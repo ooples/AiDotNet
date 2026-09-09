@@ -157,7 +157,8 @@ try {
         & $certificateWriter -MapFile shard-map.json -AuditFile audit.json -OutcomesFile outcomes.json `
             -CandidateMapRunId 100 -AuditSourceRunId 101 `
             -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
-            -CertificationRunId 102 -OutDirectory certified
+            -CertificationRunId 102 -Basis HistoricalReplay -OutDirectory certified `
+            -DecisionFile certified-decision.json
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath certified/certification.json)) {
             throw 'the real certification policy did not produce a certificate for the clean complete audit'
         }
@@ -197,8 +198,10 @@ try {
             'the identical-tree audit did not record the expected skipped shards'
 
         & $certificateWriter -MapFile certified/shard-map.json -AuditFile unchanged-audit.json `
-            -OutcomesFile outcomes.json -CandidateMapRunId 100 -AuditSourceRunId 101 `
-            -AuditSourceSha $baseSha -CertificationRunId 105 -OutDirectory unchanged-certified
+            -OutcomesFile outcomes.json -CandidateMapRunId 105 -AuditSourceRunId 101 `
+            -AuditSourceSha $baseSha -CertificationRunId 105 -Basis FreshCoverage `
+            -OutDirectory unchanged-certified `
+            -DecisionFile unchanged-decision.json
         Assert-True ($LASTEXITCODE -eq 0 -and
             (Test-Path -LiteralPath unchanged-certified/certification.json)) `
             'the policy did not certify the clean identical-tree audit'
@@ -230,7 +233,8 @@ try {
         & $certificateWriter -MapFile certified/shard-map.json -AuditFile selected-failure-audit.json `
             -OutcomesFile selected-failure-outcomes.json -CandidateMapRunId 100 `
             -AuditSourceRunId 101 -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
-            -CertificationRunId 103 -OutDirectory selected-failure-certified
+            -CertificationRunId 103 -Basis HistoricalReplay -OutDirectory selected-failure-certified `
+            -DecisionFile selected-failure-decision.json
         Assert-True ($LASTEXITCODE -eq 0 -and
             (Test-Path -LiteralPath selected-failure-certified/certification.json)) `
             'the end-to-end chain rejected a complete audit whose only failure was selected'
@@ -256,7 +260,8 @@ try {
         & $certificateWriter -MapFile certified/shard-map.json -AuditFile missed-failure-audit.json `
             -OutcomesFile missed-failure-outcomes.json -CandidateMapRunId 100 `
             -AuditSourceRunId 101 -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
-            -CertificationRunId 104 -OutDirectory missed-failure-certified
+            -CertificationRunId 104 -Basis HistoricalReplay -OutDirectory missed-failure-certified `
+            -DecisionFile missed-failure-decision.json
         Assert-True ($LASTEXITCODE -eq 0 -and
             -not (Test-Path -LiteralPath missed-failure-certified/certification.json)) `
             'the end-to-end chain certified a map after selection skipped a failing shard'

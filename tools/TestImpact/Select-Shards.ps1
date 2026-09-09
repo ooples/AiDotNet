@@ -27,9 +27,10 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $ExpectedShards,
     [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
     [Parameter(ParameterSetName = 'Select')]
+    [Parameter(Mandatory, ParameterSetName = 'Classify')] [string] $BaseSha,
+    [Parameter(ParameterSetName = 'Select')]
     [Parameter(ParameterSetName = 'Classify')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'Classify')] [switch] $ClassifyOnly,
-    [Parameter(Mandatory, ParameterSetName = 'Classify')] [string] $BaseSha,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -39,6 +40,7 @@ $ErrorActionPreference = 'Stop'
 enum ChangedPathImpact {
     NonRuntime
     MapCandidate
+    SelectionControl
     FullValidation
 }
 
@@ -48,12 +50,15 @@ $script:SharedInfrastructureFiles = @(
 )
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
-    '.github/test-shard-changes.json',
+    '.github/test-shard-changes.json'
+)
+$script:SelectionControlPaths = @(
     '.github/workflows/sonarcloud.yml',
     '.github/workflows/test-impact-map.yml',
     '.github/workflows/ci-shard-closure-policy.yml'
 )
-$script:FullValidationDirectories = @('.github/actions/', '.github/scripts/', 'tools/TestImpact/')
+$script:FullValidationDirectories = @('.github/actions/', '.github/scripts/')
+$script:SelectionControlDirectories = @('tools/TestImpact/')
 $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/azure-functions-deploy.yml',
     '.github/workflows/cancel-on-pr-close.yml',
@@ -73,6 +78,18 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/release-please.yml',
     '.github/workflows/samples.yml'
 )
+
+function Test-SelectionControl {
+    param([string] $Path)
+    $normalized = $Path.Replace('\', '/')
+    foreach ($entry in $script:SelectionControlPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    foreach ($entry in $script:SelectionControlDirectories) {
+        if ($normalized.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
 
 function Test-SharedInfrastructure {
     param([string] $Path)
@@ -96,6 +113,9 @@ function Get-ChangedPathImpact {
     param([Parameter(Mandatory)] [string] $Path)
 
     $normalized = $Path.Replace('\', '/')
+    if (Test-SelectionControl -Path $normalized) {
+        return [ChangedPathImpact]::SelectionControl
+    }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
     }
@@ -306,6 +326,7 @@ function Select-ImpactedShards {
     param(
         [Parameter(Mandatory)] $Map,
         [Parameter(Mandatory)] [hashtable] $Changed,
+        [AllowEmptyCollection()] [string[]] $CurrentPaths = @(),
         [switch] $AuditUnchangedMap
     )
 
@@ -313,11 +334,32 @@ function Select-ImpactedShards {
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
     $escalate = $false
+    $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
+        @($CurrentPaths)
+    }
+    else {
+        @($Changed.Keys)
+    }
+    foreach ($currentPath in $effectiveCurrentPaths) {
+        [void] $currentPathSet.Add(([string] $currentPath).Replace('\', '/'))
+    }
 
     foreach ($path in ($Changed.Keys | Sort-Object)) {
         $impact = Get-ChangedPathImpact -Path $path
         switch ($impact) {
             ([ChangedPathImpact]::NonRuntime) { continue }
+            ([ChangedPathImpact]::SelectionControl) {
+                # A control-path edit in THIS pull request must exercise the complete matrix. The
+                # same path in the older map-to-HEAD delta was already validated when it landed and
+                # cannot change source line ranges; treating it as permanently current otherwise
+                # wedges every future runtime PR in full-matrix mode until another map is built.
+                if ($currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
+                    $escalate = $true
+                    [void] $reasons.Add("current validation-selection control change: $path")
+                }
+                continue
+            }
             ([ChangedPathImpact]::FullValidation) {
                 $escalate = $true
                 [void] $reasons.Add("validation infrastructure or unknown GitHub configuration: $path")
@@ -505,6 +547,22 @@ if ($SelfTest) {
     Assert-True $r.RequiresValidation 'a mixed change containing source must require validation'
     Assert-True ($r.Shards -contains 'Alpha') 'a mixed change must retain the mapped shard'
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'a mixed change must retain always-run shards'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/Covered.cs' = @(12, 14)
+        '.github/workflows/sonarcloud.yml' = @(1, 2)
+    } -CurrentPaths @('src/Covered.cs')
+    Assert-True (-not $r.Escalate) `
+        'a historical selector-control edit permanently escalated a later mapped PR'
+    Assert-True ($r.Shards -contains 'Alpha') `
+        'ignoring historical control churn dropped the mapped runtime shard'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/Covered.cs' = @(12, 14)
+        '.github/workflows/sonarcloud.yml' = @(1, 2)
+    } -CurrentPaths @('.github/workflows/sonarcloud.yml', 'src/Covered.cs')
+    Assert-True $r.Escalate `
+        'a selector-control edit in the current PR did not force complete validation'
 
     $r = Select-ImpactedShards -Map $map -Changed @{}
     Assert-True $r.Escalate 'an empty changed path set must fail closed'
@@ -720,8 +778,15 @@ if ($LASTEXITCODE -ne 0) {
 
 try {
     $changed = Get-ChangedRanges -MapSha $mapSha
+    $currentPaths = @($changed.Keys)
+    if ($BaseSha) {
+        & git cat-file -e "$BaseSha^{commit}"
+        if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
+        $currentPaths = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
+        if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from current base '$BaseSha' failed" }
+    }
     Write-Host "changed files: $($changed.Count)"
-    $selection = Select-ImpactedShards -Map $map -Changed $changed `
+    $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -AuditUnchangedMap:$AuditUnchangedMap
 
     if ($selection.Escalate) {
