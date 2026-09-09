@@ -18,7 +18,8 @@ public class ModelCoverageBaselineTests
 {
     /// <summary>
     /// Models with model-family test coverage, measured on the branch that fixed the instrument
-    /// (#2091 Phase 1) at 1466 of 1816. Independently corroborated at 1443 by a whole-word type
+    /// (#2091 Phase 1) at 1466 of 1816, then raised to 1482
+    /// once ResolveTestBaseClass stopped routing models into families they cannot satisfy. Independently corroborated at 1443 by a whole-word type
     /// reference count over the hand-written AND generated test corpus - the generated half being
     /// what the original ~36% measurement missed, since those classes exist only at compile time.
     ///
@@ -26,7 +27,7 @@ public class ModelCoverageBaselineTests
     /// that were covered no longer are: establish why before editing this constant, because the
     /// point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1466;
+    private const int BaselineTestedCount = 1482;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
