@@ -177,43 +177,37 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
 
     public TimeSformer(
         NeuralNetworkArchitecture<T> architecture,
-        int numClasses = 400,
+        TimeSformerOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 768,
-        int numHeads = 12,
-        int numLayers = 12,
-        int numFrames = 8,
-        int patchSize = 16,
-        AttentionType attentionType = AttentionType.DividedSpaceTime,
-        TimeSformerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TimeSformerOptions();
+        _options.Validate();
         Options = _options;
 
-        if (embedDim < 1)
-            throw new ArgumentOutOfRangeException(nameof(embedDim), "Embedding dimension must be at least 1.");
-        if (numLayers < 1)
-            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
-        if (numHeads < 1)
-            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
-        if (embedDim % numHeads != 0)
-            throw new ArgumentException("Embedding dimension must be divisible by the number of attention heads.", nameof(numHeads));
-        if (patchSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch size must be at least 1.");
-        if (numClasses < 1)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
+        if (_options.EmbedDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbedDim), "Embedding dimension must be at least 1.");
+        if (_options.NumLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumLayers), "Number of layers must be at least 1.");
+        if (_options.NumHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumHeads), "Number of heads must be at least 1.");
+        if (_options.EmbedDim % _options.NumHeads != 0)
+            throw new ArgumentException("Embedding dimension must be divisible by the number of attention heads.", nameof(_options.NumHeads));
+        if (_options.PatchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize), "Patch size must be at least 1.");
+        if (_options.NumClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumClasses), "Number of classes must be at least 1.");
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numHeads = numHeads;
-        _numLayers = numLayers;
-        _numFrames = numFrames;
-        _patchSize = patchSize;
+        _embedDim = _options.EmbedDim;
+        _numHeads = _options.NumHeads;
+        _numLayers = _options.NumLayers;
+        _numFrames = _options.NumFrames;
+        _patchSize = _options.PatchSize;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
-        _numClasses = numClasses;
-        _attentionType = attentionType;
+        _numClasses = _options.NumClasses;
+        _attentionType = _options.AttentionType;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -231,12 +225,11 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
     public TimeSformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 400,
-        int embedDim = 768,
         TimeSformerOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TimeSformerOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -246,13 +239,13 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = embedDim;
+        _embedDim = _options.EmbedDim;
         _numHeads = 12;
         _numLayers = 12;
         _numFrames = 8;
         _patchSize = 16;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
-        _numClasses = numClasses;
+        _numClasses = _options.NumClasses;
         _attentionType = AttentionType.DividedSpaceTime;
         _lossFunction = new CrossEntropyWithLogitsLoss<T>();
 

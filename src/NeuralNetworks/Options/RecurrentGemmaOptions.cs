@@ -78,7 +78,7 @@ public class RecurrentGemmaOptions : SequenceModelOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         ScaleEmbeddingsBySqrtWidth = other.ScaleEmbeddingsBySqrtWidth;
         LearningRate = other.LearningRate;

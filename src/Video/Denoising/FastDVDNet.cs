@@ -104,19 +104,18 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
 
     public FastDVDNet(
         NeuralNetworkArchitecture<T> architecture,
+        FastDVDNetOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 32,
-        int numInputFrames = 5,
-        FastDVDNetOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new FastDVDNetOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numFeatures = numFeatures;
-        _numInputFrames = numInputFrames;
+        _numFeatures = _options.NumFeatures;
+        _numInputFrames = _options.NumInputFrames;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
 
@@ -142,9 +141,10 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         FastDVDNetOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new FastDVDNetOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))

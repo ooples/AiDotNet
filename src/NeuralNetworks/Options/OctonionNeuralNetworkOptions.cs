@@ -30,7 +30,7 @@ public class OctonionNeuralNetworkOptions : NeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         InitialLearningRate = other.InitialLearningRate;
         Momentum = other.Momentum;
         RampEpoch = other.RampEpoch;

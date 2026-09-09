@@ -140,25 +140,22 @@ public partial class XMem<T> : NeuralNetworkBase<T>
 
     public XMem(
         NeuralNetworkArchitecture<T> architecture,
+        XMemOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 256,
-        int sensoryMemorySize = 3,
-        int workingMemorySize = 10,
-        int longTermMemorySize = 100,
-        XMemOptions? options = null)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new XMemOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _sensoryMemorySize = sensoryMemorySize;
-        _workingMemorySize = workingMemorySize;
-        _longTermMemorySize = longTermMemorySize;
+        _numFeatures = _options.NumFeatures;
+        _sensoryMemorySize = _options.SensoryMemorySize;
+        _workingMemorySize = _options.WorkingMemorySize;
+        _longTermMemorySize = _options.LongTermMemorySize;
 
         _sensoryMemory = [];
         _workingMemory = [];
@@ -186,13 +183,11 @@ public partial class XMem<T> : NeuralNetworkBase<T>
     public XMem(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sensoryMemorySize = 3,
-        int workingMemorySize = 10,
-        int longTermMemorySize = 100,
         XMemOptions? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new XMemOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -205,9 +200,9 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numFeatures = 256;
-        _sensoryMemorySize = sensoryMemorySize;
-        _workingMemorySize = workingMemorySize;
-        _longTermMemorySize = longTermMemorySize;
+        _sensoryMemorySize = _options.SensoryMemorySize;
+        _workingMemorySize = _options.WorkingMemorySize;
+        _longTermMemorySize = _options.LongTermMemorySize;
 
         _sensoryMemory = [];
         _workingMemory = [];

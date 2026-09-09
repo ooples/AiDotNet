@@ -190,33 +190,30 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     public VRT(
         NeuralNetworkArchitecture<T> architecture,
+        VRTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 120,
-        int numFrames = 6,
-        int numBlocks = 8,
-        int scaleFactor = 4,
-        VRTOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(
-            architecture,
+            architecture: architecture,
             lossFunction ?? new CharbonnierLoss<T>(options?.CharbonnierEpsilon ?? 1e-3))
     {
         _options = options ?? new VRTOptions();
+        _options.Validate();
         Options = _options;
-        if (embedDim < 1)
-            throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
-        if (numFrames < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFrames), numFrames, "Number of frames must be at least 1.");
-        if (scaleFactor < 1)
-            throw new ArgumentOutOfRangeException(nameof(scaleFactor), scaleFactor, "Scale factor must be at least 1.");
+        if (_options.EmbedDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbedDim), _options.EmbedDim, "Embedding dimension must be at least 1.");
+        if (_options.NumFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFrames), _options.NumFrames, "Number of frames must be at least 1.");
+        if (_options.ScaleFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.ScaleFactor), _options.ScaleFactor, "Scale factor must be at least 1.");
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numFrames = numFrames;
-        NumFrames = numFrames;
-        _numBlocks = numBlocks;
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
+        _embedDim = _options.EmbedDim;
+        _numFrames = _options.NumFrames;
+        NumFrames = _options.NumFrames;
+        _numBlocks = _options.NumBlocks;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
 
@@ -254,13 +251,13 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
     public VRT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4,
         VRTOptions? options = null)
         : base(
-            architecture,
+            architecture: architecture,
             new CharbonnierLoss<T>(options?.CharbonnierEpsilon ?? 1e-3))
     {
         _options = options ?? new VRTOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -273,8 +270,8 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
         _numFrames = 6;
         NumFrames = 6;
         _numBlocks = 8;
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
         _lossFunction = new CharbonnierLoss<T>(_options.CharbonnierEpsilon);

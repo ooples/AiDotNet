@@ -27,7 +27,7 @@ public class InfographicVQAOptions : DocumentNeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         ImageSize = other.ImageSize;
         MaxSequenceLength = other.MaxSequenceLength;

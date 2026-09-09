@@ -52,7 +52,7 @@ public class HawkOptions : SequenceModelOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         RecurrenceDimension = other.RecurrenceDimension;
         LearningRate = other.LearningRate;

@@ -17,7 +17,7 @@ public class DepthAnythingV2Options : NeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         NumFeatures = other.NumFeatures;
         NumEncoderBlocks = other.NumEncoderBlocks;

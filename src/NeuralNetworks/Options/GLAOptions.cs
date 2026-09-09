@@ -38,7 +38,7 @@ public class GLAOptions : SequenceModelOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         LearningRate = other.LearningRate;
         VocabSize = other.VocabSize;

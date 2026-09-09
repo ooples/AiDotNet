@@ -335,12 +335,11 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
     public SAM2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7,
         SAM2Options? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new SAM2Options();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -350,9 +349,8 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        if (memoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryBankSize));
-        _memoryBankSize = memoryBankSize;
+        _modelSize = _options.ModelSize;
+        _memoryBankSize = _options.MemoryBankSize;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;

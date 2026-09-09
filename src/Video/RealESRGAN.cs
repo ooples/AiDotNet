@@ -371,54 +371,48 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
+        RealESRGANOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
-        int scaleFactor = 4,
-        int numRRDBBlocks = 23,
-        int numFeatures = 64,
-        double residualScale = 0.2,
-        double l1Lambda = 1.0,
-        double perceptualLambda = 1.0,
-        double ganLambda = 0.1,
-        RealESRGANOptions? options = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null)
         : base(ValidateAndGetArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
-               new RealESRGANLoss<T>(l1Lambda, perceptualLambda, ganLambda))
+               new RealESRGANLoss<T>((options?.L1Lambda ?? 1.0), (options?.PerceptualLambda ?? 1.0), (options?.GanLambda ?? 0.1)))
     {
         _options = options ?? new RealESRGANOptions();
+        _options.Validate();
         Options = _options;
         // Validate numeric inputs (null validation already done in ValidateAndGetArchitecture)
-        if (scaleFactor < 1)
-            throw new ArgumentOutOfRangeException(nameof(scaleFactor), scaleFactor, "Scale factor must be at least 1.");
-        if (numRRDBBlocks < 1)
-            throw new ArgumentOutOfRangeException(nameof(numRRDBBlocks), numRRDBBlocks, "Number of RRDB blocks must be at least 1.");
-        if (numFeatures < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be at least 1.");
-        if (l1Lambda < 0)
-            throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
-        if (perceptualLambda < 0)
-            throw new ArgumentOutOfRangeException(nameof(perceptualLambda), perceptualLambda, "Perceptual lambda must be non-negative.");
-        if (ganLambda < 0)
-            throw new ArgumentOutOfRangeException(nameof(ganLambda), ganLambda, "GAN lambda must be non-negative.");
+        if (_options.ScaleFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.ScaleFactor), _options.ScaleFactor, "Scale factor must be at least 1.");
+        if (_options.NumRRDBBlocks < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumRRDBBlocks), _options.NumRRDBBlocks, "Number of RRDB blocks must be at least 1.");
+        if (_options.NumFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFeatures), _options.NumFeatures, "Number of features must be at least 1.");
+        if (_options.L1Lambda < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.L1Lambda), _options.L1Lambda, "L1 lambda must be non-negative.");
+        if (_options.PerceptualLambda < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.PerceptualLambda), _options.PerceptualLambda, "Perceptual lambda must be non-negative.");
+        if (_options.GanLambda < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.GanLambda), _options.GanLambda, "GAN lambda must be non-negative.");
 
         // Set native mode
         _useNativeMode = true;
 
         // Store configuration
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
-        _numRRDBBlocks = numRRDBBlocks;
-        _numFeatures = numFeatures;
-        _residualScale = residualScale;
-        _l1Lambda = l1Lambda;
-        _perceptualLambda = perceptualLambda;
-        _ganLambda = ganLambda;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
+        _numRRDBBlocks = _options.NumRRDBBlocks;
+        _numFeatures = _options.NumFeatures;
+        _residualScale = _options.ResidualScale;
+        _l1Lambda = _options.L1Lambda;
+        _perceptualLambda = _options.PerceptualLambda;
+        _ganLambda = _options.GanLambda;
 
         // Initialize loss diagnostics
         _lastDiscriminatorLoss = NumOps.Zero;
         _lastGeneratorLoss = NumOps.Zero;
 
         // Create loss function
-        _realESRGANLoss = new RealESRGANLoss<T>(l1Lambda, perceptualLambda, ganLambda);
+        _realESRGANLoss = new RealESRGANLoss<T>(_options.L1Lambda, _options.PerceptualLambda, _options.GanLambda);
 
         // Create RRDBNet generator (the proper ESRGAN generator architecture)
         // — generator is lazy on spatial dims, only channel counts matter at ctor time.
@@ -428,11 +422,11 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Generator = new RRDBNetGenerator<T>(
             inputChannels: inputChannels,
             outputChannels: outputChannels,
-            numFeatures: numFeatures,
+            numFeatures: _options.NumFeatures,
             growthChannels: 32, // ESRGAN paper default
-            numRRDBBlocks: numRRDBBlocks,
-            scale: scaleFactor,
-            residualScale: residualScale);
+            numRRDBBlocks: _options.NumRRDBBlocks,
+            scale: _options.ScaleFactor,
+            residualScale: _options.ResidualScale);
 
         // Create U-Net discriminator (lazy on input H/W and channel count).
         Discriminator = new UNetDiscriminator<T>(
@@ -479,24 +473,24 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
     public RealESRGAN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4,
         RealESRGANOptions? options = null)
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+        : base(architecture: architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new RealESRGANOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"Real-ESRGAN ONNX model not found: {onnxModelPath}");
-        if (scaleFactor < 1)
-            throw new ArgumentOutOfRangeException(nameof(scaleFactor), scaleFactor, "Scale factor must be at least 1.");
+        if (_options.ScaleFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.ScaleFactor), _options.ScaleFactor, "Scale factor must be at least 1.");
 
         // Set ONNX mode
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
 
         // Set defaults for other fields (not used in ONNX mode)
         _numRRDBBlocks = 23;

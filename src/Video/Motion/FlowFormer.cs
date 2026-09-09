@@ -110,21 +110,19 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
 
     public FlowFormer(
         NeuralNetworkArchitecture<T> architecture,
+        FlowFormerOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 256,
-        int numLayers = 6,
-        int numIterations = 12,
-        FlowFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new FlowFormerOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numLayers = numLayers;
-        _numIterations = numIterations;
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
+        _numIterations = _options.NumIterations;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 448;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
 
@@ -138,9 +136,10 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         FlowFormerOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new FlowFormerOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))

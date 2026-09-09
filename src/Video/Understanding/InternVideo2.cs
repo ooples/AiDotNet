@@ -208,31 +208,27 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
 
     public InternVideo2(
         NeuralNetworkArchitecture<T> architecture,
+        InternVideo2Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 768,
-        int numHeads = 12,
-        int numEncoderLayers = 12,
-        int numFrames = 8,
-        int patchSize = 14,
-        InternVideo2Options? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new InternVideo2Options();
+        _options.Validate();
         Options = _options;
-        if (embedDim < 1)
-            throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
-        if (numEncoderLayers < 1)
-            throw new ArgumentOutOfRangeException(nameof(numEncoderLayers), numEncoderLayers, "Number of encoder layers must be at least 1.");
-        if (patchSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(patchSize), patchSize, "Patch size must be at least 1.");
+        if (_options.EmbedDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbedDim), _options.EmbedDim, "Embedding dimension must be at least 1.");
+        if (_options.NumEncoderLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumEncoderLayers), _options.NumEncoderLayers, "Number of encoder layers must be at least 1.");
+        if (_options.PatchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize), _options.PatchSize, "Patch size must be at least 1.");
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numHeads = numHeads;
-        _numEncoderLayers = numEncoderLayers;
-        _numFrames = numFrames;
-        _patchSize = patchSize;
+        _embedDim = _options.EmbedDim;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numFrames = _options.NumFrames;
+        _patchSize = _options.PatchSize;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -264,11 +260,11 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
     public InternVideo2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int embedDim = 768,
         InternVideo2Options? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new InternVideo2Options();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -277,7 +273,7 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = embedDim;
+        _embedDim = _options.EmbedDim;
         _numHeads = 12;
         _numEncoderLayers = 12;
         _numFrames = 8;

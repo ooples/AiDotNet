@@ -280,31 +280,27 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     public BasicVSRPlusPlus(
         NeuralNetworkArchitecture<T> architecture,
-        int scaleFactor = 4,
-        int numFeatures = 64,
-        int numResidualBlocks = 15,
-        int numPropagations = 2,
-        double learningRate = 0.0001,
         BasicVSRPlusPlusOptions? options = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new BasicVSRPlusPlusOptions();
+        _options.Validate();
         Options = _options;
 
-        if (scaleFactor != 2 && scaleFactor != 4)
-            throw new ArgumentOutOfRangeException(nameof(scaleFactor), "Scale factor must be 2 or 4.");
-        if (numFeatures < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
-        if (numResidualBlocks < 1)
-            throw new ArgumentOutOfRangeException(nameof(numResidualBlocks), "Number of residual blocks must be at least 1.");
+        if (_options.ScaleFactor != 2 && _options.ScaleFactor != 4)
+            throw new ArgumentOutOfRangeException(nameof(_options.ScaleFactor), "Scale factor must be 2 or 4.");
+        if (_options.NumFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFeatures), "Number of features must be at least 1.");
+        if (_options.NumResidualBlocks < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumResidualBlocks), "Number of residual blocks must be at least 1.");
 
         _useNativeMode = true;
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
-        _numFeatures = numFeatures;
-        _numResidualBlocks = numResidualBlocks;
-        _numPropagations = numPropagations;
-        _learningRate = learningRate;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
+        _numFeatures = _options.NumFeatures;
+        _numResidualBlocks = _options.NumResidualBlocks;
+        _numPropagations = _options.NumPropagations;
+        _learningRate = _options.LearningRate;
 
         _residualBlocks = [];
         _backwardAlignments = [];
@@ -345,14 +341,11 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     public BasicVSRPlusPlus(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4,
-        int numFeatures = 64,
-        int numResidualBlocks = 15,
-        int numPropagations = 2,
         BasicVSRPlusPlusOptions? options = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new BasicVSRPlusPlusOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -362,11 +355,11 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _scaleFactor = scaleFactor;
-        ScaleFactor = scaleFactor;
-        _numFeatures = numFeatures;
-        _numResidualBlocks = numResidualBlocks;
-        _numPropagations = numPropagations;
+        _scaleFactor = _options.ScaleFactor;
+        ScaleFactor = _options.ScaleFactor;
+        _numFeatures = _options.NumFeatures;
+        _numResidualBlocks = _options.NumResidualBlocks;
+        _numPropagations = _options.NumPropagations;
         _learningRate = 0.0001;
 
         _residualBlocks = [];

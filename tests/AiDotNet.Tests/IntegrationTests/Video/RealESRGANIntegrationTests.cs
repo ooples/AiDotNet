@@ -1,4 +1,6 @@
 using AiDotNet.Enums;
+using AiDotNet.Video.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Video;
@@ -25,11 +27,7 @@ public class RealESRGANIntegrationTests
         var discriminatorArch = CreateArchitecture(256, 256, 3);
 
         // Act
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Assert
         Assert.NotNull(model);
@@ -51,11 +49,7 @@ public class RealESRGANIntegrationTests
         var discriminatorArch = CreateArchitecture(64 * scaleFactor, 64 * scaleFactor, 3);
 
         // Act
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: scaleFactor);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = scaleFactor });
 
         // Assert
         Assert.Equal(scaleFactor, model.ScaleFactor);
@@ -72,11 +66,7 @@ public class RealESRGANIntegrationTests
         var discriminatorArch = CreateArchitecture(256, 256, 3);
 
         // Act
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            numRRDBBlocks: numRRDBBlocks);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { NumRRDBBlocks = numRRDBBlocks });
 
         // Assert
         Assert.NotNull(model);
@@ -116,11 +106,7 @@ public class RealESRGANIntegrationTests
         var discriminatorArch = CreateArchitecture(256, 256, 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 0 }));
     }
 
     #endregion
@@ -133,11 +119,7 @@ public class RealESRGANIntegrationTests
         // Arrange - 4D tensor: [batch, channels, height, width]
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         var inputTensor = CreateRandomTensor(new[] { 1, 3, 32, 32 });
 
@@ -157,11 +139,7 @@ public class RealESRGANIntegrationTests
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
 
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // 5D tensor: [batch, frames, channels, height, width]
         var inputTensor = CreateRandomTensor(new[] { 1, 4, 3, 32, 32 });
@@ -181,11 +159,7 @@ public class RealESRGANIntegrationTests
         var generatorArch = CreateArchitecture(32, 32, 1);
         var discriminatorArch = CreateArchitecture(128, 128, 1);
 
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // 2D tensor: [height, width]
         var inputTensor = CreateRandomTensor(new[] { 32, 32 });
@@ -203,11 +177,7 @@ public class RealESRGANIntegrationTests
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Batch of 4 images
         var inputTensor = CreateRandomTensor(new[] { 4, 3, 32, 32 });
@@ -231,11 +201,7 @@ public class RealESRGANIntegrationTests
         // Scale factor must be 2 or 4 for RRDBNetGenerator
         var generatorArch = CreateArchitecture(16, 16, 3);
         var discriminatorArch = CreateArchitecture(32, 32, 3); // 16 * 2 = 32
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 2);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 2 });
 
         var lowResInput = CreateRandomTensor(new[] { 1, 3, 16, 16 });
         var highResTarget = CreateRandomTensor(new[] { 1, 3, 32, 32 }); // Scaled 2x
@@ -257,11 +223,7 @@ public class RealESRGANIntegrationTests
         // Scale factor must be 2 or 4 for RRDBNetGenerator
         var generatorArch = CreateArchitecture(16, 16, 3);
         var discriminatorArch = CreateArchitecture(32, 32, 3); // 16 * 2 = 32
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 2);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 2 });
 
         var losses = new List<double>();
 
@@ -289,11 +251,7 @@ public class RealESRGANIntegrationTests
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         var inputTensor = CreateRandomTensor(new[] { 1, 3, 32, 32 });
 
@@ -310,11 +268,7 @@ public class RealESRGANIntegrationTests
         // Arrange
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => model.Upscale(null!));
@@ -330,13 +284,7 @@ public class RealESRGANIntegrationTests
         // Arrange
         var generatorArch = CreateArchitecture(64, 64, 3);
         var discriminatorArch = CreateArchitecture(256, 256, 3);
-        var model = new RealESRGAN<double>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4,
-            numRRDBBlocks: 23,
-            numFeatures: 64);
+        var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4, NumRRDBBlocks = 23, NumFeatures = 64 });
 
         // Act
         var metadata = model.GetModelMetadata();
@@ -378,11 +326,7 @@ public class RealESRGANIntegrationTests
             outputSize: 0);
 
         // Act
-        var model = new RealESRGAN<float>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<float>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Assert
         Assert.NotNull(model);
@@ -412,11 +356,7 @@ public class RealESRGANIntegrationTests
             inputDepth: 3,
             outputSize: 0);
 
-        var model = new RealESRGAN<float>(
-            generatorArch,
-            discriminatorArch,
-            InputType.ThreeDimensional,
-            scaleFactor: 4);
+        var model = new RealESRGAN<float>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         var inputData = new float[1 * 3 * 32 * 32];
         var random = new Random(42);

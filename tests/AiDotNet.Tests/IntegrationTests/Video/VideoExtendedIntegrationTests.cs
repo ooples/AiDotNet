@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -244,7 +245,7 @@ public class VideoExtendedIntegrationTests
     public async Task SlowFast_Construction_CustomParams()
     {
         var arch = CreateArch();
-        var model = new SlowFast<double>(arch, numClasses: 200, slowFrames: 8, alpha: 4);
+        var model = new SlowFast<double>(arch, options: new SlowFastOptions { NumClasses = 200, SlowFrames = 8, Alpha = 4 });
 
         Assert.Equal(200, model.NumClasses);
         Assert.Equal(8, model.SlowFrames);
@@ -257,7 +258,7 @@ public class VideoExtendedIntegrationTests
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new SlowFast<double>(arch, numClasses: 0));
+            new SlowFast<double>(arch, options: new SlowFastOptions { NumClasses = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -265,7 +266,7 @@ public class VideoExtendedIntegrationTests
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new SlowFast<double>(arch, slowFrames: 0));
+            new SlowFast<double>(arch, options: new SlowFastOptions { SlowFrames = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -273,14 +274,14 @@ public class VideoExtendedIntegrationTests
     {
         var arch = CreateArch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new SlowFast<double>(arch, alpha: 0));
+            new SlowFast<double>(arch, options: new SlowFastOptions { Alpha = 0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task SlowFast_Predict_ProducesOutput()
     {
         var arch = CreateArch();
-        var model = new SlowFast<double>(arch, numClasses: 10);
+        var model = new SlowFast<double>(arch, options: new SlowFastOptions { NumClasses = 10 });
         var input = new Tensor<double>([1, 3, 32, 32]);
         var output = model.Predict(input);
 
@@ -292,7 +293,7 @@ public class VideoExtendedIntegrationTests
     public async Task SlowFast_GetModelMetadata_ContainsCorrectInfo()
     {
         var arch = CreateArch();
-        var model = new SlowFast<double>(arch, numClasses: 100);
+        var model = new SlowFast<double>(arch, options: new SlowFastOptions { NumClasses = 100 });
         var metadata = model.GetModelMetadata();
 
 
@@ -340,7 +341,7 @@ public class VideoExtendedIntegrationTests
     public async Task FILM_Construction()
     {
         var arch = CreateArch();
-        var model = new FILM<double>(arch, numScales: 3, numFeatures: 32);
+        var model = new FILM<double>(arch, options: new FILMOptions { NumScales = 3, NumFeatures = 32 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -364,7 +365,7 @@ public class VideoExtendedIntegrationTests
     public async Task VRT_Construction()
     {
         var arch = CreateArch();
-        var model = new VRT<double>(arch, embedDim: 64, numFrames: 4, scaleFactor: 2);
+        var model = new VRT<double>(arch, options: new VRTOptions { EmbedDim = 64, NumFrames = 4, ScaleFactor = 2 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -385,7 +386,7 @@ public class VideoExtendedIntegrationTests
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputHeight: SecondOrderHW, inputWidth: SecondOrderHW, inputDepth: 3, outputSize: 2),
-            scaleFactor: 2, numFeatures: SecondOrderFeatures, numResidualBlocks: 1, numPropagations: 1);
+            options: new BasicVSRPlusPlusOptions { ScaleFactor = 2, NumFeatures = SecondOrderFeatures, NumResidualBlocks = 1, NumPropagations = 1 });
 
     private static Tensor<double> MakeClip(int numFrames, int seed)
     {
@@ -554,7 +555,7 @@ public class VideoExtendedIntegrationTests
     public async Task AnimateDiff_Construction()
     {
         var arch = CreateArch();
-        var model = new AnimateDiff<double>(arch, numLayers: 2, numFrames: 4);
+        var model = new AnimateDiff<double>(arch, options: new AnimateDiffOptions { NumLayers = 2, NumFrames = 4 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -680,7 +681,7 @@ public class VideoExtendedIntegrationTests
     public async Task ByteTrack_Construction()
     {
         var arch = CreateArch(height: 64, width: 64);
-        var model = new ByteTrack<double>(arch, numFeatures: 64);
+        var model = new ByteTrack<double>(arch, options: new ByteTrackOptions { NumFeatures = 64 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -714,11 +715,14 @@ public class VideoExtendedIntegrationTests
             NumSpatialBlocks = 1,
             NumTemporalBlocks = 1,
             NumTextBlocks = 1,
-            WarmupSteps = 0
+            WarmupSteps = 0,
+            NumFrames = 4,
+            EmbeddingDim = 4,
+            TextMaxLength = 8,
+            VocabSize = 64,
         };
         using var source = new VideoCLIP<float>(
-            arch, numFrames: 4, embeddingDim: 4, textMaxLength: 8,
-            vocabSize: 64, options: options);
+            arch, options: options);
         var input = new Tensor<float>([4, 3, 32, 32]);
         for (int i = 0; i < input.Length; i++)
             input[i] = (float)Math.Sin(i * 0.01);
@@ -760,7 +764,7 @@ public class VideoExtendedIntegrationTests
     public async Task TimeSformer_Construction()
     {
         var arch = CreateArch();
-        var model = new TimeSformer<double>(arch, numClasses: 10, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8);
+        var model = new TimeSformer<double>(arch, options: new TimeSformerOptions { NumClasses = 10, EmbedDim = 64, NumHeads = 4, NumLayers = 2, NumFrames = 4, PatchSize = 8 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -768,7 +772,7 @@ public class VideoExtendedIntegrationTests
     public async Task VideoMAE_Construction()
     {
         var arch = CreateArch();
-        var model = new VideoMAE<double>(arch, numClasses: 10, numFrames: 4, numFeatures: 64);
+        var model = new VideoMAE<double>(arch, options: new VideoMAEOptions { NumClasses = 10, NumFrames = 4, NumFeatures = 64 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -797,7 +801,7 @@ public class VideoExtendedIntegrationTests
     public async Task FILM_Metadata_NotNull()
     {
         var arch = CreateArch();
-        var model = new FILM<double>(arch, numScales: 3, numFeatures: 32);
+        var model = new FILM<double>(arch, options: new FILMOptions { NumScales = 3, NumFeatures = 32 });
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -805,7 +809,7 @@ public class VideoExtendedIntegrationTests
     public async Task VRT_Metadata_NotNull()
     {
         var arch = CreateArch();
-        var model = new VRT<double>(arch, embedDim: 64, numFrames: 4, scaleFactor: 2);
+        var model = new VRT<double>(arch, options: new VRTOptions { EmbedDim = 64, NumFrames = 4, ScaleFactor = 2 });
         Assert.NotNull(model.GetModelMetadata());
     }
 

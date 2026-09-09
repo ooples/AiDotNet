@@ -114,24 +114,20 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
 
     public ByteTrack(
         NeuralNetworkArchitecture<T> architecture,
+        ByteTrackOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 256,
-        int numClasses = 1,
-        double highThreshold = 0.6,
-        double lowThreshold = 0.1,
-        int maxAge = 30,
-        ByteTrackOptions? options = null)
-        : base(architecture, lossFunction ?? new FocalLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new FocalLoss<T>())
     {
         _options = options ?? new ByteTrackOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _numFeatures = numFeatures;
-        _numClasses = numClasses;
-        _highThreshold = highThreshold;
-        _lowThreshold = lowThreshold;
-        _maxAge = maxAge;
+        _numFeatures = _options.NumFeatures;
+        _numClasses = _options.NumClasses;
+        _highThreshold = _options.HighThreshold;
+        _lowThreshold = _options.LowThreshold;
+        _maxAge = _options.MaxAge;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 1440;
 
@@ -144,11 +140,11 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
     public ByteTrack(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 1,
         ByteTrackOptions? options = null)
-        : base(architecture, new FocalLoss<T>())
+        : base(architecture: architecture, new FocalLoss<T>())
     {
         _options = options ?? new ByteTrackOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -158,7 +154,7 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _numFeatures = 256;
-        _numClasses = numClasses;
+        _numClasses = _options.NumClasses;
         _highThreshold = 0.6;
         _lowThreshold = 0.1;
         _maxAge = 30;

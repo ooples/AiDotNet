@@ -193,26 +193,22 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// </remarks>
     public OpenSora(
         NeuralNetworkArchitecture<T> architecture,
-        int numFrames = 16,
-        int hiddenDim = 1152,
-        int numLayers = 28,
-        int numInferenceSteps = 50,
-        double guidanceScale = 7.5,
         OpenSoraOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new OpenSoraOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFrames = numFrames;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numInferenceSteps = numInferenceSteps;
-        _guidanceScale = guidanceScale;
-        GuidanceScale = guidanceScale;
+        _numFrames = _options.NumFrames;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numInferenceSteps = _options.NumInferenceSteps;
+        _guidanceScale = _options.GuidanceScale;
+        GuidanceScale = _options.GuidanceScale;
         _numHeads = 16;
         _headDim = _hiddenDim / _numHeads;
 

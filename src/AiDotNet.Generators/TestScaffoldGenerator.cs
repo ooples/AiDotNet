@@ -4426,7 +4426,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 6, outputSize: 2), " +
-                    "numFeatures: 8, numLayers: 1)";
+                    "options: new AiDotNet.Video.Options.RPKNetOptions { NumFeatures = 8, NumLayers = 1 }" + ")";
             }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
@@ -4441,8 +4441,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numFrames: 4, embeddingDim: 4, textMaxLength: 8, vocabSize: 64, " +
-                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { HiddenDimension = 32, " +
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 32, " +
                     "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
                     // Paper warm-up is 1000 optimizer steps and the model keeps that default.
                     // These invariants train for one or two steps, where a 1000-step linear
@@ -4845,7 +4844,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
-                    "numFeatures: 8, numTransformerLayers: 1, numHeads: 1)";
+                    "options: new AiDotNet.Video.Options.GMFlowOptions { NumFeatures = 8, NumTransformerLayers = 1, NumHeads = 1 }" + ")";
             }
             else if (model.ClassName == "GroundedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
@@ -5154,7 +5153,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "numFeatures: 8)";
+                    "options: new AiDotNet.Video.Options.E2FGVIOptions { NumFeatures = 8 }" + ")";
             }
             else if (model.ClassName == "EVACLIP" && model.TypeParameterCount == 1)
             {
@@ -5187,7 +5186,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "embedDim: 32, numLayers: 4, numFrames: 4, numTimesteps: 16)";
+                    "options: new AiDotNet.Video.Options.CogVideoOptions { EmbedDim = 32, NumLayers = 4, NumFrames = 4, NumTimesteps = 16 }" + ")";
             }
             else if (model.ClassName == "E3TTS" && model.TypeParameterCount == 1)
             {
@@ -5335,8 +5334,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), memoryBankSize: 2, " +
-                    "options: new AiDotNet.Video.Options.SAM2Options { " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.Video.Options.SAM2Options { MemoryBankSize = 2, " +
                     "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
                     "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, " +
                     "HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
@@ -5444,7 +5443,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "numFeatures: 8, numFrames: 2, numBlocks: 1, scaleFactor: 2)";
+                    "options: new AiDotNet.Video.Options.EDVROptions { NumFeatures = 8, NumFrames = 2, NumBlocks = 1, ScaleFactor = 2 }" + ")";
             }
             else if (model.ClassName == "DeepSeekVL2" && model.TypeParameterCount == 1)
             {
@@ -5827,7 +5826,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 6), " +
                     "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
-                    "numFeatures: 16, numClasses: 1)";
+                    "options: new AiDotNet.Video.Options.ByteTrackOptions { NumFeatures = 16, NumClasses = 1 }" + ")";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
             {
@@ -7184,7 +7183,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
                     "outputSize: 4), " +
-                    "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
+                    "options: new AiDotNet.Video.Options.TimeSformerOptions { NumClasses = 4, EmbedDim = 64, NumHeads = 4, NumLayers = 2, NumFrames = 4, PatchSize = 8 }" + ")";
             }
             else if (model.ClassName == "Conformer" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -7346,7 +7345,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 32), " +
-                    "embedDim: 32, numHeads: 4, numEncoderLayers: 1, numFrames: 2, patchSize: 8)";
+                    "options: new AiDotNet.Video.Options.InternVideo2Options { EmbedDim = 32, NumHeads = 4, NumEncoderLayers = 1, NumFrames = 2, PatchSize = 8 }" + ")";
             }
             else if (model.ClassName == "Phi4Multimodal" && model.TypeParameterCount == 1)
             {
@@ -8851,7 +8850,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "inputChannels: 3, numLayers: 1, numFrames: 2)";
+                    "options: new AiDotNet.Video.Options.AnimateDiffOptions { InputChannels = 3, NumLayers = 1, NumFrames = 2 }" + ")";
             }
             else if (model.ClassName == "PICK" && model.TypeParameterCount == 1)
             {
@@ -9596,7 +9595,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numFrames: 2, embeddingDim: 64, textMaxLength: 16, vocabSize: 512)";
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 2, EmbeddingDim = 64, TextMaxLength = 16, VocabSize = 512 }" + ")";
             }
             else if (model.ClassName == "MOMENT" && model.TypeParameterCount == 1)
             {
@@ -9985,7 +9984,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
-                    "numFeatures: 32, memorySize: 8)";
+                    "options: new AiDotNet.Video.Options.CutieOptions { NumFeatures = 32, MemorySize = 8 }" + ")";
             }
             else if (model.ClassName == "CUPS" && model.TypeParameterCount == 1)
             {
@@ -10038,7 +10037,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "numClasses: 4, numFrames: 4, numFeatures: 32)";
+                    "options: new AiDotNet.Video.Options.VideoMAEOptions { NumClasses = 4, NumFrames = 4, NumFeatures = 32 }" + ")";
             }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
@@ -10700,8 +10699,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "optimizer: null, lossFunction: null, embedDim: 16, numFrames: 2, " +
-                    "numBlocks: 4, scaleFactor: 2, options: new AiDotNet.Video.Options.VRTOptions())";
+                    "optimizer: null, lossFunction: null, " +
+                    "options: new AiDotNet.Video.Options.VRTOptions { EmbedDim = 16, NumFrames = 2, NumBlocks = 4, ScaleFactor = 2 })";
             }
             else if (model.ClassName == "TableTransformer" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10769,7 +10768,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
-                    "numFeatures: 32, numTransformerBlocks: 2, numHeads: 4)";
+                    "options: new AiDotNet.Video.Options.ProPainterOptions { NumFeatures = 32, NumTransformerBlocks = 2, NumHeads = 4 }" + ")";
             }
             else if (model.ClassName == "BasicVSRPlusPlus" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -10804,8 +10803,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 2, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
                     "outputSize: 4), " +
-                    "scaleFactor: 2, numFeatures: 8, numResidualBlocks: 1, " +
-                    "numPropagations: 1, learningRate: 1e-2)";
+                    "options: new AiDotNet.Video.Options.BasicVSRPlusPlusOptions { ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1, LearningRate = 1e-2 }" + ")";
             }
             else if (model.ClassName == "SeedVR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -11126,7 +11124,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
-                    "numFeatures: 8, numLayers: 1)";
+                    "options: new AiDotNet.Video.Options.DPFlowOptions { NumFeatures = 8, NumLayers = 1 }" + ")";
             }
             else if (model.ClassName == "RAFT" && model.TypeParameterCount == 1)
             {
@@ -11143,7 +11141,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
-                    "numFeatures: 8, correlationLevels: 2, correlationRadius: 2, numIterations: 2)";
+                    "options: new AiDotNet.Video.Options.RAFTOptions { NumFeatures = 8, CorrelationLevels = 2, CorrelationRadius = 2, NumIterations = 2 }" + ")";
             }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -11172,8 +11170,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 256px, 64/256-wide defaults for users.
                 string scaleArguments = model.ClassName switch
                 {
-                    "FlowFormer" => "embedDim: 32, numLayers: 1, numIterations: 1",
-                    _ => "numFeatures: 8, numLayers: 1"
+                    "FlowFormer" => "options: new AiDotNet.Video.Options.FlowFormerOptions { EmbedDim = 32, NumLayers = 1, NumIterations = 1 }",
+                    _ => "options: new AiDotNet.Video.Options.FlowFormerPlusPlusOptions { NumFeatures = 8, NumLayers = 1 }"
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
@@ -11190,7 +11188,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 3), " +
-                    "numScales: 2, numFeatures: 8)";
+                    "options: new AiDotNet.Video.Options.FILMOptions { NumScales = 2, NumFeatures = 8 }" + ")";
             }
             else if ((model.ClassName is "DynamiCrafter" or "EMAVFI" or "FLAVR")
                      && model.TypeParameterCount == 1

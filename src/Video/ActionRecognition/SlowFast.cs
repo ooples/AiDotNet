@@ -178,32 +178,28 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
     public SlowFast(
         NeuralNetworkArchitecture<T> architecture,
-        int numClasses = 400,
+        SlowFastOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? probabilityActivation = null,
         IReadOnlyList<ILayer<T>>? customFastLayers = null,
-        IReadOnlyList<ILayer<T>>? customFusionLayers = null,
-        int slowFrames = 4,
-        int slowChannels = 64,
-        int fastChannels = 8,
-        int alpha = 8,
-        SlowFastOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        IReadOnlyList<ILayer<T>>? customFusionLayers = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SlowFastOptions();
+        _options.Validate();
         Options = _options;
 
-        if (numClasses < 1)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
-        if (slowFrames < 1)
-            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
-        if (slowChannels < 1)
-            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
-        if (fastChannels < 1)
-            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
-        if (alpha < 1)
-            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
+        if (_options.NumClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumClasses), "Number of classes must be at least 1.");
+        if (_options.SlowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.SlowFrames), "Slow frames must be at least 1.");
+        if (_options.SlowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.SlowChannels), "Slow channels must be at least 1.");
+        if (_options.FastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.FastChannels), "Fast channels must be at least 1.");
+        if (_options.Alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.Alpha), "Alpha must be at least 1.");
 
         // Validate custom layer consistency - if any custom layers provided, all three pathways must be specified
         bool hasCustomSlowLayers = architecture.Layers != null && architecture.Layers.Count > 0;
@@ -222,12 +218,12 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         }
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _slowFrames = slowFrames;
-        _fastFrames = slowFrames * alpha;
-        _slowChannels = slowChannels;
-        _fastChannels = fastChannels;
-        _alpha = alpha;
+        _numClasses = _options.NumClasses;
+        _slowFrames = _options.SlowFrames;
+        _fastFrames = _options.SlowFrames * _options.Alpha;
+        _slowChannels = _options.SlowChannels;
+        _fastChannels = _options.FastChannels;
+        _alpha = _options.Alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
@@ -254,41 +250,37 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     public SlowFast(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 400,
-        IActivationFunction<T>? probabilityActivation = null,
-        int slowFrames = 4,
-        int slowChannels = 64,
-        int fastChannels = 8,
-        int alpha = 8,
-        SlowFastOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        SlowFastOptions? options = null,
+        IActivationFunction<T>? probabilityActivation = null)
+        : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SlowFastOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"SlowFast ONNX model not found: {onnxModelPath}");
-        if (numClasses < 1)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
-        if (slowFrames < 1)
-            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
-        if (slowChannels < 1)
-            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
-        if (fastChannels < 1)
-            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
-        if (alpha < 1)
-            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
+        if (_options.NumClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumClasses), "Number of classes must be at least 1.");
+        if (_options.SlowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.SlowFrames), "Slow frames must be at least 1.");
+        if (_options.SlowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.SlowChannels), "Slow channels must be at least 1.");
+        if (_options.FastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.FastChannels), "Fast channels must be at least 1.");
+        if (_options.Alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.Alpha), "Alpha must be at least 1.");
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _numClasses = numClasses;
-        _slowFrames = slowFrames;
-        _fastFrames = slowFrames * alpha;
-        _slowChannels = slowChannels;
-        _fastChannels = fastChannels;
-        _alpha = alpha;
+        _numClasses = _options.NumClasses;
+        _slowFrames = _options.SlowFrames;
+        _fastFrames = _options.SlowFrames * _options.Alpha;
+        _slowChannels = _options.SlowChannels;
+        _fastChannels = _options.FastChannels;
+        _alpha = _options.Alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _lossFunction = new CrossEntropyWithLogitsLoss<T>();
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
