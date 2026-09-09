@@ -167,6 +167,16 @@ Assert-Contract (-not $codeqlHeader.Contains(
 Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
     'CodeQL cannot publish its required result after a selector failure'
 
+# Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
+# not on a neighboring job where it is invisible and becomes a null template value at runtime.
+$sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
+$sonarHeader = Get-JobHeader -JobBlock $sonarJob
+$effectiveValidationEnvironment = 'EFFECTIVE_REQUIRES_VALIDATION: ${{ (needs.validation-source.outputs.reuse == ''true'' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || ''true'' }}'
+Assert-Contract ($sonarHeader.Contains($effectiveValidationEnvironment)) `
+    'Sonar steps parse EFFECTIVE_REQUIRES_VALIDATION but the Sonar job does not define it'
+Assert-Contract (([Regex]::Matches($validation, '(?m)^      EFFECTIVE_REQUIRES_VALIDATION:')).Count -eq 1) `
+    'EFFECTIVE_REQUIRES_VALIDATION must be defined exactly once on the Sonar job'
+
 foreach ($job in @(
     'test-regression-analysis', 'sonarcloud', 'ci-test-analysis',
     'validation-gate', 'certify-expensive-validation', 'promote-ci-test-analysis',
