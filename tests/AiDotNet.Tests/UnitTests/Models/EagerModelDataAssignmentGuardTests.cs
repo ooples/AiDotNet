@@ -35,15 +35,26 @@ namespace AiDotNet.Tests.UnitTests.Models;
 public class EagerModelDataAssignmentGuardTests
 {
     /// <summary>
-    /// Assignments of the form <c>ModelData = ...Serialize...</c> at the start of a line.
+    /// Assignments to <c>ModelData</c>, whether in an object initializer or through an instance.
     /// </summary>
     /// <remarks>
-    /// Anchored at line start so <c>SerializedModelData</c> and similar names cannot match, and
-    /// comment lines are filtered separately so the prose in ModelMetadata.cs that quotes the old
-    /// pattern is not read as code.
+    /// <para>
+    /// Two forms, because catching only the first leaves a hole exactly where the next regression
+    /// would land: <c>ModelData = ...</c> at the start of a line is the object-initializer form all
+    /// 290 converted sites used, and <c>something.ModelData = ...</c> is the post-construction form
+    /// several base classes already use for their JSON config blobs. None of those serialize weights
+    /// today, but nothing stopped one from being written that way, and a guard blind to it would
+    /// report success.
+    /// </para>
+    /// <para>
+    /// <c>SerializedModelData</c> cannot match either branch: the first is anchored at line start,
+    /// and the second requires the dot to sit immediately before <c>ModelData</c>. Comment lines are
+    /// filtered separately so the prose in ModelMetadata.cs that quotes the old pattern is not read
+    /// as code.
+    /// </para>
     /// </remarks>
     private static readonly Regex EagerAssignment = new(
-        @"^[ \t]*ModelData[ \t]*=[ \t]*(?<rhs>.+)$",
+        @"(?:^[ \t]*|\.)ModelData[ \t]*=[ \t]*(?<rhs>.+)$",
         RegexOptions.Compiled);
 
     private static readonly Regex Serializes = new(
