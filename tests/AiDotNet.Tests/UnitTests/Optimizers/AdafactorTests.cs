@@ -85,7 +85,7 @@ public class AdafactorTests
             Assert.True(Math.Abs(updated[i] - 1.0) <= 0.1 + 1e-9,
                 $"a gradient of 1e6 moved the weight by {Math.Abs(updated[i] - 1.0)}, which is more "
                 + "than one clipped step; the update clipping is not bounding the step");
-            Assert.True(double.IsFinite(updated[i]));
+            Assert.True(!double.IsNaN(updated[i]) && !double.IsInfinity(updated[i]));
         }
     }
 
@@ -137,7 +137,7 @@ public class AdafactorTests
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            Assert.True(double.IsFinite(parameters[i]), $"parameter {i} became {parameters[i]}");
+            Assert.True(!double.IsNaN(parameters[i]) && !double.IsInfinity(parameters[i]), $"parameter {i} became {parameters[i]}");
         }
     }
 

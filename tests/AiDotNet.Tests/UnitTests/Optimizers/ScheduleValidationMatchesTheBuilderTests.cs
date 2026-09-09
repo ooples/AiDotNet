@@ -47,7 +47,7 @@ public class ScheduleValidationMatchesTheBuilderTests
     {
         var inconsistent = new List<string>();
 
-        foreach (LearningRateSchedulerType schedule in Enum.GetValues<LearningRateSchedulerType>())
+        foreach (LearningRateSchedulerType schedule in ((LearningRateSchedulerType[])Enum.GetValues(typeof(LearningRateSchedulerType))))
         {
             var recipe = FullySpecified(schedule);
 
@@ -103,7 +103,7 @@ public class ScheduleValidationMatchesTheBuilderTests
     {
         // The other half of the contract: silently accepting an unmappable schedule would let a
         // model declare one and train at a constant rate with nothing saying so.
-        var unmappable = Enum.GetValues<LearningRateSchedulerType>()
+        var unmappable = ((LearningRateSchedulerType[])Enum.GetValues(typeof(LearningRateSchedulerType)))
             .Where(schedule => !HasBuilderArm(schedule))
             .ToList();
 
