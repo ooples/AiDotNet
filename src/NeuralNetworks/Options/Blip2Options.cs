@@ -37,6 +37,7 @@ public class Blip2Options : VisionLanguageModelOptions
         NumQueryTokens = 32;
         NumHeads = 12;
         NumLmDecoderLayers = 6;
+        LanguageModelBackbone = LanguageModelBackbone.OPT;
     }
 
 
@@ -75,4 +76,9 @@ public class Blip2Options : VisionLanguageModelOptions
     {
         ValidateCore();
     }
+
+    /// <summary>
+    /// Gets or sets the language model backbone.
+    /// </summary>
+    public LanguageModelBackbone LanguageModelBackbone { get; set; }
 }

@@ -28,6 +28,14 @@ public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
         AudioSampleRate = 16000; // DEFAULT_SAMPLE_RATE
         VideoFrameRate = 25.0; // DEFAULT_FRAME_RATE
         NumEncoderLayers = 6;
+        EmbeddingDimension = 512; // DEFAULT_EMBEDDING_DIM
+        AudioSampleRate = 16000; // DEFAULT_SAMPLE_RATE
+        VideoFrameRate = 25.0; // DEFAULT_FRAME_RATE
+        NumEncoderLayers = 6;
+        EmbeddingDimension = 512; // DEFAULT_EMBEDDING_DIM
+        AudioSampleRate = 16000; // DEFAULT_SAMPLE_RATE
+        VideoFrameRate = 25.0; // DEFAULT_FRAME_RATE
+        NumEncoderLayers = 6;
     }
 
 

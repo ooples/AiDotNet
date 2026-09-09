@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -41,10 +42,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ValidParameters_CreatesModel()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(),
-            imageHeight: 32, imageWidth: 32, patchSize: 8,
-            channels: 3, modelDimension: 32, numLayers: 2, numClasses: 10);
+        var model = new VisionMambaModel<float>(CreateArch(), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 32, PatchSize = 8, Channels = 3, ModelDimension = 32, NumLayers = 2, NumClasses = 10 });
 
         Assert.Equal(32, model.ImageHeight);
         Assert.Equal(32, model.ImageWidth);
@@ -60,22 +58,21 @@ public class VisionMambaModelTests
     public async Task Constructor_ThrowsWhenImageNotDivisibleByPatch()
     {
         Assert.Throws<ArgumentException>(() =>
-            new VisionMambaModel<float>(CreateArch(30, 32), imageHeight: 30, imageWidth: 32, patchSize: 8));
+            new VisionMambaModel<float>(CreateArch(30, 32), options: new VisionMambaOptions { ImageHeight = 30, ImageWidth = 32, PatchSize = 8 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenImageHeightNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new VisionMambaModel<float>(CreateArch(1, 32), imageHeight: 0, imageWidth: 32, patchSize: 8));
+            new VisionMambaModel<float>(CreateArch(1, 32), options: new VisionMambaOptions { ImageHeight = 0, ImageWidth = 32, PatchSize = 8 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenNumClassesNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new VisionMambaModel<float>(CreateArch(16, 16, numClasses: 1),
-                imageHeight: 16, imageWidth: 16, patchSize: 4, numClasses: 0));
+            new VisionMambaModel<float>(CreateArch(16, 16, numClasses: 1), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, NumClasses = 0 }));
     }
 
     [Theory]
@@ -91,11 +88,7 @@ public class VisionMambaModelTests
         int patchSize = 4;
         int numClasses = 5;
 
-        var model = new VisionMambaModel<float>(
-            CreateArch(height, width, channels, numClasses),
-            height, width, patchSize, channels,
-            modelDimension: 16, numLayers: 2, numClasses: numClasses,
-            stateDimension: 4, scanPattern: pattern);
+        var model = new VisionMambaModel<float>(CreateArch(height, width, channels, numClasses), options: new VisionMambaOptions { ImageHeight = height, ImageWidth = width, PatchSize = patchSize, Channels = channels, ModelDimension = 16, NumLayers = 2, NumClasses = numClasses, StateDimension = 4, ScanPattern = pattern });
 
         var input = CreateRandomTensor(new[] { batchSize, channels, height, width });
         var output = model.Predict(input);
@@ -113,11 +106,7 @@ public class VisionMambaModelTests
         int patchSize = 4;
         int numClasses = 5;
 
-        var model = new VisionMambaModel<float>(
-            CreateArch(height, width, channels, numClasses),
-            height, width, patchSize, channels,
-            modelDimension: 16, numLayers: 2, numClasses: numClasses,
-            stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(height, width, channels, numClasses), options: new VisionMambaOptions { ImageHeight = height, ImageWidth = width, PatchSize = patchSize, Channels = channels, ModelDimension = 16, NumLayers = 2, NumClasses = numClasses, StateDimension = 4 });
 
         var input = CreateRandomTensor(new[] { channels, height, width });
         var output = model.Predict(input);
@@ -137,11 +126,7 @@ public class VisionMambaModelTests
         int patchSize = 4;
         int numClasses = 3;
 
-        var model = new VisionMambaModel<float>(
-            CreateArch(height, width, channels, numClasses),
-            height, width, patchSize, channels,
-            modelDimension: 16, numLayers: 2, numClasses: numClasses,
-            stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(height, width, channels, numClasses), options: new VisionMambaOptions { ImageHeight = height, ImageWidth = width, PatchSize = patchSize, Channels = channels, ModelDimension = 16, NumLayers = 2, NumClasses = numClasses, StateDimension = 4 });
 
         var input = CreateRandomTensor(new[] { 1, channels, height, width });
         var expected = new Tensor<float>(new[] { 1, numClasses });
@@ -158,9 +143,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task GetParameters_SetParameters_RoundTrip()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(16, 16, 1, 3),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(16, 16, 1, 3), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 3, StateDimension = 4 });
 
         var params1 = model.GetParameters();
         Assert.True(params1.Length > 0);
@@ -178,9 +161,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task SetParameters_ThrowsOnWrongLength()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(16, 16, 1, 3),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(16, 16, 1, 3), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 3, StateDimension = 4 });
 
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
@@ -188,19 +169,14 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task SupportsTraining_ReturnsTrue()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(16, 16, 1, 3),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(16, 16, 1, 3), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 3, StateDimension = 4 });
         Assert.True(model.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]
     public async Task GetModelMetadata_ContainsExpectedKeys()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(32, 32, 3, 10),
-            32, 32, 8, 3, modelDimension: 64, numLayers: 4, numClasses: 10,
-            scanPattern: VisionScanPattern.CrossScan);
+        var model = new VisionMambaModel<float>(CreateArch(32, 32, 3, 10), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 32, PatchSize = 8, Channels = 3, ModelDimension = 64, NumLayers = 4, NumClasses = 10, ScanPattern = VisionScanPattern.CrossScan });
 
         var metadata = model.GetModelMetadata();
 
@@ -217,9 +193,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task ResetState_AllowsReuse()
     {
-        var model = new VisionMambaModel<float>(
-            CreateArch(16, 16, 1, 3),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
+        var model = new VisionMambaModel<float>(CreateArch(16, 16, 1, 3), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 3, StateDimension = 4 });
 
         var input = CreateRandomTensor(new[] { 1, 1, 16, 16 });
         var output1 = model.Predict(input);
@@ -243,11 +217,7 @@ public class VisionMambaModelTests
     public async Task DifferentImageSizes_Work()
     {
         // Rectangular image
-        var model = new VisionMambaModel<float>(
-            CreateArch(32, 16, 1, 5),
-            imageHeight: 32, imageWidth: 16, patchSize: 8,
-            channels: 1, modelDimension: 16, numLayers: 2, numClasses: 5,
-            stateDimension: 4, scanPattern: VisionScanPattern.Continuous);
+        var model = new VisionMambaModel<float>(CreateArch(32, 16, 1, 5), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 16, PatchSize = 8, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 5, StateDimension = 4, ScanPattern = VisionScanPattern.Continuous });
 
         Assert.Equal(8, model.NumPatches); // (32/8) * (16/8) = 4*2 = 8
 
@@ -261,9 +231,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task Predict_Double_ProducesValidOutput()
     {
-        var model = new VisionMambaModel<double>(
-            CreateDoubleArch(),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
+        var model = new VisionMambaModel<double>(CreateDoubleArch(), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 3, StateDimension = 4 });
 
         var input = CreateRandomDoubleTensor(new[] { 1, 1, 16, 16 });
         var output = model.Predict(input);

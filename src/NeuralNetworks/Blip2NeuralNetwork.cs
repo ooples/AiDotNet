@@ -349,7 +349,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         string languageModelPath,
         ITokenizer tokenizer,
         Blip2Options? options = null,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture,
@@ -357,6 +356,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                1.0)
     {
         _options = options ?? new Blip2Options();
+        _options.Validate();
         _options.Validate();
         Options = _options;
 
@@ -378,7 +378,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _visionEncoderPath = visionEncoderPath;
         _qformerPath = qformerPath;
         _languageModelPath = languageModelPath;
-        _languageModelBackbone = languageModelBackbone;
+        _languageModelBackbone = _options.LanguageModelBackbone;
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
@@ -462,7 +462,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         Blip2Options? options = null,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
@@ -471,6 +470,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                1.0)
     {
         _options = options ?? new Blip2Options();
+        _options.Validate();
         _options.Validate();
         if (_options.ImageSize % _options.PatchSize != 0)
             throw new ArgumentException(
@@ -493,10 +493,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _patchSize = _options.PatchSize;
         _vocabularySize = _options.VocabSize;
         _numLmDecoderLayers = _options.NumLmDecoderLayers;
-        _languageModelBackbone = languageModelBackbone;
+        _languageModelBackbone = _options.LanguageModelBackbone;
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
-        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(_options.LanguageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 

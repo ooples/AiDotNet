@@ -138,22 +138,20 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     /// </summary>
     public UnifiedMultimodalNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
-        int maxSequenceLength = DEFAULT_MAX_SEQ_LEN,
-        int numTransformerLayers = DEFAULT_NUM_LAYERS,
+        UnifiedMultimodalNetworkOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null,
-        UnifiedMultimodalNetworkOptions? options = null)
+        int? seed = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new UnifiedMultimodalNetworkOptions();
+        _options.Validate();
         Options = _options;
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _numTransformerLayers = numTransformerLayers;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _numTransformerLayers = _options.NumTransformerLayers;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         // AdamW (decoupled weight decay) is the canonical optimizer for multimodal transformers:

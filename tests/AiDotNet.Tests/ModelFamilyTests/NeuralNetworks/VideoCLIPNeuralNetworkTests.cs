@@ -108,8 +108,8 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase<float>
                 NumHeads = 4,                // Paper: 12 (ViT-B attention heads)
                 NumFrames = 4,               // Paper: 8 (sampled frames per video)
                 FrameRate = 1.0,             // Paper: 1 FPS sampling
+                TemporalAggregation = TemporalAggregationType.TemporalTransformer,
             },
-            temporalAggregation: TemporalAggregationType.TemporalTransformer,
             optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions),
             lossFunction: new CosineSimilarityLoss<float>());
 

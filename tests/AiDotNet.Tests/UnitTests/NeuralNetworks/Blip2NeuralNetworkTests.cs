@@ -174,7 +174,11 @@ public class Blip2NeuralNetworkTests
         var architecture = CreateBasicArchitecture();
 
         // Act
-        var network = new Blip2NeuralNetwork<float>(architecture, languageModelBackbone: LanguageModelBackbone.OPT, options: new Blip2Options { NumQueryTokens = 32 });
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options
+        {
+            LanguageModelBackbone = LanguageModelBackbone.OPT,
+            NumQueryTokens = 32,
+        });
 
         // Assert
         Assert.Equal(32, network.NumQueryTokens);
@@ -274,7 +278,7 @@ public class Blip2NeuralNetworkTests
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(architecture, languageModelBackbone: LanguageModelBackbone.FlanT5, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumQueryTokens = 32, NumHeads = 2, NumLmDecoderLayers = 1 });
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { LanguageModelBackbone = LanguageModelBackbone.FlanT5, ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumQueryTokens = 32, NumHeads = 2, NumLmDecoderLayers = 1 });
 
         // Act
         var metadata = network.GetModelMetadata();

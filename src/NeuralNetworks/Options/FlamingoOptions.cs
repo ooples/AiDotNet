@@ -38,6 +38,7 @@ public class FlamingoOptions : VisionLanguageModelOptions
         VocabSize = 32000;
         NumPerceiverLayers = 6;
         LearningRate = 1e-3;
+        LanguageModelBackbone = LanguageModelBackbone.Chinchilla;
     }
 
 
@@ -81,4 +82,9 @@ public class FlamingoOptions : VisionLanguageModelOptions
     {
         ValidateCore();
     }
+
+    /// <summary>
+    /// Gets or sets the language model backbone.
+    /// </summary>
+    public LanguageModelBackbone LanguageModelBackbone { get; set; }
 }
