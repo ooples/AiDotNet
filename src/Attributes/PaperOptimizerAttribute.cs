@@ -304,14 +304,23 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// <remarks>
     /// <para>
     /// Papers overwhelmingly state decay in EPOCHS -- "decay by 0.01 every 3 epochs", "halved every
-    /// two epochs", "a 0.999 factor in every epoch" -- while a scheduler steps per batch by default.
-    /// Declaring the interval without its unit silently reinterprets epochs as steps, which is not a
-    /// small error: MobileNetV3's 0.01 every 3 epochs becomes a 100x cut every 3 steps, and the model
-    /// stops training within a few updates.
+    /// two epochs", "a 0.999 factor in every epoch" -- while the schedule attached from a recipe is
+    /// stepped per batch. Declaring the interval without its unit silently reinterprets epochs as
+    /// steps, which is not a small error: MobileNetV3's 0.01 every 3 epochs becomes a 100x cut every
+    /// 3 steps, and the model stops training within a few updates.
     /// </para>
     /// <para>
-    /// Left at <c>StepPerBatch</c>, which is the library default, so declaring nothing changes
-    /// nothing. Set <c>StepPerEpoch</c> whenever the paper counts in epochs.
+    /// Defaults to <c>StepPerBatch</c>, which is the cadence every schedule these recipes express is
+    /// written in -- StepSize, WarmupSteps, Noam's t and milestone fractions all count steps. Set
+    /// <c>StepPerEpoch</c> whenever the paper counts in epochs.
+    /// </para>
+    /// <para>
+    /// This is NOT the library default: <c>GradientBasedOptimizerOptions.SchedulerStepMode</c>
+    /// defaults to <c>StepPerEpoch</c>. The factory therefore writes the declared cadence onto the
+    /// options unconditionally. An earlier revision wrote it only when it differed from
+    /// <c>StepPerBatch</c>, on the assumption that the options already agreed -- they do not, so
+    /// every recipe that did not explicitly ask for an epoch cadence got a schedule that was
+    /// attached and then never advanced.
     /// </para>
     /// </remarks>
     public SchedulerStepMode ScheduleStepMode { get; set; } = SchedulerStepMode.StepPerBatch;

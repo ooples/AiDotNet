@@ -732,6 +732,83 @@ internal static class PaperOptimizerFactory
             "warmup held at its share of the run; same treatment as the #1835 densification window");
         return scaled;
     }
+    /// <summary>
+    /// Writes the cadence a recipe's schedule is stepped at onto the optimizer options.
+    /// </summary>
+    /// <param name="options">The optimizer options a schedule was just attached to.</param>
+    /// <param name="cadence">The cadence the recipe declares.</param>
+    /// <remarks>
+    /// <para>
+    /// Always written, never conditionally. <c>GradientBasedOptimizerOptions.SchedulerStepMode</c>
+    /// defaults to <c>StepPerEpoch</c>, and <c>GradientBasedOptimizerBase.OnBatchEnd</c> advances
+    /// the schedule only under <c>StepPerBatch</c> (or during warmup under <c>WarmupThenEpoch</c>).
+    /// Tape training signals batch ends and nothing on the <c>Train</c> path raises an epoch, so a
+    /// schedule attached from a recipe was installed and then never advanced: the optimizer kept
+    /// whatever rate the schedule reports at step 0, for the whole run.
+    /// </para>
+    /// <para>
+    /// That is silent for a decaying schedule, which merely trains at its peak rate throughout, and
+    /// destructive for one that ramps up. ECAPA-TDNN declares Cyclic Triangular2 between
+    /// MinLearningRate 1e-8 and 1e-3; a cyclic schedule starts at its base, so the model trained at
+    /// 1e-8 forever and its memorization probe moved loss from 0.438444 to 0.438423 across 100
+    /// steps. Noam and LinearWarmup have the same shape and the same exposure.
+    /// </para>
+    /// <para>
+    /// Skipping the write when the recipe asks for <c>StepPerBatch</c> looks safe and is not: it
+    /// assumes the options already say <c>StepPerBatch</c>, and they say <c>StepPerEpoch</c>. That
+    /// assumption left every recipe that did not explicitly ask for an epoch cadence -- which is
+    /// almost all of them, since <c>StepPerBatch</c> is the attribute's own default -- with a
+    /// schedule that never ticked.
+    /// </para>
+    /// </remarks>
+    private static void ApplyScheduleCadence(object options, SchedulerStepMode cadence)
+    {
+        PropertyInfo? mode = options.GetType().GetProperty(
+            "SchedulerStepMode", BindingFlags.Public | BindingFlags.Instance);
+
+        if (mode is not null && mode.CanWrite && mode.PropertyType == typeof(SchedulerStepMode))
+        {
+            mode.SetValue(options, cadence);
+        }
+    }
+
+    /// <summary>
+    /// The half-cycle a cyclic schedule should actually use: the published one, or a proportional
+    /// share of the run when the published one is longer than the run itself.
+    /// </summary>
+    /// <param name="declaredStepSize">The half-cycle the paper states, in steps.</param>
+    /// <param name="totalSteps">The run length, or 0 when it is not known.</param>
+    /// <remarks>
+    /// <para>
+    /// A published StepSize is stated in the units of that paper's own training run. ECAPA-TDNN
+    /// declares a Triangular2 cycle with StepSize 65000 ramping 1e-8 to 1e-3, which is right for the
+    /// run it was measured on and useless for a shorter one: 100 steps into a 65000-step ramp the
+    /// rate is about 1.5e-6, roughly 650 times below the declared rate, so the model does not
+    /// visibly train. That is what the generated memorization probe caught -- loss moved from
+    /// 0.438444 to 0.438423 across 100 steps.
+    /// </para>
+    /// <para>
+    /// Copying 65000 into a 100-step run misapplies the recipe rather than honouring it, so the
+    /// half-cycle is scaled to fit: half the run, leaving room for one full up-and-down cycle. The
+    /// shape of the schedule, which is the part the paper is actually asserting, is preserved. This
+    /// mirrors <see cref="ResolveMilestones"/> and the TriStage hold fraction, both of which already
+    /// resolve published positions against the real run length.
+    /// </para>
+    /// <para>
+    /// With no horizon the declared value is kept unchanged: guessing a cycle for an unknown run
+    /// length would be inventing a schedule rather than adapting one.
+    /// </para>
+    /// </remarks>
+    private static int FittedHalfCycle(int declaredStepSize, int totalSteps)
+    {
+        if (totalSteps <= 0 || declaredStepSize <= totalSteps)
+        {
+            return declaredStepSize;
+        }
+
+        return Math.Max(1, totalSteps / 2);
+    }
+
     /// <summary>Turns fractional decay points into the step numbers this run will actually reach.</summary>
     /// <remarks>
     /// Distinct and strictly increasing, because MultiStepLRScheduler requires increasing
@@ -877,19 +954,13 @@ internal static class PaperOptimizerFactory
         ILearningRateScheduler? scheduler = BuildScheduler(
             recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
         scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
-        if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
-
-        // A schedule stated in epochs must be stepped in epochs. Without this the interval is
-        // read as batches and the rate collapses far faster than the paper intends.
-        if (recipe.ScheduleStepMode != SchedulerStepMode.StepPerBatch)
+        if (scheduler is not null)
         {
-            PropertyInfo? modeProperty = options.GetType().GetProperty(
-                "SchedulerStepMode", BindingFlags.Public | BindingFlags.Instance);
-            if (modeProperty is not null && modeProperty.CanWrite
-                && modeProperty.PropertyType == typeof(SchedulerStepMode))
-            {
-                modeProperty.SetValue(options, recipe.ScheduleStepMode);
-            }
+            schedulerProperty.SetValue(options, scheduler);
+
+            // A schedule stated in epochs must be stepped in epochs, so the recipe chooses; and the
+            // chosen cadence is always written, because the options do not already agree with it.
+            ApplyScheduleCadence(options, recipe.ScheduleStepMode);
         }
     }
 
@@ -946,12 +1017,14 @@ internal static class PaperOptimizerFactory
                 LearningRateSchedulerType.Noam when modelDimension > 0 && warmupSteps > 0
                     => new NoamSchedule(modelDimension, warmupSteps),
 
-                // The bounds are the declared rate and floor; StepSize is the half-cycle.
+                // The bounds are the declared rate and floor; StepSize is the half-cycle, scaled to
+                // the run when the published one would not fit inside it.
                 LearningRateSchedulerType.Cyclic
                     when recipe.StepSize > 0 && !double.IsNaN(recipe.LearningRate)
                     => new CyclicLRScheduler(
                            baseLearningRate: floor, maxLearningRate: recipe.LearningRate,
-                           stepSizeUp: recipe.StepSize, mode: recipe.CyclicPolicy),
+                           stepSizeUp: FittedHalfCycle(recipe.StepSize, totalSteps),
+                           mode: recipe.CyclicPolicy),
 
                 LearningRateSchedulerType.MultiStep
                     when recipe.MilestoneFractions.Length > 0 && totalSteps > 0
