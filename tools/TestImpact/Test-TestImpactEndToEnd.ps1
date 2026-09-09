@@ -324,6 +324,15 @@ try {
             'a source-to-Markdown rename incorrectly suppressed runtime validation'
         Assert-True (@($renameClassification.changedPaths).Count -eq 2) `
             'source-to-Markdown rename classification did not expose both sides'
+        & $selector -MapFile certified/shard-map.json `
+            -ExpectedShards @('Alpha', 'Beta', 'Always') -OutFile rename-selection.json
+        $renameSelection = Get-Content rename-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $renameSelection.escalate) `
+            'a mapped source-to-Markdown rename unexpectedly escalated'
+        Assert-True ([bool] $renameSelection.requiresValidation) `
+            'normal shard selection hid the source side of a source-to-Markdown rename'
+        Assert-True (@($renameSelection.shards).Count -eq 3) `
+            'normal shard selection did not retain both mapped source shards and always-run validation'
 
         $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1

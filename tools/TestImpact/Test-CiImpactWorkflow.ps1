@@ -222,8 +222,12 @@ Assert-Contract ($selectStep.Contains('if ($requiresValidation -and $matrixShard
     'the empty-matrix fallback cannot distinguish an authorized non-runtime result from uncertainty'
 Assert-Contract ($selectorText.Contains('enum ChangedPathImpact')) `
     'changed-path control flow is not represented by a closed enum'
-Assert-Contract ($selectorText.Contains('diff --no-renames --name-only')) `
+Assert-Contract ($selectorText.Contains('diff --no-renames --name-only $BaseSha HEAD')) `
     'path classification can hide the source side of a rename'
+Assert-Contract ($selectorText.Contains('diff --no-renames --name-only $MapSha HEAD')) `
+    'normal shard selection can hide the source path of a rename'
+Assert-Contract ($selectorText.Contains('diff --no-renames --no-ext-diff -U0 $MapSha HEAD')) `
+    'normal shard range selection can omit the deleted side of a rename'
 Assert-Contract ($selectorHeader.Contains(
         'coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}')) `
     'select-shards does not publish the known always-run coverage disposition'

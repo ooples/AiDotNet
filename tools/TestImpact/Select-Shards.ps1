@@ -295,9 +295,9 @@ function ConvertTo-ChangedRanges {
 function Get-ChangedRanges {
     param([string] $MapSha)
 
-    $changedFiles = @(& git -c core.quotepath=false diff --name-only $MapSha HEAD --)
+    $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$MapSha' failed" }
-    $diff = @(& git -c core.quotepath=false diff --no-ext-diff -U0 $MapSha HEAD --)
+    $diff = @(& git -c core.quotepath=false diff --no-renames --no-ext-diff -U0 $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff from '$MapSha' failed" }
     return ConvertTo-ChangedRanges -DiffLines $diff -ChangedFiles $changedFiles
 }
