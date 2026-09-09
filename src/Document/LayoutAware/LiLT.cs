@@ -136,19 +136,13 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 7,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        string textBackbone = "bert-base",
+        LiLTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LiLTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LiLTOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -159,16 +153,16 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _textBackbone = textBackbone;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _textBackbone = _options.TextBackbone;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
-        MaxSequenceLength = maxSequenceLength;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -190,35 +184,29 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// </remarks>
     public LiLT(
         NeuralNetworkArchitecture<T> architecture,
+        LiLTOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 7,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        string textBackbone = "bert-base",
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LiLTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LiLTOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _textBackbone = textBackbone;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _textBackbone = _options.TextBackbone;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
-        MaxSequenceLength = maxSequenceLength;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
-        _tokenizer = tokenizer ?? CreateTokenizerForBackbone(textBackbone, vocabSize);
+        _tokenizer = tokenizer ?? CreateTokenizerForBackbone(_options.TextBackbone, _options.VocabSize);
 
         InitializeLayers();
     }

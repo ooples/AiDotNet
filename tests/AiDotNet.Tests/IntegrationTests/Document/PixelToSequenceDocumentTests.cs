@@ -1,4 +1,6 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Document.PixelToSequence;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -40,7 +42,7 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        var model = new Donut<double>(arch, options: new DonutOptions { ImageHeight = 64, ImageWidth = 64 });
         Assert.NotNull(model);
     }
 
@@ -48,7 +50,7 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        var model = new Donut<double>(arch, options: new DonutOptions { ImageHeight = 64, ImageWidth = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +62,7 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        var model = new Donut<double>(arch, options: new DonutOptions { ImageHeight = 64, ImageWidth = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("Donut", meta.Name);
     }
@@ -73,7 +75,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
+        var model = new Nougat<double>(arch, options: new NougatOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -81,7 +83,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
+        var model = new Nougat<double>(arch, options: new NougatOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -93,7 +95,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
+        var model = new Nougat<double>(arch, options: new NougatOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("Nougat", meta.Name);
     }
@@ -106,7 +108,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
+        var model = new Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -114,7 +116,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
+        var model = new Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -126,7 +128,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
+        var model = new Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("Pix2Struct", meta.Name);
     }
@@ -139,7 +141,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
+        var model = new Dessurt<double>(arch, options: new DessurtOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -147,7 +149,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
+        var model = new Dessurt<double>(arch, options: new DessurtOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -159,7 +161,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
+        var model = new Dessurt<double>(arch, options: new DessurtOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("Dessurt", meta.Name);
     }
@@ -172,7 +174,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
+        var model = new MATCHA<double>(arch, options: new MATCHAOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -180,7 +182,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
+        var model = new MATCHA<double>(arch, options: new MATCHAOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -192,7 +194,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
+        var model = new MATCHA<double>(arch, options: new MATCHAOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("MATCHA", meta.Name);
     }
@@ -207,11 +209,11 @@ public class PixelToSequenceDocumentTests
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
-            new Donut<double>(arch, imageHeight: 64, imageWidth: 64),
-            new Nougat<double>(arch, imageSize: 64),
-            new Pix2Struct<double>(arch, imageSize: 64),
-            new Dessurt<double>(arch, imageSize: 64),
-            new MATCHA<double>(arch, imageSize: 64),
+            new Donut<double>(arch, options: new DonutOptions { ImageHeight = 64, ImageWidth = 64 }),
+            new Nougat<double>(arch, options: new NougatOptions { ImageSize = 64 }),
+            new Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 64 }),
+            new Dessurt<double>(arch, options: new DessurtOptions { ImageSize = 64 }),
+            new MATCHA<double>(arch, options: new MATCHAOptions { ImageSize = 64 }),
         };
 
         foreach (var model in models)

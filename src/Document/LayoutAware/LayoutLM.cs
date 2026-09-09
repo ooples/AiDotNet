@@ -129,19 +129,13 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 7,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int maxPosition2D = 1024,
+        LayoutLMOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -152,12 +146,12 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _maxPosition2D = maxPosition2D;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _maxPosition2D = _options.MaxPosition2D;
         // Paper-faithful LR per Xu et al. 2020 KDD §4.1 ("LayoutLM"): AdamW with
         // peak LR=5e-5, linear warmup, weight decay 0.01. The framework default
         // (LR=1e-3) is BERT-pretraining-from-scratch territory and diverges
@@ -166,7 +160,7 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
-        MaxSequenceLength = maxSequenceLength;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -198,29 +192,23 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
     /// </remarks>
     public LayoutLM(
         NeuralNetworkArchitecture<T> architecture,
+        LayoutLMOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 7,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int maxPosition2D = 1024,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _maxPosition2D = maxPosition2D;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _maxPosition2D = _options.MaxPosition2D;
         // Paper-faithful LR per Xu et al. 2020 KDD §4.1 ("LayoutLM"): AdamW with
         // peak LR=5e-5, linear warmup, weight decay 0.01. The framework default
         // (LR=1e-3) is BERT-pretraining-from-scratch territory and diverges
@@ -229,7 +217,7 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
-        MaxSequenceLength = maxSequenceLength;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

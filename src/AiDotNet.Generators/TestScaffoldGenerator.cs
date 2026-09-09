@@ -6315,8 +6315,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
                     "new AiDotNet.NeuralNetworks.Layers.FlattenLayer<double>(), " +
                     "new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(4, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }), " +
-                    "imageSize: 32, maxSequenceLength: 8, encoderDim: 32, decoderDim: 32, " +
-                    "encoderLayers: 1, decoderLayers: 1, numHeads: 4, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.DessurtOptions { ImageSize = 32, MaxSequenceLength = 8, EncoderDim = 32, DecoderDim = 32, EncoderLayers = 1, DecoderLayers = 1, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "InfographicVQA" && model.TypeParameterCount == 1)
             {
@@ -6327,8 +6326,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, maxSequenceLength: 16, visionDim: 32, textDim: 32, " +
-                    "fusionDim: 32, visionLayers: 1, fusionLayers: 1, numHeads: 4, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.InfographicVQAOptions { ImageSize = 32, MaxSequenceLength = 16, VisionDim = 32, TextDim = 32, FusionDim = 32, VisionLayers = 1, FusionLayers = 1, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "Pix2Struct" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6345,9 +6343,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, patchSize: 16, maxPatches: 4, maxSequenceLength: 8, " +
-                    "hiddenDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, " +
-                    "numHeads: 2, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.Pix2StructOptions { ImageSize = 32, PatchSize = 16, MaxPatches = 4, MaxSequenceLength = 8, HiddenDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6361,9 +6357,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, maxSequenceLength: 8, encoderDim: 32, decoderDim: 32, " +
-                    "encoderLayers: 1, decoderLayers: 1, numHeads: 2, vocabSize: 64, " +
-                    "maxPatchesPerImage: 4)";
+                    "options: new AiDotNet.Document.Options.MATCHAOptions { ImageSize = 32, MaxSequenceLength = 8, EncoderDim = 32, DecoderDim = 32, EncoderLayers = 1, DecoderLayers = 1, NumHeads = 2, VocabSize = 64, MaxPatchesPerImage = 4 }" + ")";
             }
             else if (model.ClassName == "REaLTabFormerGenerator" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6535,8 +6529,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 16, outputSize: 4), nodeDim: 16, edgeDim: 8, " +
-                    "gcnLayers: 1, numClasses: 4, maxNodes: 16)";
+                    "inputSize: 16, outputSize: 4), " +
+                    "options: new AiDotNet.Document.Options.DocGCNOptions { NodeDim = 16, EdgeDim = 8, GcnLayers = 1, NumClasses = 4, MaxNodes = 16 }" + ")";
             }
             else if (model.ClassName == "Mamba2LanguageModel" && model.TypeParameterCount == 1)
             {
@@ -8873,8 +8867,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numEntityTypes: 4, imageSize: 32, maxSequenceLength: 32, hiddenDim: 32, " +
-                    "numGcnLayers: 1, numHeads: 2, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.PICKOptions { NumEntityTypes = 4, ImageSize = 32, MaxSequenceLength = 32, HiddenDim = 32, NumGcnLayers = 1, NumHeads = 2, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "Octo" && model.TypeParameterCount == 1)
             {
@@ -8906,8 +8899,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LayoutLMOptions { NumClasses = 4, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "LayoutLMv2" && model.TypeParameterCount == 1)
             {
@@ -8921,16 +8913,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32, " +
-                    // TEST-ONLY learning rate. The production default is the paper's 2e-5 (Appendix B), but that
-                    // is a FINE-TUNING rate for an already-pretrained backbone. This fixture trains a randomly
-                    // initialized model from scratch, where 2e-5 barely moves it: MoreData_ShouldNotDegrade
-                    // measured 2.2398 after 50 iterations against 2.2491 after 200, both still at the ~2.24
-                    // near-random loss of a 4-class head, so the comparison was dominated by data draw rather
-                    // than by learning. 3e-4 is the ordinary from-scratch rate for a small transformer; the
-                    // production default stays paper-faithful. (#1789)
-                    "options: new AiDotNet.Document.Options.LayoutLMv2Options { LearningRate = 3e-4 })";
+                    "options: new AiDotNet.Document.Options.LayoutLMv2Options { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32, LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "UDOP" && model.TypeParameterCount == 1)
             {
@@ -8948,8 +8931,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
-                    "tokenizer: null, numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 32, " +
-                    "numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, vocabSize: 64)";
+                    "tokenizer: null, " +
+                    "options: new AiDotNet.Document.Options.UDOPOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "LayoutXLM" && model.TypeParameterCount == 1)
             {
@@ -8962,8 +8945,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
+                    "options: new AiDotNet.Document.Options.LayoutXLMOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32 }" + ")";
             }
             else if (model.ClassName == "DocFormer" && model.TypeParameterCount == 1)
             {
@@ -8977,8 +8959,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, spatialDim: 32)";
+                    "options: new AiDotNet.Document.Options.DocFormerOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 32 }" + ")";
             }
             else if (model.ClassName == "LiLT" && model.TypeParameterCount == 1)
             {
@@ -8991,8 +8972,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LiLTOptions { NumClasses = 4, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "LayoutLMv3" && model.TypeParameterCount == 1)
             {
@@ -9008,8 +8988,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, patchSize: 16, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LayoutLMv3Options { NumClasses = 4, ImageSize = 32, PatchSize = 16, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
@@ -10467,8 +10446,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
                     "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 28, maxSequenceLength: 16, visionDim: 32, languageDim: 32, " +
-                    "visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 4, visionNumHeads: 4)";
+                    "options: new AiDotNet.Document.Options.DocOwlOptions { ImageSize = 28, MaxSequenceLength = 16, VisionDim = 32, LanguageDim = 32, VisionLayers = 1, LanguageLayers = 1, NumHeads = 4, VocabSize = 4, VisionNumHeads = 4 }" + ")";
             }
             else if (model.ClassName == "Pix2Struct"
                      && typeName.StartsWith(
@@ -10511,9 +10489,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
-                    "tokenizer: null, imageSize: 128, patchSize: 16, maxSequenceLength: 32, " +
-                    "hiddenDim: 128, numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, " +
-                    "vocabSize: 64)";
+                    "tokenizer: null, " +
+                    "options: new AiDotNet.Document.Options.NougatOptions { ImageSize = 128, PatchSize = 16, MaxSequenceLength = 32, HiddenDim = 128, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
                           or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")

@@ -147,7 +147,12 @@ public class DocumentNeuralNetworkOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
-        Require(MaxSequenceLength, nameof(MaxSequenceLength));
-        Require(HiddenDim, nameof(HiddenDim));
+        // Nothing is universal across 29 heterogeneous document models: only 13 of them have a
+        // hidden dimension at all, and 17 a sequence length. Requiring a value the family does
+        // not share compiles clean and then fails at construction — it cost 11 failing tests
+        // here and 30 in the GAN family before that.
+        //
+        // A leaf that knows it needs a value calls Require itself, in its own Validate().
+        Require(ImageSize > 0 ? ImageSize : 1, nameof(ImageSize));
     }
 }

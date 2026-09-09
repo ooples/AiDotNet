@@ -162,20 +162,13 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 16,
-        int imageSize = 224,
-        int maxSequenceLength = 2048,
-        int hiddenDim = 1024,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 12,
-        int numHeads = 16,
-        int vocabSize = 50000,
+        UDOPOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        UDOPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new UDOPOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -186,12 +179,12 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
         // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
         // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
@@ -205,8 +198,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
                 WeightDecay = 0.01
             });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -229,43 +222,36 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// </remarks>
     public UDOP(
         NeuralNetworkArchitecture<T> architecture,
+        UDOPOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 16,
-        int imageSize = 224,
-        int maxSequenceLength = 2048,
-        int hiddenDim = 1024,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 12,
-        int numHeads = 16,
-        int vocabSize = 50000,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        UDOPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new UDOPOptions();
+        _options.Validate();
         Options = _options;
 
         // A 64px native instance is a smoke-scale model, not a useful carrier for UDOP-Large's
         // 1024-wide 12+12-layer defaults. Scale only default-valued parameters in that explicit
         // tiny-image mode; the normal 224px production constructor remains paper-faithful.
-        if (imageSize <= 64)
+        if (_options.ImageSize <= 64)
         {
-            if (maxSequenceLength == 2048) maxSequenceLength = 64;
-            if (hiddenDim == 1024) hiddenDim = 64;
-            if (numEncoderLayers == 12) numEncoderLayers = 2;
-            if (numDecoderLayers == 12) numDecoderLayers = 2;
-            if (numHeads == 16) numHeads = 4;
-            if (vocabSize == 50000) vocabSize = 256;
+            if (_options.MaxSequenceLength == 2048) _options.MaxSequenceLength = 64;
+            if (_options.HiddenDim == 1024) _options.HiddenDim = 64;
+            if (_options.NumEncoderLayers == 12) _options.NumEncoderLayers = 2;
+            if (_options.NumDecoderLayers == 12) _options.NumDecoderLayers = 2;
+            if (_options.NumHeads == 16) _options.NumHeads = 4;
+            if (_options.VocabSize == 50000) _options.VocabSize = 256;
         }
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
         // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
         // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
@@ -279,8 +265,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
                 WeightDecay = 0.01
             });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

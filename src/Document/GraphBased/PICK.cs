@@ -113,19 +113,13 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numEntityTypes = 14,
-        int imageSize = 512,
-        int maxSequenceLength = 512,
-        int hiddenDim = 256,
-        int numGcnLayers = 2,
-        int numHeads = 8,
-        int vocabSize = 30522,
+        PICKOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        PICKOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new PICKOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -136,16 +130,16 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numEntityTypes = numEntityTypes;
-        _hiddenDim = hiddenDim;
-        _numGcnLayers = numGcnLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _numEntityTypes = _options.NumEntityTypes;
+        _hiddenDim = _options.HiddenDim;
+        _numGcnLayers = _options.NumGcnLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -167,33 +161,27 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     /// </remarks>
     public PICK(
         NeuralNetworkArchitecture<T> architecture,
+        PICKOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numEntityTypes = 14,
-        int imageSize = 512,
-        int maxSequenceLength = 512,
-        int hiddenDim = 256,
-        int numGcnLayers = 2,
-        int numHeads = 8,
-        int vocabSize = 30522,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        PICKOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new PICKOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numEntityTypes = numEntityTypes;
-        _hiddenDim = hiddenDim;
-        _numGcnLayers = numGcnLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _numEntityTypes = _options.NumEntityTypes;
+        _hiddenDim = _options.HiddenDim;
+        _numGcnLayers = _options.NumGcnLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

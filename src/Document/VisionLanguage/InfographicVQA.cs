@@ -127,21 +127,13 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     public InfographicVQA(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 1024,
-        int maxSequenceLength = 512,
-        int visionDim = 768,
-        int textDim = 768,
-        int fusionDim = 768,
-        int visionLayers = 12,
-        int fusionLayers = 6,
-        int numHeads = 12,
-        int vocabSize = 30522,
+        InfographicVQAOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        InfographicVQAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new InfographicVQAOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -150,17 +142,17 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _visionDim = visionDim;
-        _textDim = textDim;
-        _fusionDim = fusionDim;
-        _visionLayers = visionLayers;
-        _fusionLayers = fusionLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _visionDim = _options.VisionDim;
+        _textDim = _options.TextDim;
+        _fusionDim = _options.FusionDim;
+        _visionLayers = _options.VisionLayers;
+        _fusionLayers = _options.FusionLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -182,35 +174,27 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     /// </remarks>
     public InfographicVQA(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 1024,
-        int maxSequenceLength = 512,
-        int visionDim = 768,
-        int textDim = 768,
-        int fusionDim = 768,
-        int visionLayers = 12,
-        int fusionLayers = 6,
-        int numHeads = 12,
-        int vocabSize = 30522,
+        InfographicVQAOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        InfographicVQAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new InfographicVQAOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _visionDim = visionDim;
-        _textDim = textDim;
-        _fusionDim = fusionDim;
-        _visionLayers = visionLayers;
-        _fusionLayers = fusionLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _visionDim = _options.VisionDim;
+        _textDim = _options.TextDim;
+        _fusionDim = _options.FusionDim;
+        _visionLayers = _options.VisionLayers;
+        _fusionLayers = _options.FusionLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
         InitializeEmbeddings();
