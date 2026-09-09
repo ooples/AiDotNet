@@ -305,5 +305,3 @@ Check the current version:
 - [Conventional Commits Specification](https://www.conventionalcommits.org/)
 - [Semantic Versioning](https://semver.org/)
 - [Keep a Changelog](https://keepachangelog.com/)
-
-<!-- CI routing live-proof fixture. -->
