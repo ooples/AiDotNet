@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -63,6 +64,9 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Oreshkin et al. 2020, Sec. 5: the Adam optimizer with default settings and an "
+                        + "initial learning rate of 0.001.")]
 public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />

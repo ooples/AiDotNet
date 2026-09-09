@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,6 +43,11 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Jang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.5, Beta2 = 0.9,
+                Source = "Jang et al. 2021, Sec. 3: the model was trained using the Adam optimizer with "
+                        + "beta1 0.5, beta2 0.9 and a 1e-4 learning rate. Those betas are the "
+                        + "adversarial-training convention rather than Adam's defaults, so they are "
+                        + "declared explicitly.")]
 public partial class UnivNet<T> : VocoderBase<T>
 {
     private readonly UnivNetOptions _options;
@@ -81,7 +88,9 @@ public partial class UnivNet<T> : VocoderBase<T>
     {
         _options = options ?? new UnivNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
