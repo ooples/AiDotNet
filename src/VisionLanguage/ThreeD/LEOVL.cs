@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,20 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Huang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.05, ReferenceBatchSize = 80, WarmupSteps = 400,
+                MaxGradientNorm = 5.0, GradientAccumulationSteps = 4,
+                Phase = TrainingPhase.Alignment,
+                Source = "Huang et al. 2024, Table A.12: the alignment stage uses AdamW with a weight "
+                        + "decay of 0.05, betas 0.9 and 0.999, a learning rate of 3e-4, 400 warmup "
+                        + "steps, 4 accumulated gradient batches, a total batch size of 80 and a "
+                        + "gradient norm of 5.0, over 5 epochs.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.05, ReferenceBatchSize = 80, WarmupSteps = 400,
+                MaxGradientNorm = 5.0, GradientAccumulationSteps = 4,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Huang et al. 2024, Table A.13: the instruction-tuning stage repeats those "
+                        + "settings at a learning rate of 3e-5 over 10 epochs.")]
 public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly LEOVLOptions _options;
@@ -101,7 +117,9 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
     {
         _options = options ?? new LEOVLOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
