@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.IO;
 using System.Linq;
@@ -107,6 +108,12 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, DecayRate = 0.5,
+                    StepSize = 100, Schedule = LearningRateSchedulerType.Step,
+                    ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                    Source = "Li et al. 2021, Sec. 5: the Adam optimizer trained for 500 epochs with an "
+                            + "initial learning rate of 0.001 that is halved every 100 epochs. The step size "
+                            + "is in epochs, which the step mode records.")]
     public partial class FourierNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly FourierNeuralOperatorOptions _options;
@@ -184,7 +191,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _width = width;
             _spatialDimensions = spatialDimensions ?? new int[] { 64, 64 }; // Default 2D
             _fourierLayers = new List<FourierLayer<T>>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
 
             InitializeLayers();

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.IO;
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Helpers;
@@ -74,6 +75,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    [PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 0.001,
+                    Source = "Cranmer et al. 2020, Sec. 4: a decaying learning rate starting at 1e-3. No "
+                            + "decay interval or endpoint is given, so no schedule is declared, and the "
+                            + "optimizer is left unspecified because the paper names none -- its single "
+                            + "occurrence of Adam is the acknowledgment of Adam Burrows.")]
     public partial class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;
