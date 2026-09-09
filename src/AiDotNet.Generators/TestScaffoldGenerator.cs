@@ -3864,7 +3864,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.LatentDiffusion;
 
         // Priority 4: Diffusion (plain, non-latent)
-        if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
+        //
+        // [ModelCategory(Diffusion)] is often DESCRIPTIVE rather than structural - MatchaTTS,
+        // CosyVoice2 and StyleTTS2 use a diffusion decoder, EmuEdit/MGIE/SmartEdit edit via
+        // diffusion - while the type itself derives from NeuralNetworkBase<T>, which implements
+        // INeuralNetworkModel<T>. Routing on the category alone therefore handed those models to a
+        // fixture requiring IDiffusionModel, which they do not implement, when they demonstrably
+        // satisfy a neural-network family instead. The category is accurate documentation and is
+        // kept; only the family choice changes, so resolution falls through to the audio,
+        // vision-language and other neural-network priorities below and the model is tested as what
+        // it actually is.
+        //
+        // A model that declares the category and is NOT a neural network keeps today's behaviour,
+        // so the informative "requires an interface this type does not implement" message survives
+        // for the cases where implementing IDiffusionModel really is the fix.
+        if (model.ImplementsDiffusionModel
+            || (model.Categories.Contains(CategoryDiffusion) && !model.ImplementsNeuralNetworkModel))
             return TestFamily.Diffusion;
 
         // Priority 5: GAN
