@@ -98,14 +98,12 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         string imageEncoderPath,
         string textEncoderPath,
         ITokenizer tokenizer,
-        ILossFunction<T>? lossFunction = null,
-        int embeddingDimension = 512,
-        int maxSequenceLength = 77,
-        int imageSize = 224,
-        ClipOptions? options = null)
+        ClipOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new ClipOptions();
+        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
@@ -123,9 +121,9 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
 
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
 
         using (var sessionOptions = new SessionOptions())
         {

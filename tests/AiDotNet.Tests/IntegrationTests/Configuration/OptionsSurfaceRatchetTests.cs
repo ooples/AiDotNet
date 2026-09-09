@@ -43,7 +43,8 @@ public class OptionsSurfaceRatchetTests
     /// add a property to that model's options class instead.
     /// </para>
     /// <para>
-    /// Phase 2 lowered this from 1067 to 977 by migrating all 17 sequence models (90 params).
+    /// Phase 2 took this from 1067 to 977 (17 sequence models, 90 params); phase 3 to 875
+    /// (11 vision-language models, 102 params).
     /// Originally established by this test's first run against master on 2026-09-08. A file-based
     /// estimate of the three areas named in the #2090 spec put it at 806; this reflection
     /// measurement found 1067, because the defect also reaches models the file scan never
@@ -54,7 +55,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 977;
+    private const int Baseline = 875;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
