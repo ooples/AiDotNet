@@ -186,28 +186,23 @@ namespace AiDotNet.NeuralNetworks
         /// learning strategy it should use (type).
         /// </remarks>
         public Word2Vec(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 10000,
-            int embeddingDimension = 100,
-            int windowSize = 5,
-            int maxTokens = 512,
-            Word2VecType type = Word2VecType.SkipGram,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            Word2VecOptions? options = null)
-            : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        Word2VecOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), options?.MaxGradNorm ?? 1.0)
         {
-            _options = options ?? new Word2VecOptions();
+        _options = options ?? new Word2VecOptions();
+        _options.Validate();
             Options = _options;
 
             _tokenizer = tokenizer;
-            _vocabSize = vocabSize;
-            _embeddingDimension = embeddingDimension;
-            _windowSize = windowSize;
-            _maxTokens = maxTokens;
-            _type = type;
+            _vocabSize = _options.VocabSize;
+            _embeddingDimension = _options.EmbeddingDimension;
+            _windowSize = _options.WindowSize;
+            _maxTokens = _options.MaxSequenceLength;
+            _type = _options.Type;
             _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
             // Mikolov et al. 2013 (the Word2Vec paper) explicitly use stochastic
             // gradient descent with an initial learning rate of 0.025 (linear

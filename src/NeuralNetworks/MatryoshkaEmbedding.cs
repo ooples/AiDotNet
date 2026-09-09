@@ -86,28 +86,21 @@ namespace AiDotNet.NeuralNetworks
         /// Initializes a new instance of the MatryoshkaEmbedding model.
         /// </summary>
         public MatryoshkaEmbedding(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 30522,
-            int maxEmbeddingDimension = 1536,
-            int[]? nestedDimensions = null,
-            int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.ClsToken,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            MatryoshkaEmbeddingOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, maxEmbeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        MatryoshkaEmbeddingOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        int[]? nestedDimensions = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
-            _options = options ?? new MatryoshkaEmbeddingOptions();
+        _options = options ?? new MatryoshkaEmbeddingOptions();
+        _options.Validate();
             Options = _options;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
             _nestedDimensions = nestedDimensions ?? new[] { 64, 128, 256, 512, 768, 1024, 1536 };
 
             InitializeLayersCore(false);

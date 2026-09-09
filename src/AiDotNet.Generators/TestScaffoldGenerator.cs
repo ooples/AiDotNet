@@ -4280,7 +4280,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 128), " +
-                    "vocabSize: 128, bucketSize: 1024, embeddingDimension: 16, maxTokens: 32)";
+                    "options: new AiDotNet.NeuralNetworks.Options.FastTextOptions { VocabSize = 128, " +
+                    "BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"

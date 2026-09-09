@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -57,15 +58,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             );
             var tokenizer = new MockTokenizer();
 
-            var model = new TransformerEmbeddingNetwork<double>(
-                architecture,
-                tokenizer,
-                optimizer: null,
-                vocabSize: vocabSize,
-                embeddingDimension: embeddingDim,
-                numLayers: 2,
-                numHeads: 4,
-                feedForwardDim: 128);
+            var model = new TransformerEmbeddingNetwork<double>(architecture, tokenizer: tokenizer, optimizer: null, options: new TransformerEmbeddingOptions { VocabSize = vocabSize, EmbeddingDimension = embeddingDim, NumLayers = 2, NumHeads = 4, FeedForwardDim = 128 });
 
             // Act
             var embedding = model.Embed("hello world");
@@ -90,14 +83,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             var tokenizer = new MockTokenizer();
             var texts = new List<string> { "text 1", "text 2", "text 3" };
 
-            var model = new TransformerEmbeddingNetwork<double>(
-                architecture,
-                tokenizer,
-                optimizer: null,
-                vocabSize: vocabSize,
-                embeddingDimension: embeddingDim,
-                numLayers: 1,
-                numHeads: 2);
+            var model = new TransformerEmbeddingNetwork<double>(architecture, tokenizer: tokenizer, optimizer: null, options: new TransformerEmbeddingOptions { VocabSize = vocabSize, EmbeddingDimension = embeddingDim, NumLayers = 1, NumHeads = 2 });
 
             // Act
             var embeddings = model.EmbedBatch(texts);
@@ -122,15 +108,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             );
             var tokenizer = new MockTokenizer();
 
-            var model = new TransformerEmbeddingNetwork<double>(
-                architecture,
-                tokenizer,
-                optimizer: null,
-                vocabSize: vocabSize,
-                embeddingDimension: embeddingDim,
-                numLayers: 1,
-                numHeads: 2,
-                poolingStrategy: TransformerEmbeddingNetwork<double>.PoolingStrategy.ClsToken);
+            var model = new TransformerEmbeddingNetwork<double>(architecture, tokenizer: tokenizer, optimizer: null, options: new TransformerEmbeddingOptions { VocabSize = vocabSize, EmbeddingDimension = embeddingDim, NumLayers = 1, NumHeads = 2, EmbeddingPoolingStrategy = EmbeddingPoolingStrategy.ClsToken });
 
             // Act
             var embedding = model.Embed("test");

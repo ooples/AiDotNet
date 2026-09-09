@@ -81,7 +81,7 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// The strategy used to pool token-level representations into a single vector.
         /// </summary>
-        private PoolingStrategy _poolingStrategy;
+        private EmbeddingPoolingStrategy _poolingStrategy;
 
         /// <summary>
         /// The total number of transformer encoder layers in the stack.
@@ -123,27 +123,6 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         public int MaxTokens => _maxSequenceLength;
 
-        /// <summary>
-        /// Defines the available pooling strategies for creating a single sentence embedding.
-        /// </summary>
-        public enum PoolingStrategy
-        {
-            /// <summary>
-            /// Averages all token representations across the sequence.
-            /// </summary>
-            Mean,
-
-            /// <summary>
-            /// Takes the maximum value across all sequence positions for each dimension.
-            /// </summary>
-            Max,
-
-            /// <summary>
-            /// Uses the representation of the first token (typically the [CLS] token).
-            /// </summary>
-            ClsToken
-        }
-
         #endregion
 
         #region Constructors
@@ -176,32 +155,25 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public TransformerEmbeddingNetwork(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 30522,
-            int embeddingDimension = 768,
-            int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            TransformerEmbeddingOptions? options = null)
-            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        TransformerEmbeddingOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.MaxGradNorm ?? 1.0)
         {
-            _options = options ?? new TransformerEmbeddingOptions();
+        _options = options ?? new TransformerEmbeddingOptions();
+        _options.Validate();
             Options = _options;
 
             _tokenizer = tokenizer;
-            _vocabSize = vocabSize;
-            _embeddingDimension = embeddingDimension;
-            _maxSequenceLength = maxSequenceLength;
-            _poolingStrategy = poolingStrategy;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _vocabSize = _options.VocabSize;
+            _embeddingDimension = _options.EmbeddingDimension;
+            _maxSequenceLength = _options.MaxSequenceLength;
+            _poolingStrategy = _options.EmbeddingPoolingStrategy;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             // Paper-faithful LR: SBERT (Reimers & Gurevych 2019) and SGPT
             // (Muennighoff 2022) fine-tune sentence-embedding transformers at
@@ -368,20 +340,20 @@ namespace AiDotNet.NeuralNetworks
 
             Vector<T> result;
 
-            if (_poolingStrategy == PoolingStrategy.ClsToken)
+            if (_poolingStrategy == EmbeddingPoolingStrategy.ClsToken)
             {
                 // Extract first row [dim] using Engine-friendly bulk copy
                 var clsData = new T[dim];
                 seq2D.Data.Span.Slice(0, dim).CopyTo(clsData);
                 result = new Vector<T>(clsData);
             }
-            else if (_poolingStrategy == PoolingStrategy.Mean)
+            else if (_poolingStrategy == EmbeddingPoolingStrategy.Mean)
             {
                 // Engine-accelerated mean reduction along sequence axis (axis 0)
                 var meanTensor = Engine.ReduceMean(seq2D, [0], keepDims: false);
                 result = meanTensor.Reshape(dim).ToVector();
             }
-            else if (_poolingStrategy == PoolingStrategy.Max)
+            else if (_poolingStrategy == EmbeddingPoolingStrategy.Max)
             {
                 // Engine-accelerated max reduction along sequence axis (axis 0)
                 var maxTensor = Engine.ReduceMax(seq2D, [0], keepDims: false, out _);
@@ -479,7 +451,7 @@ namespace AiDotNet.NeuralNetworks
                     { "EmbeddingDimension", _embeddingDimension },
                     { "NumLayers", _numLayers },
                     { "NumHeads", _numHeads },
-                    { "PoolingStrategy", _poolingStrategy.ToString() }
+                    { "EmbeddingPoolingStrategy", _poolingStrategy.ToString() }
                 }
             };
         }

@@ -19,7 +19,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// See <see cref="ModelHyperparameterOptions"/> for why these properties are non-nullable.
 /// </para>
 /// <para>
-/// <b>Pooling strategy is deliberately absent.</b> Two unrelated <c>PoolingStrategy</c>
+/// <b>Pooling strategy is deliberately absent.</b> Two unrelated <c>EmbeddingPoolingStrategy</c>
 /// enums exist in this codebase — one nested inside <c>TransformerEmbeddingNetwork&lt;T&gt;</c>
 /// and one in <c>AiDotNet.VisionLanguage.Encoders</c>. Choosing between them, or unifying
 /// them, is part of wiring the embedding models rather than of declaring this base, so the
