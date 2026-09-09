@@ -38,7 +38,9 @@
 
 .PARAMETER SelectorPath
     Select-Shards.ps1. Invoked as a subprocess so the audit exercises the SHIPPING selector rather
-    than a copy of its logic that is free to drift from it.
+    than a copy of its logic that is free to drift from it. The audit-only unchanged-map switch is
+    passed explicitly so an exact map/source tree still exercises a reduced selection; ordinary PR
+    selection does not receive that capability and continues to fail closed on an empty diff.
 
 .PARAMETER OutFile
     Optional path for the JSON report.
@@ -178,7 +180,8 @@ foreach ($outcome in $outcomes) {
 $failed = @($outcomes | Where-Object { [string] $_.outcome -ne 'success' } | ForEach-Object { [string] $_.shard })
 
 $selectionFile = Join-Path ([System.IO.Path]::GetTempPath()) "selection-audit-$PID.json"
-& $SelectorPath -MapFile $MapFile -ExpectedShards @($allShards) -OutFile $selectionFile | Out-Null
+& $SelectorPath -MapFile $MapFile -ExpectedShards @($allShards) -AuditUnchangedMap `
+    -OutFile $selectionFile | Out-Null
 $selection = Get-Content -LiteralPath $selectionFile -Raw | ConvertFrom-Json
 Remove-Item -LiteralPath $selectionFile -ErrorAction SilentlyContinue
 

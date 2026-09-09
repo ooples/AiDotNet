@@ -58,6 +58,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
+          ./tools/TestImpact/Test-ValidationReuseModes.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
 
       - name: Find a complete marked coverage run
         id: source
