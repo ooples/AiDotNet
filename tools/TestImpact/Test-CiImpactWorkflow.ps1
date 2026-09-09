@@ -17,6 +17,7 @@
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
     [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
+    [string] $Selector = 'tools/TestImpact/Select-Shards.ps1',
     [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1',
     [string] $RequiredArtifactReceiver = 'tools/TestImpact/Receive-RequiredArtifact.ps1'
 )
@@ -104,17 +105,17 @@ function Get-ContinuedShellCommand {
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
+$selectorText = Get-Content -LiteralPath $Selector -Raw
 $certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
 $requiredArtifactReceiverText = Get-Content -LiteralPath $RequiredArtifactReceiver -Raw
 
 # Every job in this list consumes meaningful runner time. Dependency-based incidental skipping is
-# not enough: a dependency can be removed during a refactor while the job remains runnable. Each
-# job must explicitly depend on validation-source and consume its JSON boolean decision.
+# not enough: each job must explicitly consume both independent typed decisions -- whether exact
+# PR validation is reusable, and whether this change can affect runtime/model/test behavior.
 $expensiveJobs = @(
     'codeql',
     'build',
     'build-compat',
-    'select-shards',
     'test-net10-sharded',
     'parameter-enumeration-sweep',
     'model-shape-conformance-windows',
@@ -132,12 +133,38 @@ foreach ($job in $expensiveJobs) {
         "expensive job '$job' has no job-level header before its steps"
     Assert-Contract (Test-JobDependency -JobHeader $header -Dependency 'validation-source') `
         "expensive job '$job' does not explicitly depend on validation-source"
+    Assert-Contract (Test-JobDependency -JobHeader $header -Dependency 'select-shards') `
+        "expensive job '$job' does not explicitly depend on select-shards"
     $jobIf = [Regex]::Match($header, '(?m)^    if:\s*(?<value>[^\r\n]+)\s*$')
     Assert-Contract $jobIf.Success `
         "expensive job '$job' has no job-level execution condition"
     Assert-Contract ($jobIf.Success -and
         $jobIf.Groups['value'].Value.Contains('fromJSON(needs.validation-source.outputs.execute_expensive)')) `
         "expensive job '$job' does not consume the typed execute_expensive decision"
+    if ($job -ne 'codeql') {
+        Assert-Contract ($jobIf.Success -and
+            $jobIf.Groups['value'].Value.Contains('fromJSON(needs.select-shards.outputs.requires_validation')) `
+            "expensive job '$job' does not consume the typed requires_validation decision"
+    }
+}
+
+# The active repository ruleset requires a CodeQL result for the candidate commit, even when no
+# runtime files changed. Keep it as one mandatory job while suppressing every model/test matrix.
+$codeqlJob = Get-JobBlock -WorkflowText $validation -Job 'codeql'
+$codeqlHeader = Get-JobHeader -JobBlock $codeqlJob
+Assert-Contract (-not $codeqlHeader.Contains(
+        'fromJSON(needs.select-shards.outputs.requires_validation')) `
+    'CodeQL can be skipped even though the Main ruleset requires its result'
+Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
+    'CodeQL cannot publish its required result after a selector failure'
+
+foreach ($job in @(
+    'test-regression-analysis', 'sonarcloud', 'ci-test-analysis',
+    'promote-ci-test-analysis', 'ci-gate', 'certify-validation'
+)) {
+    $header = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job $job)
+    Assert-Contract ($header.Contains('always()') -and $header.Contains('!cancelled()')) `
+        "job '$job' can keep an explicitly canceled run alive"
 }
 
 $resolver = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
@@ -154,6 +181,13 @@ Assert-Contract ($resolveStep.Contains('continue-on-error: true')) `
     'an unexpected resolver failure blocks dependents instead of retaining fail-closed defaults'
 
 $selectorJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
+$selectorHeader = Get-JobHeader -JobBlock $selectorJob
+Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
+    'select-shards does not depend on validation-source'
+Assert-Contract ($selectorHeader.Contains('fromJSON(needs.validation-source.outputs.execute_expensive)')) `
+    'select-shards does not consume the typed execute_expensive decision'
+Assert-Contract ($selectorHeader.Contains('requires_validation: ${{ steps.select.outputs.requires_validation }}')) `
+    'select-shards does not publish its typed runtime-validation decision'
 $selfTestStep = Get-StepBlock -JobBlock $selectorJob -Step 'Verify the impact tooling'
 Assert-Contract ([bool] $selfTestStep) `
     'select-shards no longer runs the impact tooling self-tests'
@@ -161,6 +195,50 @@ Assert-Contract (-not $selfTestStep.Contains('continue-on-error: true')) `
     'checked-in impact tooling can fail its self-tests while CI remains green'
 Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest')) `
     'the required-artifact transport policy is not executed against its self-tests'
+Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest')) `
+    'the aggregate GitHub API retry policy is not executed against its self-tests'
+Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Test-ValidationReuseModes.ps1')) `
+    'the post-merge certificate modes are not exercised by primary CI'
+$selectStep = Get-StepBlock -JobBlock $selectorJob -Step 'Select'
+Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
+    'ordinary PR selection was given the audit-only unchanged-map capability'
+Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
+    'non-runtime classification still depends on a coverage map being available'
+Assert-Contract ($selectStep.Contains('-BaseSha $env:PR_BASE_SHA')) `
+    'non-runtime classification does not use the exact PR base-to-head path set'
+Assert-Contract ($selectStep.Contains('$pathRequiresValidation = Read-RequiredJsonBoolean')) `
+    'the selector does not validate and consume the path classifier boolean'
+Assert-Contract ($selectStep.Contains('$selectionEscalated = Read-RequiredJsonBoolean')) `
+    'the selector does not validate the map escalation decision'
+Assert-Contract ($selectStep.Contains('$selectionRequiresValidation = Read-RequiredJsonBoolean')) `
+    'the selector does not validate the map runtime-validation decision'
+Assert-Contract ($selectStep.Contains("throw 'shard selector contradicted the exact-path runtime decision'")) `
+    'the map selector can suppress validation after the exact-path classifier required it'
+Assert-Contract ($selectStep.Contains("selector output property 'shards' must be a JSON string array")) `
+    'the selector does not validate the selected shard payload type'
+Assert-Contract ($selectStep.Contains('requires_validation=$($requiresValidation.ToString().ToLowerInvariant())')) `
+    'the selector does not emit the runtime-validation decision as a JSON boolean'
+Assert-Contract ($selectStep.Contains('if ($requiresValidation -and $matrixShards.Count -eq 0)')) `
+    'the empty-matrix fallback cannot distinguish an authorized non-runtime result from uncertainty'
+Assert-Contract ($selectorText.Contains('enum ChangedPathImpact')) `
+    'changed-path control flow is not represented by a closed enum'
+Assert-Contract ($selectorText.Contains('diff --no-renames --name-only $BaseSha HEAD')) `
+    'path classification can hide the source side of a rename'
+Assert-Contract ($selectorText.Contains('diff --no-renames --name-only $MapSha HEAD')) `
+    'normal shard selection can hide the source path of a rename'
+Assert-Contract ($selectorText.Contains('diff --no-renames --no-ext-diff -U0 $MapSha HEAD')) `
+    'normal shard range selection can omit the deleted side of a rename'
+Assert-Contract ($selectorHeader.Contains(
+        'coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}')) `
+    'select-shards does not publish the known always-run coverage disposition'
+Assert-Contract ($selectStep.Contains('-NoCoverageShards $nn')) `
+    'coverage splitting is not restricted to the workflow''s explicit heavy/timing boundary'
+Assert-Contract ($selectStep.Contains('$runWithoutInstrumentation = @($coverageSplit.runWithoutCoverage)')) `
+    'the selector drops the RunWithoutCoverage disposition before matrix execution'
+Assert-Contract ($selectStep.Contains('runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)')) `
+    'coverage provenance does not record which shards deliberately ran without instrumentation'
+Assert-Contract ($selectStep.Contains('coverage_run_without_instrumentation=$(ConvertTo-Json')) `
+    'the typed coverage decision is not transported to the shard jobs'
 
 # A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
 # ListArtifacts concurrently and GitHub responds with a secondary-rate-limit 403. The build publishes
@@ -193,6 +271,27 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $d
 Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
     'native-command error handling can bypass the typed artifact retry policy'
 
+$githubApiRetryPath = Join-Path $PSScriptRoot 'Invoke-GitHubApiWithRetry.ps1'
+$githubApiRetryText = Get-Content -LiteralPath $githubApiRetryPath -Raw
+Assert-Contract ($githubApiRetryText.Contains('enum GitHubApiRequestDisposition')) `
+    'GitHub API retry state is represented by strings instead of a closed type'
+Assert-Contract ($githubApiRetryText.Contains('Get-GitHubApiRequestDisposition')) `
+    'GitHub API requests do not distinguish transient and permanent failures'
+Assert-Contract ($githubApiRetryText.Contains('Start-Sleep -Seconds $delay')) `
+    'GitHub API transient failures retry immediately instead of applying bounded backoff'
+
+$analysisJob = Get-JobBlock -WorkflowText $validation -Job 'ci-test-analysis'
+$collectStateStep = Get-StepBlock -JobBlock $analysisJob `
+    -Step 'Collect shard states and latest merged baseline'
+Assert-Contract ($collectStateStep.Contains('. ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1')) `
+    'aggregate test analysis does not load the tested GitHub API retry policy'
+Assert-Contract (-not $collectStateStep.Contains('Invoke-RestMethod')) `
+    'aggregate test analysis bypasses retry policy for a REST read'
+Assert-Contract (-not $collectStateStep.Contains('Invoke-WebRequest')) `
+    'aggregate test analysis bypasses retry policy for an artifact download'
+Assert-Contract (([Regex]::Matches($collectStateStep, 'Invoke-GitHubApiWithRetry')).Count -eq 5) `
+    'not every aggregate GitHub API read is routed through retry policy'
+
 $artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
 foreach ($job in $artifactConsumers) {
     $consumer = Get-JobBlock -WorkflowText $validation -Job $job
@@ -217,6 +316,82 @@ foreach ($job in $artifactConsumers) {
 }
 
 $testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+Assert-Contract ($testConsumer.Contains('enum CoverageDisposition')) `
+    'coverage execution state is represented by string comparisons instead of a closed enum'
+Assert-Contract ($testConsumer.Contains(
+        'COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}')) `
+    'shard jobs do not consume the selected RunWithoutCoverage set'
+Assert-Contract ($testConsumer.Contains(
+        '$coverageDisposition = [CoverageDisposition]::RunWithoutCoverage')) `
+    'shard execution cannot select the explicit RunWithoutCoverage state'
+Assert-Contract ($testConsumer.Contains(
+        '$coverageDisposition -eq [CoverageDisposition]::Instrument')) `
+    'forced coverage is not authorized exclusively by the Instrument state'
+Assert-Contract ($testConsumer.Contains(
+        'coverage disposition for ''$shardName'' is both Carried and RunWithoutCoverage')) `
+    'overlapping coverage dispositions do not fail closed'
+Assert-Contract ($testConsumer.Contains(
+        'coverage disposition ''$coverageDisposition'' is invalid for coverage-producing shard ''$shardName''')) `
+    'non-instrumented coverage dispositions are not bounded to heavy/timing shards'
+
+# Parse the exact embedded pwsh program after replacing GitHub's expression tokens. Text searches
+# prove the wiring is present; the language parser proves a later YAML edit cannot leave that
+# critical disposition code syntactically dead while the contract still sees its strings.
+$testRunStep = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+Assert-Contract ([bool] $testRunStep) `
+    'the sharded test execution step is absent'
+$testStepLines = [Regex]::Split($testRunStep, '\r?\n')
+$testRunLine = [Array]::IndexOf($testStepLines, '        run: |')
+Assert-Contract ($testRunLine -ge 0) `
+    'the sharded test step has no literal PowerShell run block to validate'
+if ($testRunLine -ge 0) {
+    $testRunBody = [System.Collections.Generic.List[string]]::new()
+    for ($i = $testRunLine + 1; $i -lt $testStepLines.Count; $i++) {
+        $line = $testStepLines[$i]
+        if ($line -and -not $line.StartsWith('          ', [StringComparison]::Ordinal)) { break }
+        [void] $testRunBody.Add($(if ($line.Length -ge 10) { $line.Substring(10) } else { '' }))
+    }
+    $testRunScript = $testRunBody -join "`n"
+    $testRunScript = [Regex]::Replace($testRunScript, '\$\{\{[^\r\n]*?\}\}', 'placeholder')
+    $parseTokens = $null
+    $parseErrors = $null
+    [void] [System.Management.Automation.Language.Parser]::ParseInput(
+        $testRunScript, [ref] $parseTokens, [ref] $parseErrors)
+    $parseErrorMessages = @($parseErrors | ForEach-Object { $_.Message }) -join '; '
+    Assert-Contract (@($parseErrors).Count -eq 0) `
+        "the embedded sharded-test PowerShell has syntax errors: $parseErrorMessages"
+
+    # Execute the exact checked-in decision block for the failure that motivated this state. This
+    # is intentionally extracted from the workflow rather than restating its algorithm in the
+    # test: Integration D must be recognized as heavy, consume the selected disposition, and leave
+    # XPlat instrumentation disabled. The dotnet invocation begins immediately after the slice.
+    $decisionStart = $testRunScript.IndexOf('$heavyShards = @(', [StringComparison]::Ordinal)
+    $decisionEnd = $testRunScript.IndexOf('$dotnetArgs = @(', [StringComparison]::Ordinal)
+    Assert-Contract ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) `
+        'the executable coverage-decision block could not be isolated from the workflow'
+    if ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) {
+        $decisionBody = $testRunScript.Substring($decisionStart, $decisionEnd - $decisionStart)
+        $decisionBody = $decisionBody.Replace("'placeholder' -eq 'true'", "'true' -eq 'true'")
+        $decisionProof = @"
+`$shardName = 'Integration D'
+`$env:COVERAGE_CARRIED = '[]'
+`$env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION = '["Integration D"]'
+$decisionBody
+[pscustomobject]@{
+    Heavy = `$heavyShard
+    CollectCoverage = `$collectCoverage
+    Disposition = [string] `$coverageDisposition
+}
+"@
+        $decisionResult = @(& ([scriptblock]::Create($decisionProof))) | Select-Object -Last 1
+        Assert-Contract ([bool] $decisionResult.Heavy) `
+            'the production workflow no longer recognizes Integration D as a heavy shard'
+        Assert-Contract (-not [bool] $decisionResult.CollectCoverage) `
+            'RunWithoutCoverage still adds instrumentation to Integration D'
+        Assert-Contract ($decisionResult.Disposition -ceq 'RunWithoutCoverage') `
+            'Integration D did not consume the typed RunWithoutCoverage disposition'
+    }
+}
 foreach ($stepName in @(
     'Upload test-impact digest',
     'Upload coverage + test results',
@@ -234,24 +409,65 @@ Assert-Contract ($shapeUpload.Contains("if: always() && steps.download-build-art
 $promotion = Get-JobBlock -WorkflowText $validation -Job 'promote-ci-test-analysis'
 Assert-Contract ($promotion.Contains("needs.validation-source.outputs.reuse == 'true'")) `
     'certified artifact promotion is not restricted to exact-tree reuse'
+Assert-Contract ($promotion.Contains('fromJSON(needs.validation-source.outputs.reused_requires_validation)')) `
+    'non-runtime reuse can still attempt to promote test artifacts that do not exist'
 
 $validationCertificate = Get-JobBlock -WorkflowText $validation -Job 'certify-validation'
 Assert-Contract ($validationCertificate.Contains("needs.ci-gate.result == 'success'")) `
     'validation certificate can be published before the required CI Gate succeeds'
+Assert-Contract ((Test-JobDependency -JobHeader (Get-JobHeader -JobBlock $validationCertificate) `
+        -Dependency 'select-shards')) `
+    'validation certificate cannot bind the runtime-validation decision'
+Assert-Contract ($validationCertificate.Contains('schemaVersion: 2')) `
+    'validation certificate schema does not include the runtime-validation decision'
+Assert-Contract ($validationCertificate.Contains('requiresValidation: $requiresValidation')) `
+    'validation certificate omits the runtime-validation decision'
 Assert-Contract ($validationCertificate.Contains('ci-validation-certificate-')) `
     'validation certificate is not published as a distinct artifact'
 Assert-Contract ($resolver.Contains('ci-validation-certificate-')) `
     'exact-tree resolver does not require the CI Gate validation certificate'
+Assert-Contract ($resolver.Contains('reused_requires_validation: ${{ steps.resolve.outputs.reused_requires_validation || steps.defaults.outputs.reused_requires_validation }}')) `
+    'exact-tree resolver does not publish the reused validation scope'
+Assert-Contract ($resolver.Contains('if .schemaVersion == 1 then true else .requiresValidation end')) `
+    'legacy certificates are not conservatively treated as full runtime validation'
+Assert-Contract ($resolver -match '(?s)if \[ "\$requires_validation" = ''true'' \]; then.*?analysis_id.*?coverage_count') `
+    'runtime certificates no longer require analysis and coverage artifacts'
 
 $gate = Get-JobBlock -WorkflowText $validation -Job 'ci-gate'
-foreach ($job in $expensiveJobs) {
+foreach ($job in @('select-shards') + $expensiveJobs) {
     Assert-Contract ($gate -match "(?m)^\s+- $([Regex]::Escape($job))\s*$") `
         "CI Gate does not depend on expensive job '$job', so its failure cannot block validation"
 }
 Assert-Contract ($gate -match 'required=\("validation-source:\$SOURCE_RESULT"\)') `
     'the reuse-aware gate must start with only validation-source as universally required'
-Assert-Contract ($gate -match '(?s)if \[ "\$REUSED_VALIDATION" = "true" \].*?promote-ci-test-analysis.*?else.*?build:\$BUILD_RESULT.*?sonarcloud:\$SONAR_RESULT') `
+Assert-Contract ($gate -match '(?s)if \[ "\$REUSED_VALIDATION" = "true" \].*?promote-ci-test-analysis.*?else.*?sonarcloud:\$SONAR_RESULT.*?build:\$BUILD_RESULT') `
     'the gate does not exclude build and SonarCloud from certified-reuse mode'
+Assert-Contract ($gate.Contains('REQUIRES_VALIDATION: ${{ needs.select-shards.outputs.requires_validation }}')) `
+    'CI Gate does not consume the runtime-validation decision'
+Assert-Contract ($gate.Contains('REUSED_REQUIRES_VALIDATION: ${{ needs.validation-source.outputs.reused_requires_validation }}')) `
+    'CI Gate does not consume the reused validation scope'
+Assert-Contract ($gate -match '(?s)if \[ "\$REUSED_VALIDATION" = "true" \]; then.*?REUSED_REQUIRES_VALIDATION.*?promote-ci-test-analysis') `
+    'CI Gate cannot reuse a non-runtime certificate without requiring absent test artifacts'
+Assert-Contract ($gate -match '(?s)required\+=\("select-shards:\$SELECT_RESULT" "codeql:\$CODEQL_RESULT" "sonarcloud:\$SONAR_RESULT"\).*?if \[ "\$REQUIRES_VALIDATION" != "false" \].*?build:\$BUILD_RESULT') `
+    'CI Gate does not allow a successful selector to suppress expensive jobs for non-runtime changes'
+Assert-Contract ($gate.Contains('Mode: non-runtime-only change; model and test validation suppressed.')) `
+    'CI Gate does not report the non-runtime validation mode'
+
+# SonarCloud Analysis is still a required repository status. Its job must succeed cheaply for a
+# non-runtime PR, but no setup, cache, download, restore, scanner, or build step may execute there.
+$sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
+Assert-Contract ($sonarJob.Contains('- name: Report non-runtime validation')) `
+    'the required SonarCloud status has no lightweight non-runtime success path'
+foreach ($stepName in @(
+    'Set up JDK 17', 'Checkout code', 'Setup .NET 10.0', 'Cache NuGet packages',
+    'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
+    'Download current-run coverage artifacts', 'Restore dependencies', 'Begin SonarCloud analysis',
+    'Build source generator first', 'Build (Release)', 'End SonarCloud analysis'
+)) {
+    $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
+    Assert-Contract ($step.Contains('fromJSON(needs.select-shards.outputs.requires_validation')) `
+        "SonarCloud step '$stepName' can run for a non-runtime change"
+}
 
 # A repository variable left the shipped feature permanently in shadow mode. Certification is the
 # authorization boundary now; no second switch may silently restore the full matrix.
@@ -290,6 +506,8 @@ Assert-Contract ($map.Contains('./tools/TestImpact/Measure-SelectionMiss.ps1 -Se
     'map certification can run without first proving that skipped failures are detected'
 Assert-Contract ($map.Contains('./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest')) `
     'the shipping certification policy is not tested before use'
+Assert-Contract ($map.Contains('./tools/TestImpact/Test-ValidationReuseModes.ps1')) `
+    'the map workflow does not exercise post-merge certificate modes'
 Assert-Contract ($map.Contains('found=false')) `
     'automatic no-source bootstrap is still represented as a workflow failure'
 Assert-Contract ($map.Contains("candidate_ready: `${{ steps.source.outputs.found }}")) `
