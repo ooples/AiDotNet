@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
@@ -13,10 +14,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// simplifies deployment.
 /// </para>
 /// </remarks>
-public class OneFormerOptions : NeuralNetworkOptions
+public class OneFormerOptions : PanopticSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public OneFormerOptions() { }
+    public OneFormerOptions()
+    {
+        NumClasses = 150;   // ADE20K
+        NumQueries = 150;
+        DropRate = 0.1;
+        ModelSize = OneFormerModelSize.SwinLarge;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -28,6 +35,10 @@ public class OneFormerOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        NumClasses = other.NumClasses;
+        NumQueries = other.NumQueries;
+        DropRate = other.DropRate;
+        ModelSize = other.ModelSize;
         ChannelDimensions = other.ChannelDimensions?.ToArray();
         StageDepths = other.StageDepths?.ToArray();
         AttentionHeads = other.AttentionHeads?.ToArray();
@@ -76,4 +87,21 @@ public class OneFormerOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the global gradient-norm clipping threshold. Set to 0 to disable clipping.</summary>
     public double MaxGradientNorm { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets the backbone size variant. Default: <see cref="OneFormerModelSize.SwinLarge"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Which size of backbone to use. A larger one is more
+    /// accurate and slower.</para>
+    /// </remarks>
+    public OneFormerModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate() => ValidateCore();
 }

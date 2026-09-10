@@ -77,7 +77,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(Mask2FormerModelSize.SwinLarge)]
     public void Mask2Former_AllModelSizes_ConstructAndPredict(Mask2FormerModelSize size)
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -297,7 +297,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(OneFormerModelSize.DiNATLarge)]
     public void OneFormer_AllModelSizes_ConstructAndPredict(OneFormerModelSize size)
     {
-        var model = new OneFormer<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -412,7 +412,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(MaskDINOModelSize.SwinLarge)]
     public void MaskDINO_AllModelSizes_ConstructAndPredict(MaskDINOModelSize size)
     {
-        var model = new MaskDINO<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -451,8 +451,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_LargerSizeHasMoreParameters()
     {
-        var small = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
-        var large = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinLarge);
+        var small = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
+        var large = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinLarge });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"SwinLarge ({large.ParameterCount}) should have more params than SwinTiny ({small.ParameterCount})");
     }

@@ -239,7 +239,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_PanopticInterface_SegmentPanoptic()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var panoptic = (IPanopticSegmentation<float>)model;
         Assert.True(panoptic.NumStuffClasses >= 0);
         Assert.True(panoptic.NumThingClasses >= 0);
@@ -270,7 +270,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OneFormer_PanopticInterface_SegmentPanoptic()
     {
-        var model = new OneFormer<float>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { NumClasses = 5, ModelSize = OneFormerModelSize.SwinLarge });
         var panoptic = (IPanopticSegmentation<float>)model;
         var result = panoptic.SegmentPanoptic(Rand(1, 3, 32, 32));
         Assert.NotNull(result);
@@ -279,7 +279,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_PanopticInterface_SegmentPanoptic()
     {
-        var model = new MaskDINO<float>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { NumClasses = 5, ModelSize = MaskDINOModelSize.R50 });
         var panoptic = (IPanopticSegmentation<float>)model;
         var result = panoptic.SegmentPanoptic(Rand(1, 3, 32, 32));
         Assert.NotNull(result);
@@ -515,7 +515,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_ParameterCount_Positive()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         Assert.True(model.ParameterCount > 0);
     }
 
@@ -566,7 +566,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_GetModelMetadata_ContainsRequiredFields()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var meta = model.GetModelMetadata();
         Assert.NotNull(meta);
         Assert.NotNull(meta.AdditionalInfo);
@@ -597,7 +597,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_DoubleDispose_DoesNotThrow()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         model.Dispose();
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
@@ -662,7 +662,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_MultiplePredictions_AllReturnOutput()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
 
         for (int i = 0; i < 5; i++)
         {
@@ -716,7 +716,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Segment_EquivalentToPredict()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var segResult = ((ISegmentationModel<float>)model).Segment(Rand(1, 3, 32, 32));
         Assert.NotNull(segResult);
         Assert.True(segResult.Length > 0);

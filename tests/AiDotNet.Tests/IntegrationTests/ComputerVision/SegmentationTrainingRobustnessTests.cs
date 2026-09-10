@@ -164,7 +164,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_MultiStepTrain_DoesNotThrow()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -178,7 +178,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OneFormer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OneFormer<float>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { NumClasses = 5, ModelSize = OneFormerModelSize.SwinLarge });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -192,7 +192,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MaskDINO<float>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { NumClasses = 5, ModelSize = MaskDINOModelSize.R50 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -262,7 +262,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OMGSeg<float>(Arch(), numClasses: 5, modelSize: OMGSegModelSize.Base);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { NumClasses = 5, ModelSize = OMGSegModelSize.Base });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -290,7 +290,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_MultiStepTrain_DoesNotThrow()
     {
-        var model = new UNINEXT<float>(Arch(), numClasses: 5, modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), options: new UNINEXTOptions { NumClasses = 5, ModelSize = UNINEXTModelSize.R50 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -605,7 +605,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_PredictAfterTrain_ProducesDifferentOutput()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
@@ -649,7 +649,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());

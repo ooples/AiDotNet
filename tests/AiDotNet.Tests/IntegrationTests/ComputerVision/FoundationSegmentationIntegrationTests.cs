@@ -165,7 +165,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Construction_Succeeds()
     {
-        var model = new Mask2Former<float>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { ModelSize = Mask2FormerModelSize.SwinTiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -173,7 +173,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Predict_ReturnsOutput()
     {
-        var model = new Mask2Former<float>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { ModelSize = Mask2FormerModelSize.SwinTiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -193,14 +193,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OneFormer_Construction_Succeeds()
     {
-        var model = new OneFormer<float>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { ModelSize = OneFormerModelSize.SwinLarge });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task OneFormer_Predict_ReturnsOutput()
     {
-        var model = new OneFormer<float>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { ModelSize = OneFormerModelSize.SwinLarge });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -220,14 +220,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_Construction_Succeeds()
     {
-        var model = new MaskDINO<float>(Arch(), modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { ModelSize = MaskDINOModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_Predict_ReturnsOutput()
     {
-        var model = new MaskDINO<float>(Arch(), modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { ModelSize = MaskDINOModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -247,14 +247,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_Construction_Succeeds()
     {
-        var model = new OMGSeg<float>(Arch(), modelSize: OMGSegModelSize.Large);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { ModelSize = OMGSegModelSize.Large });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_Predict_ReturnsOutput()
     {
-        var model = new OMGSeg<float>(Arch(), modelSize: OMGSegModelSize.Large);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { ModelSize = OMGSegModelSize.Large });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -328,14 +328,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_Construction_Succeeds()
     {
-        var model = new UNINEXT<float>(Arch(), modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), options: new UNINEXTOptions { ModelSize = UNINEXTModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_Predict_ReturnsOutput()
     {
-        var model = new UNINEXT<float>(Arch(), modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), options: new UNINEXTOptions { ModelSize = UNINEXTModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

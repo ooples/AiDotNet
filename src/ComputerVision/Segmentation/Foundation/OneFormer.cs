@@ -133,27 +133,34 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 150,
-        OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
-        double dropRate = 0.1,
         OneFormerOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture.
+        : this(options ?? new OneFormerOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    private OneFormer(
+        OneFormerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+
+        // The base resolves height/width/channels/options.NumClasses/native-mode from the architecture.
         // OneFormer keeps its own class-axis-1 loss default, which the base does not know about.
         : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(classAxis: 1),
-               numClasses, Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+               options.NumClasses, Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new OneFormerOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
         // Resolved EAGERLY, not through the base's lazy CreateDefaultOptimizer(): OneFormer's
         // override validates LearningRate/WeightDecay/MaxGradientNorm, and that validation has
         // always fired at construction time rather than at the first training step.
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
-        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
+        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(options.ModelSize, _options);
         (_attentionHeads, _windowSize, _patchSize, _mlpRatio) = ResolveEncoderConfig(_options, _channelDims);
         InitializeLayers();
     }
@@ -178,25 +185,32 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
     public OneFormer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 150,
-        OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         OneFormerOptions? options = null)
+        : this(options ?? new OneFormerOptions(), architecture, onnxModelPath)
+    {
+    }
+
+    private OneFormer(
+        OneFormerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
+        options.Validate();
         // The base's ONNX constructor installs a plain CrossEntropyWithLogitsLoss because it has no
         // lossFunction parameter. OneFormer's channel-first output needs classAxis 1, so restore it.
         LossFunction = new CrossEntropyWithLogitsLoss<T>(classAxis: 1);
-        _options = options ?? new OneFormerOptions();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
         _dropRate = 0.0;
 
-        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
+        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(options.ModelSize, _options);
         (_attentionHeads, _windowSize, _patchSize, _mlpRatio) = ResolveEncoderConfig(_options, _channelDims);
 
         InitializeLayers();

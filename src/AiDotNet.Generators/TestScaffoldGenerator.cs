@@ -6014,7 +6014,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.Mask2FormerOptions { " +
+                    "NumClasses = 4, NumQueries = 8 })";
             }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
@@ -7879,8 +7881,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, numQueries: 4, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Foundation.OneFormerOptions { " +
+                    "NumClasses = 4, NumQueries = 4, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "AttentionHeads = new[] { 1, 2, 4, 8 }, DecoderDimension = 16, " +
                     "WindowSize = 4, PatchSize = 4, MlpRatio = 2 })";

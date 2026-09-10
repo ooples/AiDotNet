@@ -135,7 +135,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void Mask2Former_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -146,7 +146,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void OneFormer_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new OneFormer<float>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { NumClasses = 5, ModelSize = OneFormerModelSize.SwinLarge });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -157,7 +157,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void MaskDINO_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new MaskDINO<float>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { NumClasses = 5, ModelSize = MaskDINOModelSize.R50 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -212,7 +212,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void OMGSeg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new OMGSeg<float>(Arch(), numClasses: 5, modelSize: OMGSegModelSize.Base);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { NumClasses = 5, ModelSize = OMGSegModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -442,7 +442,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void Mask2Former_Predict_NonSquare_ReturnsOutput(int h, int w)
     {
-        var model = new Mask2Former<float>(Arch(h, w, 3), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(h, w, 3), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var output = model.Predict(Rand(1, 3, h, w));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -502,7 +502,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void Mask2Former_Train_NonSquare_DoesNotThrow(int h, int w)
     {
-        var model = new Mask2Former<float>(Arch(h, w, 3), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(h, w, 3), options: new Mask2FormerOptions { NumClasses = 5, ModelSize = Mask2FormerModelSize.SwinTiny });
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
