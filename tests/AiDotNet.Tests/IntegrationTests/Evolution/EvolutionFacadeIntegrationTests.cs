@@ -544,6 +544,45 @@ public sealed class EvolutionFacadeIntegrationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => builder.BuildAsync(cancellation.Token));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task ProgramCorrectnessIsAppliedThroughTheFacade(double passFraction)
+    {
+        var engine = new AdditionProgramExecutionEngine();
+        var client = new LadderChatClient();
+        int checks = 0;
+        var correctness = new DelegateProgramFitnessEvaluator(_ =>
+        {
+            checks++;
+            return passFraction;
+        });
+        AiModelResult<double, Matrix<double>, Vector<double>> result = await CreateProgramBuilder(client, engine)
+            .ConfigureProgramCorrectness(correctness)
+            .BuildAsync();
+        Assert.True(checks > 0);
+        ProgramEvolutionResult program = Assert.IsType<ProgramEvolutionResult>(result.ProgramEvolution);
+        if (passFraction == 0)
+        {
+            Assert.Equal(0, engine.Calls);
+            Assert.Equal(0, client.Calls);
+            Assert.False(program.HasBestProgram);
+        }
+        else
+        {
+            Assert.True(engine.Calls > 0);
+            Assert.True(program.HasBestProgram);
+        }
+    }
+
+    [Fact]
+    public void ProgramCorrectnessRejectsNullAtConfigurationTime()
+    {
+        IAiModelBuilder<double, Matrix<double>, Vector<double>> builder =
+            new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureProgramCorrectness(null!));
+    }
+
     private static EvolutionRunSummary RequireSummary(AiModelResult<double, Matrix<double>, Vector<double>> result) =>
         Assert.IsType<EvolutionRunSummary>(result.EvolutionSummary);
 

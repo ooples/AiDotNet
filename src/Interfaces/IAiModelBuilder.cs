@@ -2699,6 +2699,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureProgramEvolution(ProgramEvolutionOptions options);
 
+    /// <summary>Requires trusted public correctness checks before evaluating program fitness.</summary>
+    /// <param name="correctness">Checks reporting a maximization pass fraction in [0, 1]. Only exactly 1 and
+    /// zero constraint violations pass. The caller owns isolation and versioning; never expose held-out tests.</param>
+    /// <returns>This builder for fluent configuration.</returns>
+    /// <remarks>Pair with ConfigureProgramEvolution. Checking and fitness costs must use the same units.</remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramCorrectness(IProgramFitnessEvaluator correctness);
+
     /// <summary>
     /// Configures the language model that proposes program edits.
     /// </summary>

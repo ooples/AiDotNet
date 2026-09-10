@@ -13,7 +13,7 @@ namespace AiDotNet.Evolution.Programs;
 /// neither executes code itself nor provides an isolation boundary. Final held-out validation belongs outside
 /// the search: its cases and diagnostics must not be fed into proposal generation.
 /// </remarks>
-public sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessEvaluator
+internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessEvaluator
 {
     private readonly IProgramFitnessEvaluator _correctness;
     private readonly IProgramFitnessEvaluator _fitness;

@@ -48,6 +48,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private object? _evolutionSeeds;
 
     private ProgramEvolutionOptions? _programEvolutionOptions;
+    private IProgramFitnessEvaluator? _programCorrectnessEvaluator;
     private IEmbeddingClient? _embeddingClient;
     private IChatClient<T>? _chatClient;
     private ChatClientOptions? _chatClientOptions;
@@ -306,6 +307,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         Guard.NotNull(options);
         options.Validate();
         _programEvolutionOptions = options.Clone();
+        return this;
+    }
+
+    /// <summary>Requires trusted public correctness checks before scoring evolved programs.</summary>
+    /// <param name="correctness">An evaluator reporting a maximization pass fraction in [0, 1]; only exactly 1
+    /// with zero constraint violations permits the configured fitness evaluator to run.</param>
+    /// <returns>This builder for fluent configuration.</returns>
+    /// <remarks>
+    /// Pair with ConfigureProgramEvolution; its test cases or evaluator script still supply fitness. Checks must
+    /// use deterministic reference tests, not an LLM judge, and provide their own sandbox and timeouts. Keep final
+    /// held-out checks outside search. Costs from both stages must use the same units. Changing check data or
+    /// semantics requires changing the evaluator's VersionHash. This setting may be supplied before or after
+    /// ConfigureProgramEvolution and does not affect generic non-program evolution runs.
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureProgramCorrectness(IProgramFitnessEvaluator correctness)
+    {
+        Guard.NotNull(correctness);
+        Guard.NotNullOrWhiteSpace(correctness.Id);
+        Guard.NotNullOrWhiteSpace(correctness.VersionHash);
+        _programCorrectnessEvaluator = correctness;
         return this;
     }
 
@@ -673,6 +694,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         try
         {
             IProgramFitnessEvaluator evaluator = CreateProgramEvaluator(programOptions, out ownedEngine);
+            if (_programCorrectnessEvaluator is { } correctness)
+                evaluator = new CorrectnessGatedProgramFitnessEvaluator(correctness, evaluator);
 
             // Duplicate rejection. The structural rung costs no network call and no model, so it is the metric a
             // program run gets by default; an embedding rung is added only when a client was supplied to score the

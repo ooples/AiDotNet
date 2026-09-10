@@ -3,11 +3,16 @@
 Roadmap slice: US-03, with an evidence-preservation prerequisite for US-17/18.
 
 ```csharp
-var gated = new CorrectnessGatedProgramFitnessEvaluator(publicReferenceChecks, runtimeEvaluator);
-var task = new ProgramEvolutionTask(gated, descriptors);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureChatClient(chatClient)
+    .ConfigureProgramCorrectness(publicReferenceChecks)
+    .ConfigureProgramEvolution(programOptions)
+    .BuildAsync();
 ```
 
-`publicReferenceChecks` implements `IProgramFitnessEvaluator` and reports a maximization pass fraction in [0, 1].
+`programOptions` provides the usual fitness test cases or evaluator script. The gate is internal plumbing assembled
+by `AiModelBuilder`; no additional public helper needs to be constructed. `publicReferenceChecks` implements
+`IProgramFitnessEvaluator` and reports a maximization pass fraction in [0, 1].
 Only exactly 1 with zero constraint violations permits runtime evaluation. Report every required check, rather than
 averaging only successful cases. A failed, timed-out or rejected check never reaches the runtime evaluator. Positive
 fitness-stage constraints also reject the result. Return failures with truthful costs; throwing after spending work
