@@ -527,9 +527,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // is paper-faithful). Runs in the nightly heavy lane.
         "InternViT",
         // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
-        // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
-        // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
-        "IDEFICS", "MusicFlamingo",
+        // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM). The gradients DO flow;
+        // the footprint simply exceeds the runner, so it runs in the nightly heavy lane.
+        "IDEFICS",
+        // MusicFlamingo was listed here too, and should not have been. It never timed out: it failed
+        // FAST (11 s and 23 s) with the loss moving the wrong way, because the model built its AdamW
+        // bare and so trained at AdamW's 1e-3 default instead of the 1e-4 its own options declared —
+        // ten times the intended rate on ~105M parameters. That is a real bug, which the note above
+        // this set says explicitly must be fixed rather than tagged, and the "9B-class" description
+        // never fitted a 105M-parameter model. Fixed in the model; the tests now pass in the default
+        // lane, so the tag is gone. If CI shows a genuine OOM on the 16 GB runner, it belongs back
+        // here with an accurate reason — but it ran clean on a 15.4 GB box.
         // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
         // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
