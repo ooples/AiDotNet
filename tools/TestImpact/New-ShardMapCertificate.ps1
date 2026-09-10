@@ -18,12 +18,27 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Build')] [long] $AuditSourceRunId,
     [Parameter(Mandatory, ParameterSetName = 'Build')] [string] $AuditSourceSha,
     [Parameter(Mandatory, ParameterSetName = 'Build')] [long] $CertificationRunId,
+    [Parameter(Mandatory, ParameterSetName = 'Build')]
+    [ValidateSet('HistoricalReplay', 'FreshCoverage')]
+    [string] $Basis,
     [Parameter(Mandatory, ParameterSetName = 'Build')] [string] $OutDirectory,
+    [Parameter(Mandatory, ParameterSetName = 'Build')] [string] $DecisionFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+enum ShardMapAuditDisposition {
+    Certified
+    SafeNoReduction
+    RevokedMiss
+}
+
+enum ShardMapCertificationBasis {
+    HistoricalReplay
+    FreshCoverage
+}
 
 function ConvertTo-RequiredInteger {
     param($Value, [string] $Name, [long] $Minimum = 0)
@@ -46,7 +61,8 @@ function Get-CertificationDecision {
         [Parameter(Mandatory)] [long] $MapRunId,
         [Parameter(Mandatory)] [long] $SourceRunId,
         [Parameter(Mandatory)] [string] $SourceSha,
-        [Parameter(Mandatory)] [long] $CertificateRunId
+        [Parameter(Mandatory)] [long] $CertificateRunId,
+        [ShardMapCertificationBasis] $CertificationBasis = [ShardMapCertificationBasis]::HistoricalReplay
     )
 
     foreach ($name in 'schemaVersion', 'sha', 'knownShards', 'alwaysRun') {
@@ -65,6 +81,17 @@ function Get-CertificationDecision {
     [void] (ConvertTo-RequiredInteger $MapRunId 'candidate map run id' 1)
     [void] (ConvertTo-RequiredInteger $SourceRunId 'audit source run id' 1)
     [void] (ConvertTo-RequiredInteger $CertificateRunId 'certification run id' 1)
+    if ($CertificationBasis -eq [ShardMapCertificationBasis]::FreshCoverage) {
+        if ($SourceSha -cne $mapSha) {
+            throw 'fresh-coverage evidence must audit the map source tree itself'
+        }
+        if ($MapRunId -ne $CertificateRunId) {
+            throw 'fresh-coverage evidence must bind the candidate map to its certification run'
+        }
+    }
+    elseif ($MapRunId -eq $CertificateRunId) {
+        throw 'historical replay must cite a candidate map from an earlier workflow run'
+    }
     if ($Map.knownShards -isnot [array] -or $Map.alwaysRun -isnot [array]) {
         throw 'map knownShards and alwaysRun must be arrays'
     }
@@ -150,10 +177,20 @@ function Get-CertificationDecision {
 
     $eligible = -not [bool] $Audit.Escalated -and $missCount -eq 0 -and
         $wouldRun -gt 0 -and $wouldSkip -gt 0
+    $disposition = if ($missCount -gt 0) {
+        [ShardMapAuditDisposition]::RevokedMiss
+    }
+    elseif ($eligible) {
+        [ShardMapAuditDisposition]::Certified
+    }
+    else {
+        [ShardMapAuditDisposition]::SafeNoReduction
+    }
     $certificate = $null
     if ($eligible) {
         $certificate = [pscustomobject] [ordered]@{
-            schemaVersion = 2
+            schemaVersion = 3
+            basis = $CertificationBasis.ToString()
             candidateMapRunId = $MapRunId
             candidateMapSha = $mapSha
             auditSourceRunId = $SourceRunId
@@ -167,7 +204,26 @@ function Get-CertificationDecision {
             missCount = 0
         }
     }
-    return [pscustomobject]@{ Eligible = $eligible; Certificate = $certificate }
+    return [pscustomobject]@{
+        Eligible = $eligible
+        Disposition = $disposition
+        Certificate = $certificate
+        Audit = [pscustomobject] [ordered]@{
+            schemaVersion = 2
+            basis = $CertificationBasis.ToString()
+            candidateMapRunId = $MapRunId
+            auditSourceRunId = $SourceRunId
+            auditSourceSha = $SourceSha
+            certificationRunId = $CertificateRunId
+            disposition = $disposition.ToString()
+            escalated = [bool] $Audit.Escalated
+            auditedShards = $total
+            wouldRun = $wouldRun
+            wouldSkip = $wouldSkip
+            failedShards = $failed
+            missCount = $missCount
+        }
+    }
 }
 
 if ($SelfTest) {
@@ -194,7 +250,23 @@ if ($SelfTest) {
     }
     $decision = Get-CertificationDecision $map $audit $outcomes 10 11 $sha 12
     Assert-True $decision.Eligible 'a complete clean reduction audit was not certifiable'
+    Assert-True ($decision.Disposition -eq [ShardMapAuditDisposition]::Certified) `
+        'a certifiable audit did not produce the Certified disposition'
+    Assert-True ($decision.Certificate.schemaVersion -eq 3 -and
+        $decision.Certificate.basis -ceq 'HistoricalReplay') `
+        'the default historical certification basis was not recorded'
     Assert-True ($decision.Certificate.failedShards -eq 0) 'a clean certificate did not record zero failures'
+
+    $freshDecision = Get-CertificationDecision $map $audit $outcomes 12 11 $sha 12 `
+        -CertificationBasis FreshCoverage
+    Assert-True ($freshDecision.Certificate.basis -ceq 'FreshCoverage') `
+        'the fresh-coverage certification basis was not recorded'
+    Assert-Rejected { Get-CertificationDecision $map $audit $outcomes 10 11 $sha 12 `
+            -CertificationBasis FreshCoverage } `
+        'fresh-coverage certification accepted a candidate from another map workflow run'
+    Assert-Rejected { Get-CertificationDecision $map $audit $outcomes 12 11 `
+            '89abcdef0123456789abcdef0123456789abcdef' 12 -CertificationBasis FreshCoverage } `
+        'fresh-coverage certification accepted outcomes from a different source tree'
 
     $failedOutcomes = @($outcomes | ForEach-Object { $_.PSObject.Copy() })
     $failedOutcomes[0].outcome = 'failure'
@@ -207,6 +279,8 @@ if ($SelfTest) {
     $missAudit = $audit.PSObject.Copy(); $missAudit.Failed = 1; $missAudit.Missed = @('B'); $missAudit.MissCount = 1
     $decision = Get-CertificationDecision $map $missAudit $skippedFailureOutcomes 10 11 $sha 12
     Assert-True (-not $decision.Eligible) 'an audit with a skipped failure was certifiable'
+    Assert-True ($decision.Disposition -eq [ShardMapAuditDisposition]::RevokedMiss) `
+        'a selection miss did not explicitly revoke older evidence'
     $falseZeroMiss = $missAudit.PSObject.Copy(); $falseZeroMiss.Missed = @(); $falseZeroMiss.MissCount = 0
     Assert-Rejected { Get-CertificationDecision $map $falseZeroMiss $skippedFailureOutcomes 10 11 $sha 12 } `
         'a false zero-miss report whose counts still balanced was accepted'
@@ -214,6 +288,8 @@ if ($SelfTest) {
     $escalated.WouldRunShards = @('A', 'B', 'Always'); $escalated.WouldSkipShards = @()
     $decision = Get-CertificationDecision $map $escalated $outcomes 10 11 $sha 12
     Assert-True (-not $decision.Eligible) 'an escalated audit was certifiable'
+    Assert-True ($decision.Disposition -eq [ShardMapAuditDisposition]::SafeNoReduction) `
+        'a zero-miss escalation was treated as a revocation'
     $noReduction = $audit.PSObject.Copy(); $noReduction.WouldRun = 3; $noReduction.WouldSkip = 0
     $noReduction.WouldRunShards = @('A', 'B', 'Always'); $noReduction.WouldSkipShards = @()
     $decision = Get-CertificationDecision $map $noReduction $outcomes 10 11 $sha 12
@@ -254,12 +330,20 @@ if ($SelfTest) {
 $mapObject = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
 $auditObject = Get-Content -LiteralPath $AuditFile -Raw | ConvertFrom-Json
 $outcomeObjects = @(Get-Content -LiteralPath $OutcomesFile -Raw | ConvertFrom-Json)
+$certificationBasis = [ShardMapCertificationBasis] $Basis
 $decision = Get-CertificationDecision -Map $mapObject -Audit $auditObject -Outcomes $outcomeObjects `
     -MapRunId $CandidateMapRunId -SourceRunId $AuditSourceRunId -SourceSha $AuditSourceSha `
-    -CertificateRunId $CertificationRunId
+    -CertificateRunId $CertificationRunId -CertificationBasis $certificationBasis
+
+if (Test-Path -LiteralPath $DecisionFile) {
+    throw "refusing to overwrite an existing audit decision at $DecisionFile"
+}
+$decisionParent = Split-Path -Parent $DecisionFile
+if ($decisionParent) { New-Item -ItemType Directory -Path $decisionParent -Force | Out-Null }
+$decision.Audit | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $DecisionFile -Encoding utf8
 
 if (-not $decision.Eligible) {
-    Write-Host 'candidate did not complete a zero-miss reduction audit - not certifying it'
+    Write-Host "candidate audit disposition is $($decision.Disposition) - not certifying it"
     exit 0
 }
 
@@ -272,3 +356,4 @@ New-Item -ItemType Directory -Path $OutDirectory -Force | Out-Null
 Copy-Item -LiteralPath $MapFile -Destination $mapPath
 $decision.Certificate | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $certificatePath -Encoding utf8
 Write-Host "certified shard map from run $CandidateMapRunId after complete audit run $AuditSourceRunId"
+exit 0
