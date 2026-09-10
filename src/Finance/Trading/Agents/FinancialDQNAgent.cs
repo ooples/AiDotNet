@@ -58,6 +58,17 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly INeuralNetwork<T> _qNetwork;
     [Buffer]
     private readonly INeuralNetwork<T> _targetNetwork;
+
+    /// <summary>How many times the target network has been synchronised from the online network.</summary>
+    /// <remarks>
+    /// Reported through <see cref="GetTradingMetrics"/> because the synchronisation SCHEDULE is not otherwise
+    /// observable from outside, and it is the single change with the largest effect on whether this agent
+    /// learns at all. The previous condition was <c>rng.Next(TargetUpdateFrequency) == 0</c> - a coin flip
+    /// giving roughly 0.6 expected syncs across an entire run, so the TD target was computed from the network
+    /// being updated in the same batch. A regression to that form changes no other observable behaviour, so
+    /// without this counter every existing assertion would keep passing while learning quietly broke again.
+    /// </remarks>
+    private int _targetSyncCount;
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
 
@@ -287,6 +298,12 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         var metrics = base.GetTradingMetrics();
         metrics["Epsilon"] = NumOps.FromDouble(_epsilon);
+        metrics["TargetSyncCount"] = NumOps.FromDouble(_targetSyncCount);
+        // Reported alongside the sync count so the SCHEDULE can be checked, not just the total: with both,
+        // TargetSyncCount == 1 + TrainingSteps / TargetUpdateFrequency is an exact identity under the
+        // deterministic condition, and a probabilistic one cannot satisfy it. The 1 is the synchronisation
+        // the constructor performs so the two networks start equal.
+        metrics["TrainingSteps"] = NumOps.FromDouble(TrainingSteps);
         return metrics;
     }
 
@@ -301,6 +318,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private void UpdateTargetNetwork()
     {
         _targetNetwork.UpdateParameters(_qNetwork.GetParameters());
+        _targetSyncCount++;
     }
 
     /// <summary>

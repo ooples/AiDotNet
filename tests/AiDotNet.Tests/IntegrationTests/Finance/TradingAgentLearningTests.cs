@@ -94,6 +94,48 @@ public class TradingAgentLearningTests
         Assert.True(agent.Epsilon >= options.EpsilonEnd, $"epsilon fell below EpsilonEnd ({agent.Epsilon})");
     }
 
+    [Theory]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(25)]
+    public void Dqn_synchronises_its_target_network_on_an_exact_schedule(int frequency)
+    {
+        // THE FIX WITH THE LARGEST EFFECT ON LEARNING, AND NOTHING ASSERTED IT.
+        //
+        // The condition was `rng.Next(TargetUpdateFrequency) == 0`: a coin flip with probability 1/N per
+        // step rather than a schedule, giving roughly 0.6 expected syncs across an entire run. The TD target
+        // was therefore computed from the very network being updated in the same batch, which is the thing a
+        // target network exists to prevent.
+        //
+        // TargetUpdateFrequency = 10 appeared in four tests as CONFIGURATION and no test observed what it
+        // did, so a regression to the coin flip would have left every assertion in this file passing.
+        //
+        // Counting syncs alone would not discriminate either: a coin flip with p = 1/N also averages
+        // steps/N syncs. What separates them is EXACTNESS - the deterministic condition satisfies the
+        // identity below on every run, and a probabilistic one satisfies it only by chance.
+        var options = new FinancialDQNAgentOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = ActionSize,
+            BatchSize = 4,
+            TargetUpdateFrequency = frequency,
+        };
+
+        using var agent = new FinancialDQNAgent<double>(Actor(), options);
+
+        // Before any training the constructor has synced once, so the two networks start equal.
+        Assert.Equal(1.0, agent.GetTradingMetrics()["TargetSyncCount"], 9);
+
+        TrainSteps(agent, 120);
+
+        var metrics = agent.GetTradingMetrics();
+        var trainingSteps = (int)metrics["TrainingSteps"];
+        var syncs = (int)metrics["TargetSyncCount"];
+
+        Assert.True(trainingSteps > frequency, $"only {trainingSteps} training steps; too few to cross the schedule");
+        Assert.Equal(1 + (trainingSteps / frequency), syncs);
+    }
+
     [Fact]
     public void Dqn_epsilon_decay_of_one_holds_the_rate_instead_of_annealing()
     {
@@ -197,6 +239,15 @@ public class TradingAgentLearningTests
         {
             StateSize = StateSize,
             ActionSize = ActionSize,
+            // NOTE: this seed does NOT make the sampling below deterministic. It reaches ReplayBuffer
+            // only; SampleAction draws from RandomHelper.CreateSecureRandom(), and Actor() leaves
+            // architecture.RandomSeed unset, so the initial policy varies between runs too. That is the
+            // gap E6.7 tracks - seeding is persisted as a determinism claim the agents do not honour.
+            //
+            // Hence the assertion below is a TOLERANCE on the dominant share rather than a check that
+            // every action was drawn: the latter would be flaky against a policy that legitimately
+            // assigns one action a small probability. The tolerance still fails the defect this test
+            // exists for, where sampling collapsed onto a single tier.
             Seed = 4242,
         };
 

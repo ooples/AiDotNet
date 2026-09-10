@@ -146,14 +146,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         return result;
     }
 
-    /// <summary>
-    /// Executes SampleAction for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
+    /// <summary>Finite check that also compiles on net471, where <c>double.IsFinite</c> does not exist.</summary>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
     /// <summary>
     /// Turns the actor's raw outputs into a probability distribution.
     /// </summary>
@@ -176,9 +171,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// can be read as "how likely is each choice".
     /// </para>
     /// </remarks>
-    /// <summary>Finite check that also compiles on net471, where <c>double.IsFinite</c> does not exist.</summary>
-    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
-
     private Vector<T> Softmax(Vector<T> logits)
     {
         var result = new Vector<T>(logits.Length);
@@ -227,6 +219,14 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         return result;
     }
 
+    /// <summary>
+    /// Executes SampleAction for the FinancialA2CAgent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FinancialA2CAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private int SampleAction(Vector<T> probabilities)
     {
         double r = RandomHelper.CreateSecureRandom().NextDouble();

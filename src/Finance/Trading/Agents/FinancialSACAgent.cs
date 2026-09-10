@@ -142,6 +142,13 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         {
             // Stochastic policy (simplified with noise)
             var noise = new Vector<T>(action.Length);
+            // One generator for the whole vector, not one per element. CreateSecureRandom builds a
+            // cryptographic generator, which costs far more than the single NextDouble draw it was
+            // serving, and SelectAction runs every training step - so this was constructing ActionSize
+            // generators per step. Exploration noise is not a security-sensitive value, and drawing
+            // every element from one generator is no less random than drawing each from its own.
+            var noiseSource = RandomHelper.CreateSecureRandom();
+
             for (int i = 0; i < noise.Length; i++)
             {
                 // ZERO-MEAN, symmetric about the actor's output.
@@ -152,7 +159,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
                 // not average out over a run, it accumulates into the experience the critics learn from.
                 // Exploration noise has to be centred on the policy it explores around, or it is not
                 // exploration, it is a drift.
-                noise[i] = NumOps.FromDouble(((RandomHelper.CreateSecureRandom().NextDouble() * 2.0) - 1.0) * ExplorationNoiseScale);
+                noise[i] = NumOps.FromDouble(((noiseSource.NextDouble() * 2.0) - 1.0) * ExplorationNoiseScale);
             }
             
             return action.Add(noise);
