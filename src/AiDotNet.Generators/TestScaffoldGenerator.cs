@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -5527,6 +5527,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // task contains only eight tokens. Exercise the same transformer encoder and
                 // token-classification head at smoke scale. Keep AdamW's intended BERT fine-tune
                 // learning rate (5e-5); the convergence override below handles its short warm-up.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "LegalBERTNER" && model.TypeParameterCount == 1)
+            {
+                // Same defect and the same remedy as FinBERTNER above: without a fixture it inherits
+                // the full BERT-base NER shape (768 hidden, 12 encoder blocks, 3072 FFN, padding to
+                // 256 tokens) to label an eight-token generated task, and its many-iteration training
+                // probes overrun the 120 s gate.
+                //
+                // This is rung 3 of the escalation and the only one left. Rung 1, <float>, is already
+                // applied (Fp32TestClassNames) and the HeavyTimeout note records it as insufficient:
+                // "still OOM or time out on the forward/training even at <float>". Rung 2, the
+                // NER-family smoke-iteration caps, is applied too. The note then says a CI-smoke
+                // constructorExpr "could rescue several, but that per-model work is deferred" — this
+                // is that work, and it is the reason the model was left running full-scale in the
+                // nightly lane instead.
+                //
+                // Measured: 31 optimizer steps of the BERT-base fixture took 114 s against a 120 s
+                // budget, so Training_ShouldReduceLoss passed or failed with machine load rather than
+                // with the code. The smoke shape exercises the same transformer encoder and
+                // token-classification head, and keeps AdamW at the 5e-5 BERT fine-tuning rate the
+                // paper specifies. Production defaults are untouched and fully user-customizable.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
@@ -14131,7 +14159,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // be [seq, 32]; feeding the paper-width [8, 768] into a 32-wide model throws
             // "embedding dimension (768) does not match weight dimension (32)" inside MultiHeadAttention.
             // Keep this list in sync with the HiddenDimension = 32 constructorExpr branches.
-            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER" or "SciBERTNER" or "BiaffineNER" or "TriaffineNER"
+            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "LegalBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER" or "SciBERTNER" or "BiaffineNER" or "TriaffineNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
