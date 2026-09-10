@@ -308,25 +308,83 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
                 : string.Empty;
             if (url.Length == 0) continue;
 
-            var match = ArxivId.Match(url);
-            if (!match.Success) continue;
-
-            if (!int.TryParse(match.Groups[2].Value, out int month)) continue;
+            if (!TryGetModernArxivId(url, out string identifier, out int month)) continue;
             if (month >= 1 && month <= 12) continue;
 
             Location location = citation.ApplicationSyntaxReference is { } reference
                 ? Location.Create(reference.SyntaxTree, reference.Span)
                 : fallbackDeclaration.Identifier.GetLocation();
             context.ReportDiagnostic(Diagnostic.Create(
-                MalformedCitation, location, type.Name, match.Value, month));
+                MalformedCitation, location, type.Name, identifier, month));
         }
     }
 
-    /// <summary>An arXiv identifier, and only on an arXiv host.</summary>
-    private static readonly System.Text.RegularExpressions.Regex ArxivId = new(
-        @"arxiv\.org/(?:abs|pdf|html)/(\d{2})(\d{2})\.\d{4,5}",
-        System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-        TimeSpan.FromSeconds(1));
+    /// <summary>Parses a modern arXiv identifier from an arXiv URL in bounded linear time.</summary>
+    /// <remarks>
+    /// This deliberately uses URI and character parsing rather than a timed regular expression.
+    /// Analyzer callbacks execute concurrently with a memory-intensive compilation, and regex
+    /// timeouts include scheduler/GC pauses. A harmless citation could therefore crash the compiler
+    /// with AD0001 even though the old pattern itself was simple. Structural parsing cannot time out,
+    /// and checking the host also prevents an <c>example.com/arxiv.org/...</c> path from being treated
+    /// as an arXiv citation.
+    /// </remarks>
+    private static bool TryGetModernArxivId(string url, out string identifier, out int month)
+    {
+        identifier = string.Empty;
+        month = 0;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || uri is null) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        string host = uri.Host;
+        if (!host.Equals("arxiv.org", StringComparison.OrdinalIgnoreCase)
+            && !host.EndsWith(".arxiv.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string[] segments = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2) return false;
+        if (!segments[0].Equals("abs", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("pdf", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("html", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string candidate = segments[1];
+        if (candidate.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = candidate.Substring(0, candidate.Length - 4);
+        }
+
+        if (candidate.Length < 5) return false;
+        int versionIndex = candidate.IndexOf('v', 5);
+        if (versionIndex < 0) versionIndex = candidate.IndexOf('V', 5);
+        if (versionIndex >= 0)
+        {
+            if (versionIndex == candidate.Length - 1) return false;
+            for (int index = versionIndex + 1; index < candidate.Length; index++)
+            {
+                if (!IsAsciiDigit(candidate[index])) return false;
+            }
+
+            candidate = candidate.Substring(0, versionIndex);
+        }
+
+        if (candidate.Length is not (9 or 10) || candidate[4] != '.') return false;
+        for (int index = 0; index < candidate.Length; index++)
+        {
+            if (index == 4) continue;
+            if (!IsAsciiDigit(candidate[index])) return false;
+        }
+
+        identifier = candidate;
+        month = (candidate[2] - '0') * 10 + candidate[3] - '0';
+        return true;
+    }
+
+    private static bool IsAsciiDigit(char value) => value >= '0' && value <= '9';
 
     /// <summary>The declared phase, as part of a recipe identity.</summary>
     /// <remarks>
@@ -336,12 +394,9 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     /// </remarks>
     private static string DescribePhase(AttributeData attribute)
     {
-        foreach (var named in attribute.NamedArguments)
+        foreach (var named in attribute.NamedArguments.Where(named => named.Key == "Phase" && named.Value.Value is not null))
         {
-            if (named.Key == "Phase" && named.Value.Value is not null)
-            {
-                return named.Value.Value.ToString() ?? string.Empty;
-            }
+            return named.Value.Value.ToString() ?? string.Empty;
         }
 
         return string.Empty;
