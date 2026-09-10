@@ -4012,11 +4012,11 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     {
         // Arrange
         var graphGen = new GraphGenerationModel<float>(
-            inputFeatures: 8,
-            hiddenDim: 16,
-            latentDim: 8,
-            numEncoderLayers: 2,
-            maxNodes: 20);
+            options: new GraphGenerationModelOptions
+            {
+                InputFeatures = 8, HiddenDim = 16, LatentDim = 8,
+                NumEncoderLayers = 2, MaxNodes = 20,
+            });
 
         // Input: node features [numNodes, features]
         var input = CreateRandomTensor([10, 8]);
@@ -4035,9 +4035,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     {
         // Arrange
         var graphGen = new GraphGenerationModel<float>(
-            inputFeatures: 8,
-            hiddenDim: 16,
-            latentDim: 8);
+            options: new GraphGenerationModelOptions
+            { InputFeatures = 8, HiddenDim = 16, LatentDim = 8 });
 
         // Act
         int parameterCount = (int)graphGen.ParameterCount;
