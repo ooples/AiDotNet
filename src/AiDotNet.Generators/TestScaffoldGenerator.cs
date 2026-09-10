@@ -406,27 +406,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                        "Make the constructor pin's inputHeight/inputWidth match the emitted InputShape.",
         category: "AiDotNet.TestScaffold",
         defaultSeverity: DiagnosticSeverity.Warning,
-        // OFF BY DEFAULT, and the reason is measured rather than cautious. Enabled, this fires on 46
-        // models, and reviewing them showed most are NOT defects:
-        //   - audio models whose fixture is a mel spectrogram, not an image: HiFiGAN / MelGAN /
-        //     UnivNet / WaveGlow / ParallelWaveGAN / ISTFTNet all read "arch 64x32 vs fixture 80x1",
-        //     which compares spectrogram axes against inputHeight/inputWidth;
-        //   - patch-grid vision-language models, where the architecture legitimately describes the
-        //     TOKEN grid and is therefore smaller than the image by the patch size: BLIP3 /
-        //     InstructBLIP / MiniGPTv2 / Phi4Multimodal at 28x28 for a 112px image (patch 4),
-        //     DeepSeekVL2 / EVACLIP at 8x8 for 112px (patch 14).
-        // Restricting to "architecture LARGER than fixture" was considered and rejected: it catches
-        // only the RoMa / VideoFlow / XMem / RAPIDFlow half of the known instances, and its one new
-        // candidate here (MedSAM2, 128 vs 64) turned out to fail a TRAINING invariant rather than a
-        // shape check, so that refinement is unvalidated.
+        // ON BY DEFAULT, once the models it was reporting were actually fixed. The rule spent its
+        // life Disabled behind a comment claiming 46 firings of which "most are NOT defects".
+        // Re-derived over the emitted fixtures, the real population was ELEVEN - Emotion2Vec, MT3,
+        // BandSplitRNN, MedicalASR, HiFiGAN, ISTFTNet, MelGAN, MultiBandMelGAN, ParallelWaveGAN,
+        // UnivNet, WaveGlow - and all eleven were genuine. Every one pinned an
+        // InputType.TwoDimensional architecture (GetInputShape() = [H, W]) while its fixture fed a
+        // rank-3 mel spectrogram; the architecture simply did not describe the input.
         //
-        // Nothing in the emitted text separates "the architecture describes the input image" from
-        // "the architecture describes a token grid or spectrogram", so an enabled version would add
-        // ~90 mostly-false warnings and train people to ignore it. Kept available deliberately:
-        // enable it (editorconfig / -warnaserror:ADNTEST002) when adding or resizing a spatial model
-        // and check whether the new entry is real. It DOES catch the real defect - verified against a
-        // deliberately reintroduced SlimSAM 32x32-vs-128x128 mismatch, which it reported.
-        isEnabledByDefault: false);
+        // Excusing them was tried first, as a "these axes mean spectrogram bins, not image axes"
+        // domain gate, and it was WRONG. A pinned architecture is not decorative: the sequence-
+        // labeling NER pin in the constructor table records this same class of bug biting for real,
+        // where a 128-vs-100 disagreement made ResolveLazyLayerShapes resolve a lazy BiLSTM against
+        // the DECLARED width and the real forward then threw "Matrix dimensions incompatible". A
+        // silenced mismatch is a live hazard waiting on a lazy layer.
+        //
+        // The fix was therefore in the generator, not in the rule: the conv1d vocoder pin now
+        // declares the [1, 80, T] mel geometry its fixture feeds (Conv1DVocoderMelFrames is the one
+        // source both read), and the generic audio fixture now honours a model-specific constructor
+        // pin through GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize - the mechanism
+        // the vision path already used and audio was never wired to.
+        isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor FloatScaffoldNoOpDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST001",
@@ -11398,6 +11398,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     int spatial = GetVisionSpatialSize(model.ClassName);
                     sizeExpr = $"inputHeight: {spatial}, inputWidth: {spatial}, inputDepth: 3, outputSize: 4";
                 }
+                else if (isAudio && model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
+                {
+                    // A conv1d waveform vocoder is fed a channels-first rank-3 mel spectrogram
+                    // [1, 80, T] by its own fixture branch. The generic audio pin below declares a
+                    // rank-2 64x32 instead, which is not the geometry this model ever sees.
+                    //
+                    // That is not cosmetic. ResolveLazyLayerShapes performs an ARCHITECTURE-DRIVEN
+                    // warm-up, so a lazy layer resolves its weights against the declared shape and
+                    // the real forward then runs on the fixture - the same failure already
+                    // documented for the sequence-labeling NER pin a few lines below, where a
+                    // 128-vs-100 disagreement threw "Matrix dimensions incompatible". Declare what
+                    // the model is actually fed so the two can never diverge.
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 80, inputWidth: "
+                        + Conv1DVocoderMelFrames(model.ClassName).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + ", inputDepth: 1, outputSize: 4";
+                }
                 else if (isAudio)
                 {
                     inputTypeExpr = "AiDotNet.Enums.InputType.TwoDimensional";
@@ -13636,7 +13653,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                // The generic audio fixture is [1, 64, 32], but a model whose constructor was
+                // pinned per-model carries its own bounded geometry - MedicalASR at 64x16 with
+                // NumMels = 16, Emotion2Vec at 4x16, MT3 at 32x32, BandSplitRNN at 1x64. Emitting
+                // the generic block for those declares one shape in the architecture and feeds
+                // another, which ResolveLazyLayerShapes resolves against the DECLARED one.
+                //
+                // The vision path already closes this gap through
+                // GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize; the mechanism was
+                // simply never wired up for audio. Reuse it rather than adding a second parser.
+                if (TryGetVisionFixtureSpatialSize(constructorExpr, out int audioHeight, out int audioWidth))
+                {
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, {audioHeight}, {audioWidth} }};");
+                }
+                else
+                {
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                }
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
                 if (model.ClassName == "PANNs")
                 {
@@ -15434,30 +15467,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Architecture-vs-fixture consistency (ADNTEST002). Both facts are present verbatim in
         // the emitted text, so compare them here rather than waiting for a shard run to surface
-        // the shape error. Only fires when BOTH are unambiguously spatial - a 3-element InputShape
-        // AND an inputHeight/inputWidth pair - so 1-D, sequence and token fixtures never trip it.
-        var archMatch = System.Text.RegularExpressions.Regex.Match(
-            generated, @"inputHeight:\s*(\d+)[\s\S]{0,80}?inputWidth:\s*(\d+)");
-        var shapeMatch = System.Text.RegularExpressions.Regex.Match(
-            generated,
-            // The terminator is REQUIRED. With it optional this matched a PREFIX of a longer
-            // shape - a 4-element [B, C, H, W] fixture matched its first three entries, so the
-            // comparison used [C, H] instead of [H, W] and reported nonsense such as "AVID
-            // fixture [.., 3, 32]". Anchoring to the close brace/bracket restricts this to
-            // genuine 3-element [C, H, W] fixtures, which is the only form the check is valid for.
-            @"InputShape\s*=>\s*(?:ResolveModelDeclaredInputShape\s*\(\s*)?(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])\s*\)?");
-        if (archMatch.Success && shapeMatch.Success)
+        // the shape error. The decision itself lives in ArchitectureFixtureMismatch so it can be
+        // tested against text and domains directly - driving the whole generator would require a
+        // synthetic model that happens to hit one of the hardcoded per-model constructor pins.
+        if (ArchitectureFixtureMismatch.TryDetect(
+                generated, out int archH, out int archW, out int fixtureH, out int fixtureW))
         {
-            int archH = int.Parse(archMatch.Groups[1].Value);
-            int archW = int.Parse(archMatch.Groups[2].Value);
-            int fixtureH = int.Parse(shapeMatch.Groups[1].Value);
-            int fixtureW = int.Parse(shapeMatch.Groups[2].Value);
-            if (archH != fixtureH || archW != fixtureW)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    ArchitectureFixtureSizeMismatchDescriptor, Location.None,
-                    model.ClassName, archH, archW, fixtureH, fixtureW));
-            }
+            context.ReportDiagnostic(Diagnostic.Create(
+                ArchitectureFixtureSizeMismatchDescriptor, Location.None,
+                model.ClassName, archH, archW, fixtureH, fixtureW));
         }
 
         generated = DropDuplicateOverrides(generated);
@@ -18059,6 +18077,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className is "WaveGlow" or "ParallelWaveGAN";
+    }
+
+    /// <summary>
+    /// Mel frame count (the T axis) of a conv1d waveform vocoder's <c>[1, 80, T]</c> fixture.
+    /// </summary>
+    /// <remarks>
+    /// Single source of truth for the fixture emission AND the architecture pin. They were
+    /// independent literals, and they disagreed: every such vocoder declared a rank-2 64x32
+    /// architecture while being fed a rank-3 mel spectrogram.
+    /// </remarks>
+    private static int Conv1DVocoderMelFrames(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+
+        // WaveNet-style stacks preserve T, so they get a longer window.
+        if (IsTimePreservingConv1DVocoder(className)) return 8;
+
+        // Spectral vocoders (513-channel conv_post) need more than a single mel frame for
+        // MoreData_ShouldNotDegrade to train stably; waveform vocoders are fine at T = 1.
+        return SpectralConv1DVocoderOutputChannels(className) > 1 ? 2 : 1;
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -29,9 +29,11 @@ namespace AiDotNet.Generators;
 /// So this reports ONLY the provably-safe shape: assigned to a local whose every subsequent use is an
 /// element read or a length query. Anything else — returned, assigned to a field, passed as an argument
 /// (the callee may store it), captured, reassigned — is left alone, even though many such sites are
-/// probably fine too. Under-reporting is the correct bias here: ADNTEST002 in this same project sits
-/// <c>Disabled</c> today because, enabled, it fired on 46 models and most were not defects. A rule that
-/// cries wolf gets switched off, and then it protects nothing.
+/// probably fine too. Under-reporting is the correct bias here: a rule that cries wolf gets switched
+/// off, and then it protects nothing. ADNTEST002 in this same project spent its life <c>Disabled</c>
+/// for exactly that reason, and what rescued it was not more caution but a narrower question - it had
+/// been comparing an image axis against a mel-spectrogram axis, and once it only asks where the two
+/// are the same quantity it reports nothing but real defects and runs enabled.
 /// </para>
 /// </remarks>
 [Generator]
