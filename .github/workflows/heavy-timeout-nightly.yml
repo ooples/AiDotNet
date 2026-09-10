@@ -71,7 +71,7 @@ jobs:
       - name: Build (Release, net10.0)
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
 
-      - name: Run heavy-timeout models (best-effort, non-gating)
+      - name: Run heavy-timeout models (informational, non-PR-gating)
         # Only the tagged models. A category filter alone does NOT keep xUnit serial, so the built
         # xunit.runner.json is rewritten to serialize collection execution (one model in flight at a
         # time) and Workstation GC is selected. Without this the heaviest models stack memory and
@@ -93,7 +93,6 @@ jobs:
         # process-wide, so the dotnet test below inherits it without a separate step that
         # workflow-level env would override.
         shell: pwsh
-        continue-on-error: true
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
@@ -130,7 +129,16 @@ jobs:
           #
           # ChunkSize is deliberately small. Past runs died within roughly 8-19 minutes of starting
           # tests, which is only a handful of these classes, so the ceiling is reached quickly.
-          $chunkSize   = if ($env:HEAVY_CHUNK_SIZE) { [int]$env:HEAVY_CHUNK_SIZE } else { 6 }
+          $chunkSize = 6
+          if ($env:HEAVY_CHUNK_SIZE) {
+            $parsedChunkSize = 0
+            if (-not [int]::TryParse($env:HEAVY_CHUNK_SIZE, [ref]$parsedChunkSize) -or $parsedChunkSize -lt 1) {
+              Write-Host "::error title=Invalid chunk_size::'$($env:HEAVY_CHUNK_SIZE)' is not a positive integer."
+              exit 1
+            }
+            $chunkSize = $parsedChunkSize
+          }
+
           $testProject = 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
           $resultsDir  = 'artifacts/heavy-timeout'
           New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
@@ -148,15 +156,22 @@ jobs:
           # HeavyTimeoutTestClassNames set -- so any list written here would drift out of step with
           # the generator the first time a model is added to it.
           Write-Host '--- discovering HeavyTimeout test classes ---'
-          $listed = dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
-            --filter 'Category=HeavyTimeout' --list-tests 2>&1
+          $listed = @(dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
+            --filter 'Category=HeavyTimeout' --list-tests 2>&1)
+          $discoveryExit = $LASTEXITCODE
 
-          $classes = $listed |
+          if ($discoveryExit -ne 0) {
+            Write-Host "::error title=HeavyTimeout discovery failed::dotnet test --list-tests exited $discoveryExit."
+            $listed | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+            exit $discoveryExit
+          }
+
+          $classes = @($listed |
             ForEach-Object { $_ -replace '\r', '' } |
             Where-Object { $_ -match '^\s{4}\S+\.\S+' } |
             ForEach-Object { ($_.Trim() -split '\(')[0] } |
             ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } |
-            Sort-Object -Unique
+            Sort-Object -Unique)
 
           if (-not $classes -or $classes.Count -eq 0) {
             # Discovery returning nothing would otherwise "pass" this lane by running no tests at
