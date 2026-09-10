@@ -412,6 +412,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// The overridable surface of <c>SafetyModuleTestBase</c>. Anything else emitted onto a
     /// SafetyModule fixture is a member of some model-family base that this base does not have.
     /// </summary>
+    /// <summary>
+    /// The overridable surface of <c>ObjectDetectorTestBase</c>.
+    /// </summary>
+    /// <remarks>
+    /// Short on purpose. This family has no training invariant - <c>ObjectDetectorBase.Train</c> is
+    /// an empty body - so the per-model training knobs the emission path attaches (iteration
+    /// counts, MoreDataTolerance, memorization budgets) describe a capability the base does not
+    /// have, and each one would be a CS0115.
+    /// <para>
+    /// InputShape and OutputShape are excluded deliberately rather than accidentally. The emission
+    /// path writes them as <c>ResolveModelDeclaredInputShape(...)</c>, which asks the constructed
+    /// model for its ARCHITECTURE - a concept these detectors do not have, since they size
+    /// themselves from an options object. The base's own default is [3, 64, 64], which matches the
+    /// bounded InputSize the family constructor emits, so letting it win is both correct and
+    /// self-consistent.
+    /// </para>
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> VisionDetectorTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "CreateModel",
+        };
+
     private static readonly System.Collections.Generic.HashSet<string> SafetyModuleTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
@@ -2976,9 +2999,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Use constructor call if the model has a zero-arg constructor and is type-compatible.
                 // For models with architecture-only constructors, emit a default architecture.
                 // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
+                // The vision detectors have none of the three generic constructor shapes - they take
+                // a single options object - but the family emits that object itself, so they ARE
+                // constructible. Without this they stayed in the "no supported constructor" bucket
+                // while a perfectly good fixture was available.
                 bool canConstruct = (model.HasParameterlessConstructor
                                     || model.HasArchitectureOnlyConstructor
-                                    || model.HasVectorOnlyConstructor) &&
+                                    || model.HasVectorOnlyConstructor
+                                    || (model.ExtendsVisionDetectorBase
+                                        && model.VisionDetectorOptionsType.Length > 0)) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3177,6 +3206,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsDiffusionModel = false;
         bool implementsGaussianProcess = false;
         bool implementsSafetyModule = false;
+        bool extendsVisionDetector = false;
+        string visionDetectorOptions = string.Empty;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3350,6 +3381,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (baseName.StartsWith("ThreeDDiffusionModelBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("3DDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsThreeDDiffusion = true;
+            // The three vision detector roots. All are ModelBase<T, Tensor<T>, Tensor<T>> and all
+            // build their own backbone from an options object, so one family covers them.
+            else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
+            {
+                extendsVisionDetector = true;
+
+                // Which options type the fixture has to build. The three roots take three
+                // different ones, and all three are plain property-initialised classes, so a
+                // bounded instance is enough to construct any detector under them.
+                visionDetectorOptions =
+                    baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal)
+                        ? "AiDotNet.Models.Options.ObjectDetectionOptions"
+                        : baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal)
+                            ? "AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions"
+                            : "AiDotNet.ComputerVision.OCR.OCROptions";
+            }
             else if (baseName.StartsWith("AnomalyDetectorBase", System.StringComparison.Ordinal))
                 extendsAnomalyDetector = true;
             else if (baseName.StartsWith("SurvivalModelBase", System.StringComparison.Ordinal))
@@ -3484,6 +3533,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ImplementsDetectionBackbone = implementsDetectionBackbone,
             ImplementsGaussianProcess = implementsGaussianProcess,
             ImplementsSafetyModule = implementsSafetyModule,
+            ExtendsVisionDetectorBase = extendsVisionDetector,
+            VisionDetectorOptionsType = visionDetectorOptions,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
@@ -3892,6 +3943,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // rather than inventing a new contract.
         if (model.ImplementsSafetyModule)
             return TestFamily.SafetyModule;
+
+        // Priority 0b: VisionDetector.
+        //
+        // ObjectDetectorBase / TextDetectorBase / OCRBase are all
+        // ModelBase<T, Tensor<T>, Tensor<T>>, and every one of them declares
+        // [ModelCategory(NeuralNetwork)] descriptively while implementing no INeuralNetworkModel -
+        // so without this they were routed to a family they could never satisfy (YOLOv9,
+        // FasterRCNN) or resolved to no family at all. Structural base check, so it runs before
+        // any category can intercept.
+        if (model.ExtendsVisionDetectorBase)
+            return TestFamily.VisionDetector;
 
         // Priority 1: GaussianProcess
         if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
@@ -4399,7 +4461,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
+            // Vision detectors take a single options object and build their own backbone and neck
+            // from it, so one family-level expression constructs all of them - no per-model pin.
+            //
+            // The defaults must be bounded here rather than inherited: ObjectDetectionOptions ships
+            // InputSize = [640, 640], NumClasses = 80 and UsePretrained = true, so an unbounded
+            // fixture would run a CSPDarknet over a 640px image on every invariant AND try to fetch
+            // pretrained weights that are not present in a test environment. Production defaults are
+            // untouched; only what the fixture asks for changes.
+            if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
+            {
+                string detectorOptions = model.VisionDetectorOptionsType switch
+                {
+                    "AiDotNet.Models.Options.ObjectDetectionOptions" =>
+                        "new AiDotNet.Models.Options.ObjectDetectionOptions<double> { "
+                            + "InputSize = new[] { 64, 64 }, NumClasses = 4, UsePretrained = false }",
+                    "AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions" =>
+                        "new AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double>()",
+                    _ => "new AiDotNet.ComputerVision.OCR.OCROptions<double>()",
+                };
+                constructorExpr = $"new {typeName}<double>({detectorOptions})";
+            }
+            else if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
             {
                 // Production retains fastText's paper-faithful 2,000,000 subword buckets. Its dense
                 // embedding gradient and dense Adam moments make even one test update several GB,
@@ -15577,14 +15660,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // build: the emission path can attach any per-model override to any model, so a deny-list
         // would be one rebase away from failing again. Only single-line expression-bodied overrides
         // are considered - CreateModule is emitted as a two-line block and is never a candidate.
-        if (family == TestFamily.SafetyModule)
+        // Families whose test base has a deliberately small surface share the model families'
+        // emission path, so they pick up per-model overrides their base never declares - every
+        // one a CS0115. Filtered by WHITELIST of what the base actually has, not by removing the
+        // members that happened to break a build: the emission path can attach any override to
+        // any model, so a deny-list would be one rebase away from failing again.
+        var allowedMembers = family switch
         {
+            TestFamily.SafetyModule => SafetyModuleTestBaseMembers,
+            TestFamily.VisionDetector => VisionDetectorTestBaseMembers,
+            _ => null,
+        };
+        if (allowedMembers is not null)
+        {
+            // Only single-line expression-bodied overrides are candidates; the factory method is
+            // emitted as a two-line block and is never matched.
             generated = System.Text.RegularExpressions.Regex.Replace(
                 generated,
-                @"[ 	]*protected override [^
-]*? (?<member>\w+)\s*=>[^;]*;[ 	]*?
-",
-                m => SafetyModuleTestBaseMembers.Contains(m.Groups["member"].Value)
+                @"[ \t]*protected override [^\r\n]*?\b(?<member>\w+)\s*=>[^;]*;[ \t]*\r?\n",
+                m => allowedMembers.Contains(m.Groups["member"].Value)
                     ? m.Value
                     : string.Empty,
                 System.Text.RegularExpressions.RegexOptions.Multiline,
@@ -15699,6 +15793,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // rather than the parameter/shape invariants of the model families.
             case TestFamily.SafetyModule:
                 return model.ImplementsSafetyModule;
+
+            // The detector bases derive from ModelBase<T, Tensor<T>, Tensor<T>>, which IS
+            // IFullModel<T, Tensor<T>, Tensor<T>> - the contract ObjectDetectorTestBase asks for -
+            // so reaching this family by base type is itself the compatibility proof.
+            case TestFamily.VisionDetector:
+                return model.ExtendsVisionDetectorBase;
 
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
@@ -17924,6 +18024,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         public bool ImplementsSafetyModule { get; set; }
 
+        public bool ExtendsVisionDetectorBase { get; set; }
+
+        public string VisionDetectorOptionsType { get; set; } = string.Empty;
+
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
         public bool UsesMatrixInput { get; set; }
@@ -18077,6 +18181,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         ProbabilisticClassifier,
         Clustering,
         SafetyModule,
+        VisionDetector,
         NeuralNetwork
     }
 
@@ -18887,6 +18992,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.ProbabilisticClassifier: return "ProbabilisticClassifierTestBase";
             case TestFamily.Clustering:            return "ClusteringModelTestBase";
             case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
+            case TestFamily.VisionDetector:        return "ObjectDetectorTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
         }
@@ -18983,6 +19089,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "INeuralNetworkModel<double>";
             case TestFamily.SafetyModule:
                 return "AiDotNet.Interfaces.ISafetyModule<double>";
+            case TestFamily.VisionDetector:
+                return "IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:
