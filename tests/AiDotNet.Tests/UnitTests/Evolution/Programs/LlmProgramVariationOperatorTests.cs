@@ -110,7 +110,12 @@ public sealed class LlmProgramVariationOperatorTests
         var variation = new LlmProgramVariationOperator<double>(client, null,
             new LlmProgramVariationOptions { MaxProposalRetries = 0 });
 
-        Assert.Same(parent, await variation.ProposeAsync(Context(parent)));
+        EvolutionVariationContext<ProgramGenome> context = Context(parent);
+        ProgramGenome child = await variation.ProposeAsync(context);
+        Assert.Same(context.Parent.Candidate.CanonicalGenome.Genome, child);
+        Assert.NotSame(parent, child);
+        Assert.Equal(parent.Source, child.Source);
+        Assert.Equal(parent.Id, child.Id);
         Assert.Equal(1, variation.GetUsage().ChatCalls);
         Assert.Equal(1, variation.GetUsage().AbandonedProposals);
         Assert.Equal(new[] { ProgramProposalOutcome.ParseFailed, ProgramProposalOutcome.Exhausted },
