@@ -85,6 +85,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         double beta2 = _options.Beta2;
         double epsilon = _options.Epsilon;
         double decay = _options.WeightDecay;
+        bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
         double gamma = StepSize(_step);
 
         // Equal-weighted averaging: c = 1/t makes x the running mean of every z so far.
@@ -92,51 +93,67 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
         foreach (var param in context.Parameters)
         {
-            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
-                continue;
-
-            var paramSpan = param.AsWritableSpan();
-            var gradSpan = grad.AsSpan();
-            int length = Math.Min(paramSpan.Length, gradSpan.Length);
-            if (length == 0) continue;
-
-            // z and x both start at the initial point, which is what the parameters hold before the
-            // first step. Seeding them from y afterwards would fold the interpolation into itself.
-            if (!_z.TryGetValue(param, out var z))
+            if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(
+                    context, param, Engine, out var gradient))
             {
-                z = Snapshot(paramSpan, length);
-                _z[param] = z;
+                StepParameter(
+                    param, gradient, beta, beta2, epsilon, decay, applyWeightDecay, gamma, c);
             }
+        }
+    }
 
-            if (!_x.TryGetValue(param, out var x))
-            {
-                x = Snapshot(paramSpan, length);
-                _x[param] = x;
-            }
+    private void StepParameter(
+        Tensor<T> parameter,
+        Tensor<T> gradient,
+        double beta,
+        double beta2,
+        double epsilon,
+        double decay,
+        bool applyWeightDecay,
+        double gamma,
+        double averagingWeight)
+    {
+        var parameterSpan = parameter.AsWritableSpan();
+        var gradientSpan = gradient.AsSpan();
+        int length = Math.Min(parameterSpan.Length, gradientSpan.Length);
+        if (length == 0) return;
 
-            var v = _v.GetOrAdd(param, _ => new T[length]);
+        // z and x both start at the initial point, which is what the parameters hold before the
+        // first step. Seeding them from y afterwards would fold the interpolation into itself.
+        if (!_z.TryGetValue(parameter, out var z))
+        {
+            z = Snapshot(parameterSpan, length);
+            _z[parameter] = z;
+        }
 
-            for (int i = 0; i < length; i++)
-            {
-                double g = NumOps.ToDouble(gradSpan[i]);
+        if (!_x.TryGetValue(parameter, out var x))
+        {
+            x = Snapshot(parameterSpan, length);
+            _x[parameter] = x;
+        }
 
-                double second = beta2 * NumOps.ToDouble(v[i]) + (1 - beta2) * g * g;
-                v[i] = NumOps.FromDouble(second);
-                double corrected = second / (1 - Math.Pow(beta2, _step));
+        var v = _v.GetOrAdd(parameter, _ => new T[length]);
 
-                // z takes the step. Weight decay is decoupled, so it acts on z directly rather
-                // than entering the second moment.
-                double zi = NumOps.ToDouble(z[i]);
-                zi -= gamma * g / (Math.Sqrt(corrected) + epsilon);
-                if (decay != 0.0) zi -= gamma * decay * zi;
-                z[i] = NumOps.FromDouble(zi);
+        for (int i = 0; i < length; i++)
+        {
+            double g = NumOps.ToDouble(gradientSpan[i]);
 
-                // x is the running average of z, and y is where the next gradient will be taken.
-                double xi = (1 - c) * NumOps.ToDouble(x[i]) + c * zi;
-                x[i] = NumOps.FromDouble(xi);
+            double second = beta2 * NumOps.ToDouble(v[i]) + (1 - beta2) * g * g;
+            v[i] = NumOps.FromDouble(second);
+            double corrected = second / (1 - Math.Pow(beta2, _step));
 
-                paramSpan[i] = NumOps.FromDouble((1 - beta) * zi + beta * xi);
-            }
+            // z takes the step. Weight decay is decoupled, so it acts on z directly rather
+            // than entering the second moment.
+            double zi = NumOps.ToDouble(z[i]);
+            zi -= gamma * g / (Math.Sqrt(corrected) + epsilon);
+            if (applyWeightDecay) zi -= gamma * decay * zi;
+            z[i] = NumOps.FromDouble(zi);
+
+            // x is the running average of z, and y is where the next gradient will be taken.
+            double xi = (1 - averagingWeight) * NumOps.ToDouble(x[i]) + averagingWeight * zi;
+            x[i] = NumOps.FromDouble(xi);
+
+            parameterSpan[i] = NumOps.FromDouble((1 - beta) * zi + beta * xi);
         }
     }
 
@@ -175,6 +192,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         double beta2 = _options.Beta2;
         double epsilon = _options.Epsilon;
         double decay = _options.WeightDecay;
+        bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
         double gamma = StepSize(_step);
         double c = 1.0 / _step;
 
@@ -187,7 +205,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             double corrected = _flatV[i] / (1 - Math.Pow(beta2, _step));
 
             _flatZ[i] -= gamma * g / (Math.Sqrt(corrected) + epsilon);
-            if (decay != 0.0) _flatZ[i] -= gamma * decay * _flatZ[i];
+            if (applyWeightDecay) _flatZ[i] -= gamma * decay * _flatZ[i];
 
             _flatX[i] = (1 - c) * _flatX[i] + c * _flatZ[i];
             updated[i] = NumOps.FromDouble((1 - beta) * _flatZ[i] + beta * _flatX[i]);
