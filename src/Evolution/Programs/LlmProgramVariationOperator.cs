@@ -682,15 +682,15 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
             return ProgramProposalOutcome.EmptyResponse;
         }
 
-        if (normalized.Length > _programOptions.MaxProgramChars || candidateSource.Length > ProgramGenome.MaxSourceLength)
+        if (candidateSource.Length > _programOptions.MaxProgramChars || candidateSource.Length > ProgramGenome.MaxSourceLength)
         {
-            feedback = "The proposed program is " + normalized.Length.ToString(CultureInfo.InvariantCulture) +
+            feedback = "The proposed program is " + candidateSource.Length.ToString(CultureInfo.InvariantCulture) +
                 " characters, above the limit of " + _programOptions.MaxProgramChars.ToString(CultureInfo.InvariantCulture) +
                 ". Return a shorter program.";
             return ProgramProposalOutcome.TooLong;
         }
 
-        if (string.Equals(normalized, parent.NormalizedSource, StringComparison.Ordinal))
+        if (string.Equals(candidateSource, parent.Source, StringComparison.Ordinal))
         {
             feedback = "The proposed program is identical to the current one. Make a substantive change.";
             return ProgramProposalOutcome.Unchanged;
@@ -1033,7 +1033,7 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
     {
         var components = new List<string>
         {
-            "llm-program-variation-v2",
+            "llm-program-variation-v3-exact-source",
             programOptions.Language.ToString(),
             programOptions.ResolveEvolveBlockMarkers().ToString(),
             programOptions.EnforceEvolveBlocks ? "enforce" : "free",

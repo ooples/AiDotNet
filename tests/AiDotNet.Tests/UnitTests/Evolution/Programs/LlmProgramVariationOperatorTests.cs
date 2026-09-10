@@ -56,6 +56,33 @@ public sealed class LlmProgramVariationOperatorTests
         "<<<<<<< SEARCH\n" + search + "\n=======\n" + replace + "\n>>>>>>> REPLACE\n";
 
     [Fact]
+    public async Task AMeaningfulMultilineWhitespaceEditIsNotDiscardedAsUnchanged()
+    {
+        var parent = new ProgramGenome("text = '''value\nend'''", ProgramLanguage.Python);
+        const string changed = "text = '''value \nend'''";
+        var client = new FakeChatClient("```python\n" + changed + "\n```");
+        var variation = new LlmProgramVariationOperator<double>(client,
+            new ProgramEvolutionOptions { Language = ProgramLanguage.Python },
+            new LlmProgramVariationOptions { Mode = ProgramEvolutionMode.FullRewrite, MaxProposalRetries = 0 });
+        ProgramGenome child = await variation.ProposeAsync(Context(parent));
+        Assert.Equal(changed, child.Source); Assert.NotEqual(parent.Id, child.Id);
+        Assert.Equal(parent.NormalizedSource, child.NormalizedSource); Assert.Equal(1, client.Calls);
+    }
+
+    [Fact]
+    public async Task SourceLimitCountsInteriorTrailingWhitespaceInRewrites()
+    {
+        string changed = "text = '''value" + new string(' ', 150) + "\nend'''";
+        var client = new FakeChatClient("```python\n" + changed + "\n```", "```python\nprint(3)\n```");
+        var variation = new LlmProgramVariationOperator<double>(client,
+            new ProgramEvolutionOptions { Language = ProgramLanguage.Python, MaxProgramChars = 100 },
+            new LlmProgramVariationOptions { Mode = ProgramEvolutionMode.FullRewrite });
+        ProgramGenome child = await variation.ProposeAsync(Context());
+        Assert.Equal("print(3)", child.Source); Assert.Equal(2, client.Calls);
+        Assert.Contains("above the limit", client.Conversations[1][3].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AppliedEditsBecomeTheChildProgram()
     {
         var client = new FakeChatClient(DiffResponse("    return x", "    return x * 2"));

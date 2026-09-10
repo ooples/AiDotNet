@@ -5,32 +5,12 @@ namespace AiDotNet.Evolution.Programs;
 
 /// <summary>An immutable program source treated as one evolvable candidate.</summary>
 /// <remarks>
-/// <para>
-/// The genome carries the exact <see cref="Source"/> text the run will hand to an execution engine plus the
-/// <see cref="Language"/> that decides comment markers, fence labels, and file extensions. <see cref="Id"/> is a
-/// lowercase hexadecimal SHA-256 over <see cref="NormalizedSource"/> and <see cref="Language"/>, and normalization
-/// strips a byte-order mark, rewrites CRLF and CR terminators as line feeds, trims trailing white space from every
-/// line, and drops trailing blank lines. Two proposals that differ only in those incidental ways therefore share one
-/// identity, which is exactly what <c>IEvolutionTask&lt;TGenome&gt;.CanonicalizeAsync</c> needs so the engine can
-/// deduplicate them and reuse a cached evaluation instead of paying to run the same program twice.
-/// </para>
-/// <para>
-/// Construction validates that the source is non-empty after normalization and no longer than
-/// <see cref="MaxSourceLength"/> characters, so an unbounded model response cannot become an unbounded genome.
-/// Identity and value equality cover exactly the same fields: <see cref="NormalizedSource"/> and
-/// <see cref="Language"/>. Language belongs in both because it selects the interpreter, so byte-identical text in
-/// two languages is two candidates that evaluate differently and must never share a cached result.
-/// <see cref="Description"/> belongs in neither: it is the model's note about what a proposal changed, it cannot
-/// alter how the program runs or scores, and putting it in equality while leaving it out of the identity is what
-/// previously let two genomes be unequal yet share an <see cref="Id"/>. A run that genuinely wants a
-/// description-carrying identity should fold it in at the task's canonicalization step instead.
-/// </para>
-/// <para><b>For Beginners:</b> This class is one candidate program in an evolutionary search: the code itself, the
-/// language it is written in, and an optional note about what changed. The important part is <see cref="Id"/>, a
-/// fingerprint computed from the code after cosmetic differences are removed. If a model reformats a file's line
-/// endings but changes nothing else, the fingerprint stays the same and the search knows it has already tried that
-/// program. Because the object never changes after construction, it is safe to keep in an archive, write to a
-/// checkpoint, and share between threads.</para>
+/// Identity and equality cover exact source text and language, excluding the optional description.
+/// Display normalization is deliberately not semantic canonicalization: trimming whitespace or rewriting line
+/// endings can change multiline string literals, preprocessing or language-specific behavior. Cosmetic-only edits
+/// may therefore require another evaluation; falsely reusing a different program's score is not an acceptable tradeoff.
+/// Sources must be nonblank, bounded and valid Unicode so UTF-8 serialization cannot collapse malformed surrogates.
+/// <see cref="NormalizedSource"/> remains available for display and approximate descriptors, never execution/cache keys.
 /// </remarks>
 public sealed class ProgramGenome : IEquatable<ProgramGenome>
 {
@@ -74,8 +54,9 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
         NormalizedSource = normalized;
         Language = language;
         Description = description;
-        Id = ComputeIdCore(normalized, language);
-        _hashCode = ComputeHashCode(normalized, language);
+        ValidateSourceEncoding(source);
+        Id = ComputeIdCore(source, language);
+        _hashCode = ComputeHashCode(source, language);
     }
 
     /// <summary>Gets the source text exactly as supplied, including its original line endings.</summary>
@@ -90,7 +71,7 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// <summary>Gets the optional bounded description of this candidate, or <c>null</c> when none was supplied.</summary>
     public string? Description { get; }
 
-    /// <summary>Gets the lowercase hexadecimal SHA-256 over <see cref="NormalizedSource"/> and <see cref="Language"/>.</summary>
+    /// <summary>Gets the versioned lowercase SHA-256 over exact <see cref="Source"/> and <see cref="Language"/>.</summary>
     /// <remarks>
     /// Two genomes share this value exactly when <see cref="Equals(ProgramGenome)"/> reports them equal, so the
     /// engine's duplicate set and evaluation cache can key on it safely. <see cref="Description"/> is excluded, so a
@@ -136,14 +117,15 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// <param name="language">
     /// The language the genome would carry; the default matches a genome constructed without one.
     /// </param>
-    /// <returns>The lowercase hexadecimal SHA-256 over the normalized text and the language.</returns>
+    /// <returns>The versioned lowercase hexadecimal SHA-256 over exact source text and language.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="language"/> is not a defined value.</exception>
     public static string ComputeId(string source, ProgramLanguage language = ProgramLanguage.Generic)
     {
         Guard.NotNull(source);
         if (!Enum.IsDefined(typeof(ProgramLanguage), language)) throw new ArgumentOutOfRangeException(nameof(language));
-        return ComputeIdCore(ProgramText.Normalize(source), language);
+        ValidateSourceEncoding(source);
+        return ComputeIdCore(source, language);
     }
 
     /// <inheritdoc/>
@@ -151,7 +133,7 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     {
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
-        return string.Equals(NormalizedSource, other.NormalizedSource, StringComparison.Ordinal)
+        return string.Equals(Source, other.Source, StringComparison.Ordinal)
             && Language == other.Language;
     }
 
@@ -180,8 +162,19 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// <returns><c>true</c> when the genomes are not value equal.</returns>
     public static bool operator !=(ProgramGenome? left, ProgramGenome? right) => !(left == right);
 
-    private static string ComputeIdCore(string normalizedSource, ProgramLanguage language) =>
-        EvolutionHash.Combine(new[] { "program-genome-v1", language.ToString(), normalizedSource });
+    private static string ComputeIdCore(string source, ProgramLanguage language) =>
+        EvolutionHash.Combine(new[] { "program-genome-v2-exact-source", language.ToString(), source });
+
+    private static void ValidateSourceEncoding(string source)
+    {
+        for (int i = 0; i < source.Length; i++)
+        {
+            if (!char.IsSurrogate(source[i])) continue;
+            if (!char.IsHighSurrogate(source[i]) || i + 1 >= source.Length || !char.IsLowSurrogate(source[i + 1]))
+                throw new ArgumentException("Program source contains an unpaired Unicode surrogate.", nameof(source));
+            i++;
+        }
+    }
 
     private static int ComputeHashCode(string normalizedSource, ProgramLanguage language)
     {
