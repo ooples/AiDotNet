@@ -10064,7 +10064,7 @@ public static partial class LayerHelper<T>
 
         // Classification head
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
-        yield return new DenseLayer<T>(numClasses);
+        yield return new DenseLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses);
     }
 
     /// <summary>
@@ -13786,7 +13786,7 @@ public static partial class LayerHelper<T>
         // Distribution parameter layers - outputs mu and sigma for Gaussian distribution
         // Mu (mean) projection
         yield return new DenseLayer<T>(
-            outputSize: predictionLength,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : predictionLength,
             activationFunction: null);  // Linear for mean
 
         // Sigma (std) projection - uses softplus implicitly in forward pass for positivity
@@ -15903,7 +15903,7 @@ public static partial class LayerHelper<T>
 
         // End-state decoder (the model extracts the final recurrent state before this head).
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
@@ -16010,7 +16010,7 @@ public static partial class LayerHelper<T>
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 

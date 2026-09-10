@@ -1,8 +1,9 @@
-using AiDotNet.Tensors.Engines;
+﻿using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.NeuralNetwork;
@@ -313,13 +314,27 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private Vector<T> SampleLatent()
+    private Vector<T> SampleLatent() => SampleLatent(_random);
+
+    /// <summary>
+    /// Draws a latent code from the standard normal using <paramref name="rng"/>.
+    /// </summary>
+    /// <remarks>
+    /// Training draws from the model's shared <c>_random</c>, where advancing the stream across
+    /// steps is the point. INFERENCE must not: Schlegl et al. (2017) start the latent search from a
+    /// random z and refine it by backpropagation, so the restart is part of the algorithm, but a
+    /// detector constructed with an explicit <c>randomSeed</c> promises reproducible scores. Drawing
+    /// the query-time restart from the shared stream broke that promise silently -
+    /// <c>Predict_ShouldBeDeterministic</c> and <c>Clone_ShouldProduceSameScores</c> both failed
+    /// because a second call to the same model on the same input resumed the stream further along.
+    /// </remarks>
+    private Vector<T> SampleLatent(Random rng)
     {
         var z = new Vector<T>(_latentDim);
         for (int i = 0; i < _latentDim; i++)
         {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = 1.0 - _random.NextDouble();
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
             double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             z[i] = NumOps.FromDouble(val);
         }
@@ -899,6 +914,11 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
         var scores = new Vector<T>(X.Rows);
 
+        // Scoring-local RNG, re-seeded from the model's own seed on every call, so the latent
+        // restarts are identical for identical input. The model's shared _random is deliberately
+        // untouched here: scoring must not advance the training stream either.
+        var scoringRng = RandomHelper.CreateSeededRandom(_randomSeed);
+
         for (int i = 0; i < X.Rows; i++)
         {
             // Normalize
@@ -910,7 +930,7 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Find optimal z via gradient descent
-            var z = SampleLatent();
+            var z = SampleLatent(scoringRng);
             var bestZ = new Vector<T>(_latentDim);
             for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
 
