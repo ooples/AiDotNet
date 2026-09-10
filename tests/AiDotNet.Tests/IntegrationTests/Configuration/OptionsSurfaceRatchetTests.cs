@@ -53,7 +53,7 @@ public class OptionsSurfaceRatchetTests
     /// Phase 2 took this from 1067 to 977 (17 sequence models, 90 params); phase 3 to 875
     /// (11 vision-language models, 102 params), then 861 once enum- and string-typed
     /// parameters were migrated too and VisionMambaModel was picked up; phase 4a to 782
-    /// (11 embedding and retrieval models, 77 params); phase 4b to 741 (10 GANs, 41 params); phase 5 to 697 (19 Document models, 148 params); phase 6 to 562 (43 Video models, 136 params); phase 7 to 441 (12 audio models, 130 params); phase 8 to 408 (all 8 panoptic segmentation models, 33 params).
+    /// (11 embedding and retrieval models, 77 params); phase 4b to 741 (10 GANs, 41 params); phase 5 to 697 (19 Document models, 148 params); phase 6 to 562 (43 Video models, 136 params); phase 7 to 441 (12 audio models, 130 params); phase 8 to 408 (all 8 panoptic segmentation models, 33 params); phase 9 to 392 (3 graph task models, 16 params).
     /// Originally established by this test's first run against master on 2026-09-08. A file-based
     /// estimate of the three areas named in the #2090 spec put it at 806; this reflection
     /// measurement found 1067, because the defect also reaches models the file scan never
@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 408;
+    private const int Baseline = 392;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -83,7 +83,7 @@ public class OptionsSurfaceRatchetTests
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 519;
+    private const int ConstructorBaseline = 503;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

@@ -91,6 +91,11 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     Authors = "Thomas N. Kipf, Max Welling")]
 public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
+    private readonly LinkPredictionOptions _options;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
+
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
@@ -117,23 +122,6 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     [Scratch]
     private Tensor<T>? _nodeEmbeddings;
 
-    /// <summary>
-    /// Decoder types for combining node embeddings into edge scores.
-    /// </summary>
-    public enum LinkPredictionDecoder
-    {
-        /// <summary>Dot product: score = z_i * z_j</summary>
-        DotProduct,
-
-        /// <summary>Cosine similarity: score = (z_i * z_j) / (||z_i|| ||z_j||)</summary>
-        CosineSimilarity,
-
-        /// <summary>Element-wise product: score = sum(z_i * z_j)</summary>
-        Hadamard,
-
-        /// <summary>L2 distance: score = -||z_i - z_j||^2</summary>
-        Distance
-    }
 
     /// <summary>
     /// Gets the number of input features per node.
@@ -206,22 +194,32 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 
     public LinkPredictionModel(
         NeuralNetworkArchitecture<T> architecture,
-        int hiddenDim = 64,
-        int embeddingDim = 32,
-        int numLayers = 2,
-        double dropoutRate = 0.5,
-        LinkPredictionDecoder decoderType = LinkPredictionDecoder.DotProduct,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
+        LinkPredictionOptions? options = null)
+        : this(options ?? new LinkPredictionOptions(), architecture, optimizer, lossFunction)
     {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    private LinkPredictionModel(
+        LinkPredictionOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), options.MaxGradNorm)
+    {
+        options.Validate();
+        _options = options;
+        Options = _options;
         InputFeatures = architecture.InputSize;
-        EmbeddingDim = embeddingDim;
-        HiddenDim = hiddenDim;
-        NumLayers = numLayers;
-        DropoutRate = dropoutRate;
-        _decoderType = decoderType;
+        EmbeddingDim = options.EmbeddingDim;
+        HiddenDim = options.HiddenDim;
+        NumLayers = options.NumLayers;
+        DropoutRate = options.DropoutRate;
+        _decoderType = options.DecoderType;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
