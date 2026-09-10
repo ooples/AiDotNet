@@ -11598,7 +11598,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measured optimizer divergence documented by HeavyTrainingTimeoutClassNames.
         bool isFloatExcluded = model.ClassName is
             "GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork";
+        // A handful of family bases have NO generic form, so a float scaffold cannot be expressed
+        // against them at all: the base would stay non-generic (over double) while the return type,
+        // constructor and factory were rewritten to float, and the override no longer matches.
+        // Most bases declare both shapes - DiffusionModelTestBase and DiffusionModelTestBase<TNum>,
+        // AudioNNModelTestBase and AudioNNModelTestBase<T> - which is why this stayed hidden: a
+        // model only trips it by being float-scaffolded AND routing to one of the few single-shape
+        // bases. UniVSTModel reaches LatentDiffusionTestBase without a float scaffold and compiles;
+        // MGIE reaches it with one and did not.
+        bool baseHasNoGenericForm = baseClassName == "LatentDiffusionTestBase";
         bool useFloat = !isFloatExcluded
+                     && !baseHasNoGenericForm
                      && (Fp32TestClassNames.Contains(model.ClassName)
                          || model.RequestsFloatScaffold
                          || supportsFloatScaffold);
