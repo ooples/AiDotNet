@@ -22,6 +22,7 @@ public class EmuEditOptions : EditingVLMOptions
         DecoderDim = other.DecoderDim;
         NumVisionLayers = other.NumVisionLayers;
         NumDecoderLayers = other.NumDecoderLayers;
+        EditHeadLayers = other.EditHeadLayers;
         NumHeads = other.NumHeads;
         VocabSize = other.VocabSize;
         MaxSequenceLength = other.MaxSequenceLength;
@@ -46,6 +47,7 @@ public class EmuEditOptions : EditingVLMOptions
         DecoderDim = 4096;
         NumVisionLayers = 24;
         NumDecoderLayers = 32;
+        EditHeadLayers = 4;
         NumHeads = 32;
         ImageSize = 512;
         VocabSize = 32000;
