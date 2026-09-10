@@ -15539,7 +15539,7 @@ public static partial class LayerHelper<T>
 
         // === Output Projection ===
         // Per-token projection from modelDim to forecast values, then pool across sequence.
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -34770,11 +34770,11 @@ public static partial class LayerHelper<T>
 
         // === Output Projection ===
         yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
+            outputSize: modelDim * (architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon) / 4,
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
