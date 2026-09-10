@@ -58,6 +58,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
+          ./tools/TestImpact/Test-ValidationReuseModes.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
 
       - name: Find a complete marked coverage run
         id: source
@@ -90,9 +92,13 @@ jobs:
             status=$(printf '%s' "$meta" | jq -r '.status')
             conclusion=$(printf '%s' "$meta" | jq -r '.conclusion // ""')
             sha=$(printf '%s' "$meta" | jq -r '.head_sha')
+            # The coverage source is the shard matrix, not the unrelated Sonar/CodeQL tail. A run
+            # cancelled after every shard completed still contains complete evidence; the exact
+            # universe and per-shard conclusions are verified below before it can be accepted.
             if [ "$workflow" != 'Build & SonarCloud' ] || [ "$branch" != 'master' ] || \
                [ "$event" != 'workflow_dispatch' ] || [ "$status" != 'completed' ] || \
-               { [ "$conclusion" != 'success' ] && [ "$conclusion" != 'failure' ]; }; then
+               { [ "$conclusion" != 'success' ] && [ "$conclusion" != 'failure' ] && \
+                 [ "$conclusion" != 'cancelled' ]; }; then
               echo "run $candidate is $workflow/$branch/$event/$status/$conclusion - not a completed coverage source"
               return 1
             fi
@@ -299,9 +305,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Audit against the exact map run recorded by the source coverage marker. A map built from
-      # this source run would make the question circular. If the audit fails, this workflow is not
-      # successful and selectors will not discover the newly uploaded artifact.
+      # Prefer auditing the exact historical map run recorded by the coverage marker. Only a typed
+      # FreshCoverage bootstrap/re-seed may use the same-tree candidate, and never after a historical
+      # miss. If certification fails, selectors cannot discover the candidate-only artifact.
       - name: Download the map that was in effect
         if: steps.source.outputs.found == 'true'
         env:
@@ -335,14 +341,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if (-not (Test-Path prevmap/shard-map.json)) {
-            Write-Host 'no prior map was in effect - skipping bootstrap audit'
-            "certified=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            exit 0
-          }
-
-          # gh rejects --slurp combined with --jq. Parse the paginated response first, then
-          # flatten it in PowerShell so matrices beyond 100 jobs stay complete.
           $jobPages = gh api --paginate --slurp `
               "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs?per_page=100" |
               ConvertFrom-Json
@@ -361,54 +359,100 @@ jobs:
           $failed = @($outcomes | Where-Object outcome -ne 'success').Count
           Write-Host "auditing $($outcomes.Count) shard outcome(s), $failed failed"
 
-          # Exercise the tooling being proposed by THIS map build, while giving git the audited
-          # tree as HEAD. Checking out first and then invoking tools/ would silently run whatever
-          # older selector happened to exist at the source commit.
+          # Exercise the tooling proposed by THIS map build while checking out the immutable source
+          # tree whose complete outcomes are being audited.
           $auditTools = Join-Path $env:RUNNER_TEMP 'test-impact-audit-tools'
           New-Item -ItemType Directory -Path $auditTools -Force | Out-Null
           Copy-Item tools/TestImpact/Select-Shards.ps1 (Join-Path $auditTools 'Select-Shards.ps1')
           Copy-Item tools/TestImpact/Measure-SelectionMiss.ps1 (Join-Path $auditTools 'Measure-SelectionMiss.ps1')
           Copy-Item tools/TestImpact/New-ShardMapCertificate.ps1 (Join-Path $auditTools 'New-ShardMapCertificate.ps1')
 
-          # HEAD must be the audited tree; the selector diffs from the prior map commit to HEAD.
-          & git checkout --quiet '${{ steps.source.outputs.sha }}'
-          if ($LASTEXITCODE -ne 0) { throw "checkout of audited commit failed - refusing to audit the wrong tree" }
-          & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
-              -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
-              -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json -OutFile audit.json
-          $auditExit = $LASTEXITCODE
+          $sourceSha = '${{ steps.source.outputs.sha }}'
+          & git checkout --quiet $sourceSha
+          if ($LASTEXITCODE -ne 0) { throw 'checkout of audited commit failed - refusing to audit the wrong tree' }
 
-          $a = Get-Content audit.json -Raw | ConvertFrom-Json
-          # The shipping policy is executable outside YAML. It validates the exact map universe,
-          # source outcomes and audit counts before producing either file in the certified pair.
-          & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
-              -MapFile prevmap/shard-map.json -AuditFile audit.json -OutcomesFile outcomes.json `
-              -CandidateMapRunId ([long] '${{ steps.source.outputs.map_run_id }}') `
-              -AuditSourceRunId ([long] '${{ steps.source.outputs.run_id }}') `
-              -AuditSourceSha '${{ steps.source.outputs.sha }}' `
-              -CertificationRunId ([long] $env:GITHUB_RUN_ID) -OutDirectory certified-map
-          if ($LASTEXITCODE -ne 0) { throw "certificate policy exited $LASTEXITCODE" }
-          $certified = Test-Path -LiteralPath certified-map/certification.json
+          $audit = $null
+          $auditExit = 0
+          $basis = ''
+          $certified = $false
+
+          # Prefer a non-circular historical replay when it is reducible. Selection-control changes
+          # are historical in this complete master run, so BaseSha equals HEAD: runtime deltas are
+          # still replayed from the map SHA, but merged CI-control churn cannot wedge every later PR.
+          if (Test-Path prevmap/shard-map.json) {
+            & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
+                -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
+                -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json `
+                -CurrentChangeBaseSha $sourceSha -OutFile historical-audit.json
+            $auditExit = $LASTEXITCODE
+            & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
+                -MapFile prevmap/shard-map.json -AuditFile historical-audit.json `
+                -OutcomesFile outcomes.json `
+                -CandidateMapRunId ([long] '${{ steps.source.outputs.map_run_id }}') `
+                -AuditSourceRunId ([long] '${{ steps.source.outputs.run_id }}') `
+                -AuditSourceSha $sourceSha -CertificationRunId ([long] $env:GITHUB_RUN_ID) `
+                -Basis HistoricalReplay -OutDirectory certified-map `
+                -DecisionFile historical-decision.json
+            if ($LASTEXITCODE -ne 0) { throw "historical certificate policy exited $LASTEXITCODE" }
+            $historicalDecision = Get-Content historical-decision.json -Raw | ConvertFrom-Json
+            if ([int] $historicalDecision.missCount -gt 0) {
+              Copy-Item historical-decision.json map-audit-decision.json
+              $audit = Get-Content historical-audit.json -Raw | ConvertFrom-Json
+              $basis = 'historical replay (revoked by miss)'
+            }
+            elseif (Test-Path certified-map/certification.json) {
+              Copy-Item historical-decision.json map-audit-decision.json
+              $audit = Get-Content historical-audit.json -Raw | ConvertFrom-Json
+              $basis = 'historical replay'
+              $certified = $true
+            }
+          }
+
+          # Bootstrap and safe no-reduction re-seeding use the freshly measured candidate. This is
+          # never allowed to hide a historical miss. The complete matrix, candidate-map integrity,
+          # executable miss-detector tests, and unchanged-tree reduction must all agree.
+          if ($null -eq $audit -or (-not $certified -and $auditExit -eq 0)) {
+            Remove-Item -LiteralPath certified-map -Recurse -Force -ErrorAction SilentlyContinue
+            & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
+                -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
+                -MapFile shard-map.json -OutcomesFile outcomes.json `
+                -CurrentChangeBaseSha $sourceSha -OutFile fresh-audit.json
+            $auditExit = $LASTEXITCODE
+            & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
+                -MapFile shard-map.json -AuditFile fresh-audit.json -OutcomesFile outcomes.json `
+                -CandidateMapRunId ([long] $env:GITHUB_RUN_ID) `
+                -AuditSourceRunId ([long] '${{ steps.source.outputs.run_id }}') `
+                -AuditSourceSha $sourceSha -CertificationRunId ([long] $env:GITHUB_RUN_ID) `
+                -Basis FreshCoverage -OutDirectory certified-map `
+                -DecisionFile map-audit-decision.json
+            if ($LASTEXITCODE -ne 0) { throw "fresh-coverage certificate policy exited $LASTEXITCODE" }
+            $audit = Get-Content fresh-audit.json -Raw | ConvertFrom-Json
+            $basis = 'fresh complete coverage'
+            $certified = Test-Path certified-map/certification.json
+          }
+
           "certified=$($certified.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-          $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
-                     elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
-                     elseif ($a.Failed -eq 0) { 'complete clean matrix; zero observed misses' }
+          $verdict = if ($audit.Escalated) { 'would have escalated - nothing skipped' }
+                     elseif ($audit.MissCount -gt 0) { "**$($audit.MissCount) MISSED**: $($audit.Missed -join ', ')" }
+                     elseif ($audit.Failed -eq 0) { 'complete clean matrix; zero observed misses' }
                      else { 'no misses' }
-          "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
+          "### Selection audit`n`n- basis: $basis`n- would run $($audit.WouldRun)/$($audit.TotalShards), skip $($audit.WouldSkip)`n- $($audit.Failed) shard(s) failed`n- $verdict" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-          # Not certifying is the whole ballgame: the PR selector accepts only certified-shard-map,
-          # so with no certificate every pull request runs the complete matrix. This step still exits
-          # successfully and the upload below is merely 'skipped', which is precisely how a repo-wide
-          # CI regression stayed invisible across several attempted fixes. Announce it.
           if (-not $certified) {
             Write-Host "::warning::no certified shard map produced - $verdict. Until a candidate certifies, every pull request runs the complete shard matrix."
-            "### No certified shard map`n`nCertification was skipped: $verdict.`n`nThe pull-request selector accepts only a certified-shard-map artifact, so until a candidate certifies **every pull request runs the complete shard matrix**." |
-              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
           exit $auditExit
+
+      - name: Upload typed audit decision
+        if: ${{ always() && steps.source.outputs.found == 'true' && hashFiles('map-audit-decision.json') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: shard-map-audit-decision
+          path: map-audit-decision.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload certified map
         if: steps.audit.outputs.certified == 'true'
