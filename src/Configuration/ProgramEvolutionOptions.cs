@@ -1,3 +1,4 @@
+using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
 using AiDotNet.Interfaces;
 using AiDotNet.ProgramSynthesis.Enums;
@@ -521,9 +522,9 @@ public sealed class ProgramEvolutionOptions
         return copy;
     }
 
-    // The engine options are copied by EvolutionEngineOptions.Copy() rather than by a list maintained here. The
+    // The engine options are copied by EvolutionEngineOptions.SnapshotAndValidate() rather than by a list maintained here. The
     // hand-written copy this replaces silently dropped 19 of the 41 options, so a program-evolution run discarded
     // its cascade, early stopping, target quality, migration topology, selection policy and output directory
     // without reporting anything.
-    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => source.Copy();
+    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => source.SnapshotAndValidate();
 }

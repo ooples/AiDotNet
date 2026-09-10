@@ -12,7 +12,7 @@ namespace AiDotNet.Evolution.Programs;
 /// Sources must be nonblank, bounded and valid Unicode so UTF-8 serialization cannot collapse malformed surrogates.
 /// <see cref="NormalizedSource"/> remains available for display and approximate descriptors, never execution/cache keys.
 /// </remarks>
-public sealed class ProgramGenome : IEquatable<ProgramGenome>
+public sealed class ProgramGenome : IEquatable<ProgramGenome>, IImmutableEvolutionGenome<ProgramGenome>
 {
     /// <summary>The largest source length, in characters, that a genome may carry.</summary>
     public const int MaxSourceLength = 1_048_576;
@@ -59,6 +59,16 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
         _hashCode = ComputeHashCode(source, language);
     }
 
+    private ProgramGenome(ProgramGenome source)
+    {
+        Source = source.Source;
+        NormalizedSource = source.NormalizedSource;
+        Language = source.Language;
+        Description = source.Description;
+        Id = source.Id;
+        _hashCode = source._hashCode;
+    }
+
     /// <summary>Gets the source text exactly as supplied, including its original line endings.</summary>
     public string Source { get; }
 
@@ -78,6 +88,9 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// description-only edit is the same candidate and is not evaluated twice.
     /// </remarks>
     public string Id { get; }
+
+    /// <inheritdoc/>
+    public ProgramGenome CreateOwnedSnapshot() => new(this);
 
     /// <summary>Gets the number of lines in <see cref="NormalizedSource"/>.</summary>
     public int LineCount
