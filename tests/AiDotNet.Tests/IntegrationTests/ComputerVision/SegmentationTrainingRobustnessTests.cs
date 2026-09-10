@@ -276,7 +276,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MixedQueryTransformer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MixedQueryTransformer<float>(Arch(), numClasses: 5, modelSize: MixedQueryTransformerModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), options: new MixedQueryTransformerOptions { NumClasses = 5, ModelSize = MixedQueryTransformerModelSize.R50 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -318,7 +318,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task XDecoder_MultiStepTrain_DoesNotThrow()
     {
-        var model = new XDecoder<float>(Arch(), numClasses: 5, modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), options: new XDecoderOptions { NumClasses = 5, ModelSize = XDecoderModelSize.Tiny });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

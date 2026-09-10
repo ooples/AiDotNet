@@ -301,14 +301,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MixedQueryTransformer_Construction_Succeeds()
     {
-        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), options: new MixedQueryTransformerOptions { ModelSize = MixedQueryTransformerModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task MixedQueryTransformer_Predict_ReturnsOutput()
     {
-        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), options: new MixedQueryTransformerOptions { ModelSize = MixedQueryTransformerModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -382,14 +382,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task XDecoder_Construction_Succeeds()
     {
-        var model = new XDecoder<float>(Arch(), modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), options: new XDecoderOptions { ModelSize = XDecoderModelSize.Tiny });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task XDecoder_Predict_ReturnsOutput()
     {
-        var model = new XDecoder<float>(Arch(), modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), options: new XDecoderOptions { ModelSize = XDecoderModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

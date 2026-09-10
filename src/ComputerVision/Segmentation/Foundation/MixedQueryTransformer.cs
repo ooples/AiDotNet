@@ -123,25 +123,32 @@ public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 133,
-        int numQueries = 200,
-        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
-        double dropRate = 0.1,
         MixedQueryTransformerOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture, and
+        : this(options ?? new MixedQueryTransformerOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    private MixedQueryTransformer(
+        MixedQueryTransformerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+
+        // The base resolves height/width/channels/options.NumClasses/native-mode from the architecture, and
         // defaults `optimizer` LAZILY via CreateDefaultOptimizer() - which is why null is passed
         // straight through instead of `optimizer ?? new AdamWOptimizer<...>(this)`, an expression
         // that cannot appear in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new MixedQueryTransformerOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -184,22 +191,29 @@ public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<
     public MixedQueryTransformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 133,
-        int numQueries = 200,
-        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
         MixedQueryTransformerOptions? options = null)
+        : this(options ?? new MixedQueryTransformerOptions(), architecture, onnxModelPath)
+    {
+    }
+
+    private MixedQueryTransformer(
+        MixedQueryTransformerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new MixedQueryTransformerOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
         _dropRate = 0.0;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }
