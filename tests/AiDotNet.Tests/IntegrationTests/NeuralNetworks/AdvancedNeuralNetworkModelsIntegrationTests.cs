@@ -1996,7 +1996,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 16,
             outputSize: 4);
 
-        var gat = new GraphAttentionNetwork<float>(architecture, numHeads: 2, numLayers: 2);
+        var gat = new GraphAttentionNetwork<float>(architecture, options: new GraphAttentionNetworkOptions { NumHeads = 2, NumLayers = 2 });
         var input = CreateRandomTensor([8, 16]); // 8 nodes, 16 features each
 
         // Act
@@ -2019,7 +2019,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 16,
             outputSize: 4);
 
-        var gat = new GraphAttentionNetwork<float>(architecture, numHeads: 2, numLayers: 2);
+        var gat = new GraphAttentionNetwork<float>(architecture, options: new GraphAttentionNetworkOptions { NumHeads = 2, NumLayers = 2 });
 
         // Act
         int parameterCount = (int)gat.ParameterCount;
@@ -3009,8 +3009,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var graphSage = new GraphSAGENetwork<float>(
             architecture,
-            aggregatorType: SAGEAggregatorType.Mean,
-            numLayers: 2);
+            options: new GraphSAGEOptions { AggregatorType = SAGEAggregatorType.Mean, NumLayers = 2 });
 
         // Create node features [numNodes, features]
         var nodeFeatures = CreateRandomTensor([8, 16]);
@@ -3041,8 +3040,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var graphSage = new GraphSAGENetwork<float>(
             architecture,
-            aggregatorType: SAGEAggregatorType.Mean,
-            numLayers: 2);
+            options: new GraphSAGEOptions { AggregatorType = SAGEAggregatorType.Mean, NumLayers = 2 });
 
         // Act
         int parameterCount = (int)graphSage.ParameterCount;
@@ -3065,8 +3063,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var gin = new GraphIsomorphismNetwork<float>(
             architecture,
-            mlpHiddenDim: 32,
-            numLayers: 2);
+            options: new GraphIsomorphismNetworkOptions { MlpHiddenDim = 32, NumLayers = 2 });
 
         // Create node features [numNodes, features]
         var nodeFeatures = CreateRandomTensor([8, 16]);
@@ -3097,8 +3094,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var gin = new GraphIsomorphismNetwork<float>(
             architecture,
-            mlpHiddenDim: 32,
-            numLayers: 2);
+            options: new GraphIsomorphismNetworkOptions { MlpHiddenDim = 32, NumLayers = 2 });
 
         // Act
         int parameterCount = (int)gin.ParameterCount;

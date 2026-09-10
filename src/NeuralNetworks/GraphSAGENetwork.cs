@@ -173,26 +173,44 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 
     public GraphSAGENetwork(
         NeuralNetworkArchitecture<T> architecture,
-        SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
-        int numLayers = 2,
-        bool normalize = true,
-        double dropoutRate = 0.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         ILearningRateScheduler? learningRateScheduler = null,
         GraphSAGEOptions? options = null)
+        : this(options ?? new GraphSAGEOptions(), architecture, optimizer, lossFunction, learningRateScheduler)
+    {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must
+    /// be resolved first. Chaining avoids constructing a throwaway options object just to
+    /// read one value off it. Options come first because a nullable and a non-nullable
+    /// reference type are the same type to the compiler, so ordering is what keeps this from
+    /// being a duplicate signature.
+    /// </para>
+    /// </remarks>
+    private GraphSAGENetwork(
+        GraphSAGEOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction,
+        ILearningRateScheduler? learningRateScheduler)
         : base(architecture,
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
-               maxGradNorm)
+               options.MaxGradNorm)
     {
-        _options = options ?? new GraphSAGEOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        AggregatorType = aggregatorType;
-        Normalize = normalize;
+        AggregatorType = _options.AggregatorType;
+        Normalize = _options.Normalize;
         HiddenDim = 64; // Default hidden dimension
-        NumLayers = numLayers;
-        DropoutRate = dropoutRate;
+        NumLayers = _options.NumLayers;
+        DropoutRate = _options.DropoutRate;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
