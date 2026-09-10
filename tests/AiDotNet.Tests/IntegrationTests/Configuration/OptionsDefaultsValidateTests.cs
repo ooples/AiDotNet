@@ -126,7 +126,18 @@ public class OptionsDefaultsValidateTests
     [Fact]
     public void OptionsClassesWithoutValidate_DoesNotRegress()
     {
-        const int UncoveredBaseline = 14;
+        // Raised from 14 to 23 deliberately, and this is the one direction the number is not
+        // supposed to move — so the reason belongs here rather than in a commit message.
+        // Re-parenting PhysicsInformedOptions onto ModelHyperparameterOptions (#2090, PINN
+        // phase) brought twelve physics-informed options classes into this scan for the first
+        // time. Nine of them are property-less shells for models not yet migrated:
+        // DeepOperatorNetwork, DeepRitzMethod, FourierNeuralOperator, GraphNeuralOperator,
+        // LagrangianNeuralNetwork, MultiScalePINN, UniversalDifferentialEquations,
+        // VariationalPINN, and PhysicsInformedOptions itself. They gained no defect; they
+        // became visible. Giving each a Validate() that checks nothing would satisfy this
+        // test while buying no safety, which is why it is a ratchet and not a demand for zero.
+        // Each falls off the list when its model is migrated.
+        const int UncoveredBaseline = 23;
 
         var all = GetConcreteOptionsTypes().ToList();
         var missing = all

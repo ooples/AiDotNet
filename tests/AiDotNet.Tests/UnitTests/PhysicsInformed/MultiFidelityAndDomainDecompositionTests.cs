@@ -1,3 +1,4 @@
+using AiDotNet.PhysicsInformed.Options;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Enums;
@@ -143,11 +144,7 @@ public class MultiFidelityAndDomainDecompositionTests
         };
 
         // Act
-        var pinn = new MultiFidelityPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new MultiFidelityPINN<double>(architecture, pde, boundaryConditions, options: new MultiFidelityPINNOptions { NumCollocationPoints = 100 });
 
         // Assert
         Assert.NotNull(pinn);
@@ -171,11 +168,7 @@ public class MultiFidelityAndDomainDecompositionTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new MultiFidelityPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new MultiFidelityPINN<double>(architecture, pde, boundaryConditions, options: new MultiFidelityPINNOptions { NumCollocationPoints = 100 });
 
         var inputs = new Tensor<double>([10, 2]);
         var outputs = new Tensor<double>([10, 1]);
@@ -200,11 +193,7 @@ public class MultiFidelityAndDomainDecompositionTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new MultiFidelityPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new MultiFidelityPINN<double>(architecture, pde, boundaryConditions, options: new MultiFidelityPINNOptions { NumCollocationPoints = 100 });
 
         var inputs = new Tensor<double>([5, 2]);
         var outputs = new Tensor<double>([5, 1]);
@@ -229,11 +218,7 @@ public class MultiFidelityAndDomainDecompositionTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new MultiFidelityPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new MultiFidelityPINN<double>(architecture, pde, boundaryConditions, options: new MultiFidelityPINNOptions { NumCollocationPoints = 100 });
 
         // Act
         pinn.SetLowFidelityFrozen(true);
@@ -258,11 +243,7 @@ public class MultiFidelityAndDomainDecompositionTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new MultiFidelityPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new MultiFidelityPINN<double>(architecture, pde, boundaryConditions, options: new MultiFidelityPINNOptions { NumCollocationPoints = 100 });
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
@@ -302,12 +283,7 @@ public class MultiFidelityAndDomainDecompositionTests
         };
 
         // Act
-        var pinn = new DomainDecompositionPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            subdomains,
-            numCollocationPointsPerSubdomain: 100);
+        var pinn = new DomainDecompositionPINN<double>(architecture, pde, boundaryConditions, subdomains, options: new DomainDecompositionPINNOptions { NumCollocationPointsPerSubdomain = 100 });
 
         // Assert
         Assert.NotNull(pinn);
@@ -366,12 +342,7 @@ public class MultiFidelityAndDomainDecompositionTests
                 new double[] { 1.0, 1.0 })
         };
 
-        var pinn = new DomainDecompositionPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            subdomains,
-            numCollocationPointsPerSubdomain: 100);
+        var pinn = new DomainDecompositionPINN<double>(architecture, pde, boundaryConditions, subdomains, options: new DomainDecompositionPINNOptions { NumCollocationPointsPerSubdomain = 100 });
 
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => pinn.GetSubdomainNetwork(-1));
@@ -401,12 +372,7 @@ public class MultiFidelityAndDomainDecompositionTests
                 new double[] { 1.0, 1.0 })
         };
 
-        var pinn = new DomainDecompositionPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            subdomains,
-            numCollocationPointsPerSubdomain: 100);
+        var pinn = new DomainDecompositionPINN<double>(architecture, pde, boundaryConditions, subdomains, options: new DomainDecompositionPINNOptions { NumCollocationPointsPerSubdomain = 100 });
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -436,12 +402,7 @@ public class MultiFidelityAndDomainDecompositionTests
                 new double[] { 1.0, 1.0 })
         };
 
-        var pinn = new DomainDecompositionPINN<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            subdomains,
-            numCollocationPointsPerSubdomain: 100);
+        var pinn = new DomainDecompositionPINN<double>(architecture, pde, boundaryConditions, subdomains, options: new DomainDecompositionPINNOptions { NumCollocationPointsPerSubdomain = 100 });
 
         // Act
         var solution = pinn.GetGlobalSolution(new double[] { 0.5, 0.5 });

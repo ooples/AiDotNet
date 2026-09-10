@@ -142,25 +142,47 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         IBoundaryCondition<T>[] boundaryConditions,
         IInitialCondition<T>? initialCondition = null,
         PhysicsInformedNeuralNetwork<T>? lowFidelityNetwork = null,
-        int numCollocationPoints = 10000,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        double lowFidelityWeight = 1.0,
-        double highFidelityWeight = 10.0,
-        double correlationWeight = 1.0,
-        double pdeWeight = 1.0,
-        double boundaryWeight = 1.0,
-        bool freezeLowFidelityAfterPretraining = true,
         MultiFidelityPINNOptions? options = null)
-        : base(architecture, pdeSpecification, boundaryConditions, initialCondition,
-               numCollocationPoints, optimizer, null, pdeWeight, boundaryWeight, null)
+        : this(options ?? new MultiFidelityPINNOptions(), architecture, pdeSpecification,
+               boundaryConditions, initialCondition, lowFidelityNetwork, optimizer)
     {
-        _options = options ?? new MultiFidelityPINNOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base constructor now takes a PhysicsInformedNeuralNetworkOptions, which has to be built
+    /// from these options before the base initializer runs. Options come first so this signature
+    /// differs from the public one.
+    /// </para>
+    /// </remarks>
+    private MultiFidelityPINN(
+        MultiFidelityPINNOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IPDESpecification<T> pdeSpecification,
+        IBoundaryCondition<T>[] boundaryConditions,
+        IInitialCondition<T>? initialCondition,
+        PhysicsInformedNeuralNetwork<T>? lowFidelityNetwork,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : base(architecture, pdeSpecification, boundaryConditions, initialCondition, optimizer,
+               new PhysicsInformedNeuralNetworkOptions
+               {
+                   NumCollocationPoints = options.NumCollocationPoints,
+                   PdeWeight = options.PdeWeight,
+                   BoundaryWeight = options.BoundaryWeight,
+               })
+    {
+        options.Validate();
+        _options = options;
         Options = _options;
 
-        _lowFidelityWeight = lowFidelityWeight;
-        _highFidelityWeight = highFidelityWeight;
-        _correlationWeight = correlationWeight;
-        _freezeLowFidelityAfterPretraining = freezeLowFidelityAfterPretraining;
+        _lowFidelityWeight = options.LowFidelityWeight;
+        _highFidelityWeight = options.HighFidelityWeight;
+        _correlationWeight = options.CorrelationWeight;
+        _freezeLowFidelityAfterPretraining = options.FreezeLowFidelityAfterPretraining;
         _lowFidelityFrozen = false;
 
         // Create or use provided low-fidelity network
@@ -177,11 +199,12 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 pdeSpecification,
                 boundaryConditions,
                 initialCondition,
-                numCollocationPoints / 2, // Fewer collocation points for LF
-                null,
-                null,
-                pdeWeight * 0.5, // Lower physics weight for LF
-                boundaryWeight);
+                options: new PhysicsInformedNeuralNetworkOptions
+                {
+                    NumCollocationPoints = options.NumCollocationPoints / 2, // Fewer for LF
+                    PdeWeight = options.PdeWeight * 0.5,                     // Lower physics weight for LF
+                    BoundaryWeight = options.BoundaryWeight,
+                });
         }
 
         // Create optimizer for this network

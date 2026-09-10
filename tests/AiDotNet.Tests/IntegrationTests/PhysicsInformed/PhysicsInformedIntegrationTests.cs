@@ -1,3 +1,4 @@
+using AiDotNet.PhysicsInformed.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -623,11 +624,7 @@ public class PhysicsInformedIntegrationTests
         var pde = new HeatEquation<double>(1.0);
         var boundaryConditions = Array.Empty<IBoundaryCondition<double>>();
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         Assert.NotNull(pinn);
         Assert.True(pinn.SupportsTraining);
@@ -663,11 +660,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var point = new double[] { 0.5, 0.1 };
         var solution = pinn.GetSolution(point);
@@ -682,11 +675,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var point = new double[] { 0.5, 0.1 };
         var residual = pinn.EvaluatePDEResidual(point);
@@ -727,11 +716,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var customPoints = new double[5, 2];
         var random = RandomHelper.CreateSeededRandom(42);
@@ -750,11 +735,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var wrongDimPoints = new double[5, 3]; // Wrong dimension
 
@@ -767,11 +748,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var input = new Tensor<double>(new[] { 3, 2 });
         var output = pinn.Predict(input);
@@ -786,11 +763,7 @@ public class PhysicsInformedIntegrationTests
     {
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var metadata = pinn.GetModelMetadata();
 
@@ -1305,11 +1278,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 1);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 1 });
 
         var point = new double[] { 0.5, 0.1 };
         var solution = pinn.GetSolution(point);
@@ -1401,11 +1370,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var pde = new HeatEquation<double>(1.0);
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
         var metadata = pinn.GetModelMetadata();
 

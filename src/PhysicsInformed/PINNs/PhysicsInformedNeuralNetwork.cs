@@ -156,16 +156,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
             IPDESpecification<T> pdeSpecification,
             IBoundaryCondition<T>[] boundaryConditions,
             IInitialCondition<T>? initialCondition = null,
-            int numCollocationPoints = 10000,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            double? dataWeight = null,
-            double? pdeWeight = null,
-            double? boundaryWeight = null,
-            double? initialWeight = null,
             PhysicsInformedNeuralNetworkOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
             _options = options ?? new PhysicsInformedNeuralNetworkOptions();
+            _options.Validate();
             Options = _options;
 
             Guard.NotNull(pdeSpecification);
@@ -173,17 +169,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
             Guard.NotNull(boundaryConditions);
             _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
-            _numCollocationPoints = numCollocationPoints;
+            _numCollocationPoints = _options.NumCollocationPoints;
 
             // Create the physics-informed loss function
             _physicsLoss = new PhysicsInformedLoss<T>(
                 _pdeSpecification,
                 _boundaryConditions,
                 _initialCondition,
-                dataWeight,
-                pdeWeight,
-                boundaryWeight,
-                initialWeight);
+                _options.DataWeight,
+                _options.PdeWeight,
+                _options.BoundaryWeight,
+                _options.InitialWeight);
 
             if (optimizer == null)
             {
