@@ -137,7 +137,8 @@ public class AdafactorTests
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            Assert.True(!double.IsNaN(parameters[i]) && !double.IsInfinity(parameters[i]), $"parameter {i} became {parameters[i]}");
+            Assert.True(!double.IsNaN(parameters[i]) && !double.IsInfinity(parameters[i]),
+                $"parameter {i} became {parameters[i]}");
         }
     }
 
@@ -160,5 +161,23 @@ public class AdafactorTests
         {
             Assert.Equal(parameters[i], updated[i], precision: 10);
         }
+    }
+
+    [Fact]
+    public void NonZeroWeightDecayShrinksAZeroGradientParameter()
+    {
+        var optimizer = Create(o =>
+        {
+            o.UseRelativeStepSize = false;
+            o.InitialLearningRate = 0.1;
+            o.WeightDecay = 0.5;
+        });
+
+        var parameters = new Vector<double>(new[] { 2.0, -2.0 });
+        var updated = optimizer.UpdateParameters(
+            parameters, new Vector<double>(new[] { 0.0, 0.0 }));
+
+        Assert.Equal(1.9, updated[0], precision: 10);
+        Assert.Equal(-1.9, updated[1], precision: 10);
     }
 }

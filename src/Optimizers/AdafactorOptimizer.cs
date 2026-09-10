@@ -134,112 +134,153 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         double epsilon = _options.Epsilon;
         double clip = _options.UpdateClippingThreshold;
         double decay = _options.WeightDecay;
+        bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
         bool keepMomentum = !double.IsNaN(_options.Beta1);
         double beta1 = keepMomentum ? _options.Beta1 : 0.0;
 
         foreach (var param in context.Parameters)
         {
-            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
-                continue;
-
-            var paramSpan = param.AsWritableSpan();
-            var gradSpan = grad.AsSpan();
-            int length = Math.Min(paramSpan.Length, gradSpan.Length);
-            if (length == 0) continue;
-
-            // The reconstructed second moment for each element, however it was estimated.
-            var estimate = new double[length];
-
-            if (IsFactorable(param._shape))
+            if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(
+                    context, param, Engine, out var gradient))
             {
-                (int rows, int columns) = AsMatrix(param._shape);
-                var rowState = _rows.GetOrAdd(param, _ => new T[rows]);
-                var columnState = _columns.GetOrAdd(param, _ => new T[columns]);
-
-                // Accumulate the row and column sums of the squared gradient.
-                var rowSums = new double[rows];
-                var columnSums = new double[columns];
-                for (int i = 0; i < length; i++)
-                {
-                    double g = NumOps.ToDouble(gradSpan[i]);
-                    double squared = g * g + epsilon;
-                    rowSums[i / columns] += squared;
-                    columnSums[i % columns] += squared;
-                }
-
-                double total = 0.0;
-                for (int r = 0; r < rows; r++)
-                {
-                    double updated = beta2 * NumOps.ToDouble(rowState[r]) + (1 - beta2) * rowSums[r];
-                    rowState[r] = NumOps.FromDouble(updated);
-                    total += updated;
-                }
-
-                for (int c = 0; c < columns; c++)
-                {
-                    columnState[c] = NumOps.FromDouble(
-                        beta2 * NumOps.ToDouble(columnState[c]) + (1 - beta2) * columnSums[c]);
-                }
-
-                // V ~= outer(R, C) / sum(R). The normalisation is what makes the rank-one
-                // reconstruction agree with the true second moment in total mass.
-                if (total <= 0.0) total = epsilon;
-                for (int i = 0; i < length; i++)
-                {
-                    estimate[i] = NumOps.ToDouble(rowState[i / columns])
-                        * NumOps.ToDouble(columnState[i % columns]) / total;
-                }
+                StepParameter(
+                    param, gradient, beta2, epsilon, clip, decay, applyWeightDecay,
+                    keepMomentum, beta1);
             }
-            else
-            {
-                var state = _full.GetOrAdd(param, _ => new T[length]);
-                for (int i = 0; i < length; i++)
-                {
-                    double g = NumOps.ToDouble(gradSpan[i]);
-                    double updated = beta2 * NumOps.ToDouble(state[i]) + (1 - beta2) * (g * g + epsilon);
-                    state[i] = NumOps.FromDouble(updated);
-                    estimate[i] = updated;
-                }
-            }
+        }
+    }
 
-            // U = G / sqrt(V), then scaled down if its RMS exceeds the threshold. Clipping the
-            // UPDATE rather than the gradient is what keeps this stable without a warmup.
-            var update = new double[length];
-            double sumSquares = 0.0;
+    private void StepParameter(
+        Tensor<T> parameter,
+        Tensor<T> gradient,
+        double beta2,
+        double epsilon,
+        double clip,
+        double decay,
+        bool applyWeightDecay,
+        bool keepMomentum,
+        double beta1)
+    {
+        var parameterSpan = parameter.AsWritableSpan();
+        var gradientSpan = gradient.AsSpan();
+        int length = Math.Min(parameterSpan.Length, gradientSpan.Length);
+        if (length == 0) return;
+
+        // The reconstructed second moment for each element, however it was estimated.
+        var estimate = new double[length];
+
+        if (IsFactorable(parameter._shape))
+        {
+            UpdateFactoredSecondMoment(
+                parameter, gradientSpan, estimate, length, beta2, epsilon);
+        }
+        else
+        {
+            UpdateFullSecondMoment(parameter, gradientSpan, estimate, length, beta2, epsilon);
+        }
+
+        // U = G / sqrt(V), then scaled down if its RMS exceeds the threshold. Clipping the
+        // UPDATE rather than the gradient is what keeps this stable without a warmup.
+        var update = new double[length];
+        double sumSquares = 0.0;
+        for (int i = 0; i < length; i++)
+        {
+            double denominator = Math.Sqrt(Math.Max(estimate[i], epsilon));
+            update[i] = NumOps.ToDouble(gradientSpan[i]) / denominator;
+            sumSquares += update[i] * update[i];
+        }
+
+        double updateRms = Math.Sqrt(sumSquares / length);
+        double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+
+        if (keepMomentum)
+        {
+            var moment = _momentum.GetOrAdd(parameter, _ => new T[length]);
             for (int i = 0; i < length; i++)
             {
-                double denominator = Math.Sqrt(Math.Max(estimate[i], epsilon));
-                update[i] = NumOps.ToDouble(gradSpan[i]) / denominator;
-                sumSquares += update[i] * update[i];
+                double m = beta1 * NumOps.ToDouble(moment[i]) + (1 - beta1) * update[i];
+                moment[i] = NumOps.FromDouble(m);
+                update[i] = m;
             }
+        }
 
-            double updateRms = Math.Sqrt(sumSquares / length);
-            double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+        double alpha = StepSize(_step, Rms(parameterSpan));
 
-            if (keepMomentum)
-            {
-                var moment = _momentum.GetOrAdd(param, _ => new T[length]);
-                for (int i = 0; i < length; i++)
-                {
-                    double m = beta1 * NumOps.ToDouble(moment[i]) + (1 - beta1) * update[i];
-                    moment[i] = NumOps.FromDouble(m);
-                    update[i] = m;
-                }
-            }
+        for (int i = 0; i < length; i++)
+        {
+            double current = NumOps.ToDouble(parameterSpan[i]);
+            double next = current - alpha * scale * update[i];
 
-            double alpha = StepSize(_step, Rms(paramSpan));
+            // Decoupled: applied to the weight, not folded into the gradient, so it does not
+            // enter the second-moment estimate.
+            if (applyWeightDecay) next -= alpha * decay * current;
 
-            for (int i = 0; i < length; i++)
-            {
-                double current = NumOps.ToDouble(paramSpan[i]);
-                double next = current - alpha * scale * update[i];
+            parameterSpan[i] = NumOps.FromDouble(next);
+        }
+    }
 
-                // Decoupled: applied to the weight, not folded into the gradient, so it does not
-                // enter the second-moment estimate.
-                if (decay != 0.0) next -= alpha * decay * current;
+    private void UpdateFactoredSecondMoment(
+        Tensor<T> parameter,
+        ReadOnlySpan<T> gradient,
+        Span<double> estimate,
+        int length,
+        double beta2,
+        double epsilon)
+    {
+        (int rows, int columns) = AsMatrix(parameter._shape);
+        var rowState = _rows.GetOrAdd(parameter, _ => new T[rows]);
+        var columnState = _columns.GetOrAdd(parameter, _ => new T[columns]);
 
-                paramSpan[i] = NumOps.FromDouble(next);
-            }
+        // Accumulate the row and column sums of the squared gradient.
+        var rowSums = new double[rows];
+        var columnSums = new double[columns];
+        for (int i = 0; i < length; i++)
+        {
+            double g = NumOps.ToDouble(gradient[i]);
+            double squared = g * g + epsilon;
+            rowSums[i / columns] += squared;
+            columnSums[i % columns] += squared;
+        }
+
+        double total = 0.0;
+        for (int r = 0; r < rows; r++)
+        {
+            double updated = beta2 * NumOps.ToDouble(rowState[r]) + (1 - beta2) * rowSums[r];
+            rowState[r] = NumOps.FromDouble(updated);
+            total += updated;
+        }
+
+        for (int c = 0; c < columns; c++)
+        {
+            columnState[c] = NumOps.FromDouble(
+                beta2 * NumOps.ToDouble(columnState[c]) + (1 - beta2) * columnSums[c]);
+        }
+
+        // V ~= outer(R, C) / sum(R). The normalisation is what makes the rank-one
+        // reconstruction agree with the true second moment in total mass.
+        if (total <= 0.0) total = epsilon;
+        for (int i = 0; i < length; i++)
+        {
+            estimate[i] = NumOps.ToDouble(rowState[i / columns])
+                * NumOps.ToDouble(columnState[i % columns]) / total;
+        }
+    }
+
+    private void UpdateFullSecondMoment(
+        Tensor<T> parameter,
+        ReadOnlySpan<T> gradient,
+        Span<double> estimate,
+        int length,
+        double beta2,
+        double epsilon)
+    {
+        var state = _full.GetOrAdd(parameter, _ => new T[length]);
+        for (int i = 0; i < length; i++)
+        {
+            double g = NumOps.ToDouble(gradient[i]);
+            double updated = beta2 * NumOps.ToDouble(state[i]) + (1 - beta2) * (g * g + epsilon);
+            state[i] = NumOps.FromDouble(updated);
+            estimate[i] = updated;
         }
     }
 
@@ -278,6 +319,8 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
         double updateRms = Math.Sqrt(sumSquares / Math.Max(1, parameters.Length));
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+        double decay = _options.WeightDecay;
+        bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
 
         var span = parameters.AsSpan();
         double alpha = StepSize(_step, Rms(span));
@@ -286,7 +329,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         {
             double current = NumOps.ToDouble(parameters[i]);
             double next = current - alpha * scale * update[i];
-            if (_options.WeightDecay != 0.0) next -= alpha * _options.WeightDecay * current;
+            if (applyWeightDecay) next -= alpha * decay * current;
             updated[i] = NumOps.FromDouble(next);
         }
 
