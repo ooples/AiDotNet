@@ -586,8 +586,7 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
 
         if (mode == ProgramPromptEvolutionMode.FullRewrite)
         {
-            FencedCodeExtractionResult extraction = FencedCodeExtractor.Extract(
-                responseText, _programOptions.Language, allowRawFallback: false);
+            FencedCodeExtractionResult extraction = FencedCodeExtractor.ExtractExact(responseText, _programOptions.Language);
             if (!extraction.HasCode)
             {
                 feedback = "No fenced code block was found. Return the complete program inside one fenced block.";
@@ -673,6 +672,14 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
                            "rather than the previous one.";
                 return ProgramProposalOutcome.Unchanged;
             }
+        }
+
+        if (_programOptions.EnforceEvolveBlocks && !ProgramEditBoundary.PreservesProtectedText(
+                parent.Source, candidateSource, _programOptions.ResolveEvolveBlockMarkers()))
+        {
+            feedback = "The proposal changed protected text outside the evolve blocks or changed their marker structure. " +
+                       "Keep every protected character and marker line exactly unchanged.";
+            return ProgramProposalOutcome.ParseFailed;
         }
 
         string normalized = ProgramGenome.Normalize(candidateSource);
@@ -1041,27 +1048,45 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
     {
         var components = new List<string>
         {
-            "llm-program-variation-v4-source-validation-retries",
+            "llm-program-variation-v5-protected-source-and-complete-options",
             programOptions.Language.ToString(),
-            programOptions.ResolveEvolveBlockMarkers().ToString(),
+            programOptions.ResolveEvolveBlockMarkers().Start,
+            programOptions.ResolveEvolveBlockMarkers().End,
             programOptions.EnforceEvolveBlocks ? "enforce" : "free",
             programOptions.MaxProgramChars.ToString(CultureInfo.InvariantCulture),
             programOptions.Diff.SearchMarker,
             programOptions.Diff.DividerMarker,
             programOptions.Diff.ReplaceMarker,
             programOptions.Diff.FuzzyWhitespace ? "fuzzy" : "exact",
+            programOptions.Diff.AllowCarriageReturns ? "allow-cr" : "refuse-cr",
+            programOptions.Diff.RejectWhenNoBlockApplied ? "require-edit" : "allow-no-edit",
+            programOptions.Diff.MaxBlocks.ToString(CultureInfo.InvariantCulture),
+            programOptions.Diff.MaxFailureExcerptLength.ToString(CultureInfo.InvariantCulture),
+            programOptions.Prompt.ProgramsAsChangesDescription ? "maintain-description" : "source-only",
+            programOptions.Prompt.InitialChangesDescription ?? string.Empty,
             ((int)variationOptions.Mode).ToString(CultureInfo.InvariantCulture),
             variationOptions.MaxProposalRetries.ToString(CultureInfo.InvariantCulture),
+            variationOptions.SamplesPerAttempt.ToString(CultureInfo.InvariantCulture),
             variationOptions.MaxInspirations.ToString(CultureInfo.InvariantCulture),
+            variationOptions.MaxTopPrograms.ToString(CultureInfo.InvariantCulture),
+            variationOptions.MaxEmptyNeighborCells.ToString(CultureInfo.InvariantCulture),
+            variationOptions.MaxPreviousAttempts.ToString(CultureInfo.InvariantCulture),
+            variationOptions.MaxRecordedAttempts.ToString(CultureInfo.InvariantCulture),
+            variationOptions.IncludeParentMetrics ? "include-metrics" : "omit-metrics",
+            variationOptions.Temperature.HasValue ? variationOptions.Temperature.Value.ToString("R", CultureInfo.InvariantCulture) : "provider-temperature",
+            variationOptions.MaxOutputTokens.HasValue ? variationOptions.MaxOutputTokens.Value.ToString(CultureInfo.InvariantCulture) : "provider-token-limit",
             variationOptions.MaxPromptProgramChars.ToString(CultureInfo.InvariantCulture),
             variationOptions.SystemMessage ?? string.Empty,
             variationOptions.ArtifactDiagnosticPrefix,
-            string.Join(",", variationOptions.FeatureDimensions),
             variationOptions.Seed.HasValue
                 ? variationOptions.Seed.Value.ToString(CultureInfo.InvariantCulture)
                 : "stream",
             promptBuilder.VersionHash
         };
+        components.Add(variationOptions.FeatureDimensions.Count.ToString(CultureInfo.InvariantCulture));
+        components.AddRange(variationOptions.FeatureDimensions);
+        components.Add(variationOptions.FeatureBinCounts.Count.ToString(CultureInfo.InvariantCulture));
+        components.AddRange(variationOptions.FeatureBinCounts.Select(count => count.ToString(CultureInfo.InvariantCulture)));
 
         return "llm-program-variation-" + EvolutionHash.Combine(components);
     }

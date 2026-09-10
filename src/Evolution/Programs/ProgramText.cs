@@ -13,6 +13,19 @@ internal static class ProgramText
     internal const string LineFeedText = "\n";
     internal const string CarriageReturnLineFeed = "\r\n";
 
+    /// <summary>Gets exact UTF-16 line offsets without normalizing mixed terminators.</summary>
+    internal static List<int> LineStarts(string source)
+    {
+        var starts = new List<int> { 0 };
+        for (int index = 0; index < source.Length; index++)
+        {
+            if (source[index] != '\r' && source[index] != '\n') continue;
+            if (source[index] == '\r' && index + 1 < source.Length && source[index + 1] == '\n') index++;
+            starts.Add(index + 1);
+        }
+        return starts;
+    }
+
     /// <summary>Splits text into lines on CRLF, CR, or LF without keeping the terminators.</summary>
     internal static List<string> SplitLines(string text)
     {

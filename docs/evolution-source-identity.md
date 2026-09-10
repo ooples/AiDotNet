@@ -12,7 +12,21 @@ display/approximate-descriptor helper; it is not a semantic-equivalence proof.
 
 Malformed model output follows the existing `ParseFailed` retry path, with bounded generic feedback, retained
 chat-call/token accounting and the unchanged parent on exhaustion. It is never silently sanitized into a different
-program. `llm-program-variation-v4-source-validation-retries` invalidates checkpoints from the earlier throwing path.
+program. Variation v5 (`llm-program-variation-v5-protected-source-and-complete-options`) includes that retry fix,
+rejects protected-text changes after every edit format, and fingerprints the previously omitted sampling,
+prompt-history, descriptor-bin and diff-parser settings. Feature names and marker pairs are separately hashed,
+not delimiter-joined strings. These identities describe the configured proposal policy; callers must still pin
+the actual model/provider version and environment, not assume a mutable model alias is reproducible.
+
+Given `EnforceEvolveBlocks`, when a full rewrite or diff changes any protected character or marker structure,
+then it receives bounded `ParseFailed` feedback and cannot become a child. Multiple block bodies may grow or
+shrink; protected mixed CR/LF/CRLF sequences are compared in the original text, not normalized region strings.
+This protects edit boundaries, not the safety or semantic correctness of code inside them.
+
+The executable full-rewrite path preserves content whitespace and mixed line endings, and requires a closed
+fence. It removes CommonMark fence indentation and the single line terminator separating code from the closing
+fence. To retain a source EOF newline, include an extra blank line before that fence. The existing public
+`FencedCodeExtractor.Extract` display-oriented behavior is unchanged; evolution uses an internal exact-text path.
 
 Given two programs with different meaningful string whitespace, when canonicalized, then they have different
 identities even if their display-normalized text is equal. Given an exact duplicate with a new description,
@@ -34,3 +48,13 @@ This intentionally evaluates some cosmetic-only edits again. A language-aware pa
 equivalence, but language-agnostic whitespace trimming cannot. Source identity is only one part of applicability:
 compiler/runtime, dependencies, public and held-out test sets, environment and fidelity must also match before
 cross-run reuse or deployment. This patch does not claim a complete dependency fingerprint or sandbox boundary.
+
+## Local regression evidence
+
+On September 10, 2026, ten new regressions failed against revision `75aa6b1`: nine option changes left the
+variation compatibility hash unchanged, and a full rewrite changed protected code. After the v5 fixes,
+1,082 authored Evolution/facade tests passed separately on .NET 10 and .NET 8, including 40 new cases.
+The local focused harness compiled the existing test sources against the real built library; production and
+test-copy DLL hashes matched. Diagnostic analyzers were disabled, so this is not whole-repository or analyzer CI.
+The new protected-text helper had 100% line/branch coverage; fenced extraction had 99.1% line/92.72% branch
+coverage on .NET 10. Hosted validation and final review remain separate requirements.
