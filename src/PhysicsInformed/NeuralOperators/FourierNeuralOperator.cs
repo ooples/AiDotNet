@@ -779,7 +779,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     { "SpatialDimensions", _spatialDimensions },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

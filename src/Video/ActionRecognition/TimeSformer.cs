@@ -641,7 +641,7 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = _useNativeMode ? this.Serialize() : []
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
         };
     }
 

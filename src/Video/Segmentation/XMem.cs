@@ -794,7 +794,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 

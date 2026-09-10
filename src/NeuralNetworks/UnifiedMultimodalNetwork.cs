@@ -1213,7 +1213,7 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelDataProvider = () => this.Serialize()
         };
     }
 

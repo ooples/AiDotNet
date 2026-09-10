@@ -516,7 +516,7 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = Serialize()
+            ModelDataProvider = () => Serialize()
         };
     }
 

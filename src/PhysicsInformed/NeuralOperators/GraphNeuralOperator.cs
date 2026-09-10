@@ -390,7 +390,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     { "HiddenDimension", _hiddenDim },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 
