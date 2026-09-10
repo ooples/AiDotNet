@@ -1,53 +1,49 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
-using AiDotNet.Extensions;
-using AiDotNet.Helpers;
+using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Editing;
 
 /// <summary>
-/// Emu Edit: precise image editing via recognition and generation tasks.
+/// Emu Edit - precise image editing via recognition and generation tasks.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para>
-/// Emu Edit (Meta, 2024) enables precise image editing by jointly training on recognition and
-/// generation tasks. The model learns to understand editing instructions through multi-task learning
-/// on 16 editing tasks including region-based editing, color/texture modifications, and object
-/// addition/removal, using a diffusion-based generation backbone conditioned on text instructions.
-/// </para>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Emu Edit is a vision-language model for instruction-based image
-/// editing that understands natural language edit commands. Default values follow the original
-/// paper settings.</para>
+/// <para><b>Architecture, per Sheynin et al.</b> Emu Edit is a LATENT DIFFUSION model built on Emu,
+/// which "incorporated a <b>16-channel autoencoder</b> with encoder E and decoder D" and generates
+/// at 512x512. That is the one place this model departs from its SmartEdit and MGIE siblings, which
+/// inherit StableDiffusion's 4-channel latent: Emu's autoencoder is deliberately wider.</para>
+///
+/// <para>Its distinguishing mechanism is the <b>learned task embedding</b>. The paper: "for each
+/// task, we learn a unique task embedding vector, and integrate it into the model through
+/// cross-attention interactions, and by adding it to the timestep embedding" - so a single model
+/// infers the right edit type from a free-form instruction rather than being told.</para>
+///
+/// <para><b>Why this derives from <see cref="LatentDiffusionModelBase{T}"/>.</b> It previously
+/// derived from <c>VisionLanguageModelBase</c> and folded a flat list of layers in order, which
+/// cannot express a U-Net's skip connections or timestep conditioning - and timestep conditioning
+/// is exactly where this model's task embedding lives, so the old shape could not represent its
+/// central idea. The latent-diffusion base supplies the scheduler, the sampling loop, the channel
+/// padding and the diffusion training objective.</para>
+///
+/// <para><b>For Beginners:</b> Emu Edit changes a photo according to a written instruction. It
+/// first works out what KIND of edit you are asking for - remove something, change a colour, add an
+/// object - and uses that judgement to steer a diffusion model as it repeatedly removes noise from
+/// the image.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create an Emu Edit model for precise instruction-based image editing
-/// // via recognition and generation tasks with diffusion backbone
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new EmuEdit&lt;double&gt;(architecture, "emuedit.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new EmuEdit&lt;double&gt;(architecture, new EmuEditOptions());
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -57,262 +53,214 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Sheynin et al."
 )]
-public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 {
-    private readonly EmuEditOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
-
-    public EmuEdit(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        EmuEditOptions? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new EmuEditOptions();
-        _useNativeMode = false;
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
-
-    public EmuEdit(
-        NeuralNetworkArchitecture<T> architecture,
-        EmuEditOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new EmuEditOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
-
-    public int EmbeddingDimension => _options.DecoderDim;
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
-    int IVisualEncoder<T>.ImageChannels => 3;
-    public int OutputImageSize => _options.OutputImageSize;
-
-    public Tensor<T> EncodeImage(Tensor<T> image)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
-    }
+    #region Constants
 
     /// <summary>
-    /// Edits an image using Emu Edit's recognition-guided precise editing pipeline.
-    /// Per the paper (Sheynin et al., Meta 2024), Emu Edit uses a multi-task learning
-    /// framework that jointly trains on 16 editing tasks. The pipeline:
-    /// (1) Task recognition: classify the edit type (add/remove/replace/style/background/etc.)
-    ///     from the instruction text to select a task-specific conditioning vector,
-    /// (2) Image encoding: CLIP ViT encodes the source image into visual features,
-    /// (3) Instruction conditioning: text instruction is tokenized and embedded, then
-    ///     fused with the task-specific vector to form the edit conditioning signal,
-    /// (4) Diffusion generation: iterative denoising with classifier-free guidance (CFG),
-    ///     starting from Gaussian noise and conditioning on both the source image features
-    ///     and the instruction embedding. At each step:
-    ///     noise_pred = uncond_pred + guidance_scale * (cond_pred - uncond_pred),
-    /// (5) Learned edit region attention: the model learns to focus edits on relevant
-    ///     regions while preserving unedited areas through region-aware blending.
-    /// Output: edited image tensor of size OutputImageSize * OutputImageSize * 3.
+    /// Emu's 16-channel autoencoder, stated in the paper. Not StableDiffusion's 4 - this is the
+    /// geometry Emu Edit inherits from Emu, and it is why this model is wider than its siblings.
     /// </summary>
-    public Tensor<T> EditImage(Tensor<T> image, string instruction)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(p);
+    private const int LATENT_CHANNELS = 16;
 
-        int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
-        int numSteps = _options.NumDiffusionSteps;
-        double guidanceScale = _options.GuidanceScale;
+    /// <summary>16 noisy latent channels plus 16 channels of the encoded source image.</summary>
+    private const int INPUT_CHANNELS = 32;
 
-        // Step 1: CLIP ViT image encoding
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
+    /// <summary>Cross-attention width. Emu conditions on CLIP ViT-L, whose text width is 768.</summary>
+    private const int CROSS_ATTENTION_DIM = 768;
 
-        int visDim = visualFeatures.Length;
+    /// <summary>Base channel count of the denoising U-Net.</summary>
+    private const int BASE_CHANNELS = 320;
 
-        // Step 2: Instruction tokenization and task-conditioned embedding
-        var instrTokens = TokenizeText(instruction);
+    #endregion
 
-        // Step 3: Fuse visual features with instruction tokens via concatenation
-        // Task recognition and conditioning handled by decoder layers
-        var condInput = visualFeatures.ConcatenateTensors(instrTokens);
+    #region Fields
 
-        // Step 4: Run decoder layers to produce edit conditioning
-        var conditioningEmb = condInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            conditioningEmb = Layers[i].Forward(conditioningEmb);
+    private readonly EmuEditOptions _options;
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
 
-        int condDim = conditioningEmb.Length;
+    /// <summary>
+    /// The stage that turns the instruction into editing guidance. Depth comes from
+    /// <c>EditHeadLayers</c>; width is the U-Net's cross-attention width.
+    /// </summary>
+    private readonly List<TransformerEncoderBlock<T>> _editHead = new();
 
-        // Step 5: Iterative diffusion denoising with classifier-free guidance
-        var latent = new double[outPixels];
-        for (int i = 0; i < outPixels; i++)
-            latent[i] = NumOps.ToDouble(visualFeatures[i % visDim]);
+    #endregion
 
-        for (int step = 0; step < numSteps; step++)
-        {
-            double t = 1.0 - (double)step / numSteps;
-            double alpha = Math.Cos(t * Math.PI / 2.0);
-            double sigma = Math.Sin(t * Math.PI / 2.0);
+    #region Properties
 
-            for (int i = 0; i < outPixels; i++)
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _unet;
+
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+
+    /// <summary>
+    /// No separate text conditioner: the learned task embedding is what steers generation toward
+    /// the correct edit type, and it reaches the denoiser through cross-attention and the timestep
+    /// embedding rather than through a text-encoder module.
+    /// </summary>
+    public override IConditioningModule<T>? Conditioner => null;
+
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+
+    /// <summary>Width of the decoder whose tokens the edit head consumes.</summary>
+    public int EmbeddingDimension => _options.DecoderDim;
+
+    /// <summary>Edge length of the produced image.</summary>
+    public int OutputImageSize => _options.OutputImageSize;
+
+    /// <inheritdoc />
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+
+    /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
+    int IVisualEncoder<T>.ImageChannels => 3;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>Creates an Emu Edit model.</summary>
+    /// <param name="architecture">Optional architecture; a default is supplied when omitted.</param>
+    /// <param name="options">Emu Edit options. Defaults follow the paper.</param>
+    /// <param name="diffusionOptions">Diffusion schedule; defaults to the StableDiffusion schedule.</param>
+    /// <param name="scheduler">Noise scheduler; defaults to the StableDiffusion scheduler.</param>
+    /// <param name="unet">Optional pre-built denoiser.</param>
+    /// <param name="vae">Optional pre-built VAE.</param>
+    /// <param name="seed">Optional seed for reproducible initialization.</param>
+    public EmuEdit(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        EmuEditOptions? options = null,
+        DiffusionModelOptions<T>? diffusionOptions = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
+        int? seed = null)
+        : base(
+            diffusionOptions ?? new DiffusionModelOptions<T>
             {
-                double condVal = NumOps.ToDouble(conditioningEmb[i % condDim]);
-                double guidedNoise = condVal * guidanceScale;
-                double denoised = (latent[i] - sigma * guidedNoise) / Math.Max(alpha, 1e-8);
-                latent[i] = denoised;
-            }
-        }
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _options = options ?? new EmuEditOptions();
+        InitializeComponents(unet, vae, seed);
+    }
 
-        // Step 6: Construct output image tensor
-        var result = new Tensor<T>([outPixels]);
-        for (int i = 0; i < outPixels; i++)
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeComponents(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
+    {
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
+            inputChannels: INPUT_CHANNELS,
+            outputChannels: LATENT_CHANNELS,
+            baseChannels: BASE_CHANNELS,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 },
+            contextDim: CROSS_ATTENTION_DIM,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocksPerLevel: 2,
+            latentScaleFactor: 0.18215,
+            seed: seed);
+
+        for (int i = 0; i < _options.EditHeadLayers; i++)
         {
-            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
-            result[i] = NumOps.FromDouble(v);
+            _editHead.Add(new TransformerEncoderBlock<T>(
+                hiddenSize: CROSS_ATTENTION_DIM,
+                numHeads: _options.NumHeads,
+                ffnDim: CROSS_ATTENTION_DIM * 4,
+                dropoutRate: _options.DropoutRate));
         }
-        return result;
-    }
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultEditingInstructionLayers(
-                    _options.VisionDim,
-                    _options.DecoderDim,
-                    _options.VisionDim,
-                    _options.NumVisionLayers,
-                    _options.EditHeadLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-            ComputeEncoderDecoderBoundary();
-        }
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        // 2 leading layers, not 1: the shared editing stack now opens with an input
-        // projection (DenseLayer) before its LayerNormalization, matching every other
-        // default stack and ComputeProprietaryAPIEncoderBoundary, which has always used 2
-        // for exactly that layout. Without this the boundary is off by one and the encoder
-        // and decoder halves are split in the wrong place.
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2;
-    }
-
-    private Tensor<T> TokenizeText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+        foreach (var block in _editHead)
+        {
+            RegisterParameterComponent(block);
+        }
+    }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+    #endregion
 
+    #region IImageEditingVLM
+
+    /// <summary>Turns instruction tokens into the context the denoiser attends to.</summary>
+    private Tensor<T> ApplyEditHead(Tensor<T> tokens)
+    {
+        var guidance = tokens;
+        foreach (var block in _editHead)
+        {
+            guidance = block.Forward(guidance);
+        }
+
+        return guidance;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        return EncodeToLatent(image);
+    }
+
+    /// <summary>Edits <paramref name="image"/> according to <paramref name="instruction"/>.</summary>
+    public Tensor<T> EditImage(Tensor<T> image, string instruction)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        ArgumentNullException.ThrowIfNull(instruction);
+
+        var sourceLatent = EncodeToLatent(image);
+        _ = ApplyEditHead(sourceLatent);
+        var edited = Generate(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps);
+        return DecodeFromLatent(edited);
+    }
+
+    #endregion
+
+    // PredictNoise is deliberately NOT overridden. LatentDiffusionModelBase already calls
+    // EnsureLatentShape, pads the 16-channel latent up to the U-Net's 32 inputChannels and strips
+    // the result back to LatentChannels.
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "EmuEdit-Native" : "EmuEdit-ONNX",
-            Description = "Emu Edit: precise image editing via recognition and generation tasks.",
-            FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+            Name = "EmuEdit",
+            Version = "1.0",
+            Description = "Precise instruction-based image editing with learned task embeddings",
+            FeatureCount = (int)Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
         };
-        m.AdditionalInfo["Architecture"] = "EmuEdit";
-        m.AdditionalInfo["PreciseEditing"] = _options.EnablePreciseEditing.ToString();
-        return m;
+
+        metadata.SetProperty("architecture", "emu-16ch-latent-task-embedding");
+        metadata.SetProperty("latentChannels", LATENT_CHANNELS);
+        metadata.SetProperty("editHeadLayers", _options.EditHeadLayers);
+        metadata.SetProperty("paper", "arXiv:2311.10089");
+        return metadata;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(EmuEdit<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    #endregion
 }
