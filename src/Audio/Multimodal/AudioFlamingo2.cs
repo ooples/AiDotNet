@@ -104,7 +104,12 @@ public partial class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLangua
     {
         _options = options ?? new AudioFlamingo2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The paper rate from this model's own options. Built bare, AdamW would use its
+        // own 1e-3 default instead and LearningRate would be configuration nobody reads —
+        // the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

@@ -8463,7 +8463,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Multimodal.Qwen2AudioOptions { AudioEncoderDim = 32, " +
                     "NumAudioEncoderLayers = 1, NumAudioEncoderHeads = 2, NumMels = 64, LMHiddenDim = 32, " +
-                    "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32 })";
+                    "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32, " +
+                    // LearningRate belongs to the same scale reduction as the dimensions above. The
+                    // model's default is 1e-5, which suits the foundation-scale stack it ships with;
+                    // across a 32-dim single-layer scaffold it moves the loss too little for
+                    // LossStrictlyDecreasesOnMemorizationTask to see a decrease. 1e-3 is what this
+                    // test actually ran at until the rate was wired through — Qwen2Audio built AdamW
+                    // bare and silently used AdamW's own 1e-3 — so pinning it here preserves the
+                    // training dynamics the test was validated against while production honours 1e-5.
+                    "LearningRate = 1e-3 })";
             }
             else if ((model.ClassName is "Bark" or "BarkModel") && model.TypeParameterCount == 1
                      && typeName.StartsWith(
