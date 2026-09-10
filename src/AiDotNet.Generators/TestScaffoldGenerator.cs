@@ -55,6 +55,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "NeuralProcessBase",         // Neural processes: inherits MetaLearnerBase
         "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
         "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
+        "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
+                                     // Routing these to the RL family was TRIED and measured: 28 of
+                                     // the 33 emitted tests failed, and none of the failures was a
+                                     // model defect. PolicyBase.Train is an intentional no-op whose
+                                     // own doc says "Training is handled by RL algorithms, not
+                                     // directly on the policy", so Training_ShouldChangeParameters
+                                     // can never pass; and ContinuousPolicy/BetaPolicy sample from a
+                                     // Gaussian by design, so Policy_ShouldBeDeterministic and
+                                     // Clone_ShouldProduceSamePolicy compare two draws from a
+                                     // distribution. The family asserts AGENT semantics a policy is
+                                     // specified not to have. Covering these needs a policy-specific
+                                     // base, not a different existing family.
         "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
         "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
         "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
@@ -395,6 +407,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // is precisely what let these sit uncovered, buried among hundreds of AIDN040 lines.
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    /// <summary>
+    /// The overridable surface of <c>SafetyModuleTestBase</c>. Anything else emitted onto a
+    /// SafetyModule fixture is a member of some model-family base that this base does not have.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> SafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "CreateModule",
+            "ContentSize",
+            "ProducesFindings",
+            "RequiresExternalResources",
+            "CreateSafeContent",
+            "CreateRandomContent",
+        };
 
     private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST002",
@@ -3149,6 +3176,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsNeuralNetworkModel = false;
         bool implementsDiffusionModel = false;
         bool implementsGaussianProcess = false;
+        bool implementsSafetyModule = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3183,6 +3211,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (display.StartsWith(IGaussianProcessPrefix, System.StringComparison.Ordinal))
             {
                 implementsGaussianProcess = true;
+            }
+            else if (display.StartsWith(ISafetyModulePrefix, System.StringComparison.Ordinal))
+            {
+                implementsSafetyModule = true;
             }
 
             // Detect IFullModel type arguments for input/output types
@@ -3451,6 +3483,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ImplementsDiffusionModel = implementsDiffusionModel,
             ImplementsDetectionBackbone = implementsDetectionBackbone,
             ImplementsGaussianProcess = implementsGaussianProcess,
+            ImplementsSafetyModule = implementsSafetyModule,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
@@ -3839,6 +3872,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         // === TIER 1: Specialized families (check first — most specific) ===
 
+        // Priority 0: SafetyModule
+        //
+        // ISafetyModule<T> is structural, not descriptive, so it is checked before any category:
+        // a content-moderation module answers to confidence calibration, severity ordering and
+        // detection monotonicity, and none of the model families can express those.
+        //
+        // These 70 types were ALL uncovered before this route existed, so nothing can be taken
+        // from a family it currently passes in. They were uncovered for two different reasons and
+        // both are addressed here: the Image/Video/Multimodal ones fell through their descriptive
+        // [ModelCategory(NeuralNetwork)] into a family requiring INeuralNetworkModel, which
+        // SafetyModuleBase<T> : ModelBase<T, Vector<T>, Vector<T>> does not implement, while the
+        // rest resolved to no family at all. AudioSafetyModuleBase and TextSafetyModuleBase stay
+        // out via ExcludedBaseClasses - those genuinely wrap a user-supplied inner model - and
+        // that check runs before this one.
+        //
+        // SafetyModuleTestBase already existed with its invariants written and had ZERO derivers;
+        // ISafetyModulePrefix was likewise declared and never read. This finishes that wiring
+        // rather than inventing a new contract.
+        if (model.ImplementsSafetyModule)
+            return TestFamily.SafetyModule;
+
         // Priority 1: GaussianProcess
         if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
             return TestFamily.GaussianProcess;
@@ -3895,7 +3949,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.Diffusion;
 
         // Priority 5: GAN
-        if (model.Categories.Contains(CategoryGAN))
+        //
+        // The interface condition is the same argument as priority 18: IsCompatibleWithFamily(GAN)
+        // IS ImplementsNeuralNetworkModel, so a type reaching here without it is being assigned a
+        // family it cannot satisfy - an ADNGEN001 no change to the model could clear short of
+        // re-parenting it. [ModelCategory(GAN)] is frequently DESCRIPTIVE ("trained
+        // adversarially") rather than structural: AnoGANDetector and GANomalyDetector derive from
+        // AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, which is precisely the
+        // AnomalyDetector family's contract, and priority 5 was intercepting them ~12 priorities
+        // before they could reach it.
+        //
+        // This cannot remove coverage: emitting a GAN fixture already required the interface.
+        // Measured over the 25 models declaring the category, only those two and GenerativeReplay
+        // (which has no fixture on any path) lack it; the LatentDiffusion-derived Turbo/SDXL
+        // models declare it too but are claimed by priority 4 first and are untouched.
+        if (model.Categories.Contains(CategoryGAN) && model.ImplementsNeuralNetworkModel)
             return TestFamily.GAN;
 
         // Priority 6: EmbeddingModel
@@ -6925,6 +6993,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Fingerprinting.ConformerFPOptions { NumMels = 32, " +
                     "EmbeddingDim = 32, HiddenDim = 64, NumLayers = 2, NumAttentionHeads = 4, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AnoGANDetector" && model.TypeParameterCount == 1)
+            {
+                // AnoGAN (Schlegl et al. 2017) trains a DCGAN for 100 epochs by default, which the
+                // parameterless fixture inherited: Clone_ShouldProduceSameScores and
+                // Parameters_ShouldBeNonEmpty each blew the 60 s per-test gate while every
+                // assertion was on track to pass. The public constructor exposes latent width,
+                // hidden width and the training budget, so exercise a real adversarial fit at
+                // smoke scale. Production defaults (64 / 128 / 100) are untouched.
+                constructorExpr = $"new {typeName}<double>(latentDim: 8, hiddenDim: 16, epochs: 3, " +
+                    "learningRate: 0.0002, contamination: 0.1, randomSeed: 42)";
+            }
+            else if (model.ClassName == "GANomalyDetector" && model.TypeParameterCount == 1)
+            {
+                // Same 100-epoch default as its AnoGAN sibling (Akcay et al. 2018), bounded the
+                // same way and for the same reason. Production defaults (32 / 64 / 100) untouched.
+                constructorExpr = $"new {typeName}<double>(latentDim: 8, hiddenDim: 16, epochs: 3, " +
+                    "learningRate: 0.0002, contamination: 0.1, randomSeed: 42)";
             }
             else if (model.ClassName == "NBEATSDetector" && model.TypeParameterCount == 1)
             {
@@ -11623,7 +11709,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // model only trips it by being float-scaffolded AND routing to one of the few single-shape
         // bases. UniVSTModel reaches LatentDiffusionTestBase without a float scaffold and compiles;
         // MGIE reaches it with one and did not.
-        bool baseHasNoGenericForm = baseClassName == "LatentDiffusionTestBase";
+        // SafetyModuleTestBase joins this list for the same reason: it is declared non-generic and
+        // pins ISafetyModule<double>, so appending a <float> argument would not compile.
+        bool baseHasNoGenericForm = baseClassName == "LatentDiffusionTestBase"
+            || baseClassName == "SafetyModuleTestBase";
         bool useFloat = !isFloatExcluded
                      && !baseHasNoGenericForm
                      && (Fp32TestClassNames.Contains(model.ClassName)
@@ -15478,6 +15567,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 model.ClassName, archH, archW, fixtureH, fixtureW));
         }
 
+        // The SafetyModule family shares the emission path with the model families, so it picks up
+        // their per-model overrides - InputShape, OutputShape, iteration counts, tolerances. None of
+        // those members exists on SafetyModuleTestBase, whose surface is deliberately small
+        // (CreateModule plus ContentSize / ProducesFindings / RequiresExternalResources /
+        // CreateSafeContent / CreateRandomContent), so every one of them is a CS0115.
+        //
+        // Filtered by WHITELIST rather than by removing the two members that happened to break the
+        // build: the emission path can attach any per-model override to any model, so a deny-list
+        // would be one rebase away from failing again. Only single-line expression-bodied overrides
+        // are considered - CreateModule is emitted as a two-line block and is never a candidate.
+        if (family == TestFamily.SafetyModule)
+        {
+            generated = System.Text.RegularExpressions.Regex.Replace(
+                generated,
+                @"[ 	]*protected override [^
+]*? (?<member>\w+)\s*=>[^;]*;[ 	]*?
+",
+                m => SafetyModuleTestBaseMembers.Contains(m.Groups["member"].Value)
+                    ? m.Value
+                    : string.Empty,
+                System.Text.RegularExpressions.RegexOptions.Multiline,
+                System.TimeSpan.FromSeconds(1));
+        }
+
         generated = DropDuplicateOverrides(generated);
 
         context.AddSource(hintName, generated);
@@ -15580,6 +15693,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // GP family requires IGaussianProcess interface
             case TestFamily.GaussianProcess:
                 return model.ImplementsGaussianProcess;
+
+            // Safety modules are asked for ISafetyModule<double> by SafetyModuleTestBase, which
+            // exercises confidence calibration, severity ordering and detection monotonicity
+            // rather than the parameter/shape invariants of the model families.
+            case TestFamily.SafetyModule:
+                return model.ImplementsSafetyModule;
 
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
@@ -17803,6 +17922,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ImplementsDetectionBackbone { get; set; }
         public bool ImplementsGaussianProcess { get; set; }
 
+        public bool ImplementsSafetyModule { get; set; }
+
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
         public bool UsesMatrixInput { get; set; }
@@ -17955,6 +18076,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Classification,
         ProbabilisticClassifier,
         Clustering,
+        SafetyModule,
         NeuralNetwork
     }
 
@@ -18764,6 +18886,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Classification:        return "ClassificationModelTestBase";
             case TestFamily.ProbabilisticClassifier: return "ProbabilisticClassifierTestBase";
             case TestFamily.Clustering:            return "ClusteringModelTestBase";
+            case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
         }
@@ -18806,6 +18929,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
+            // SafetyModuleTestBase asks for CreateModule, not CreateModel.
+            case TestFamily.SafetyModule:
+                return "CreateModule";
             default:
                 return "CreateModel";
         }
@@ -18855,6 +18981,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
+            case TestFamily.SafetyModule:
+                return "AiDotNet.Interfaces.ISafetyModule<double>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:
