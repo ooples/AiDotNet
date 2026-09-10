@@ -13,6 +13,11 @@
 .PARAMETER ExpectedShards
     The complete current shard manifest. A map for a different shard universe is never trusted.
 
+.PARAMETER AuditUnchangedMap
+    Allows the nightly selection-miss audit to evaluate an unchanged map tree by selecting only
+    always-run shards. Ordinary PR selection must not pass this switch: an unexpectedly empty PR
+    diff remains a fail-closed full-matrix decision.
+
 .PARAMETER SelfTest
     Runs the built-in adversarial checks and exits.
 #>
@@ -20,40 +25,123 @@
 param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $MapFile,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $ExpectedShards,
-    [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
+    [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
+    [Parameter(ParameterSetName = 'Select')]
+    [Parameter(Mandatory, ParameterSetName = 'Classify')] [string] $BaseSha,
+    [Parameter(ParameterSetName = 'Select')]
+    [Parameter(ParameterSetName = 'Classify')] [string] $OutFile,
+    [Parameter(Mandatory, ParameterSetName = 'Classify')] [switch] $ClassifyOnly,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:SharedInfrastructure = @(
-    '.github/',
+enum ChangedPathImpact {
+    NonRuntime
+    MapCandidate
+    SelectionControl
+    FullValidation
+}
+
+$script:SharedInfrastructureFiles = @(
     'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
-    'global.json', 'nuget.config', 'NuGet.config',
-    '.editorconfig'
+    'global.json', 'nuget.config', 'NuGet.config', '.editorconfig'
 )
+$script:FullValidationPaths = @(
+    '.github/test-shards.yml',
+    '.github/test-shard-changes.json'
+)
+$script:SelectionControlPaths = @(
+    '.github/workflows/sonarcloud.yml',
+    '.github/workflows/test-impact-map.yml',
+    '.github/workflows/ci-shard-closure-policy.yml'
+)
+$script:FullValidationDirectories = @('.github/actions/', '.github/scripts/')
+$script:SelectionControlDirectories = @('tools/TestImpact/')
+$script:NonRuntimeWorkflowPaths = @(
+    '.github/workflows/azure-functions-deploy.yml',
+    '.github/workflows/cancel-on-pr-close.yml',
+    '.github/workflows/ci-website.yml',
+    '.github/workflows/codacy.yml',
+    '.github/workflows/commitlint-fix.yml',
+    '.github/workflows/commitlint.yml',
+    '.github/workflows/copilot-review-gate.yml',
+    '.github/workflows/deploy-serving.yml',
+    '.github/workflows/deploy-website.yml',
+    '.github/workflows/docs-wiki.yml',
+    '.github/workflows/docs.yml',
+    '.github/workflows/dotnet-format-autofix.yml',
+    '.github/workflows/heavy-timeout-nightly.yml',
+    '.github/workflows/model-performance-census.yml',
+    '.github/workflows/pr-title-lint.yml',
+    '.github/workflows/release-please.yml',
+    '.github/workflows/samples.yml'
+)
+
+function Test-SelectionControl {
+    param([string] $Path)
+    $normalized = $Path.Replace('\', '/')
+    foreach ($entry in $script:SelectionControlPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    foreach ($entry in $script:SelectionControlDirectories) {
+        if ($normalized.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
 
 function Test-SharedInfrastructure {
     param([string] $Path)
-    # Two kinds of entry, matched differently on purpose:
-    #
-    #   trailing '/'  a directory - prefix match
-    #   otherwise     a config FILE NAME - matched by basename at ANY depth, because MSBuild and
-    #                 NuGet apply Directory.Build.props / Directory.Packages.props / nuget.config
-    #                 per-directory, so src/Directory.Build.props changes what a subtree compiles
-    #                 just as surely as the root one (and src/Directory.Build.props exists here).
-    #
-    # An earlier revision used StartsWith for everything, which missed those nested files AND
-    # escalated on unrelated look-alikes such as Directory.Packages.props.backup.
-    $name = [System.IO.Path]::GetFileName($Path)
-    foreach ($entry in $script:SharedInfrastructure) {
-        if ($entry.EndsWith('/')) {
-            if ($Path.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-        }
-        elseif ($name -ieq $entry) { return $true }
+    $normalized = $Path.Replace('\', '/')
+    $name = [System.IO.Path]::GetFileName($normalized)
+    foreach ($entry in $script:SharedInfrastructureFiles) {
+        # MSBuild and NuGet apply these names per-directory, so a nested file is just as capable of
+        # changing compilation as the root one. Exact basename matching keeps lookalike suffixes out.
+        if ($name -ieq $entry) { return $true }
+    }
+    foreach ($entry in $script:FullValidationPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    foreach ($entry in $script:FullValidationDirectories) {
+        if ($normalized.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false
+}
+
+function Get-ChangedPathImpact {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    $normalized = $Path.Replace('\', '/')
+    if (Test-SelectionControl -Path $normalized) {
+        return [ChangedPathImpact]::SelectionControl
+    }
+    if (Test-SharedInfrastructure -Path $normalized) {
+        return [ChangedPathImpact]::FullValidation
+    }
+
+    # Markdown cannot alter a build or runtime. Known independent workflows have their own triggers
+    # and jobs; changing one cannot alter this validation workflow. This is an allowlist so a newly
+    # added or renamed workflow remains full-validation until its independence is reviewed.
+    if ([System.IO.Path]::GetExtension($normalized).Equals('.md', [StringComparison]::OrdinalIgnoreCase)) {
+        return [ChangedPathImpact]::NonRuntime
+    }
+    if ($normalized.StartsWith('.github/workflows/', [StringComparison]::OrdinalIgnoreCase)) {
+        foreach ($entry in $script:NonRuntimeWorkflowPaths) {
+            if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) {
+                return [ChangedPathImpact]::NonRuntime
+            }
+        }
+        return [ChangedPathImpact]::FullValidation
+    }
+
+    # Unknown GitHub configuration can affect analysis, generated reports, or a required check. It
+    # is intentionally not eligible for coverage-map reduction until classified explicitly.
+    if ($normalized.StartsWith('.github/', [StringComparison]::OrdinalIgnoreCase)) {
+        return [ChangedPathImpact]::FullValidation
+    }
+
+    return [ChangedPathImpact]::MapCandidate
 }
 
 function Test-RangeOverlap {
@@ -227,9 +315,9 @@ function ConvertTo-ChangedRanges {
 function Get-ChangedRanges {
     param([string] $MapSha)
 
-    $changedFiles = @(& git -c core.quotepath=false diff --name-only $MapSha HEAD --)
+    $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$MapSha' failed" }
-    $diff = @(& git -c core.quotepath=false diff --no-ext-diff -U0 $MapSha HEAD --)
+    $diff = @(& git -c core.quotepath=false diff --no-renames --no-ext-diff -U0 $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff from '$MapSha' failed" }
     return ConvertTo-ChangedRanges -DiffLines $diff -ChangedFiles $changedFiles
 }
@@ -237,20 +325,90 @@ function Get-ChangedRanges {
 function Select-ImpactedShards {
     param(
         [Parameter(Mandatory)] $Map,
-        [Parameter(Mandatory)] [hashtable] $Changed
+        [Parameter(Mandatory)] [hashtable] $Changed,
+        [AllowEmptyCollection()] [string[]] $CurrentPaths = @(),
+        [switch] $AuditUnchangedMap
     )
 
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+    $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
     $escalate = $false
+    $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
+        @($CurrentPaths)
+    }
+    else {
+        @($Changed.Keys)
+    }
+    foreach ($currentPath in $effectiveCurrentPaths) {
+        [void] $currentPathSet.Add(([string] $currentPath).Replace('\', '/'))
+    }
 
     foreach ($path in ($Changed.Keys | Sort-Object)) {
-        if (Test-SharedInfrastructure -Path $path) {
-            $escalate = $true
-            [void] $reasons.Add("shared infrastructure: $path")
-            continue
+        $impact = Get-ChangedPathImpact -Path $path
+        switch ($impact) {
+            ([ChangedPathImpact]::NonRuntime) { continue }
+            ([ChangedPathImpact]::SelectionControl) {
+                # A control-path edit in THIS pull request must exercise the complete matrix. The
+                # same path in the older map-to-HEAD delta was already validated when it landed and
+                # cannot change source line ranges; treating it as permanently current otherwise
+                # wedges every future runtime PR in full-matrix mode until another map is built.
+                if ($currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
+                    $escalate = $true
+                    [void] $reasons.Add("current validation-selection control change: $path")
+                }
+                continue
+            }
+            ([ChangedPathImpact]::FullValidation) {
+                $escalate = $true
+                [void] $reasons.Add("validation infrastructure or unknown GitHub configuration: $path")
+                continue
+            }
+            ([ChangedPathImpact]::MapCandidate) {
+                [void] $mappedPaths.Add([string] $path)
+            }
         }
+    }
+
+    if ($Changed.Count -eq 0) {
+        if ($AuditUnchangedMap) {
+            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+            # Certificate policy requires both a nonempty selected set and a nonempty skipped set.
+            # With no always-run shards, an unchanged audit is vacuous and must wait for a real
+            # mapped change rather than certifying that selection was exercised when it was not.
+            if ($selected.Count -gt 0) {
+                return [pscustomobject]@{
+                    Escalate           = $false
+                    RequiresValidation = $true
+                    Reasons            = @('map and audited tree are unchanged')
+                    Shards             = @($selected | Sort-Object)
+                }
+            }
+        }
+
+        return [pscustomobject]@{
+            Escalate            = $true
+            RequiresValidation = $true
+            Reasons             = @('changed path set was empty')
+            Shards              = @()
+        }
+    }
+
+    # A non-runtime-only change is a deliberate empty selection, distinct from a selector failure.
+    # Keep that state typed here and expose only a JSON boolean at the workflow boundary.
+    if ($mappedPaths.Count -eq 0) {
+        return [pscustomobject]@{
+            Escalate          = $escalate
+            RequiresValidation = $escalate
+            Reasons           = $reasons
+            Shards            = @()
+        }
+    }
+
+    foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+
+    foreach ($path in $mappedPaths) {
 
         $entry = $Map.files.PSObject.Properties[$path]
         if (-not $entry) {
@@ -300,9 +458,10 @@ function Select-ImpactedShards {
     }
 
     return [pscustomobject]@{
-        Escalate = $escalate
-        Reasons  = $reasons
-        Shards   = @($selected | Sort-Object)
+        Escalate           = $escalate
+        RequiresValidation = $true
+        Reasons            = $reasons
+        Shards             = @($selected | Sort-Object)
     }
 }
 
@@ -339,6 +498,7 @@ if ($SelfTest) {
 
     $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) }
     Assert-True (-not $r.Escalate) 'a mapped, fully covered change must not escalate'
+    Assert-True $r.RequiresValidation 'a mapped change must require validation'
     Assert-True ($r.Shards -contains 'Alpha') 'a change on Alpha lines must select Alpha'
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change outside Beta lines must not select Beta'
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'always-run shards must always be selected'
@@ -350,11 +510,75 @@ if ($SelfTest) {
     foreach ($change in @(
         @{ Path = 'src/Unmapped.cs'; Why = 'an unmapped file must escalate' },
         @{ Path = 'Directory.Packages.props'; Why = 'dependency infrastructure must escalate' },
-        @{ Path = '.github/workflows/ci.yml'; Why = 'workflow infrastructure must escalate' }
+        @{ Path = '.github/workflows/sonarcloud.yml'; Why = 'the validation workflow must escalate' },
+        @{ Path = '.github/workflows/test-impact-map.yml'; Why = 'the map workflow must escalate' },
+        @{ Path = '.github/workflows/ci-shard-closure-policy.yml'; Why = 'the closure policy must escalate' },
+        @{ Path = '.github/test-shards.yml'; Why = 'the shard manifest must escalate' },
+        @{ Path = '.github/test-shard-changes.json'; Why = 'the shard history must escalate' },
+        @{ Path = '.github/scripts/analyze-test-results.ps1'; Why = 'CI analysis scripts must escalate' },
+        @{ Path = '.github/actions/local/action.yml'; Why = 'local actions must escalate' },
+        @{ Path = 'tools/TestImpact/Select-Shards.ps1'; Why = 'impact tooling must escalate' },
+        @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
+        @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
+        @{ Path = '.github/workflows/new-unknown.yml'; Why = 'unknown workflows must escalate' }
     )) {
         $r = Select-ImpactedShards -Map $map -Changed @{ $change.Path = @(1, 2) }
         Assert-True $r.Escalate $change.Why
+        Assert-True $r.RequiresValidation "$($change.Why) and require validation"
     }
+
+    # The exact counterexample that exposed the original defect: two GitHub-hosted documentation
+    # files plus an independent release workflow must not instantiate the model/test graph.
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        '.github/AUTOMATED_RELEASE_SETUP.md' = @(1, 2)
+        '.github/VERSIONING.md' = @(1, 2)
+        '.github/workflows/release-please.yml' = @(1, 2)
+    }
+    Assert-True (-not $r.Escalate) 'the PR #2118 path set must not escalate'
+    Assert-True (-not $r.RequiresValidation) 'the PR #2118 path set must suppress runtime validation'
+    Assert-True (@($r.Shards).Count -eq 0) 'the PR #2118 path set must select zero shards'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/Covered.cs' = @(12, 14)
+        '.github/workflows/release-please.yml' = @(1, 2)
+        'docs/usage.md' = @(1, 2)
+    }
+    Assert-True (-not $r.Escalate) 'non-runtime files mixed with a covered edit must stay reducible'
+    Assert-True $r.RequiresValidation 'a mixed change containing source must require validation'
+    Assert-True ($r.Shards -contains 'Alpha') 'a mixed change must retain the mapped shard'
+    Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'a mixed change must retain always-run shards'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/Covered.cs' = @(12, 14)
+        '.github/workflows/sonarcloud.yml' = @(1, 2)
+    } -CurrentPaths @('src/Covered.cs')
+    Assert-True (-not $r.Escalate) `
+        'a historical selector-control edit permanently escalated a later mapped PR'
+    Assert-True ($r.Shards -contains 'Alpha') `
+        'ignoring historical control churn dropped the mapped runtime shard'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/Covered.cs' = @(12, 14)
+        '.github/workflows/sonarcloud.yml' = @(1, 2)
+    } -CurrentPaths @('.github/workflows/sonarcloud.yml', 'src/Covered.cs')
+    Assert-True $r.Escalate `
+        'a selector-control edit in the current PR did not force complete validation'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{}
+    Assert-True $r.Escalate 'an empty changed path set must fail closed'
+    Assert-True $r.RequiresValidation 'an empty changed path set must require validation'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{} -AuditUnchangedMap
+    Assert-True (-not $r.Escalate) 'an unchanged map audit must exercise reduced selection'
+    Assert-True $r.RequiresValidation 'an unchanged map audit must still represent runtime validation'
+    Assert-True (($r.Shards -join ',') -eq 'HeavyNoCoverage') `
+        'an unchanged map audit must select exactly the always-run shards'
+
+    $fullyMapped = $map | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $fullyMapped.alwaysRun = @()
+    $r = Select-ImpactedShards -Map $fullyMapped -Changed @{} -AuditUnchangedMap
+    Assert-True $r.Escalate `
+        'a vacuous unchanged audit with no always-run shards must not authorize certification'
 
     foreach ($edge in @(10, 20)) {
         $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
@@ -433,8 +657,9 @@ if ($SelfTest) {
     $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props.backup' = @(1, 2) }
     Assert-True (-not ($r.Reasons -join ';').Contains('shared infrastructure')) `
         'a look-alike suffix must not match shared infrastructure'
-    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/anything.yml' = @(1, 2) }
-    Assert-True $r.Escalate 'the .github/ directory prefix still escalates'
+    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/docs.yml' = @(1, 2) }
+    Assert-True (-not $r.Escalate -and -not $r.RequiresValidation) `
+        'an independent YAML workflow must be classified as non-runtime'
 
     # 15. Hunk BODY content must be inert. A removed line whose text begins with '-- ' renders as
     #     '--- ...', byte-identical to an old-file header; the pre-fix parser nulled $current on it
@@ -482,11 +707,50 @@ if ($SelfTest) {
 
 # ---------------------------------------------------------------- selection
 
+if ($ClassifyOnly) {
+    $requiresValidation = $true
+    $reason = 'classification-failed'
+    $changedFiles = @()
+    try {
+        & git cat-file -e "$BaseSha^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
+        # A source-to-Markdown rename must report both the deleted source path and added Markdown
+        # path; otherwise looking only at the destination could incorrectly authorize no CI.
+        $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
+        if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$BaseSha' failed" }
+        $changedFiles = @($changedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($changedFiles.Count -eq 0) {
+            $reason = 'changed-path-set-empty'
+        }
+        else {
+            $requiresValidation = [bool] @(
+                $changedFiles | Where-Object {
+                    (Get-ChangedPathImpact -Path ([string] $_)) -ne [ChangedPathImpact]::NonRuntime
+                }
+            ).Count
+            $reason = $(if ($requiresValidation) { 'runtime-or-unknown' } else { 'non-runtime-only' })
+        }
+    }
+    catch {
+        Write-Host "::warning::path classification failed, so runtime validation remains required: $($_.Exception.Message)"
+    }
+
+    $result = [pscustomobject]@{
+        requiresValidation = $requiresValidation
+        reason = $reason
+        changedPaths = @($changedFiles)
+    }
+    if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
+    exit 0
+}
+
 function Exit-Escalated {
     param([Parameter(Mandatory)] [string] $Reason, [string] $Message)
 
     if ($Message) { Write-Host "::warning::$Message" }
-    $result = [pscustomobject]@{ escalate = $true; reason = $Reason; reasons = @(); shards = @() }
+    $result = [pscustomobject]@{
+        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); shards = @()
+    }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
 }
@@ -514,8 +778,16 @@ if ($LASTEXITCODE -ne 0) {
 
 try {
     $changed = Get-ChangedRanges -MapSha $mapSha
+    $currentPaths = @($changed.Keys)
+    if ($BaseSha) {
+        & git cat-file -e "$BaseSha^{commit}"
+        if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
+        $currentPaths = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
+        if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from current base '$BaseSha' failed" }
+    }
     Write-Host "changed files: $($changed.Count)"
-    $selection = Select-ImpactedShards -Map $map -Changed $changed
+    $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
+        -AuditUnchangedMap:$AuditUnchangedMap
 
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'
@@ -527,10 +799,13 @@ try {
     }
 
     $result = [pscustomobject]@{
-        escalate = $selection.Escalate
-        reason   = $(if ($selection.Escalate) { 'impact-unknown' } else { 'selected' })
-        reasons  = $selection.Reasons
-        shards   = $selection.Shards
+        escalate          = $selection.Escalate
+        requiresValidation = $selection.RequiresValidation
+        reason            = $(if ($selection.Escalate) { 'impact-unknown' }
+                              elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
+                              else { 'selected' })
+        reasons           = $selection.Reasons
+        shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }
