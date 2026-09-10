@@ -27,6 +27,7 @@ public class EditingVLMOptions : GenerativeVLMOptions
         DecoderDim = other.DecoderDim;
         NumVisionLayers = other.NumVisionLayers;
         NumDecoderLayers = other.NumDecoderLayers;
+        EditHeadLayers = other.EditHeadLayers;
         NumHeads = other.NumHeads;
         VocabSize = other.VocabSize;
         MaxSequenceLength = other.MaxSequenceLength;
@@ -52,4 +53,18 @@ public class EditingVLMOptions : GenerativeVLMOptions
 
     /// <summary>Gets or sets the guidance scale for classifier-free guidance.</summary>
     public double GuidanceScale { get; set; } = 7.5;
+
+    /// <summary>
+    /// Depth of the edit head that carries MLLM visual tokens into the diffusion model.
+    /// Paper default 4: MGIE (arXiv 2309.17102, Sec. 3) states "The edit head T is a 4-layer
+    /// Transformer, which transforms language features into editing guidance"; EmuEdit and
+    /// SmartEdit use the same bridging stage. Settable, so a caller can depart from the paper.
+    ///
+    /// All three models previously passed NumDecoderLayers here - the LLM's own depth, 32 for
+    /// the LLaMA-7B in LLaVA-7B - building an edit head eight times the paper's depth. The
+    /// other defaults are already paper-faithful: VisionDim 1024 with 24 layers is CLIP
+    /// ViT-L/14 and DecoderDim 4096 with 32 layers and 32 heads is LLaMA-7B, which together
+    /// are exactly the LLaVA-7B the paper initializes from.
+    /// </summary>
+    public int EditHeadLayers { get; set; } = 4;
 }

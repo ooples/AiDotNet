@@ -222,7 +222,7 @@ public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T
                     _options.DecoderDim,
                     _options.VisionDim,
                     _options.NumVisionLayers,
-                    _options.NumDecoderLayers,
+                    _options.EditHeadLayers,
                     _options.NumHeads,
                     _options.DropoutRate
                 )
