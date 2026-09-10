@@ -6039,6 +6039,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
             }
+            else if (model.ClassName == "KMaXDeepLab" && model.TypeParameterCount == 1)
+            {
+                // Same family and the same rung as Mask2Former above. Its own fallback geometry is
+                // 640x640 over 133 classes, and the k-means cross-attention (queries x pixels x dim)
+                // makes each training iteration multi-second at that size.
+                //
+                // Rungs 1 and 2 are applied: it is in Fp32TestClassNames with a measured rationale,
+                // and it carries the segmentation family's iteration caps. Both were recorded as
+                // insufficient -- the HeavyTimeout note names it for a memorization task that
+                // "overran even the fp32 blame-hang" -- and the same note says a CI-smoke fixture
+                // "could rescue several, but that per-model work is deferred". This is that work.
+                //
+                // numClasses is the real lever, not just resolution: the base derives its stuff/thing
+                // split from it (numClasses/3), and the mask decoder's query set scales with it.
+                // ModelSize stays R50, which is already the smaller of the two available. The k-means
+                // mask-transformer pipeline is unchanged and paper defaults remain user-selectable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4)";
+            }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
                 // MedicalASR (2024): clinical Conformer ASR — production 512-d / 18-layer encoder + 10k vocab
@@ -8847,6 +8868,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumBackboneBlocks = 2, IntermediateDim = 32, FftSize = 16, HopSize = 4, " +
                     "LearningRate = 2e-4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MelGAN" && model.TypeParameterCount == 1)
+            {
+                // Same rung as Vocos above, and the only rung left open for this model. MelGAN's
+                // generator is 512 base channels over 3 residual stacks, and its memorization and
+                // training probes overrun the 180 s gate at that width.
+                //
+                // Rung 2 is CLOSED here rather than merely unapplied: its cap entry records that
+                // adding MelGAN to the iteration-override block "would fail the build with CS0102 --
+                // the cap rung is closed", because its family branch already emits those members.
+                // The same note adds that its remaining failures "are the memorization / training
+                // probes at the 180 s gate, not MoreData, so the existing caps do not reach them".
+                // A fixture is the one lever that reaches them.
+                //
+                // NgfBase is the ONLY knob that may move here. InitializeLayers builds the default
+                // HiFi-GAN generator as CreateDefaultHiFiGANLayers(MelChannels, NgfBase, 1), and it
+                // guards the two it does not consume: setting NumResStacks or DropoutRate away from
+                // their defaults throws "configured but not applied by the paper-faithful HiFi-GAN
+                // generator default; supply explicit Architecture.Layers". That guard is right --
+                // silently ignoring a configured option is worse than refusing it -- and an earlier
+                // draft of this fixture set NumResStacks = 1 and failed all 33 tests on it.
+                //
+                // MelChannels is applied and would shrink further, but it is the 80 in this model's
+                // declared [1,80,8] -> [1,1,2048] contract, so moving it changes the output axes
+                // rather than only the cost. Width alone is the safe lever; the multi-scale
+                // generator and paper defaults are otherwise unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 32, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.MelGANOptions { NgfBase = 32 })";
+            }
             else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
             {
                 // MetaVoice-1B (metavoiceio/metavoice-src) defaults to its paper 1.2B scale: a
@@ -11196,6 +11248,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
                     "numFeatures: 8, correlationLevels: 2, correlationRadius: 2, numIterations: 2)";
+            }
+            else if (model.ClassName == "MemFlow" && model.TypeParameterCount == 1)
+            {
+                // Same rung and the same scale as RAFT above. MemFlow's parameterless ctor builds a
+                // 256x256 pair at 64 features over 8 layers, and its many-iteration training probes
+                // overrun the gate at that size.
+                //
+                // Rungs 1 and 2 are already applied and were not enough: it is in Fp32TestClassNames,
+                // and its iteration-cap entry records that the cap block "emits MoreDataTolerance as
+                // well, so a model whose family emits ANY of those five members must take a different
+                // rung". That different rung is this one, and the HeavyTimeout note names MemFlow in
+                // the group whose CI-smoke fixture "could rescue several, but that per-model work is
+                // deferred".
+                //
+                // InputDepth stays 6: the two frames are stacked channel-wise and the lazy feature
+                // conv is sized from InputDepth, so 3 would build a single-frame extractor and
+                // PredictCore's Shape[1]/2 split would halve the wrong axis. Only the scale changes --
+                // the memory-augmented flow pipeline is unchanged, and paper defaults stay intact.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
+                    "numFeatures: 8, numLayers: 2)";
             }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
