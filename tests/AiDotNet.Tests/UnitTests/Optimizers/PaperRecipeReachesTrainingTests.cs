@@ -2,6 +2,10 @@ using System;
 using System.Linq;
 using System.Reflection;
 using AiDotNet.Interfaces;
+using AiDotNet.Audio.Speaker;
+using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Tasks.Graph;
 using AiDotNet.Optimizers;
@@ -104,5 +108,101 @@ public class PaperRecipeReachesTrainingTests
             .ToList();
 
         Assert.NotEmpty(declared);
+    }
+
+    /// <summary>
+    /// A published cycle longer than the run it is applied to is scaled to fit, so a short run
+    /// still gets the schedule's shape instead of its opening sliver.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN declares Triangular2 with StepSize 65000, ramping 1e-8 to 1e-3. Copied verbatim
+    /// into a 100-step run, the rate is about 1.5e-6 throughout -- roughly 650 times below the
+    /// declared one -- and the model does not visibly train. The generated memorization probe
+    /// caught exactly that: loss moved from 0.438444 to 0.438423 over 100 steps, and the same three
+    /// shards passed on master.
+    /// </para>
+    /// <para>
+    /// A StepSize is stated in the units of the paper's own run, so copying it into a much shorter
+    /// one misapplies the recipe rather than honouring it. Asserted on the shipped model rather
+    /// than a synthetic recipe, because it is the real declaration that has to survive this.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APublishedCycleLongerThanTheRunIsScaledToFitIt()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 8);
+
+        var model = new ECAPATDNNSpeaker<double>(architecture);
+
+        object? optimizer = EffectiveTrainingOptimizer(model);
+        Assert.NotNull(optimizer);
+
+        var typed = Assert.IsAssignableFrom<IOptimizer<double, Tensor<double>, Tensor<double>>>(optimizer);
+
+        // The scheduler hangs off the gradient-based options, not the base ones GetOptions() is
+        // typed as -- which is why the factory reaches it by reflection.
+        var options = Assert.IsAssignableFrom<GradientBasedOptimizerOptions<double, Tensor<double>, Tensor<double>>>(
+            typed.GetOptions());
+
+        var cyclic = Assert.IsType<CyclicLRScheduler>(options.LearningRateScheduler);
+
+        // Scaled to half the run, leaving room for one full up-and-down cycle -- not the published
+        // 65000, which is the whole defect.
+        Assert.NotEqual(65000, cyclic.StepSizeUp);
+        Assert.Equal(Math.Max(1, options.MaxIterations / 2), cyclic.StepSizeUp);
+
+        // The bounds are still the declared ones: the shape is refitted, the recipe is not rewritten.
+        Assert.Equal(1e-3, options.InitialLearningRate, precision: 12);
+    }
+
+    /// <summary>
+    /// A schedule the factory attaches must also advance during training, not merely be present.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>SchedulerStepMode</c> defaults to <c>StepPerEpoch</c> and <c>OnBatchEnd</c> steps the
+    /// schedule only under <c>StepPerBatch</c>. Tape training signals batch ends and nothing on the
+    /// <c>Train</c> path raises an epoch, so a recipe's schedule was installed and then frozen at
+    /// whatever rate it reports at step 0 -- invisible for a decaying schedule, fatal for a ramping
+    /// one. ECAPA-TDNN's cyclic schedule starts at its base of 1e-8, so the model trained at 1e-8
+    /// for every step and its memorization probe barely moved the loss.
+    /// </para>
+    /// <para>
+    /// Asserting the mode alone would only restate the fix, so this steps the real optimizer and
+    /// requires the rate to have actually changed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AnAttachedScheduleActuallyAdvancesOnABatch()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 8);
+
+        var model = new ECAPATDNNSpeaker<double>(architecture);
+
+        var optimizer = Assert.IsAssignableFrom<IOptimizer<double, Tensor<double>, Tensor<double>>>(
+            EffectiveTrainingOptimizer(model));
+
+        var options = Assert.IsAssignableFrom<GradientBasedOptimizerOptions<double, Tensor<double>, Tensor<double>>>(
+            optimizer.GetOptions());
+
+        // Per-batch is the cadence every published schedule here is written in.
+        Assert.Equal(SchedulerStepMode.StepPerBatch, options.SchedulerStepMode);
+
+        var stepped = Assert.IsAssignableFrom<GradientBasedOptimizerBase<double, Tensor<double>, Tensor<double>>>(
+            optimizer);
+
+        double before = stepped.GetCurrentLearningRate();
+        stepped.OnBatchEnd();
+        double after = stepped.GetCurrentLearningRate();
+
+        // The whole defect was a rate that never moved off the schedule's starting value.
+        Assert.NotEqual(before, after);
+
+        // And it moves upward, because a cyclic schedule starts at its base and ramps toward the
+        // declared rate. A decaying schedule would hide this bug; this one cannot.
+        Assert.True(after > before, $"rate did not rise: before={before:E6}, after={after:E6}");
     }
 }
