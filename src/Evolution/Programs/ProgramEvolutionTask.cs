@@ -158,7 +158,9 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
             result.Objectives,
             result.ConstraintViolations,
             result.CostUnits,
-            result.Diagnostics);
+            result.Diagnostics,
+            result.Metrics,
+            result.Artifacts);
     }
 
     private static string BuildVersionHash(
@@ -169,7 +171,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         EvolveBlockMarkers markers = options.ResolveEvolveBlockMarkers();
         var components = new List<string>
         {
-            "program-evolution-task-v2",
+            "program-evolution-task-v3",
             options.Language.ToString(),
             markers.ToString(),
             options.EnforceEvolveBlocks ? "enforce" : "free",
