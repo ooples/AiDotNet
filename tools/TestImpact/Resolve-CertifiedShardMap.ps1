@@ -1,18 +1,21 @@
 <#
 .SYNOPSIS
-    Downloads the certified shard map, if and only if the newest completed map run certified one.
+    Downloads the newest positively certified shard map that has not been explicitly revoked.
 
 .DESCRIPTION
-    The newest completed Test impact map run is a revocation boundary. A failed run or a successful
-    run without a certified-shard-map artifact invalidates every older certificate. Keeping that
-    policy here, rather than embedded in workflow YAML, lets adversarial fixtures execute the exact
-    decision code and record every attempted artifact download.
+    Cancellation is not negative audit evidence, and a successful audit that could not reduce a
+    particular historical diff does not invalidate an older zero-miss certificate. The resolver
+    therefore scans backward through those neutral states. It stops only at an explicit audited
+    selection miss or at a failed run that predates typed audit decisions and cannot be classified
+    safely. This preserves fail-closed revocation without letting queue cancellation disable
+    selective CI repo-wide.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Resolve')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Resolve')] [string] $Repository,
     [Parameter(Mandatory, ParameterSetName = 'Resolve')] [string] $OutDirectory,
     [Parameter(Mandatory, ParameterSetName = 'Resolve')] [string] $ResultFile,
+    [Parameter(ParameterSetName = 'Resolve')] [string] $MapBranch = 'master',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -21,30 +24,78 @@ $ErrorActionPreference = 'Stop'
 
 enum CertifiedShardMapResolutionStatus {
     Found
-    NoCompletedRun
-    LatestRunFailed
+    NoCertifiedRun
+    RevokedByAuditMiss
+    UnclassifiedFailure
     CertificateUnavailable
+}
+
+enum ShardMapAuditDisposition {
+    Certified
+    SafeNoReduction
+    RevokedMiss
+}
+
+enum ShardMapCertificationBasis {
+    HistoricalReplay
+    FreshCoverage
+}
+
+function ConvertTo-AuditDecision {
+    param($Decision, [long] $ExpectedRunId)
+
+    foreach ($name in 'schemaVersion', 'certificationRunId', 'disposition', 'missCount') {
+        if (-not $Decision.PSObject.Properties[$name]) { throw "audit decision is missing $name" }
+    }
+    $schema = 0
+    if (-not [int]::TryParse([string] $Decision.schemaVersion, [ref] $schema) -or
+        ($schema -ne 1 -and $schema -ne 2)) {
+        throw 'audit decision schemaVersion must be the integer 1 or 2'
+    }
+    if ($schema -eq 2) {
+        if (-not $Decision.PSObject.Properties['basis']) {
+            throw 'schema-v2 audit decision is missing basis'
+        }
+        $basis = [ShardMapCertificationBasis]::HistoricalReplay
+        if (-not [Enum]::TryParse[ShardMapCertificationBasis]([string] $Decision.basis, $false, [ref] $basis)) {
+            throw "audit decision has unsupported basis '$($Decision.basis)'"
+        }
+    }
+    $runId = 0L
+    if (-not [long]::TryParse([string] $Decision.certificationRunId, [ref] $runId) -or
+        $runId -ne $ExpectedRunId) {
+        throw 'audit decision certificationRunId does not match its workflow run'
+    }
+    $missCount = 0
+    if (-not [int]::TryParse([string] $Decision.missCount, [ref] $missCount) -or $missCount -lt 0) {
+        throw 'audit decision missCount must be a non-negative integer'
+    }
+    $disposition = [ShardMapAuditDisposition]::Certified
+    $dispositionText = [string] $Decision.disposition
+    if (-not [Enum]::TryParse[ShardMapAuditDisposition]($dispositionText, $false, [ref] $disposition)) {
+        throw "audit decision has unsupported disposition '$dispositionText'"
+    }
+    if (($disposition -eq [ShardMapAuditDisposition]::RevokedMiss) -ne ($missCount -gt 0)) {
+        throw 'audit decision disposition contradicts its miss count'
+    }
+    return $disposition
 }
 
 function Resolve-CertifiedShardMapRun {
     param(
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Runs,
-        [Parameter(Mandatory)] [scriptblock] $DownloadCertificate
+        [Parameter(Mandatory)] [scriptblock] $DownloadCertificate,
+        [Parameter(Mandatory)] [scriptblock] $DownloadDecision
     )
 
     $targetRuns = [System.Collections.Generic.List[object]]::new()
     foreach ($run in $Runs) {
         if (-not $run.PSObject.Properties['workflowName'] -or
-            [string] $run.workflowName -cne 'Test impact map') {
-            continue
-        }
+            [string] $run.workflowName -cne 'Test impact map') { continue }
         foreach ($property in 'databaseId', 'conclusion', 'createdAt', 'status') {
-            if (-not $run.PSObject.Properties[$property]) {
-                throw "map run is missing $property"
-            }
+            if (-not $run.PSObject.Properties[$property]) { throw "map run is missing $property" }
         }
         if ([string] $run.status -cne 'completed') { continue }
-
         $runId = 0L
         if (-not [long]::TryParse([string] $run.databaseId, [ref] $runId) -or $runId -lt 1) {
             throw 'map run databaseId must be a positive integer'
@@ -64,112 +115,129 @@ function Resolve-CertifiedShardMapRun {
         })
     }
 
-    $latest = @($targetRuns | Sort-Object CreatedAt, RunId -Descending | Select-Object -First 1)
-    if ($latest.Count -eq 0) {
-        return [pscustomobject]@{
-            Status = [CertifiedShardMapResolutionStatus]::NoCompletedRun
-            RunId = 0L
+    :runLoop foreach ($candidate in @($targetRuns | Sort-Object CreatedAt, RunId -Descending)) {
+        $runId = [long] $candidate.RunId
+        $decisionObject = & $DownloadDecision $runId
+        if ($null -ne $decisionObject) {
+            try { $disposition = ConvertTo-AuditDecision $decisionObject $runId }
+            catch {
+                return [pscustomobject]@{
+                    Status = [CertifiedShardMapResolutionStatus]::UnclassifiedFailure
+                    RunId = $runId
+                }
+            }
+            switch ($disposition) {
+                ([ShardMapAuditDisposition]::RevokedMiss) {
+                    return [pscustomobject]@{
+                        Status = [CertifiedShardMapResolutionStatus]::RevokedByAuditMiss
+                        RunId = $runId
+                    }
+                }
+                ([ShardMapAuditDisposition]::SafeNoReduction) { continue runLoop }
+                ([ShardMapAuditDisposition]::Certified) {
+                    if ([bool] (& $DownloadCertificate $runId)) {
+                        return [pscustomobject]@{
+                            Status = [CertifiedShardMapResolutionStatus]::Found
+                            RunId = $runId
+                        }
+                    }
+                    return [pscustomobject]@{
+                        Status = [CertifiedShardMapResolutionStatus]::CertificateUnavailable
+                        RunId = $runId
+                    }
+                }
+            }
         }
-    }
 
-    $candidate = $latest[0]
-    if ($candidate.Conclusion -cne 'success') {
-        return [pscustomobject]@{
-            Status = [CertifiedShardMapResolutionStatus]::LatestRunFailed
-            RunId = [long] $candidate.RunId
+        # Backward compatibility for certificates produced before typed audit decisions shipped.
+        # A historical success may contain a positive certificate or may simply be bootstrap/no
+        # reduction. A cancellation contains no negative evidence. An unclassified failure remains
+        # a hard boundary because an old miss would otherwise be silently ignored.
+        if ($candidate.Conclusion -ceq 'success') {
+            if ([bool] (& $DownloadCertificate $runId)) {
+                return [pscustomobject]@{
+                    Status = [CertifiedShardMapResolutionStatus]::Found
+                    RunId = $runId
+                }
+            }
+            continue
         }
-    }
-
-    $downloaded = [bool] (& $DownloadCertificate ([long] $candidate.RunId))
-    if (-not $downloaded) {
+        if ($candidate.Conclusion -ceq 'cancelled') { continue }
         return [pscustomobject]@{
-            Status = [CertifiedShardMapResolutionStatus]::CertificateUnavailable
-            RunId = [long] $candidate.RunId
+            Status = [CertifiedShardMapResolutionStatus]::UnclassifiedFailure
+            RunId = $runId
         }
     }
 
     return [pscustomobject]@{
-        Status = [CertifiedShardMapResolutionStatus]::Found
-        RunId = [long] $candidate.RunId
+        Status = [CertifiedShardMapResolutionStatus]::NoCertifiedRun
+        RunId = 0L
     }
 }
 
 if ($SelfTest) {
     $failures = [System.Collections.Generic.List[string]]::new()
-    function Assert-True {
-        param([bool] $Condition, [string] $What)
-        if (-not $Condition) { [void] $failures.Add($What) }
+    function Assert-True { param([bool] $Condition, [string] $Message)
+        if (-not $Condition) { [void] $failures.Add($Message) }
     }
     function New-Run {
-        param(
-            [long] $Id,
-            [string] $Conclusion,
-            [string] $CreatedAt,
-            [string] $WorkflowName = 'Test impact map',
-            [string] $Status = 'completed'
-        )
+        param([long] $Id, [string] $Conclusion, [string] $CreatedAt,
+            [string] $WorkflowName = 'Test impact map', [string] $Status = 'completed')
         return [pscustomobject]@{
-            databaseId = $Id
-            conclusion = $Conclusion
-            createdAt = $CreatedAt
-            workflowName = $WorkflowName
-            status = $Status
+            databaseId = $Id; conclusion = $Conclusion; createdAt = $CreatedAt
+            workflowName = $WorkflowName; status = $Status
+        }
+    }
+    function New-Decision {
+        param([long] $RunId, [string] $Disposition, [int] $MissCount = 0)
+        return [pscustomobject]@{
+            schemaVersion = 1; certificationRunId = $RunId
+            disposition = $Disposition; missCount = $MissCount
         }
     }
 
-    $runs = @(
-        (New-Run 100 'success' '2026-09-08T01:00:00Z'),
-        (New-Run 300 'success' '2026-09-08T03:00:00Z' 'Build & SonarCloud'),
-        (New-Run 200 'failure' '2026-09-08T02:00:00Z')
-    )
-    $attempts = [System.Collections.Generic.List[long]]::new()
-    $result = Resolve-CertifiedShardMapRun -Runs $runs -DownloadCertificate {
-        param([long] $RunId)
-        [void] $attempts.Add($RunId)
-        return $true
-    }
-    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::LatestRunFailed) `
-        'an older certificate survived a newer failed map run'
-    Assert-True ($attempts.Count -eq 0) `
-        'the resolver attempted a certificate download after the newest map run failed'
-
-    $runs = @(
-        (New-Run 100 'success' '2026-09-08T01:00:00Z'),
-        (New-Run 201 'success' '2026-09-08T02:00:00Z')
-    )
-    $attempts = [System.Collections.Generic.List[long]]::new()
-    $result = Resolve-CertifiedShardMapRun -Runs $runs -DownloadCertificate {
-        param([long] $RunId)
-        [void] $attempts.Add($RunId)
-        return $false
-    }
-    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::CertificateUnavailable) `
-        'a successful map run without a certificate did not revoke older evidence'
-    Assert-True (($attempts -join ',') -ceq '201') `
-        'the resolver probed an older certificate after the newest artifact was unavailable'
-
-    $attempts = [System.Collections.Generic.List[long]]::new()
-    $result = Resolve-CertifiedShardMapRun -Runs $runs -DownloadCertificate {
-        param([long] $RunId)
-        [void] $attempts.Add($RunId)
-        return $RunId -eq 201
-    }
-    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::Found -and
-        $result.RunId -eq 201) 'the newest certified map was not selected'
-    Assert-True (($attempts -join ',') -ceq '201') `
-        'selecting a valid newest certificate attempted more than one download'
-
-    $attempts = [System.Collections.Generic.List[long]]::new()
+    $certificateAttempts = [System.Collections.Generic.List[long]]::new()
     $result = Resolve-CertifiedShardMapRun -Runs @(
-        (New-Run 400 'success' '2026-09-08T04:00:00Z' 'Build & SonarCloud')
-    ) -DownloadCertificate {
-        param([long] $RunId)
-        [void] $attempts.Add($RunId)
-        return $true
+        (New-Run 300 'cancelled' '2026-09-08T03:00:00Z'),
+        (New-Run 200 'success' '2026-09-08T02:00:00Z'),
+        (New-Run 100 'success' '2026-09-08T01:00:00Z')
+    ) -DownloadDecision { param($RunId) $null } -DownloadCertificate {
+        param($RunId); [void] $certificateAttempts.Add($RunId); return $RunId -eq 100
     }
-    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::NoCompletedRun) `
-        'an unrelated workflow was accepted as a map workflow'
-    Assert-True ($attempts.Count -eq 0) 'an unrelated workflow triggered an artifact download'
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::Found -and $result.RunId -eq 100) `
+        'cancelled and successful no-certificate runs disabled an older positive certificate'
+    Assert-True (($certificateAttempts -join ',') -ceq '200,100') `
+        'historical fallback did not examine positive evidence in newest-first order'
+
+    $result = Resolve-CertifiedShardMapRun -Runs @(
+        (New-Run 400 'failure' '2026-09-08T04:00:00Z'),
+        (New-Run 100 'success' '2026-09-08T01:00:00Z')
+    ) -DownloadDecision { param($RunId) if ($RunId -eq 400) { New-Decision 400 RevokedMiss 1 } } `
+      -DownloadCertificate { param($RunId) return $true }
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::RevokedByAuditMiss) `
+        'an explicit selection miss did not revoke older evidence'
+
+    $result = Resolve-CertifiedShardMapRun -Runs @(
+        (New-Run 400 'failure' '2026-09-08T04:00:00Z'),
+        (New-Run 100 'success' '2026-09-08T01:00:00Z')
+    ) -DownloadDecision { param($RunId) if ($RunId -eq 400) { New-Decision 400 SafeNoReduction } } `
+      -DownloadCertificate { param($RunId) return $RunId -eq 100 }
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::Found -and $result.RunId -eq 100) `
+        'a typed zero-miss no-reduction audit revoked older evidence'
+
+    $result = Resolve-CertifiedShardMapRun -Runs @(
+        (New-Run 400 'failure' '2026-09-08T04:00:00Z'),
+        (New-Run 100 'success' '2026-09-08T01:00:00Z')
+    ) -DownloadDecision { param($RunId) $null } -DownloadCertificate { param($RunId) return $true }
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::UnclassifiedFailure) `
+        'an unclassified historical failure did not fail closed'
+
+    $result = Resolve-CertifiedShardMapRun -Runs @(
+        (New-Run 500 'success' '2026-09-08T05:00:00Z')
+    ) -DownloadDecision { param($RunId) New-Decision 500 Certified } `
+      -DownloadCertificate { param($RunId) return $false }
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::CertificateUnavailable) `
+        'a typed Certified decision was accepted without its certificate artifact'
 
     if ($failures.Count -gt 0) {
         Write-Host 'Resolve-CertifiedShardMap self-test FAILED:'
@@ -187,17 +255,38 @@ if (Test-Path -LiteralPath $ResultFile) {
     throw "refusing to overwrite existing result file $ResultFile"
 }
 
-$runsJson = & gh run list --repo $Repository --workflow test-impact-map.yml --branch master `
+$runsJson = & gh run list --repo $Repository --workflow test-impact-map.yml --branch $MapBranch `
     --status completed --limit 20 --json databaseId,conclusion,createdAt,workflowName,status 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw 'could not query completed Test impact map workflow runs'
-}
+if ($LASTEXITCODE -ne 0) { throw 'could not query completed Test impact map workflow runs' }
 $runs = @($runsJson | ConvertFrom-Json)
-$resolution = Resolve-CertifiedShardMapRun -Runs $runs -DownloadCertificate {
-    param([long] $RunId)
-    & gh run download $RunId --repo $Repository --name certified-shard-map `
-        --dir $OutDirectory *> $null
-    return $LASTEXITCODE -eq 0
+$decisionRoot = Join-Path ([IO.Path]::GetTempPath()) ("aidotnet-map-decisions-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $decisionRoot -Force | Out-Null
+try {
+    $resolution = Resolve-CertifiedShardMapRun -Runs $runs -DownloadCertificate {
+        param([long] $RunId)
+        & gh run download $RunId --repo $Repository --name certified-shard-map `
+            --dir $OutDirectory *> $null
+        return $LASTEXITCODE -eq 0
+    } -DownloadDecision {
+        param([long] $RunId)
+        $directory = Join-Path $decisionRoot ([string] $RunId)
+        & gh run download $RunId --repo $Repository --name shard-map-audit-decision `
+            --dir $directory *> $null
+        if ($LASTEXITCODE -ne 0) { return $null }
+        $file = @(Get-ChildItem -LiteralPath $directory -Filter map-audit-decision.json -File -Recurse |
+            Select-Object -First 1)
+        if ($file.Count -eq 0) { return $null }
+        try { return (Get-Content -LiteralPath $file[0].FullName -Raw | ConvertFrom-Json) }
+        catch { return [pscustomobject]@{ malformed = $true } }
+    }
+}
+finally {
+    $resolvedDecisionRoot = [IO.Path]::GetFullPath($decisionRoot)
+    $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    if ($resolvedDecisionRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and
+        (Split-Path -Leaf $resolvedDecisionRoot).StartsWith('aidotnet-map-decisions-', [StringComparison]::Ordinal)) {
+        Remove-Item -LiteralPath $resolvedDecisionRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $found = $resolution.Status -eq [CertifiedShardMapResolutionStatus]::Found
@@ -209,16 +298,19 @@ $found = $resolution.Status -eq [CertifiedShardMapResolutionStatus]::Found
 
 switch ($resolution.Status) {
     ([CertifiedShardMapResolutionStatus]::Found) {
-        Write-Host "using certified shard map from latest completed map run $($resolution.RunId)"
+        Write-Host "using certified shard map from run $($resolution.RunId)"
     }
-    ([CertifiedShardMapResolutionStatus]::NoCompletedRun) {
-        Write-Host '::warning::no completed Test impact map workflow exists; selection will fail closed'
+    ([CertifiedShardMapResolutionStatus]::NoCertifiedRun) {
+        Write-Host '::warning::no usable certified shard map exists; selection will fail closed'
     }
-    ([CertifiedShardMapResolutionStatus]::LatestRunFailed) {
-        Write-Host "::warning::latest completed map run $($resolution.RunId) failed; refusing to fall back to an older map"
+    ([CertifiedShardMapResolutionStatus]::RevokedByAuditMiss) {
+        Write-Host "::warning::map audit run $($resolution.RunId) observed a selection miss; older evidence is revoked"
+    }
+    ([CertifiedShardMapResolutionStatus]::UnclassifiedFailure) {
+        Write-Host "::warning::map run $($resolution.RunId) failed without a typed audit decision; older evidence remains blocked"
     }
     ([CertifiedShardMapResolutionStatus]::CertificateUnavailable) {
-        Write-Host "::warning::latest completed map run $($resolution.RunId) has no usable certificate; refusing to fall back to an older map"
+        Write-Host "::warning::map run $($resolution.RunId) claims certification but its certificate is unavailable"
     }
 }
 exit 0
