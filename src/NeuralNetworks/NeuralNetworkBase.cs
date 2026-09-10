@@ -5963,6 +5963,91 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
         }
     }
+    /// <summary>
+    /// Reports when the architecture this model was CONSTRUCTED with does not describe the input
+    /// its first layer actually accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ValidateCustomLayersInternal"/> has carried exactly this check for a long time,
+    /// but every one of its 205 call sites sits inside an <c>Architecture.Layers</c> guard - so it
+    /// runs only when the CALLER supplied the layers, and never on the default path where the model
+    /// builds its own stack from a <c>LayerHelper</c> factory. That is the overwhelmingly common
+    /// case, and it was completely unchecked.
+    /// </para>
+    /// <para>
+    /// The gap is not cosmetic. The architecture is load-bearing even when no factory reads it:
+    /// <c>ResolveLazyLayerShapes</c> performs an architecture-driven warm-up, so a lazy layer
+    /// resolves its weights from the DECLARED shape while the forward runs on whatever the options
+    /// produced. Measured across LayerHelper, 104 factories take a <c>NeuralNetworkArchitecture</c>
+    /// and never read it, so for those models the architecture and the layers are free to disagree
+    /// with nothing to say so.
+    /// </para>
+    /// <para>
+    /// Reporting only, and deliberately so. Escalating to an exception here would fail construction
+    /// for every one of those models at once, and the honest sequence is to make the divergence
+    /// VISIBLE first and clear the backlog against it - the same shadow-comparison discipline the
+    /// contract check above already follows. <see cref="ThrowOnLayerContractMismatch"/> escalates it
+    /// for anyone who wants the strict behaviour today.
+    /// </para>
+    /// </remarks>
+    private void ReportArchitectureLayerDisagreement()
+    {
+        try
+        {
+            if (_architectureAgreementReported) return;
+            if (Layers is null || Layers.Count == 0) return;
+            _architectureAgreementReported = true;
+
+            // A layer-only architecture declares no input of its own - the layers ARE the
+            // declaration - so there is nothing to disagree with.
+            if (Architecture.IsLayerOnly) return;
+
+            if (IsFirstLayerShapeCompatible(Layers[0])) return;
+
+            var firstLayerShape = TryGetLayerShape(Layers[0], static l => l.GetInputShape());
+            var architectureShape = TryGetArchitectureDeclaredInputShape();
+
+            // Either side being unresolved is a lazy layer that has not materialised yet, not a
+            // disagreement. IsFirstLayerShapeCompatible already treats those as compatible; this is
+            // belt and braces so a diagnostic cannot invent a finding out of missing data.
+            if (firstLayerShape is null || architectureShape is null) return;
+
+            var report = new System.Text.StringBuilder();
+            report.Append(GetType().Name)
+                .Append(": the architecture this model was constructed with does not describe the ")
+                .Append("input its first layer accepts (first layer = ")
+                .Append(Layers[0].GetType().Name)
+                .Append(", input shape = ").Append(FormatShape(firstLayerShape))
+                .Append("; architecture input shape = ").Append(FormatShape(architectureShape))
+                .Append("). The layer stack was built without consulting the architecture, so a ")
+                .Append("caller's architecture is silently discarded - and ResolveLazyLayerShapes ")
+                .Append("still resolves lazy weights against the declared shape.");
+
+            if (ThrowOnLayerContractMismatch)
+            {
+                throw new InvalidOperationException(report.ToString());
+            }
+
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // The deliberate escalation above. Everything else is swallowed below.
+            throw;
+        }
+        catch
+        {
+            // A diagnostic must never be the reason a model fails to construct.
+        }
+    }
+
+    /// <summary>One-shot latch so the architecture/layer disagreement is reported once.</summary>
+    private bool _architectureAgreementReported;
+
     /// <summary>One-shot latch so the traced chain validation runs on the FIRST forward only.</summary>
     private bool _chainValidatedFromTrace;
 
@@ -5992,6 +6077,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             trace?.Dispose();
         }
+
+        // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
+        // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
+        // of this method's caller - Layers was still EMPTY, because these stacks materialise during
+        // the forward. A check that runs before the layers exist cannot fail, and would have shipped
+        // as a diagnostic that silently never fired.
+        ReportArchitectureLayerDisagreement();
 
         if (trace is not null)
         {

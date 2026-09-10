@@ -3007,7 +3007,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || model.HasArchitectureOnlyConstructor
                                     || model.HasVectorOnlyConstructor
                                     || (model.ExtendsVisionDetectorBase
-                                        && model.VisionDetectorOptionsType.Length > 0)) &&
+                                        && model.VisionDetectorOptionsType.Length > 0)
+                                    || model.ExtendsTextConditioningBase) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3208,6 +3209,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsSafetyModule = false;
         bool extendsVisionDetector = false;
         string visionDetectorOptions = string.Empty;
+        bool extendsTextConditioning = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3383,6 +3385,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsThreeDDiffusion = true;
             // The three vision detector roots. All are ModelBase<T, Tensor<T>, Tensor<T>> and all
             // build their own backbone from an options object, so one family covers them.
+            else if (baseName.StartsWith("TextConditioningBase", System.StringComparison.Ordinal))
+                extendsTextConditioning = true;
             else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
@@ -3535,6 +3539,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ImplementsSafetyModule = implementsSafetyModule,
             ExtendsVisionDetectorBase = extendsVisionDetector,
             VisionDetectorOptionsType = visionDetectorOptions,
+            ExtendsTextConditioningBase = extendsTextConditioning,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
@@ -4469,7 +4474,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // fixture would run a CSPDarknet over a 640px image on every invariant AND try to fetch
             // pretrained weights that are not present in a test environment. Production defaults are
             // untouched; only what the fixture asks for changes.
-            if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
+            // The diffusion text conditioners take an ITokenizer and nothing else that matters.
+            // ClipTokenizerFactory.CreateShapeCompatibleForTesting exists precisely for this - a
+            // real BPE tokenizer at a bounded vocabulary - so the fixture uses the repository's own
+            // intended construction path rather than a stub that would not tokenize.
+            if (model.ExtendsTextConditioningBase)
+            {
+                constructorExpr = $"new {typeName}<double>("
+                    + "AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting())";
+            }
+            else if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
             {
                 string detectorOptions = model.VisionDetectorOptionsType switch
                 {
@@ -18027,6 +18041,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsVisionDetectorBase { get; set; }
 
         public string VisionDetectorOptionsType { get; set; } = string.Empty;
+
+        public bool ExtendsTextConditioningBase { get; set; }
 
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
