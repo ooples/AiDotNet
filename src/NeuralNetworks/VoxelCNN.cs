@@ -136,36 +136,42 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
 
     public VoxelCNN(
         NeuralNetworkArchitecture<T> architecture,
-        int voxelResolution = 32,
-        int numConvBlocks = 3,
-        int baseFilters = 32,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         VoxelCNNOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : this(options ?? new VoxelCNNOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new VoxelCNNOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must be
+    /// resolved first. Options come first in the parameter list because a nullable and a
+    /// non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private VoxelCNN(
+        VoxelCNNOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), options.MaxGradNorm)
+    {
+        // Every dimension check the constructor used to make now lives on the options, including
+        // the cross-field resolution-vs-blocks rule.
+        options.Validate();
+        _options = options;
         Options = _options;
 
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
-        if (voxelResolution <= 0)
-            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
-        if (numConvBlocks <= 0)
-            throw new ArgumentException("Number of convolutional blocks must be positive.", nameof(numConvBlocks));
-        if (baseFilters <= 0)
-            throw new ArgumentException("Base filters must be positive.", nameof(baseFilters));
 
-        // Minimum resolution depends on numConvBlocks (each block halves resolution)
-        int minResolution = 1 << numConvBlocks; // 2^numConvBlocks
-        if (voxelResolution < minResolution)
-            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
-                $"VoxelResolution must be at least {minResolution} for {numConvBlocks} convolutional blocks.");
-
-        VoxelResolution = voxelResolution;
-        NumConvBlocks = numConvBlocks;
-        BaseFilters = baseFilters;
+        VoxelResolution = options.VoxelResolution;
+        NumConvBlocks = options.NumConvBlocks;
+        BaseFilters = options.BaseFilters;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

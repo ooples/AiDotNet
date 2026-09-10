@@ -1374,8 +1374,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var network = new LiquidStateMachine<float>(
             architecture,
             reservoirSize: 64,
-            spectralRadius: 0.9f,
-            inputScaling: 0.1f);
+            options: new LiquidStateMachineOptions { SpectralRadius = 0.9, InputScaling = 0.1 });
         var input = CreateRandomTensor([16]);
 
         // Act
@@ -1400,8 +1399,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var network = new LiquidStateMachine<float>(
             architecture,
             reservoirSize: 64,
-            spectralRadius: 0.9f,
-            inputScaling: 0.1f);
+            options: new LiquidStateMachineOptions { SpectralRadius = 0.9, InputScaling = 0.1 });
 
         // Act
         int parameterCount = (int)network.ParameterCount;
@@ -4065,9 +4063,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var unet3d = new UNet3D<float>(
             architecture,
-            voxelResolution: 8,
-            numEncoderBlocks: 2,
-            baseFilters: 8);
+            options: new UNet3DOptions { VoxelResolution = 8, NumEncoderBlocks = 2, BaseFilters = 8 });
 
         // Input: 3D voxel grid [C, D, H, W]
         var input = CreateRandomTensor([1, 8, 8, 8]);
@@ -4094,7 +4090,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputDepth: 8,
             outputSize: 4);
 
-        var unet3d = new UNet3D<float>(architecture, voxelResolution: 8, numEncoderBlocks: 2, baseFilters: 8);
+        var unet3d = new UNet3D<float>(architecture, options: new UNet3DOptions { VoxelResolution = 8, NumEncoderBlocks = 2, BaseFilters = 8 });
 
         // Act
         int parameterCount = (int)unet3d.ParameterCount;
@@ -4123,9 +4119,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var voxelCnn = new VoxelCNN<float>(
             architecture,
-            voxelResolution: 8,
-            numConvBlocks: 2,
-            baseFilters: 8);
+            options: new VoxelCNNOptions { VoxelResolution = 8, NumConvBlocks = 2, BaseFilters = 8 });
 
         var input = CreateRandomTensor([1, 8, 8, 8]);
 
@@ -4151,7 +4145,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputDepth: 8,
             outputSize: 4);
 
-        var voxelCnn = new VoxelCNN<float>(architecture, voxelResolution: 8, numConvBlocks: 2, baseFilters: 8);
+        var voxelCnn = new VoxelCNN<float>(architecture, options: new VoxelCNNOptions { VoxelResolution = 8, NumConvBlocks = 2, BaseFilters = 8 });
 
         // Act
         int parameterCount = (int)voxelCnn.ParameterCount;

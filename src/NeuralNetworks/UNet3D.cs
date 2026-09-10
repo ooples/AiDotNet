@@ -135,36 +135,42 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping. Defaults to 1.0.</param>
     public UNet3D(
         NeuralNetworkArchitecture<T> architecture,
-        int voxelResolution = 32,
-        int numEncoderBlocks = 4,
-        int baseFilters = 32,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         UNet3DOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : this(options ?? new UNet3DOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new UNet3DOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must be
+    /// resolved first. Options come first in the parameter list because a nullable and a
+    /// non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private UNet3D(
+        UNet3DOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), options.MaxGradNorm)
+    {
+        // Every dimension check the constructor used to make now lives on the options, including
+        // the cross-field resolution-vs-blocks rule.
+        options.Validate();
+        _options = options;
         Options = _options;
 
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
-        if (voxelResolution <= 0)
-            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
-        if (numEncoderBlocks <= 0)
-            throw new ArgumentException("Number of encoder blocks must be positive.", nameof(numEncoderBlocks));
-        if (baseFilters <= 0)
-            throw new ArgumentException("Base filters must be positive.", nameof(baseFilters));
 
-        // Minimum resolution depends on numEncoderBlocks
-        int minResolution = 1 << numEncoderBlocks; // 2^numEncoderBlocks
-        if (voxelResolution < minResolution)
-            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
-                $"VoxelResolution must be at least {minResolution} for {numEncoderBlocks} encoder blocks.");
-
-        VoxelResolution = voxelResolution;
-        NumEncoderBlocks = numEncoderBlocks;
-        BaseFilters = baseFilters;
+        VoxelResolution = options.VoxelResolution;
+        NumEncoderBlocks = options.NumEncoderBlocks;
+        BaseFilters = options.BaseFilters;
         NumClasses = architecture.OutputSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
