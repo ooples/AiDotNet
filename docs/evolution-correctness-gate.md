@@ -25,7 +25,17 @@ Given a valid program, when checking and scoring finish, then their same-unit co
 is retained. Correctness-stage success metadata is deliberately not merged into fitness metadata.
 
 Given descriptors are enabled, when ProgramEvolutionTask merges them, then metrics and repair artifacts survive.
-That preservation affects future search feedback: task version v3 intentionally refuses old v2 checkpoints.
+That preservation and exact-source identity affect future search feedback: task version
+`program-evolution-task-v4-exact-source` intentionally refuses older checkpoints, including v2 and v3.
+
+## Breaking change and migration
+
+`IAiModelBuilder<T, TInput, TOutput>` now requires `ConfigureProgramCorrectness(IProgramFitnessEvaluator)`.
+External implementations must add this member and recompile. Store or forward the supplied evaluator and ensure
+it gates program fitness as described above; silently ignoring it would bypass the requested correctness checks.
+Implementations that cannot support program evolution should explicitly throw `NotSupportedException`.
+Users of the provided `AiModelBuilder` need no implementation changes. See the unreleased breaking changes in
+[CHANGELOG.md](../CHANGELOG.md) and [source-identity migration](evolution-source-identity.md).
 
 This is a gate, not a compiler, sandbox or proof of correctness. Both stages must isolate untrusted code and enforce
 timeouts. Keep final held-out checks outside search and never expose their cases or diagnostics to the proposing model.

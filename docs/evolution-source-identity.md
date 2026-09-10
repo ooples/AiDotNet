@@ -10,6 +10,10 @@ identity version. Description-only edits remain equal. Ill-formed Unicode is rej
 preventing replacement encoding from collapsing distinct malformed inputs. `NormalizedSource` remains a
 display/approximate-descriptor helper; it is not a semantic-equivalence proof.
 
+Malformed model output follows the existing `ParseFailed` retry path, with bounded generic feedback, retained
+chat-call/token accounting and the unchanged parent on exhaustion. It is never silently sanitized into a different
+program. `llm-program-variation-v4-source-validation-retries` invalidates checkpoints from the earlier throwing path.
+
 Given two programs with different meaningful string whitespace, when canonicalized, then they have different
 identities even if their display-normalized text is equal. Given an exact duplicate with a new description,
 when canonicalized, then it retains the same identity and can reuse evaluation evidence.

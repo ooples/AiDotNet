@@ -696,7 +696,15 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
             return ProgramProposalOutcome.Unchanged;
         }
 
-        child = new ProgramGenome(candidateSource, parent.Language, candidateDescription);
+        try
+        {
+            child = new ProgramGenome(candidateSource, parent.Language, candidateDescription);
+        }
+        catch (ArgumentException)
+        {
+            feedback = "The proposed source is invalid, including malformed Unicode. Return valid source text.";
+            return ProgramProposalOutcome.ParseFailed;
+        }
         feedback = string.Empty;
         return ProgramProposalOutcome.Accepted;
     }
@@ -1033,7 +1041,7 @@ public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOpe
     {
         var components = new List<string>
         {
-            "llm-program-variation-v3-exact-source",
+            "llm-program-variation-v4-source-validation-retries",
             programOptions.Language.ToString(),
             programOptions.ResolveEvolveBlockMarkers().ToString(),
             programOptions.EnforceEvolveBlocks ? "enforce" : "free",

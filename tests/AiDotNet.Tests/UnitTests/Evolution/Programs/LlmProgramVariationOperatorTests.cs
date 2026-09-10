@@ -83,6 +83,41 @@ public sealed class LlmProgramVariationOperatorTests
     }
 
     [Fact]
+    public async Task MalformedUnicodeIsRecordedAndRetriedWithoutLosingUsage()
+    {
+        string invalid = "print('" + (char)0xD800 + "')";
+        var client = new FakeChatClient("```python\n" + invalid + "\n```", "```python\nprint(3)\n```");
+        var variation = new LlmProgramVariationOperator<double>(client,
+            new ProgramEvolutionOptions { Language = ProgramLanguage.Python },
+            new LlmProgramVariationOptions { Mode = ProgramEvolutionMode.FullRewrite, MaxProposalRetries = 1 });
+
+        ProgramGenome child = await variation.ProposeAsync(Context());
+
+        Assert.Equal("print(3)", child.Source);
+        Assert.Equal(2, variation.GetUsage().ChatCalls);
+        Assert.Equal(1, variation.GetUsage().Retries);
+        Assert.Equal(0, variation.GetUsage().ProviderErrors);
+        Assert.Equal(ProgramProposalOutcome.ParseFailed, variation.GetRecentAttempts()[0].Outcome);
+        Assert.Contains("malformed Unicode", client.Conversations[1][3].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MalformedUnicodeAtRetryLimitPreservesTheParent()
+    {
+        var parent = new ProgramGenome(ParentSource, ProgramLanguage.Python);
+        string invalid = "    return '" + (char)0xDC00 + "'";
+        var client = new FakeChatClient(DiffResponse("    return x", invalid));
+        var variation = new LlmProgramVariationOperator<double>(client, null,
+            new LlmProgramVariationOptions { MaxProposalRetries = 0 });
+
+        Assert.Same(parent, await variation.ProposeAsync(Context(parent)));
+        Assert.Equal(1, variation.GetUsage().ChatCalls);
+        Assert.Equal(1, variation.GetUsage().AbandonedProposals);
+        Assert.Equal(new[] { ProgramProposalOutcome.ParseFailed, ProgramProposalOutcome.Exhausted },
+            variation.GetRecentAttempts().Select(attempt => attempt.Outcome));
+    }
+
+    [Fact]
     public async Task AppliedEditsBecomeTheChildProgram()
     {
         var client = new FakeChatClient(DiffResponse("    return x", "    return x * 2"));
