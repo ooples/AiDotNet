@@ -485,7 +485,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "HasBoundaryConditions", _boundaryCheck != null && _boundaryValue != null },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

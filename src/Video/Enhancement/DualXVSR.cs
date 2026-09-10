@@ -175,7 +175,7 @@ public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
             Name = _useNativeMode ? "DualXVSR-Native" : "DualXVSR-ONNX",
             Description = $"DualX-VSR {_options.Variant} dual axial spatial-temporal transformer VSR (2025)",
             Complexity = _options.NumAxialBlocks,
-            ModelData = _useNativeMode ? this.Serialize() : []
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();
         m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
