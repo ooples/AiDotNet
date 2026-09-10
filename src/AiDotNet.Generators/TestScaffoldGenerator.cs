@@ -14374,16 +14374,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 "DeBERTaNER" or "PubMedBERTNER" => 1,
                 _ => 2
             };
-            // LegalBERTNER falls in the default 1-vs-2 iteration bucket, and its second Adam step
-            // rises further than the shared 0.5 bound allows: measured GetLastLoss 2.847519 after
-            // one step against 3.455980 after two, a gap of 0.608. That is the same early-training
-            // transient the DistilBERT/BioBERT/BLINK note above describes, just larger on a BERT
-            // encoder that has barely left initialisation — every other LegalBERTNER invariant
-            // passes, Training_ShouldReduceLoss and Training_ShouldChangeParameters included, and
-            // SequenceLabelingNERBase already pairs correctly with CrossEntropyWithLogitsLoss so
-            // this is NOT the raw-logit/CategoricalCrossEntropy mispairing fixed for the LM heads.
-            // Give it the 1.0 its BERT-family siblings FinBERT / FinBERTTone / FinGPT already use.
-            double moreDataTolerance = model.ClassName == "LegalBERTNER" ? 1.0 : 0.5;
+            // LegalBERTNER used to need its own 1.0 here: at the default 1-vs-2 bucket its second
+            // Adam step rose 0.608 past the first, beyond the shared 0.5 bound. That tolerance was
+            // holding up a comparison the invariant no longer makes. NERModelTestBase's
+            // MoreData_ShouldNotDegrade compared a short run against a longer one, which asserts
+            // per-step monotonicity that stochastic optimisation does not provide; it now takes a
+            // baseline after the first step and compares once, after an adequate budget, the way
+            // Training_ShouldReduceLoss and the base invariant already do (#2135).
+            //
+            // The number was also not stable enough to tune: measured at 0.608 when it was written
+            // and 1.167 in the nightly that finally exceeded it. A per-model bound tracking a value
+            // that moves with initialisation is the symptom the base comment warns about, not a fix.
+            double moreDataTolerance = 0.5;
             sb.AppendLine($"    protected override int MoreDataShortIterations => {shortIterations};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {longIterations};");
             sb.AppendLine($"    protected override double MoreDataTolerance => {moreDataTolerance.ToString(System.Globalization.CultureInfo.InvariantCulture)};");

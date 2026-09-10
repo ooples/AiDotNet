@@ -483,12 +483,22 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
 
         if (_options.WarmupSteps > 0 || _options.TotalTrainingSteps > 0)
         {
+            // A warmup that starts at exactly zero spends its first update not moving: the rate is
+            // 0, so no parameter changes and the step is wasted. Start at one warmup-step's worth
+            // of the target rate instead, which is what PromptNER's paper-schedule factory already
+            // does for this family. An explicitly configured value is always honoured.
+            double warmupInitLr = _options.WarmupInitialLearningRate > 0.0
+                ? _options.WarmupInitialLearningRate
+                : (_options.WarmupSteps > 0
+                    ? _options.LearningRate / _options.WarmupSteps
+                    : _options.LearningRate);
+
             optimizerOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
             optimizerOptions.LearningRateScheduler = new LinearWarmupScheduler(
                 baseLearningRate: _options.LearningRate,
                 warmupSteps: _options.WarmupSteps,
                 totalSteps: _options.TotalTrainingSteps,
-                warmupInitLr: _options.WarmupInitialLearningRate,
+                warmupInitLr: warmupInitLr,
                 decayMode: _options.TotalTrainingSteps > _options.WarmupSteps
                     ? LinearWarmupScheduler.DecayMode.Linear
                     : LinearWarmupScheduler.DecayMode.Constant,
