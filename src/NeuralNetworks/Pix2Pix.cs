@@ -387,8 +387,15 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
 
     /// <summary>
     /// Concatenates spatial image tensors along the channel dimension.
-    /// Input: [B,H,W,C1] + [B,H,W,C2] => Output: [B,H,W,C1+C2]
+    /// Input: [B,C1,H,W] + [B,C2,H,W] => Output: [B,C1+C2,H,W]
     /// </summary>
+    /// <remarks>
+    /// NCHW, because that is the layout this model declares (ImageTranslationModelLayoutBase) and
+    /// the layout its ConvolutionalLayers consume. This method used to read a 4-D tensor as
+    /// [B, H, W, C], which stacked the discriminator's input/target pair along WIDTH instead of
+    /// channels - so the conditional discriminator never saw the input image channel-aligned with
+    /// the image it was judging, which is the whole of pix2pix's conditioning (Isola et al., 2017).
+    /// </remarks>
     private Tensor<T> ConcatenateSpatialImages(Tensor<T> images1, Tensor<T> images2)
     {
         int batchSize = images1.Shape[0];
@@ -399,14 +406,14 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
 
         if (images1.Shape.Length == 4 && images2.Shape.Length == 4)
         {
-            // 4D tensor: [B, H, W, C] (assuming channels-last)
-            height1 = images1.Shape[1];
-            width1 = images1.Shape[2];
-            channels1 = images1.Shape[3];
+            // 4D tensor: [B, C, H, W] - this model's declared layout.
+            channels1 = images1.Shape[1];
+            height1 = images1.Shape[2];
+            width1 = images1.Shape[3];
 
-            height2 = images2.Shape[1];
-            width2 = images2.Shape[2];
-            channels2 = images2.Shape[3];
+            channels2 = images2.Shape[1];
+            height2 = images2.Shape[2];
+            width2 = images2.Shape[3];
         }
         else if (images1.Shape.Length == 3 && images2.Shape.Length == 3)
         {
@@ -439,7 +446,7 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
 
         // Create output tensor with concatenated channels
         int[] outputShape = images1.Shape.Length == 4
-            ? new int[] { batchSize, height, width, totalChannels }
+            ? new int[] { batchSize, totalChannels, height, width }
             : new int[] { batchSize, height * width, totalChannels };
         var result = TensorAllocator.Rent<T>(outputShape);
 
@@ -447,19 +454,24 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         {
             if (images1.Shape.Length == 4)
             {
-                for (int h = 0; h < height; h++)
+                // images1 fills channels [0, C1); images2 fills [C1, C1 + C2).
+                for (int c = 0; c < channels1; c++)
                 {
-                    for (int w = 0; w < width; w++)
+                    for (int h = 0; h < height; h++)
                     {
-                        // Copy channels from images1
-                        for (int c = 0; c < channels1; c++)
+                        for (int w = 0; w < width; w++)
                         {
-                            result[b, h, w, c] = images1[b, h, w, c];
+                            result[b, c, h, w] = images1[b, c, h, w];
                         }
-                        // Copy channels from images2
-                        for (int c = 0; c < channels2; c++)
+                    }
+                }
+                for (int c = 0; c < channels2; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
                         {
-                            result[b, h, w, channels1 + c] = images2[b, h, w, c];
+                            result[b, channels1 + c, h, w] = images2[b, c, h, w];
                         }
                     }
                 }

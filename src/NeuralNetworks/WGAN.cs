@@ -625,8 +625,40 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // input = realImages, expectedOutput = noise
-        TrainStep(input, expectedOutput);
+        // input = noise, expectedOutput = realImages. Predict(input) runs Generator(input), so the
+        // IFullModel contract - Train(x, y) teaches Predict(x) ~ y - makes the input the noise and the
+        // target the image, exactly as WGANGP and StyleGAN already call TrainStep(expectedOutput,
+        // input). This used to pass them the other way round, so the critic was shown noise as real.
+        TrainStep(expectedOutput, input);
+    }
+
+    /// <summary>
+    /// Named activations of both subnetworks: the generator's layers, then the critic's over the image
+    /// the generator produced.
+    /// </summary>
+    /// <remarks>
+    /// The layers live inside Generator and Critic rather than in this model's own list, so the base
+    /// implementation found none. Mirrors WGANGP.GetNamedLayerActivations.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = input;
+        for (int i = 0; i < Generator.Layers.Count; i++)
+        {
+            current = Generator.Layers[i].Forward(current);
+            activations[$"Generator_Layer_{i}_{Generator.Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        var criticInput = current;
+        for (int i = 0; i < Critic.Layers.Count; i++)
+        {
+            criticInput = Critic.Layers[i].Forward(criticInput);
+            activations[$"Critic_Layer_{i}_{Critic.Layers[i].GetType().Name}"] = criticInput.Clone();
+        }
+
+        return activations;
     }
 
     /// <inheritdoc/>

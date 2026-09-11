@@ -156,9 +156,13 @@ public class BiFPN<T> : NeckBase<T>
         // Bottom-up pathway weights (for each level except the highest resolution)
         for (int i = 1; i < _numLevels; i++)
         {
-            // Fusion weights for combining: top-down output, original lateral, downsampled from above
-            // Intermediate levels have 3 inputs, first level in bottom-up has 2
-            int numInputs = (i == 1) ? 2 : 3;
+            // Must match what Forward's bottom-up loop feeds: every intermediate node fuses THREE
+            // inputs (the downsampled output below, this level's top-down intermediate, and this
+            // level's original input) and only the TOP node fuses two, having no top-down node above
+            // it - the EfficientDet BiFPN topology (Tan, Pang & Le, 2020). The old rule gave node 1
+            // two weights for three inputs, and since the loop always starts at i = 1, every forward
+            // threw "Number of inputs must match number of weights".
+            int numInputs = (i == _numLevels - 1) ? 2 : 3;
             var fusionWeights = new List<Tensor<T>>();
             for (int j = 0; j < numInputs; j++)
             {
@@ -351,7 +355,8 @@ public class BiFPN<T> : NeckBase<T>
         // Bottom-up pathway
         for (int i = 1; i < _numLevels; i++)
         {
-            int numInputs = (i == 1) ? 2 : 3;
+            // Same rule as InitializeWeightsForNetwork - the count must describe the weights that exist.
+            int numInputs = (i == _numLevels - 1) ? 2 : 3;
             count += numInputs; // Fusion weights
             count += _outputChannels * _outputChannels + _outputChannels; // Conv
         }
