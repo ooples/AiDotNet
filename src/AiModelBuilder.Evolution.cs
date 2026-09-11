@@ -697,8 +697,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ProgramEvolutionOptions programOptions = _programEvolutionOptions
             ?? throw new InvalidOperationException("ConfigureProgramEvolution has not been called.");
 
-        IChatClient<T> configuredClient = _chatClient
-            ?? throw new InvalidOperationException(
+        IChatClient<T>? configuredClient = _chatClient;
+        if (programOptions.CustomVariation is null && configuredClient is null)
+            throw new InvalidOperationException(
                 "Program evolution proposes edits with a language model, so it needs a chat client. Call " +
                 "ConfigureChatClient(...) or ConfigureChatClientEnsemble(...) before BuildAsync().");
 
@@ -718,6 +719,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         EvolutionOptions options = ResolveProgramEvolutionOptions(programOptions);
+        if (programOptions.ResourceAccounting is not null &&
+            (options.Resume || options.CheckpointInterval > 0 || options.CheckpointDirectory is not null))
+            throw new NotSupportedException("Resource-accounted program runs require coordinated ledger/engine checkpoints; automatic resume is not yet supported.");
         ProcessProgramExecutionEngine? ownedEngine = null;
 
         // The provenance sink buffers records, so it is owned here and disposed in the finally below. Leaving that
@@ -744,10 +748,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     new ProgramNoveltyPolicy(noveltyOptions, new ProgramTokenSetDistance(), _embeddingClient));
             }
 
-            var task = new ProgramEvolutionTask(evaluator, programOptions.CreateDescriptorSet(), programOptions);
-            IChatClient<T> client = _chatClientOptions is null
-                ? configuredClient
-                : ChatClientPipelineFactory.Create(configuredClient, _chatClientOptions);
+            IEvolutionTask<ProgramGenome> task = new ProgramEvolutionTask(evaluator, programOptions.CreateDescriptorSet(), programOptions);
+            if (programOptions.ResourceAccounting is { } resources)
+                task = new ResourceMeteredEvolutionTask<ProgramGenome>(task, resources.Ledger, new[] { resources.MaximumEvaluationCostUnits });
 
             string? runRoot = programOptions.Engine.OutputDirectory;
 
@@ -759,9 +762,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     Path.Combine(runRoot, "provenance"), programOptions.Provenance);
             }
 
-            var variation = new LlmProgramVariationOperator<T>(
-                client, programOptions, programOptions.Variation, "llm-program-variation", null,
-                provenanceSink, programOptions.Provenance);
+            IProgramVariationOperator variation;
+            if (programOptions.CustomVariation is { } custom) variation = custom;
+            else
+            {
+                IChatClient<T> client = configuredClient ?? throw new InvalidOperationException("A chat client is required.");
+                if (_chatClientOptions is not null) client = ChatClientPipelineFactory.Create(client, _chatClientOptions);
+                variation = new LlmProgramVariationOperator<T>(client, programOptions, programOptions.Variation,
+                    "llm-program-variation", null, provenanceSink, programOptions.Provenance);
+            }
 
             // Best-program files. Without this a finished run leaves nothing on disk to open.
             ProgramRunOutputObserver? outputObserver = null;

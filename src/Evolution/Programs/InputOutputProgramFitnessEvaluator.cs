@@ -24,6 +24,9 @@ namespace AiDotNet.Evolution.Programs;
 /// At most eight example-level diagnostics are retained. <see cref="VersionHash"/> incorporates a hash of the
 /// examples and the comparison mode, so changing the test set correctly invalidates older checkpoints.
 /// </para>
+/// <para>Cost units count calls dispatched to the runner, including the current call when it cancels. They do
+/// not measure runtime, tokens or money. Cancellation before dispatch is free; fatal process failures propagate
+/// so an enclosing resource ledger can retain its conservative unknown-consumption charge.</para>
 /// <para><b>For Beginners:</b> This evaluator checks a generated program the way a teacher marks homework: it runs
 /// the program on each example input and compares what it printed with the expected answer, then reports the
 /// fraction it got right. You supply the "runner" that actually executes the code, because running code a language
@@ -122,11 +125,11 @@ public sealed class InputOutputProgramFitnessEvaluator : IProgramFitnessEvaluato
             {
                 return new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(
                     EvolutionEvaluationStatus.Canceled,
-                    costUnits: index,
+                    costUnits: index + 1,
                     diagnostics: new[] { new EvolutionDiagnostic("program_io_canceled", "Execution was canceled.") }));
             }
 #pragma warning disable CA1031
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
 #pragma warning restore CA1031
             {
                 AddDiagnostic(diagnostics, index, "engine_threw", exception.GetType().Name);
@@ -189,7 +192,7 @@ public sealed class InputOutputProgramFitnessEvaluator : IProgramFitnessEvaluato
     {
         var components = new List<string>
         {
-            "program-io-evaluator-v1",
+            "program-io-evaluator-v2-dispatched-attempt-costs",
             ((int)comparison).ToString(CultureInfo.InvariantCulture)
         };
 

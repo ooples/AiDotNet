@@ -17,6 +17,8 @@ Only exactly 1 with zero constraint violations permits runtime evaluation. Repor
 averaging only successful cases. A failed, timed-out or rejected check never reaches the runtime evaluator. Positive
 fitness-stage constraints also reject the result. Return failures with truthful costs; throwing after spending work
 cannot provide an exact receipt to the wrapper.
+An absent result is likewise unknown consumption: gate v2 throws instead of claiming that zero or just the
+checking-stage cost is the complete total. Shared resource accounting retains the reserved maximum in that case.
 
 Given a fast but incorrect program, when reference checks fail, then runtime scoring is not invoked and the program
 cannot enter the archive as a completed result.
@@ -26,7 +28,8 @@ is retained. Correctness-stage success metadata is deliberately not merged into 
 
 Given descriptors are enabled, when ProgramEvolutionTask merges them, then metrics and repair artifacts survive.
 That preservation and exact-source identity affect future search feedback: task version
-`program-evolution-task-v4-exact-source` intentionally refuses older checkpoints, including v2 and v3.
+`program-evolution-task-v5-cost-semantics-and-marker-identity` intentionally refuses older checkpoints. It also
+separately fingerprints start/end markers and declared resource cost-unit semantics.
 
 ## Breaking change and migration
 
@@ -39,4 +42,5 @@ Users of the provided `AiModelBuilder` need no implementation changes. See the u
 
 This is a gate, not a compiler, sandbox or proof of correctness. Both stages must isolate untrusted code and enforce
 timeouts. Keep final held-out checks outside search and never expose their cases or diagnostics to the proposing model.
-The existing package migration PR #2092 must be reconciled separately; this PR does not modify the copied core engine.
+The #2092 package-migration commits are integrated into this companion branch (not merged into master).
+The engine now comes from AiDotNet.Evolution; see [package integration](evolution-package-integration.md).

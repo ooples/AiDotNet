@@ -33,7 +33,7 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         _fitness = fitness;
         VersionHash = EvolutionHash.Combine(new[]
         {
-            "correctness-gated-program-v1", correctness.Id, correctness.VersionHash, fitness.Id, fitness.VersionHash
+            "correctness-gated-program-v2-complete-cost-receipts", correctness.Id, correctness.VersionHash, fitness.Id, fitness.VersionHash
         });
     }
 
@@ -56,7 +56,7 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         Guard.NotNull(context);
         cancellationToken.ThrowIfCancellationRequested();
         EvolutionTaskResult? validation = await _correctness.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
-        if (validation is null) return EvolutionTaskResult.Failed("correctness_null", "Correctness evaluation returned no result.");
+        if (validation is null) throw new InvalidOperationException("Correctness evaluation returned no result or resource receipt.");
         if (validation.Status != EvolutionEvaluationStatus.Completed) return validation;
         if (validation.Direction != EvolutionOptimizationDirection.Maximize || validation.Quality != 1 ||
             validation.ConstraintViolations.Any(value => value > 0))
@@ -64,8 +64,7 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         cancellationToken.ThrowIfCancellationRequested();
         EvolutionTaskResult? fitness = await _fitness.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
         if (fitness is null)
-            return new EvolutionTaskResult(EvolutionEvaluationStatus.Failed, costUnits: validation.CostUnits,
-                diagnostics: new[] { new EvolutionDiagnostic("fitness_null", "Fitness evaluation returned no result.") });
+            throw new InvalidOperationException("Fitness evaluation returned no result or resource receipt.");
         EvolutionEvaluationStatus status = fitness.Status == EvolutionEvaluationStatus.Completed &&
             fitness.ConstraintViolations.Any(value => value > 0) ? EvolutionEvaluationStatus.Rejected : fitness.Status;
         return Copy(fitness, status, validation.CostUnits + fitness.CostUnits);

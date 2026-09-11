@@ -106,13 +106,12 @@ public sealed class CorrectnessGatedProgramFitnessEvaluatorTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task NullStageResultsFailClosedAndRetainKnownCosts(bool nullValidation)
+    public async Task NullStageResultsFailClosedWithoutFabricatingACompleteCostReceipt(bool nullValidation)
     {
         var validation = new Stub(nullValidation ? null! : Completed(1, 3));
         var fitness = new Stub(null!);
-        EvolutionTaskResult result = await new CorrectnessGatedProgramFitnessEvaluator(validation, fitness).EvaluateAsync(Genome, Context);
-        Assert.Equal(EvolutionEvaluationStatus.Failed, result.Status);
-        Assert.Equal(nullValidation ? 0 : 3, result.CostUnits);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new CorrectnessGatedProgramFitnessEvaluator(validation, fitness).EvaluateAsync(Genome, Context).AsTask());
         Assert.Equal(nullValidation ? 0 : 1, fitness.Calls);
     }
 

@@ -1,0 +1,69 @@
+name: Compiler-guided evolution
+
+on:
+  pull_request:
+    paths:
+      - 'src/AiDotNet.Evolution.CSharp/**'
+      - 'src/Evolution/Programs/**'
+      - 'src/Configuration/ProgramEvolution*.cs'
+      - 'src/AiModelBuilder.Evolution.cs'
+      - 'src/AiDotNet.csproj'
+      - 'src/Directory.Build.props'
+      - 'AiDotNet.sln'
+      - 'tests/AiDotNet.Evolution.CSharp.Tests/**'
+      - 'Directory.Packages.props'
+      - '.github/workflows/evolution-csharp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evolution-csharp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compiler-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net10.0, net8.0]
+    env:
+      # Temporary source-path contract check for companion PR #15. This does not prove that the
+      # older published preview contains these APIs or bypass the normal package-path release gate.
+      EvolutionProjectPath: ${{ github.workspace }}/.dependencies/evolution/src/AiDotNet.Evolution/AiDotNet.Evolution.csproj
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkout pinned companion source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ooples/AiDotNet.Evolution
+          ref: 6d9aeb2dd44f5020469c81ad2cb4046f9f3495bb
+          path: .dependencies/evolution
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            10.0.x
+            8.0.x
+      - name: Restore and build real dependencies
+        run: >-
+          dotnet build tests/AiDotNet.Evolution.CSharp.Tests/AiDotNet.Evolution.CSharp.Tests.csproj
+          -c Release -f ${{ matrix.framework }} -p:UseLocalEvolution=true -m:2
+      - name: Test compiler, repair, facade and receipts without a live provider
+        run: >-
+          dotnet test tests/AiDotNet.Evolution.CSharp.Tests/AiDotNet.Evolution.CSharp.Tests.csproj
+          -c Release -f ${{ matrix.framework }} --no-build --no-restore -p:UseLocalEvolution=true
+          --logger "trx;LogFileName=compiler.trx" --results-directory TestResults/compiler-${{ matrix.framework }}
+          --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[AiDotNet.Evolution.CSharp]*
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compiler-${{ matrix.framework }}
+          path: TestResults/compiler-${{ matrix.framework }}
+          if-no-files-found: error

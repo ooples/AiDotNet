@@ -140,8 +140,8 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
 
         if (result is null)
         {
-            return EvolutionTaskResult.Failed(
-                "program_evaluator_returned_null", "The fitness evaluator returned no result.");
+            // No receipt after dispatch is unknown consumption, not a known zero-cost failure.
+            throw new InvalidOperationException("The fitness evaluator returned no result or resource receipt.");
         }
 
         if (_descriptors.Count == 0 || result.Status != EvolutionEvaluationStatus.Completed) return result;
@@ -171,9 +171,10 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         EvolveBlockMarkers markers = options.ResolveEvolveBlockMarkers();
         var components = new List<string>
         {
-            "program-evolution-task-v4-exact-source",
+            "program-evolution-task-v5-cost-semantics-and-marker-identity",
             options.Language.ToString(),
-            markers.ToString(),
+            markers.Start,
+            markers.End,
             options.EnforceEvolveBlocks ? "enforce" : "free",
             options.MaxProgramChars.ToString(CultureInfo.InvariantCulture),
             descriptors.VersionHash,
@@ -183,6 +184,12 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
             // checkpoint-compatibility check.
             evaluator.Id
         };
+
+        if (options.ResourceAccounting is { } resources)
+        {
+            components.Add("program-resource-cost-unit-v1");
+            components.Add(resources.CostUnitVersionHash);
+        }
 
         return "program-task-" + EvolutionHash.Combine(components);
     }

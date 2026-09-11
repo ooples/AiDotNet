@@ -44,6 +44,11 @@ new identity semantics. The genome payload shape remains v1 because it already p
 deserializing a standalone old payload computes the new identity but does not migrate old archived evaluations.
 Start a new run or perform an explicitly validated migration/re-evaluation; do not relabel old scores.
 
+Program task v5 (`program-evolution-task-v5-cost-semantics-and-marker-identity`) additionally separates marker
+identities and incorporates declared evaluation cost units. I/O evaluator v2
+(`program-io-evaluator-v2-dispatched-attempt-costs`) counts the current dispatched call when it cancels, and
+propagates fatal runner failures instead of assigning ordinary fitness. These also invalidate old task evidence.
+
 This intentionally evaluates some cosmetic-only edits again. A language-aware parser may later prove safe
 equivalence, but language-agnostic whitespace trimming cannot. Source identity is only one part of applicability:
 compiler/runtime, dependencies, public and held-out test sets, environment and fidelity must also match before

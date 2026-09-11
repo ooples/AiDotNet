@@ -56,6 +56,7 @@
     <InternalsVisibleTo Include="AiDotNet.Serving" />
     <InternalsVisibleTo Include="AiDotNet.Serving.Tests" />
     <InternalsVisibleTo Include="AiDotNet.ProgramSynthesis.Tooling" />
+    <InternalsVisibleTo Include="AiDotNet.Evolution.CSharp" />
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
     <InternalsVisibleTo Include="HarmonicEngine" />
     <InternalsVisibleTo Include="HarmonicEngine.Tests" />
@@ -66,6 +67,8 @@
 
   <!-- Exclude other projects from this build -->
   <ItemGroup>
+    <Compile Remove="AiDotNet.Evolution.CSharp\**\*.cs" />
+    <None Remove="AiDotNet.Evolution.CSharp\**" />
     <Compile Remove="AiDotNet.Playground\**" />
     <Compile Remove="AiDotNet.Playground.Functions\**" />
     <None Remove="AiDotNet.Playground\**" />
