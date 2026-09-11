@@ -3,9 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
+using AiDotNet.NeuralNetworks.Options;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 
@@ -32,6 +37,10 @@ namespace AiDotNet.Tests.IntegrationTests.Configuration;
 /// </remarks>
 public class OptionsSurfaceRatchetTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public OptionsSurfaceRatchetTests(ITestOutputHelper output) => _output = output;
+
     /// <summary>
     /// Number of tunable defaulted constructor parameters that have no correspondingly-named
     /// property on their model's options type.
@@ -72,23 +81,6 @@ public class OptionsSurfaceRatchetTests
             "modelIdentity", "modelPath", "name", "seed", "checkpointPath", "weightsPath",
         };
 
-    /// <summary>
-    /// Types that are not models in the sense this ratchet cares about: architecture
-    /// descriptors, whose topology knobs belong on the architecture per the design, and
-    /// compiled-model hosts, whose parameters describe an artifact rather than a model.
-    /// </summary>
-    private static readonly HashSet<string> ExcludedTypeNames =
-        new HashSet<string>(StringComparer.Ordinal)
-        {
-            "NeuralNetworkArchitecture",
-            "TransformerArchitecture",
-            "DualStreamArchitecture",
-            "TripleStreamArchitecture",
-            "AudioTextDualStreamArchitecture",
-            "CompiledModelHost",
-            "ChainedCompiledModelHost",
-        };
-
     [Fact]
     public void ModelConstructorParametersHaveOptionsEquivalents_DoesNotRegress()
     {
@@ -117,20 +109,44 @@ public class OptionsSurfaceRatchetTests
     /// Pins the fix rather than its shape: a property that exists but is ignored still leaves
     /// the model unconfigurable, which is the exact defect this work addresses.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Enabled in phase 2, when the first model family is wired to read its options. Until
-    /// then there is nothing for it to assert against — no model reads a value off its options
-    /// object, so every case would fail for the reason the ratchet above already records.
-    /// </para>
-    /// </remarks>
-    [Fact(Skip = "Enabled in phase 2 of #2090, when the first model family reads its options.")]
-    public void SettingAnOptionsPropertyChangesTheModel()
+    [Theory]
+    [MemberData(nameof(SequenceConfigurationCases))]
+    public void SettingAnOptionsPropertyChangesTheModel(SequenceFamily family, SequenceChange change)
     {
-        throw new NotImplementedException(
-            "Phase 2: for each migrated model, constructing it with a non-default Options value "
-                + "must produce a model whose GetOptions() returns that value and whose layer "
-                + "stack differs from the default-constructed one.");
+        var baseline = CreateSequenceModel(family, width: 16, depth: 1);
+        using var baselineModel = baseline.Model;
+        var changed = CreateSequenceModel(family,
+            width: change == SequenceChange.Width ? 32 : 16,
+            depth: change == SequenceChange.Depth ? 2 : 1);
+        using var changedModel = changed.Model;
+
+        var expectedModelType = RequiredSequenceModels[family].MakeGenericType(typeof(float));
+        Assert.Equal(expectedModelType, baselineModel.GetType());
+        Assert.Equal(expectedModelType, changedModel.GetType());
+        Assert.Same(baseline.Options, baselineModel.GetOptions());
+        Assert.Same(changed.Options, changedModel.GetOptions());
+        AssertMaterializedChange(baselineModel, changedModel, change);
+        _output.WriteLine($"{family}/{change}: materialized parameters {baselineModel.ParameterCount} -> "
+            + $"{changedModel.ParameterCount}; physical block/layer count {TopologySize(baselineModel)} -> {TopologySize(changedModel)}.");
+    }
+
+    [Theory]
+    [InlineData(SequenceFamily.Mamba)]
+    [InlineData(SequenceFamily.Jamba)]
+    public void BehavioralGuard_RejectsOptionsEchoWithoutTopologyChange(SequenceFamily family)
+    {
+        var baseline = CreateSequenceModel(family, width: 16, depth: 1);
+        using var baselineModel = baseline.Model;
+        var unchanged = CreateSequenceModel(family, width: 16, depth: 1);
+        using var unchangedModel = unchanged.Model;
+        // Real models with identical topology, but GetOptions now advertises another depth.
+        // This reproduces the false-proof shape without any replacement model or fake layer.
+        unchanged.Options.NumLayers = 2;
+        Assert.Same(unchanged.Options, unchangedModel.GetOptions());
+        Assert.Equal(2, Assert.IsAssignableFrom<SequenceModelOptions>(unchangedModel.GetOptions()).NumLayers);
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+            AssertMaterializedChange(baselineModel, unchangedModel, SequenceChange.Depth));
+        Assert.Contains("Physical topology does not match", failure.Message);
     }
 
     /// <summary>
@@ -145,9 +161,163 @@ public class OptionsSurfaceRatchetTests
             .ThenBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
 
-        // Not an assertion about the contents — this exists so the numbers are visible in the
-        // test output when a migration lands, without having to run the scanner by hand.
-        Assert.True(byType.Count >= 0);
+        _output.WriteLine($"Total gaps: {gaps.Count} across {byType.Count} model types; "
+            + $"scanned {GetModelTypes().Length} concrete models.");
+        foreach (var group in byType)
+        {
+            _output.WriteLine($"  {group.Key} ({group.Count()}) options={group.First().OptionsTypeName}: "
+                + string.Join(", ", group.Select(gap => gap.ParameterName)));
+        }
+        Assert.Equal(gaps.Count, byType.Sum(group => group.Count()));
+    }
+
+    [Fact]
+    public void GapReport_WritesTheMeasuredCountsAndEveryGroup()
+    {
+        var capture = new CapturingOutput();
+        new OptionsSurfaceRatchetTests(capture).ReportRemainingGaps();
+        var gaps = MeasureGaps();
+        var groups = gaps.GroupBy(gap => gap.TypeName).OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.Ordinal).ToArray();
+        Assert.Equal(groups.Length + 1, capture.Lines.Count);
+        Assert.Equal($"Total gaps: {gaps.Count} across {groups.Length} model types; "
+            + $"scanned {GetModelTypes().Length} concrete models.", capture.Lines[0]);
+        for (var index = 0; index < groups.Length; index++)
+        {
+            Assert.Contains(groups[index].Key, capture.Lines[index + 1]);
+            Assert.All(groups[index], gap => Assert.Contains(gap.ParameterName, capture.Lines[index + 1]));
+        }
+    }
+
+    private sealed class CapturingOutput : ITestOutputHelper
+    {
+        public List<string> Lines { get; } = new();
+        public void WriteLine(string message) => Lines.Add(message);
+        public void WriteLine(string format, params object[] args) => Lines.Add(string.Format(format, args));
+    }
+
+    public enum SequenceFamily
+    {
+        Eagle, FalconMamba, Finch, GatedDeltaNet, GLA, Griffin, Hawk, Jamba,
+        Mamba2, Mamba, RecurrentGemma, RWKV4, RWKV7, Samba, XLSTM, Zamba2, Zamba
+    }
+
+    public enum SequenceChange { Width, Depth }
+
+    public static IEnumerable<object[]> SequenceConfigurationCases =>
+        from family in Enum.GetValues(typeof(SequenceFamily)).Cast<SequenceFamily>()
+        from change in Enum.GetValues(typeof(SequenceChange)).Cast<SequenceChange>()
+        select new object[] { family, change };
+
+    private static readonly IReadOnlyDictionary<SequenceFamily, Type> RequiredSequenceModels = new Dictionary<SequenceFamily, Type>
+    {
+        [SequenceFamily.Eagle] = typeof(EagleLanguageModel<>),
+        [SequenceFamily.FalconMamba] = typeof(FalconMambaLanguageModel<>),
+        [SequenceFamily.Finch] = typeof(FinchLanguageModel<>),
+        [SequenceFamily.GatedDeltaNet] = typeof(GatedDeltaNetLanguageModel<>),
+        [SequenceFamily.GLA] = typeof(GLALanguageModel<>),
+        [SequenceFamily.Griffin] = typeof(GriffinLanguageModel<>),
+        [SequenceFamily.Hawk] = typeof(HawkLanguageModel<>),
+        [SequenceFamily.Jamba] = typeof(JambaLanguageModel<>),
+        [SequenceFamily.Mamba2] = typeof(Mamba2LanguageModel<>),
+        [SequenceFamily.Mamba] = typeof(MambaLanguageModel<>),
+        [SequenceFamily.RecurrentGemma] = typeof(RecurrentGemmaLanguageModel<>),
+        [SequenceFamily.RWKV4] = typeof(RWKV4LanguageModel<>),
+        [SequenceFamily.RWKV7] = typeof(RWKV7LanguageModel<>),
+        [SequenceFamily.Samba] = typeof(SambaLanguageModel<>),
+        [SequenceFamily.XLSTM] = typeof(XLSTMLanguageModel<>),
+        [SequenceFamily.Zamba2] = typeof(Zamba2LanguageModel<>),
+        [SequenceFamily.Zamba] = typeof(ZambaLanguageModel<>)
+    };
+
+    [Fact]
+    public void SequenceCohort_CoversEveryMigratedOptionsType()
+    {
+        var optionsTypes = typeof(SequenceModelOptions).Assembly.GetTypes()
+            .Where(type => !type.IsAbstract && typeof(SequenceModelOptions).IsAssignableFrom(type))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
+        var consumedTypes = RequiredSequenceModels.Values.SelectMany(type => type.GetConstructors())
+            .SelectMany(constructor => constructor.GetParameters()).Select(parameter => parameter.ParameterType)
+            .Where(type => typeof(SequenceModelOptions).IsAssignableFrom(type)).Distinct()
+            .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
+        Assert.Equal(17, Enum.GetValues(typeof(SequenceFamily)).Length);
+        Assert.Equal(17, RequiredSequenceModels.Count);
+        Assert.Equal(Enum.GetValues(typeof(SequenceFamily)).Cast<SequenceFamily>().OrderBy(family => family),
+            RequiredSequenceModels.Keys.OrderBy(family => family));
+        Assert.Equal(optionsTypes, consumedTypes);
+        Assert.Equal(17, optionsTypes.Length);
+    }
+
+    private static (NeuralNetworkBase<float> Model, SequenceModelOptions Options) CreateSequenceModel(
+        SequenceFamily family, int width, int depth) => family switch
+        {
+            SequenceFamily.Eagle => Create(new EagleOptions(), (architecture, options) => new EagleLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.FalconMamba => Create(new FalconMambaOptions(), (architecture, options) => new FalconMambaLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Finch => Create(new FinchOptions(), (architecture, options) => new FinchLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.GatedDeltaNet => Create(new GatedDeltaNetOptions(), (architecture, options) => new GatedDeltaNetLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.GLA => Create(new GLAOptions(), (architecture, options) => new GLALanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Griffin => Create(new GriffinOptions { RecurrenceDimension = 16 }, (architecture, options) => new GriffinLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Hawk => Create(new HawkOptions { RecurrenceDimension = 16 }, (architecture, options) => new HawkLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Jamba => Create(new JambaOptions(), (architecture, options) => new JambaLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Mamba2 => Create(new Mamba2Options(), (architecture, options) => new Mamba2LanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Mamba => Create(new MambaOptions(), (architecture, options) => new MambaLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.RecurrentGemma => Create(new RecurrentGemmaOptions(), (architecture, options) => new RecurrentGemmaLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.RWKV4 => Create(new RWKV4Options(), (architecture, options) => new RWKV4LanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.RWKV7 => Create(new RWKV7Options(), (architecture, options) => new RWKV7LanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Samba => Create(new SambaOptions(), (architecture, options) => new SambaLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.XLSTM => Create(new XLSTMOptions(), (architecture, options) => new XLSTMLanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Zamba2 => Create(new Zamba2Options(), (architecture, options) => new Zamba2LanguageModel<float>(architecture, options), width, depth),
+            SequenceFamily.Zamba => Create(new ZambaOptions(), (architecture, options) => new ZambaLanguageModel<float>(architecture, options), width, depth),
+            _ => throw new ArgumentOutOfRangeException(nameof(family), family, "Unknown sequence family.")
+        };
+
+    private static (NeuralNetworkBase<float> Model, SequenceModelOptions Options) Create<TOptions>(TOptions options,
+        Func<NeuralNetworkArchitecture<float>, TOptions, NeuralNetworkBase<float>> construct, int width, int depth)
+        where TOptions : SequenceModelOptions
+    {
+        options.Seed = 42;
+        options.VocabSize = 32;
+        options.ModelDimension = width;
+        options.NumLayers = depth;
+        options.NumHeads = 2;
+        options.StateDimension = 8;
+        options.MaxSequenceLength = 4;
+        options.AttentionInterval = 2;
+        options.ExpandFactor = 2;
+        options.FfnMultiplier = 3.5;
+        var architecture = new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
+            NeuralNetworkTaskType.TextGeneration, inputSize: 32, outputSize: 32);
+        return (construct(architecture, options), options);
+    }
+
+    private static int TopologySize(NeuralNetworkBase<float> model) => model.Layers.Sum(layer => layer switch
+    {
+        HybridBlockScheduler<float> scheduler => scheduler.NumBlocks,
+        Rwkv7Stack<float> stack => stack.Blocks.Count,
+        _ => 1
+    });
+
+    private static void AssertMaterializedChange(NeuralNetworkBase<float> baseline,
+        NeuralNetworkBase<float> changed, SequenceChange change)
+    {
+        Assert.InRange(baseline.LayerCount, 4, 8);
+        Assert.InRange(changed.LayerCount, 4, 8);
+        var baselineEmbedding = Assert.IsType<EmbeddingLayer<float>>(baseline.Layers[0]);
+        var changedEmbedding = Assert.IsType<EmbeddingLayer<float>>(changed.Layers[0]);
+        // Check an actual parameter tensor, not a model metadata/property echo.
+        Assert.Equal(32 * 16, baselineEmbedding.GetParameters().Length);
+        Assert.Equal(32 * (change == SequenceChange.Width ? 32 : 16), changedEmbedding.GetParameters().Length);
+        Assert.True(TopologySize(baseline) + (change == SequenceChange.Depth ? 1 : 0) == TopologySize(changed),
+            "Physical topology does not match the requested options change.");
+        // Count first so a broken configuration cannot trigger paper-scale flattening.
+        Assert.InRange(baseline.ParameterCount, 1, 1_000_000);
+        Assert.InRange(changed.ParameterCount, 1, 1_000_000);
+        var baselineParameters = baseline.GetParameters();
+        var changedParameters = changed.GetParameters();
+        Assert.Equal(baseline.ParameterCount, baselineParameters.Length);
+        Assert.Equal(changed.ParameterCount, changedParameters.Length);
+        Assert.True(changedParameters.Length > baselineParameters.Length,
+            $"Changing {change} must increase materialized parameters, not just the advertised options.");
     }
 
     private sealed class Gap
@@ -172,29 +342,52 @@ public class OptionsSurfaceRatchetTests
     /// the inheritance chain is the only approach that does.
     /// </para>
     /// </remarks>
-    private static IEnumerable<Type> GetModelTypes()
+    private static Type[] GetModelTypes(Func<Type[]>? loadTypes = null)
     {
         Type[] types;
         try
         {
-            types = typeof(NeuralNetworkBase<>).Assembly.GetTypes();
+            types = (loadTypes ?? typeof(NeuralNetworkBase<>).Assembly.GetTypes)();
         }
         catch (ReflectionTypeLoadException ex)
         {
-            // A type that fails to load cannot be measured, but the ones that did load still can.
-            types = ex.Types.Where(t => t != null).ToArray()!;
+            throw new InvalidOperationException("Cannot measure the options surface from a partially loaded assembly. "
+                + string.Join("; ", ex.LoaderExceptions.Where(error => error != null).Select(error => error?.Message)), ex);
         }
 
-        foreach (var type in types)
-        {
-            if (type == null || type.IsAbstract || type.IsInterface || !type.IsClass) continue;
-            if (!type.IsPublic && !type.IsNestedPublic) continue;
+        var models = types.Where(type => type.IsClass && !type.IsAbstract
+            && (type.IsPublic || type.IsNestedPublic) && DerivesFromNeuralNetworkBase(type)).ToArray();
+        if (models.Length == 0)
+            throw new InvalidOperationException("Model discovery returned no concrete neural-network models.");
+        var missing = RequiredSequenceModels.Values.Except(models).ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException("Model discovery omitted migrated sequence models: "
+                + string.Join(", ", missing.Select(type => type.FullName)));
+        return models;
+    }
 
-            string simpleName = StripArity(type.Name);
-            if (ExcludedTypeNames.Contains(simpleName)) continue;
+    [Fact]
+    public void ModelDiscovery_RejectsEmptyCensus()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => GetModelTypes(() => Array.Empty<Type>()));
+        Assert.Contains("no concrete", exception.Message);
+    }
 
-            if (DerivesFromNeuralNetworkBase(type)) yield return type;
-        }
+    [Fact]
+    public void ModelDiscovery_RejectsIncompleteCohort()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => GetModelTypes(() => new[] { typeof(RWKV7LanguageModel<>) }));
+        Assert.Contains(typeof(MambaLanguageModel<>).FullName ?? nameof(MambaLanguageModel<float>), exception.Message);
+    }
+
+    [Fact]
+    public void ModelDiscovery_DoesNotDiscardLoaderFailures()
+    {
+        var failure = new ReflectionTypeLoadException(new[] { typeof(RWKV7LanguageModel<>) },
+            new Exception[] { new TypeLoadException("Required model dependency could not load.") });
+        var exception = Assert.Throws<InvalidOperationException>(() => GetModelTypes(() => throw failure));
+        Assert.Same(failure, exception.InnerException);
+        Assert.Contains("Required model dependency could not load", exception.Message);
     }
 
     private static bool DerivesFromNeuralNetworkBase(Type type)
@@ -233,7 +426,7 @@ public class OptionsSurfaceRatchetTests
                         continue;
                     }
 
-                    if (!parameter.HasDefaultValue) continue;
+                    if (!HasDefaultValue(parameter)) continue;
                     if (parameter.Name == null) continue;
                     if (ExcludedParameterNames.Contains(parameter.Name)) continue;
                     if (!IsTunable(parameterType)) continue;
@@ -266,6 +459,76 @@ public class OptionsSurfaceRatchetTests
         }
 
         return gaps;
+    }
+
+    private static bool HasDefaultValue(ParameterInfo parameter)
+    {
+        try
+        {
+            return parameter.HasDefaultValue;
+        }
+        catch (ArgumentException) when (parameter.ParameterType.IsEnum && parameter.ParameterType.ContainsGenericParameters)
+        {
+            // The runtime attempts to box a nested enum from an open generic model. That is
+            // not a constructible runtime type. Enum defaults are metadata constants, so only
+            // this case can use the flag; decimal/DateTime attribute defaults keep the normal path.
+            return (parameter.Attributes & ParameterAttributes.HasDefault) != 0;
+        }
+    }
+
+    [Theory]
+    [InlineData(typeof(DefaultMetadataSample<>))]
+    [InlineData(typeof(DefaultMetadataSample<int>))]
+    public void DefaultMetadata_PreservesRequiredOptionalAndAttributeConstants(Type declaringType)
+    {
+        var method = declaringType.GetMethod(nameof(DefaultMetadataSample<int>.Sample));
+        Assert.NotNull(method);
+        var parameters = method.GetParameters();
+        Assert.Equal(new[] { false, false, false, true, true, true, true, true, true, true, true, true },
+            parameters.Select(HasDefaultValue));
+        // The decimal and DateTime controls specifically forbid a blanket HasDefault flag check.
+        Assert.Equal(ParameterAttributes.None, parameters[3].Attributes & ParameterAttributes.HasDefault);
+        Assert.Equal(ParameterAttributes.None, parameters[6].Attributes & ParameterAttributes.HasDefault);
+        Assert.Equal(new DateTime(1234), parameters[3].DefaultValue);
+        Assert.Equal(1.25m, parameters[6].DefaultValue);
+    }
+
+    public sealed class DefaultMetadataSample<T>
+    {
+        public enum NestedMode { Standard, Custom }
+
+        public static void Sample(int required,
+            [System.Runtime.InteropServices.Optional] int optionalWithoutDefault,
+            NestedMode requiredMode,
+            [System.Runtime.CompilerServices.DateTimeConstant(1234)] DateTime date,
+            NestedMode mode = NestedMode.Custom,
+            int number = 3,
+            decimal amount = 1.25m,
+            string? label = null,
+            bool enabled = true,
+            float fraction = 0.5f,
+            double ratio = 0.25,
+            long count = 4)
+        {
+        }
+    }
+
+    [Fact]
+    public void ModelDiscovery_ArchitectureAndArtifactExclusionsDoNotChangeTheCensus()
+    {
+        var nonModels = new[]
+        {
+            typeof(NeuralNetworkArchitecture<>), typeof(TransformerArchitecture<>),
+            typeof(DualStreamArchitecture<>), typeof(TripleStreamArchitecture<>),
+            typeof(AudioTextDualStreamArchitecture<>), typeof(CompiledModelHost<>), typeof(ChainedCompiledModelHost<>)
+        };
+        Assert.All(nonModels, type => Assert.False(DerivesFromNeuralNetworkBase(type)));
+        var models = GetModelTypes();
+        // Compare with the exact previous name exclusions as a migration control, not a discovery policy.
+        var oldExcludedNames = nonModels.Select(type => StripArity(type.Name)).ToArray();
+        var oldCensus = models.Where(type => !oldExcludedNames.Contains(StripArity(type.Name))).ToArray();
+        Assert.Equal(models, oldCensus);
+        _output.WriteLine($"Current and previous-exclusion census: {models.Length} models; excluded model delta: {models.Length - oldCensus.Length}.");
     }
 
     /// <summary>
