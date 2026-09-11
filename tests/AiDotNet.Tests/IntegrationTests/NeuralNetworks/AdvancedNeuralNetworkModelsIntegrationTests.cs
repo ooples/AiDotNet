@@ -3445,10 +3445,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             channels: 3,
             patchSize: 8,
             numClasses: 10,
-            hiddenDim: 64,
-            numLayers: 2,
-            numHeads: 4,
-            mlpDim: 128);
+            options: new VisionTransformerOptions
+            {
+                HiddenDim = 64,
+                NumLayers = 2,
+                NumHeads = 4,
+                MlpDim = 128
+            });
 
         var imageInput = CreateRandomTensor([3, 32, 32]);
 
@@ -3482,10 +3485,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             channels: 3,
             patchSize: 8,
             numClasses: 10,
-            hiddenDim: 64,
-            numLayers: 2,
-            numHeads: 4,
-            mlpDim: 128);
+            options: new VisionTransformerOptions
+            {
+                HiddenDim = 64,
+                NumLayers = 2,
+                NumHeads = 4,
+                MlpDim = 128
+            });
 
         // Act
         int parameterCount = (int)vit.ParameterCount;
