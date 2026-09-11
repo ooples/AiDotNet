@@ -1617,7 +1617,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         T t = NumOps.One;
-        T loss = context.Reevaluate();
+        T loss = ReevaluateWithGradients(context);
 
         // One trial vector for the whole search, overwritten per attempt. SetFlatParameters copies the
         // values out rather than retaining the vector, so reusing it is safe — and at the default bound
@@ -1642,7 +1642,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             context.SetFlatParameters(trial);
-            loss = context.Reevaluate();
+            loss = ReevaluateWithGradients(context);
         }
 
         // A step that still fails Armijo after every halving is worse than not stepping, so don't.
@@ -2684,12 +2684,56 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// The update runs with gradient recording suppressed, as PyTorch's <c>optimizer.step()</c> runs under
     /// <c>torch.no_grad()</c>. Callers step while the tape they differentiated is still live, so an update
     /// written with engine tensor ops (RMSProp's momentum-free path among others) was recorded onto that tape
-    /// as if it were part of the model's forward pass (#2155).
+    /// as if it were part of the model's forward pass (#2155). A re-evaluation inside the step records again;
+    /// see <see cref="ReevaluateWithGradients"/>.
     /// </remarks>
     public void Step(TapeStepContext<T> context)
     {
-        using var noGrad = new NoGradScope<T>();
-        StepCore(context);
+        _stepNoGrad = new NoGradScope<T>();
+        try
+        {
+            StepCore(context);
+        }
+        finally
+        {
+            _stepNoGrad?.Dispose();
+            _stepNoGrad = null;
+        }
+    }
+
+    /// <summary>The no-grad scope of the step in progress; released while the step re-evaluates.</summary>
+    private NoGradScope<T>? _stepNoGrad;
+
+    /// <summary>
+    /// Re-evaluates the loss, and its gradient, at the parameters the step has just written, with gradient
+    /// recording on.
+    /// </summary>
+    /// <param name="context">The step's context.</param>
+    /// <returns>The loss at the current parameters.</returns>
+    /// <remarks>
+    /// The step runs under no-grad, but a line search or a trust-region ratio test scores its trial point by
+    /// re-running the forward pass on a fresh tape, and that tape must record: with the step's scope still
+    /// open it recorded nothing and the re-evaluation threw. The scope is released for the re-evaluation and
+    /// restored after it. A caller's own no-grad scope still applies.
+    /// </remarks>
+    protected T ReevaluateWithGradients(TapeStepContext<T> context)
+    {
+        var scope = _stepNoGrad;
+        if (scope is null)
+        {
+            return context.Reevaluate();
+        }
+
+        scope.Dispose();
+        _stepNoGrad = null;
+        try
+        {
+            return context.Reevaluate();
+        }
+        finally
+        {
+            _stepNoGrad = new NoGradScope<T>();
+        }
     }
 
     /// <summary>Applies one update from the tape gradients in <paramref name="context"/>.</summary>

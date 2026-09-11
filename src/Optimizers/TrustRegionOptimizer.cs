@@ -773,7 +773,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         }
 
         T originalLoss = context.Loss;
-        T newLoss = context.Reevaluate();
+        T newLoss = ReevaluateWithGradients(context);
         _trustRegionRadius = radiusBeforeStep;
         ApplyTrustRegionRatioTest(context, original, updated, gradient, originalLoss, newLoss);
     }
