@@ -86,25 +86,29 @@ public partial class FastABODDetector<T> : AnomalyDetectorBase<T>
 
         _trainingData = X;
 
-        // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // The threshold is calibrated on leave-one-out training scores (PyOD's decision_scores_).
+        var trainingScores = ScoreAnomaliesInternal(X, excludeSelf: true);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Every row is scored against the whole training set, as PyOD's decision_function does. The result depends
+    /// only on the values; it used to exclude self only when handed the very matrix instance Fit saw.
+    /// </remarks>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        return ScoreAnomaliesInternal(X, excludeSelf: false);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool excludeSelf)
     {
         ValidateInput(X);
 
-        bool isSameAsTraining = ReferenceEquals(X, _trainingData);
+        bool isSameAsTraining = excludeSelf;
         var scores = new Vector<T>(X.Rows);
 
         for (int p = 0; p < X.Rows; p++)
