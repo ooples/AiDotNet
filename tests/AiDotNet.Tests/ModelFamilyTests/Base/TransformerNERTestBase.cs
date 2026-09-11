@@ -38,8 +38,8 @@ public abstract class TransformerNERTestBase<T> : NERModelTestBase<T>
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
         base.PrepareForGradientFlowInvariant(network, input, target);
-        if (network is not TransformerNERBase<T>
-            || network.GetOptions() is not TransformerNEROptions options
+        if (network is not TransformerNERBase<T> transformer
+            || transformer.GetOptions() is not TransformerNEROptions options
             || options.WarmupSteps <= 0 || options.WarmupInitialLearningRate != 0.0)
         {
             return;

@@ -102,7 +102,7 @@ public sealed class TransformerNERSmokeFixtureContractTests
                 injected = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                     new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                     {
-                        LearningRate = 0.01,
+                        InitialLearningRate = 0.01,
                         SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                         LearningRateScheduler = new LinearWarmupScheduler(0.01, 4, warmupInitLr: 0.003)
                     });
@@ -110,13 +110,13 @@ public sealed class TransformerNERSmokeFixtureContractTests
             case GuardControl.InjectedOptimizerWithoutScheduler:
                 injected = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                     new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
-                    { LearningRate = 0.01, SchedulerStepMode = SchedulerStepMode.StepPerBatch });
+                    { InitialLearningRate = 0.01, SchedulerStepMode = SchedulerStepMode.StepPerBatch });
                 break;
             case GuardControl.EpochSteppedScheduler:
                 injected = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                     new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                     {
-                        LearningRate = 0.01,
+                        InitialLearningRate = 0.01,
                         SchedulerStepMode = SchedulerStepMode.StepPerEpoch,
                         LearningRateScheduler = new LinearWarmupScheduler(0.01, 4)
                     });
