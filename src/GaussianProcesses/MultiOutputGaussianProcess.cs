@@ -115,13 +115,20 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// <exception cref="InvalidOperationException">Always thrown because this method is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method is not used for multi-output Gaussian Processes.
-    /// Use the FitMultiOutput method instead when you have multiple output values to predict.
+    /// <b>For Beginners:</b> A single target vector is treated as one output. Use FitMultiOutput
+    /// when you have several output values to predict at once.
     /// </para>
     /// </remarks>
     public override void Fit(Matrix<T> X, Vector<T> y)
     {
-        throw new InvalidOperationException("Use FitMultiOutput method for multi-output GP");
+        // IFullModel compliance: a single target vector is the one-output case, fitted through the
+        // same multi-output path - exactly how MultiTaskGaussianProcess.Fit(Matrix, Vector) treats it.
+        // Throwing here made the model unusable through the IFullModel contract it implements.
+        ArgumentNullException.ThrowIfNull(y);
+        var yMatrix = new Matrix<T>(y.Length, 1);
+        for (int i = 0; i < y.Length; i++)
+            yMatrix[i, 0] = y[i];
+        FitMultiOutput(X, yMatrix);
     }
 
     /// <summary>
