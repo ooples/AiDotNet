@@ -15,6 +15,12 @@ using AiDotNet.Models;
 using AiDotNet.Validation;
 
 using AiDotNet.Models.Parameters;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -84,6 +90,32 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private readonly ILossFunction<T> _defaultLossFunction;
 
+        // The candidate operations, one per search-space entry and in its order: the name as the search
+        // space spells it, and what that name denotes on this cell's feature axis.
+        private readonly string[] _operationNames;
+        private readonly Operation[] _operations;
+
+        // The shape each operation weight takes on the tape, keyed like _weights.
+        private readonly Dictionary<string, int[]> _weightShapes = new Dictionary<string, int[]>();
+
+        // Zero-copy tensor views of the architecture matrices and weight vectors, one per storage object.
+        // The optimizers key their state (Adam moments, momentum velocity) by tensor identity, so a view
+        // rebuilt every step would silently restart them; a restored matrix or vector gets a fresh view.
+        private readonly ConditionalWeakTable<Matrix<T>, Tensor<T>> _architectureViews = new ConditionalWeakTable<Matrix<T>, Tensor<T>>();
+        private readonly ConditionalWeakTable<Vector<T>, Tensor<T>> _weightViews = new ConditionalWeakTable<Vector<T>, Tensor<T>>();
+
+        // Liu et al. 2019, appendix A.1.1: Adam for the architecture (3e-4, betas (0.5, 0.999), weight decay
+        // 1e-3) and momentum SGD for the weights (0.025, momentum 0.9, weight decay 3e-4).
+        private const double ArchitectureLearningRate = 3e-4;
+        private const double ArchitectureWeightDecay = 1e-3;
+        private const double WeightLearningRate = 0.025;
+        private const double WeightMomentum = 0.9;
+        private const double WeightDecay = 3e-4;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _architectureOptimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _weightOptimizer;
+
+        private static readonly string[] DefaultOperationNames = { "identity", "conv3x3", "conv5x5", "maxpool3x3", "avgpool3x3" };
+
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
         /// <summary>
@@ -105,35 +137,32 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
         public SuperNet(SearchSpaceBase<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
-            _searchSpace = searchSpace;
+            _searchSpace = searchSpace ?? throw new ArgumentNullException(nameof(searchSpace));
+            if (numNodes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(numNodes), numNodes, "A SuperNet cell needs at least one node.");
+
             _numNodes = numNodes;
-            _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
+            _operationNames = (searchSpace.Operations is { Count: > 0 } names ? names : (IList<string>)DefaultOperationNames).ToArray();
+            _operations = _operationNames.Select(ParseOperation).ToArray();
+            _numOperations = _operations.Length;
             _random = RandomHelper.CreateSeededRandom(42); // Initialize with seed for reproducibility
 
-            // Initialize architecture parameters (alpha) with small random values
+            // Architecture parameters start at zero, "which implies equal amount of attention (after taking
+            // the softmax) over all possible ops" (Liu et al. 2019, appendix A.1.1). Node j mixes every earlier
+            // node, the input included, so its matrix has j + 1 rows.
             _architectureParams = new List<Matrix<T>>();
             _architectureGradients = new List<Matrix<T>>();
-
             for (int i = 0; i < _numNodes; i++)
             {
-                // Each node can receive input from all previous nodes
-                // Alpha is initialized near zero so all operations have equal weight after softmax
-                var alpha = new Matrix<T>(i + 1, _numOperations);
-                for (int j = 0; j < alpha.Rows; j++)
-                {
-                    for (int k = 0; k < alpha.Columns; k++)
-                    {
-                        // Small random initialization: range [-0.1, 0.1]
-                        alpha[j, k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.2);
-                    }
-                }
-                _architectureParams.Add(alpha);
+                _architectureParams.Add(new Matrix<T>(i + 1, _numOperations));
                 _architectureGradients.Add(new Matrix<T>(i + 1, _numOperations));
             }
 
-            // Initialize network weights
+            // Every operation weight exists from construction: none depends on the input width, so the
+            // parameter count is fixed before any forward pass.
             _weights = new Dictionary<string, Vector<T>>();
             _weightGradients = new Dictionary<string, Vector<T>>();
+            ReconcileWeightsWithPlan();
 
             // Initialize default loss function (MSE for SuperNet)
             _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -144,242 +173,236 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public override Tensor<T> Predict(Tensor<T> input)
         {
-            // Handle 1D input by reshaping to 2D [1, features]
-            bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input._shape;
-            if (was1D)
-            {
-                input = input.Reshape([1, input.Shape[0]]);
-            }
-            else if (input.Shape.Length > 2)
-            {
-                // For higher-rank tensors, flatten to 2D [batch, features]
-                int batchSize = 1;
-                for (int i = 0; i < input.Shape.Length - 1; i++)
-                    batchSize *= input.Shape[i];
-                int features = input.Shape[input.Shape.Length - 1];
-                input = input.Reshape([batchSize, features]);
-            }
+            var rows = ToRows(input, out int[] originalShape);
+            _inputSize = rows.Shape[1];
+            _outputSize = _inputSize;
 
-            _inputSize = input.Shape[input.Shape.Length - 1];
-            _outputSize = _inputSize; // For simplicity, maintain same dimensions
-
-            // Store intermediate node outputs
-            var nodeOutputs = new List<Tensor<T>> { input };
-
-            // Process each node
-            for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
-            {
-                var nodeOutput = new Tensor<T>(input._shape);
-                var alpha = _architectureParams[nodeIdx];
-
-                // Apply softmax to architecture parameters for this node
-                var softmaxWeights = ApplySoftmax(alpha);
-
-                // Mix operations from all previous nodes
-                for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
-                {
-                    var prevOutput = nodeOutputs[prevNodeIdx];
-
-                    // Apply each operation and mix with softmax weights
-                    for (int opIdx = 0; opIdx < _numOperations; opIdx++)
-                    {
-                        var opOutput = ApplyOperation(prevOutput, opIdx, $"node{nodeIdx}_from{prevNodeIdx}_op{opIdx}");
-                        var weight = softmaxWeights[prevNodeIdx, opIdx];
-
-                        // Accumulate weighted operation outputs
-                        for (int batchIdx = 0; batchIdx < nodeOutput.Shape[0]; batchIdx++)
-                        {
-                            for (int featureIdx = 0; featureIdx < nodeOutput.Shape[1]; featureIdx++)
-                            {
-                                nodeOutput[batchIdx, featureIdx] = NumOps.Add(
-                                    nodeOutput[batchIdx, featureIdx],
-                                    NumOps.Multiply(weight, opOutput[batchIdx, featureIdx]));
-                            }
-                        }
-                    }
-                }
-
-                nodeOutputs.Add(nodeOutput);
-            }
-
-            // Get final output and restore original shape if needed
-            var result = nodeOutputs[nodeOutputs.Count - 1];
-            if (was1D)
-            {
-                result = result.Reshape(originalShape);
-            }
-            else if (originalShape.Length > 2)
-            {
-                result = result.Reshape(originalShape);
-            }
-
-            return result;
+            var result = Forward(rows);
+            return originalShape.Length == 2 ? result : result.Reshape(originalShape);
         }
 
         /// <summary>
-        /// Training is handled externally by alternating architecture and weight updates
+        /// One step of first-order differentiable architecture search on a single batch.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Liu et al. 2019, Algorithm 1 with xi = 0: descend the loss with respect to the architecture,
+        /// then with respect to the weights. The paper takes the first on held-out validation data;
+        /// Train receives one batch, so both steps use it. Use <see cref="TrainStep"/> to keep the split.
+        /// </para>
+        /// <para>
+        /// This used to throw NotSupportedException, so a SuperNet returned by a NAS search could not be
+        /// trained by the model builder that received it.
+        /// </para>
+        /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            throw new NotSupportedException(
-                "SuperNet training is handled through alternating optimization. " +
-                "Use UpdateArchitectureParameters() and UpdateWeights() instead.");
+            TrainStep(input, expectedOutput, input, expectedOutput);
+        }
+
+        /// <summary>
+        /// One step of first-order DARTS: the architecture on the validation batch, then the weights on the
+        /// training batch (Liu et al. 2019, Algorithm 1 with xi = 0).
+        /// </summary>
+        /// <returns>The validation loss the architecture step descended and the training loss the weight
+        /// step descended, each including its weight-decay term.</returns>
+        public (T ArchitectureLoss, T WeightLoss) TrainStep(
+            Tensor<T> trainInput, Tensor<T> trainTarget, Tensor<T> validationInput, Tensor<T> validationTarget)
+        {
+            if (trainInput is null) throw new ArgumentNullException(nameof(trainInput));
+            if (trainTarget is null) throw new ArgumentNullException(nameof(trainTarget));
+            if (validationInput is null) throw new ArgumentNullException(nameof(validationInput));
+            if (validationTarget is null) throw new ArgumentNullException(nameof(validationTarget));
+
+            T architectureLoss = StepOnTape(
+                validationInput, validationTarget, ArchitectureSources(), ArchitectureWeightDecay, ArchitectureOptimizer);
+            T weightLoss = StepOnTape(trainInput, trainTarget, WeightSources(), WeightDecay, WeightOptimizer);
+            return (architectureLoss, weightLoss);
         }
 
         /// <summary>
         /// Computes validation loss for architecture parameter updates
         /// </summary>
         public T ComputeValidationLoss(Tensor<T> valData, Tensor<T> valLabels)
-        {
-            var predictions = Predict(valData);
-            return ComputeLoss(predictions, valLabels);
-        }
+            => ScalarValue(TaskLoss(valData, valLabels, _defaultLossFunction));
 
         /// <summary>
         /// Computes training loss for weight updates
         /// </summary>
         public T ComputeTrainingLoss(Tensor<T> trainData, Tensor<T> trainLabels)
-        {
-            var predictions = Predict(trainData);
-            return ComputeLoss(predictions, trainLabels);
-        }
+            => ScalarValue(TaskLoss(trainData, trainLabels, _defaultLossFunction));
 
         /// <summary>
-        /// Computes mean squared error loss
+        /// Computes the exact gradient of the loss with respect to the architecture parameters, into
+        /// <see cref="GetArchitectureGradients"/>.
         /// </summary>
-        private T ComputeLoss(Tensor<T> predictions, Tensor<T> targets)
-        {
-            T sumSquaredError = NumOps.Zero;
-            int count = 0;
-
-            // Access tensors using proper 2D indexing
-            for (int batchIdx = 0; batchIdx < predictions.Shape[0]; batchIdx++)
-            {
-                for (int featureIdx = 0; featureIdx < predictions.Shape[1]; featureIdx++)
-                {
-                    var diff = NumOps.Subtract(predictions[batchIdx, featureIdx], targets[batchIdx, featureIdx]);
-                    sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
-                    count++;
-                }
-            }
-
-            return NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
-        }
-
-        /// <summary>
-        /// Backward pass to compute gradients for architecture parameters
-        /// </summary>
+        /// <remarks>
+        /// Taken on the tape. It used to be a central finite difference: two forward passes for every
+        /// architecture scalar, and an approximation.
+        /// </remarks>
         public void BackwardArchitecture(Tensor<T> input, Tensor<T> target)
         {
-            // Simplified gradient computation
-            // In a full implementation, this would use automatic differentiation
-            var output = Predict(input);
-            var loss = ComputeLoss(output, target);
-
-            // Compute gradients using finite differences (simplified)
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            for (int nodeIdx = 0; nodeIdx < _architectureParams.Count; nodeIdx++)
+            var sources = ArchitectureSources();
+            Dictionary<Tensor<T>, Tensor<T>> gradients;
+            using (var tape = new GradientTape<T>())
             {
-                var alpha = _architectureParams[nodeIdx];
-                var grad = _architectureGradients[nodeIdx];
+                gradients = tape.ComputeGradients(TaskLoss(input, target, _defaultLossFunction), sources, false);
+            }
 
-                for (int i = 0; i < alpha.Rows; i++)
+            for (int node = 0; node < _architectureParams.Count; node++)
+            {
+                var destination = _architectureGradients[node];
+                gradients.TryGetValue(sources[node], out var gradient);
+                for (int r = 0; r < destination.Rows; r++)
                 {
-                    for (int j = 0; j < alpha.Columns; j++)
+                    for (int c = 0; c < destination.Columns; c++)
                     {
-                        // Finite difference approximation
-                        T originalValue = alpha[i, j];
-
-                        alpha[i, j] = NumOps.Add(originalValue, epsilon);
-                        var lossPlus = ComputeValidationLoss(input, target);
-
-                        alpha[i, j] = NumOps.Subtract(originalValue, epsilon);
-                        var lossMinus = ComputeValidationLoss(input, target);
-
-                        alpha[i, j] = originalValue;
-
-                        // Gradient = (f(x+ε) - f(x-ε)) / (2ε)
-                        grad[i, j] = NumOps.Divide(
-                            NumOps.Subtract(lossPlus, lossMinus),
-                            NumOps.Multiply(NumOps.FromDouble(2), epsilon)
-                        );
+                        destination[r, c] = gradient is null ? NumOps.Zero : gradient[r, c];
                     }
                 }
             }
         }
 
         /// <summary>
-        /// Backward pass to compute gradients for network weights using the specified loss function.
+        /// Computes the exact gradient of <paramref name="lossFunction"/> with respect to the operation
+        /// weights, into <see cref="GetWeightGradients"/>.
         /// </summary>
-        /// <param name="input">The input tensor.</param>
-        /// <param name="target">The target tensor.</param>
-        /// <param name="lossFunction">The loss function to use for gradient computation.</param>
         public void BackwardWeights(Tensor<T> input, Tensor<T> target, ILossFunction<T> lossFunction)
         {
-            // Simplified gradient computation for weights
-            var output = Predict(input);
-            T epsilon = NumOps.FromDouble(1e-5);
+            if (lossFunction is null) throw new ArgumentNullException(nameof(lossFunction));
 
-            foreach (var kvp in _weights)
+            var keys = _weights.Keys.ToList();
+            var sources = keys.Select(WeightView).ToList();
+            Dictionary<Tensor<T>, Tensor<T>> gradients;
+            using (var tape = new GradientTape<T>())
             {
-                var key = kvp.Key;
-                var weight = kvp.Value;
-                var grad = _weightGradients[key];
+                gradients = tape.ComputeGradients(TaskLoss(input, target, lossFunction), sources, false);
+            }
 
-                for (int i = 0; i < weight.Length; i++)
+            for (int i = 0; i < keys.Count; i++)
+            {
+                var destination = _weightGradients[keys[i]];
+                gradients.TryGetValue(sources[i], out var gradient);
+                for (int e = 0; e < destination.Length; e++)
                 {
-                    T originalValue = weight[i];
-
-                    weight[i] = NumOps.Add(originalValue, epsilon);
-                    var lossPlus = ComputeLossWithFunction(input, target, lossFunction);
-
-                    weight[i] = NumOps.Subtract(originalValue, epsilon);
-                    var lossMinus = ComputeLossWithFunction(input, target, lossFunction);
-
-                    weight[i] = originalValue;
-
-                    grad[i] = NumOps.Divide(
-                        NumOps.Subtract(lossPlus, lossMinus),
-                        NumOps.Multiply(NumOps.FromDouble(2), epsilon)
-                    );
+                    destination[e] = gradient is null ? NumOps.Zero : gradient.GetFlat(e);
                 }
             }
         }
 
         /// <summary>
-        /// Computes loss using the specified loss function.
+        /// The cell's forward pass, shared by <see cref="Predict"/> and every training entry point: node j
+        /// is the softmax(alpha_j)-weighted sum of every candidate operation applied to every earlier node
+        /// (Liu et al. 2019, eqs. 1 and 2), and the cell's output is its last node.
         /// </summary>
-        /// <param name="input">The input tensor.</param>
-        /// <param name="target">The target tensor.</param>
-        /// <param name="lossFunction">The loss function to use.</param>
-        /// <returns>The computed loss value.</returns>
-        private T ComputeLossWithFunction(Tensor<T> input, Tensor<T> target, ILossFunction<T> lossFunction)
+        private Tensor<T> Forward(Tensor<T> rows)
         {
-            var predictions = Predict(input);
+            int batch = rows.Shape[0];
+            int features = rows.Shape[1];
+            var nodes = new List<Tensor<T>>(_numNodes + 1) { rows };
 
-            // Flatten tensors to vectors for ILossFunction
-            var predVector = FlattenTensor(predictions);
-            var targetVector = FlattenTensor(target);
+            for (int node = 0; node < _numNodes; node++)
+            {
+                var mixture = Engine.Softmax(ArchitectureView(node), axis: 1);
+                Tensor<T>? output = null;
+                for (int from = 0; from <= node; from++)
+                {
+                    for (int op = 0; op < _numOperations; op++)
+                    {
+                        // The zero operation takes its share of the softmax and contributes nothing.
+                        if (_operations[op].Kind == OperationKind.Zero) continue;
 
-            return lossFunction.CalculateLoss(predVector, targetVector);
+                        var weight = Engine.TensorTile(
+                            Engine.TensorSlice(mixture, new[] { from, op }, new[] { 1, 1 }), new[] { batch, features });
+                        var term = Engine.TensorMultiply(weight, ApplyOperation(nodes[from], node, from, op));
+                        output = output is null ? term : Engine.TensorAdd(output, term);
+                    }
+                }
+
+                nodes.Add(output ?? new Tensor<T>(new[] { batch, features }));
+            }
+
+            return nodes[nodes.Count - 1];
         }
 
-        /// <summary>
-        /// Flattens a 2D tensor to a vector.
-        /// </summary>
-        private Vector<T> FlattenTensor(Tensor<T> tensor)
+        /// <summary>Flattens any input to [batch, features], remembering the caller's shape.</summary>
+        private static Tensor<T> ToRows(Tensor<T> input, out int[] originalShape)
         {
-            var flattenedData = new List<T>();
-            for (int i = 0; i < tensor.Shape[0]; i++)
+            if (input is null) throw new ArgumentNullException(nameof(input));
+
+            originalShape = input.Shape.ToArray();
+            if (input.Shape.Length == 1)
+                return input.Reshape(new[] { 1, input.Shape[0] });
+            if (input.Shape.Length == 2)
+                return input;
+
+            int features = input.Shape[input.Shape.Length - 1];
+            return input.Reshape(new[] { input.Length / features, features });
+        }
+
+        private Tensor<T> TaskLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> lossFunction)
+            => lossFunction.ComputeTapeLoss(Forward(ToRows(input, out _)), ToRows(target, out _));
+
+        private T ScalarValue(Tensor<T> tensor) => tensor.Length > 0 ? tensor.GetFlat(0) : NumOps.Zero;
+
+        /// <summary>
+        /// One optimizer step on the tape: the task loss plus coupled weight decay (lambda / 2) * sum(theta^2),
+        /// whose gradient lambda * theta is exactly PyTorch's weight_decay for both Adam and SGD.
+        /// </summary>
+        private T StepOnTape(
+            Tensor<T> input, Tensor<T> target, IReadOnlyList<Tensor<T>> sources, double weightDecay,
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+        {
+            Dictionary<Tensor<T>, Tensor<T>> gradients;
+            Tensor<T> loss;
+            using (var tape = new GradientTape<T>())
             {
-                for (int j = 0; j < tensor.Shape[1]; j++)
+                loss = Engine.Reshape(TaskLoss(input, target, _defaultLossFunction), new[] { 1 });
+                foreach (var parameter in sources)
                 {
-                    flattenedData.Add(tensor[i, j]);
+                    var squares = Engine.ReduceSum(Engine.TensorMultiply(parameter, parameter), null, keepDims: false);
+                    loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(
+                        Engine.Reshape(squares, new[] { 1 }), NumOps.FromDouble(weightDecay / 2.0)));
                 }
+
+                gradients = tape.ComputeGradients(loss, sources, false);
             }
-            return new Vector<T>(flattenedData.ToArray());
+
+            T lossValue = ScalarValue(loss);
+            optimizer.Step(new TapeStepContext<T>(sources, gradients, lossValue));
+            return lossValue;
+        }
+
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ArchitectureOptimizer
+            => _architectureOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = ArchitectureLearningRate,
+                    Beta1 = 0.5,
+                    Beta2 = 0.999,
+                });
+
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> WeightOptimizer
+            => _weightOptimizer ??= new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = WeightLearningRate,
+                    InitialMomentum = WeightMomentum,
+                });
+
+        private List<Tensor<T>> ArchitectureSources()
+            => Enumerable.Range(0, _architectureParams.Count).Select(ArchitectureView).ToList();
+
+        private List<Tensor<T>> WeightSources() => _weights.Keys.Select(WeightView).ToList();
+
+        private Tensor<T> ArchitectureView(int node)
+            => _architectureViews.GetValue(_architectureParams[node],
+                matrix => Tensor<T>.FromMemory(matrix.AsWritableMemory(), new[] { matrix.Rows, matrix.Columns }));
+
+        private Tensor<T> WeightView(string key)
+        {
+            int[] shape = _weightShapes[key];
+            return _weightViews.GetValue(_weights[key], vector => Tensor<T>.FromMemory(vector.AsWritableMemory(), shape));
         }
 
         /// <summary>
@@ -550,17 +573,19 @@ namespace AiDotNet.NeuralNetworks
                 // For each previous node connection, select operation with highest weight
                 for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
                 {
-                    int bestOpIdx = 0;
-                    T bestWeight = softmaxWeights[prevNodeIdx, 0];
-
-                    for (int opIdx = 1; opIdx < _numOperations; opIdx++)
+                    // The strongest non-zero operation (Liu et al. 2019, section 2.4). The zero operation marks
+                    // an absent edge, so it is only chosen when it is the only candidate.
+                    int bestOpIdx = -1;
+                    for (int opIdx = 0; opIdx < _numOperations; opIdx++)
                     {
-                        if (NumOps.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], bestWeight))
+                        if (_operations[opIdx].Kind == OperationKind.Zero) continue;
+                        if (bestOpIdx < 0 || NumOps.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], softmaxWeights[prevNodeIdx, bestOpIdx]))
                         {
-                            bestWeight = softmaxWeights[prevNodeIdx, opIdx];
                             bestOpIdx = opIdx;
                         }
                     }
+
+                    if (bestOpIdx < 0) bestOpIdx = 0;
 
                     // Add selected operation to architecture
                     var operation = GetOperationName(bestOpIdx);
@@ -608,151 +633,359 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Apply a specific operation to input
+        /// Applies candidate operation <paramref name="op"/> on the edge from node <paramref name="from"/> to
+        /// node <paramref name="node"/>, to a [batch, features] tensor, on the active tape.
         /// </summary>
-        private Tensor<T> ApplyOperation(Tensor<T> input, int opIdx, string weightKey)
+        /// <remarks>
+        /// The cell works on a feature vector, so each named operation is its one-channel analogue along the
+        /// feature axis: a KxK convolution is a width-K kernel, a KxK pool is a width-K window, and the
+        /// residual, inverted-residual and squeeze-and-excitation blocks compose those. Depthwise, separable
+        /// and grouped convolutions coincide with a plain one on a single channel. These replace constant
+        /// scalings that only carried the names ("MaxPool" was x * 0.9).
+        /// </remarks>
+        private Tensor<T> ApplyOperation(Tensor<T> x, int node, int from, int op)
         {
-            // Handle 1D input by reshaping to 2D [1, features]
-            bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input._shape;
-            if (was1D)
+            var operation = _operations[op];
+            string key = WeightKey(node, from, op, string.Empty);
+            int batch = x.Shape[0];
+            int features = x.Shape[1];
+            switch (operation.Kind)
             {
-                input = input.Reshape([1, input.Shape[0]]);
-            }
-            else if (input.Shape.Length > 2)
-            {
-                // For higher-rank tensors, flatten to 2D [batch, features]
-                int batchSize = 1;
-                for (int i = 0; i < input.Shape.Length - 1; i++)
-                    batchSize *= input.Shape[i];
-                int features = input.Shape[input.Shape.Length - 1];
-                input = input.Reshape([batchSize, features]);
-            }
+                case OperationKind.Identity:
+                    return x;
 
-            // Initialize weights if needed
-            if (!_weights.ContainsKey(weightKey))
-            {
-                _weights[weightKey] = new Vector<T>(input.Length);
-                _weightGradients[weightKey] = new Vector<T>(input.Length);
+                case OperationKind.Convolution:
+                    return Convolve(x, WeightView(key + "kernel"), operation.KernelSize, operation.Dilation);
 
-                // Initialize with small random values
-                for (int i = 0; i < input.Length; i++)
+                case OperationKind.MaxPool:
+                    return MaxPool(x, operation.KernelSize);
+
+                case OperationKind.AveragePool:
+                    return AveragePool(x, operation.KernelSize);
+
+                case OperationKind.ResidualBasic:
                 {
-                    _weights[weightKey][i] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
+                    // He et al. 2016: relu(x + conv(relu(conv(x)))).
+                    var inner = Engine.ReLU(Convolve(x, WeightView(key + "kernel1"), operation.KernelSize, 1));
+                    return Engine.ReLU(Engine.TensorAdd(x, Convolve(inner, WeightView(key + "kernel2"), operation.KernelSize, 1)));
                 }
-            }
 
-            var output = TensorAllocator.Rent<T>(input._shape);
-            var weight = _weights[weightKey];
-
-            // Apply operation (simplified) using proper 2D tensor indexing
-            switch (opIdx)
-            {
-                case 0: // Identity
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
-                    {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            output[batchIdx, featureIdx] = input[batchIdx, featureIdx];
-                        }
-                    }
-                    break;
-
-                case 1: // 3x3 Conv (simplified as weighted pass)
+                case OperationKind.ResidualBottleneck:
                 {
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
-                    {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            if (featureIdx < weight.Length)
-                            {
-                                output[batchIdx, featureIdx] = NumOps.Multiply(
-                                    input[batchIdx, featureIdx],
-                                    NumOps.Add(NumOps.One, weight[featureIdx]));
-                            }
-                        }
-                    }
+                    // He et al. 2016: 1x1 reduce, KxK, 1x1 expand, each followed by ReLU, around the skip.
+                    var reduced = Engine.ReLU(Convolve(x, WeightView(key + "reduce"), 1, 1));
+                    var mixed = Engine.ReLU(Convolve(reduced, WeightView(key + "kernel"), operation.KernelSize, 1));
+                    return Engine.ReLU(Engine.TensorAdd(x, Convolve(mixed, WeightView(key + "expand"), 1, 1)));
                 }
-                break;
 
-                case 2: // 5x5 Conv (simplified)
+                case OperationKind.InvertedResidual:
                 {
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
+                    // Sandler et al. 2018: 1x1 expansion to E channels, ReLU6, depthwise KxK, ReLU6, linear 1x1
+                    // projection back, and the skip because input and output match.
+                    int expansion = operation.Expansion;
+                    var six = NumOps.FromDouble(6.0);
+                    var expanded = Engine.TensorClamp(
+                        Engine.Conv1D(Engine.Reshape(x, new[] { batch, 1, features }), WeightView(key + "expand")),
+                        NumOps.Zero, six);
+                    var depthwiseKernels = WeightView(key + "depthwise");
+                    var channels = new Tensor<T>[expansion];
+                    for (int c = 0; c < expansion; c++)
                     {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            if (featureIdx < weight.Length)
-                            {
-                                output[batchIdx, featureIdx] = NumOps.Multiply(
-                                    input[batchIdx, featureIdx],
-                                    NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[featureIdx])));
-                            }
-                        }
+                        channels[c] = Engine.Conv1D(
+                            Engine.TensorSlice(expanded, new[] { 0, c, 0 }, new[] { batch, 1, features }),
+                            Engine.TensorSlice(depthwiseKernels, new[] { c, 0, 0 }, new[] { 1, 1, operation.KernelSize }),
+                            stride: 1, padding: (operation.KernelSize - 1) / 2);
                     }
+
+                    var depthwise = Engine.TensorClamp(Engine.TensorConcatenate(channels, axis: 1), NumOps.Zero, six);
+                    var projected = Engine.Conv1D(depthwise, WeightView(key + "project"));
+                    return Engine.TensorAdd(x, Engine.Reshape(projected, new[] { batch, features }));
                 }
-                break;
 
-                case 3: // MaxPool (simplified)
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
-                    {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            output[batchIdx, featureIdx] = NumOps.Multiply(input[batchIdx, featureIdx], NumOps.FromDouble(0.9));
-                        }
-                    }
-                    break;
-
-                case 4: // AvgPool (simplified)
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
-                    {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            output[batchIdx, featureIdx] = NumOps.Multiply(input[batchIdx, featureIdx], NumOps.FromDouble(0.8));
-                        }
-                    }
-                    break;
+                case OperationKind.SqueezeExcitation:
+                {
+                    // Hu et al. 2018 on one channel: squeeze over the feature axis, a two-layer excitation, and
+                    // a sigmoid gate that rescales the input.
+                    var squeezed = Engine.ReduceMean(x, new[] { 1 }, keepDims: true);
+                    var hidden = Engine.ReLU(Affine(squeezed, key + "w1", key + "b1"));
+                    var gate = Engine.Sigmoid(Affine(hidden, key + "w2", key + "b2"));
+                    return Engine.TensorMultiply(x, Engine.TensorTile(gate, new[] { 1, features }));
+                }
 
                 default:
-                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
-                    {
-                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
-                        {
-                            output[batchIdx, featureIdx] = input[batchIdx, featureIdx];
-                        }
-                    }
-                    break;
+                    return new Tensor<T>(new[] { batch, features });
             }
+        }
 
-            // Restore original shape if input was 1D or higher-rank
-            if (was1D)
-            {
-                output = output.Reshape(originalShape);
-            }
-            else if (originalShape.Length > 2)
-            {
-                output = output.Reshape(originalShape);
-            }
+        /// <summary>A width-K convolution along the feature axis with "same" padding.</summary>
+        private Tensor<T> Convolve(Tensor<T> x, Tensor<T> kernel, int kernelSize, int dilation)
+        {
+            int batch = x.Shape[0];
+            int features = x.Shape[1];
+            var output = Engine.Conv1D(
+                Engine.Reshape(x, new[] { batch, 1, features }), kernel,
+                stride: 1, padding: dilation * (kernelSize - 1) / 2, dilation: dilation);
+            return Engine.Reshape(output, new[] { batch, features });
+        }
 
-            return output;
+        /// <summary>w * s + b for a [batch, 1] tensor and scalar weights.</summary>
+        private Tensor<T> Affine(Tensor<T> s, string weightKey, string biasKey)
+        {
+            int batch = s.Shape[0];
+            return Engine.TensorAdd(
+                Engine.TensorMultiply(s, Engine.TensorTile(WeightView(weightKey), new[] { batch, 1 })),
+                Engine.TensorTile(WeightView(biasKey), new[] { batch, 1 }));
         }
 
         /// <summary>
-        /// Gets the human-readable name for a given operation index.
-        /// Maps operation indices to their corresponding operation types in the NAS search space.
+        /// A width-K max over neighbouring features, stride 1. Shifting in the edge value is the same as
+        /// ignoring padding, because the maximum already includes that value.
         /// </summary>
-        /// <param name="opIdx">The operation index (0-4)</param>
-        /// <returns>The operation name (identity, conv3x3, conv5x5, maxpool, avgpool)</returns>
-        private string GetOperationName(int opIdx)
+        private Tensor<T> MaxPool(Tensor<T> x, int kernelSize)
         {
-            return opIdx switch
+            int left = (kernelSize - 1) / 2;
+            Tensor<T>? result = null;
+            for (int offset = -left; offset < kernelSize - left; offset++)
             {
-                0 => "identity",
-                1 => "conv3x3",
-                2 => "conv5x5",
-                3 => "maxpool",
-                4 => "avgpool",
-                _ => "identity"
-            };
+                var shifted = Shift(x, offset, replicateEdge: true);
+                result = result is null ? shifted : Engine.TensorMax(result, shifted);
+            }
+
+            return result ?? x;
+        }
+
+        /// <summary>
+        /// A width-K mean over neighbouring features, stride 1, averaging only the positions that exist
+        /// (count_include_pad = False, as in DARTS).
+        /// </summary>
+        private Tensor<T> AveragePool(Tensor<T> x, int kernelSize)
+        {
+            int batch = x.Shape[0];
+            int features = x.Shape[1];
+            int left = (kernelSize - 1) / 2;
+            Tensor<T>? sum = null;
+            var reciprocal = new Tensor<T>(new[] { 1, features });
+            for (int f = 0; f < features; f++)
+            {
+                int count = 0;
+                for (int offset = -left; offset < kernelSize - left; offset++)
+                {
+                    if (f + offset >= 0 && f + offset < features) count++;
+                }
+
+                reciprocal[0, f] = NumOps.FromDouble(1.0 / count);
+            }
+
+            for (int offset = -left; offset < kernelSize - left; offset++)
+            {
+                var shifted = Shift(x, offset, replicateEdge: false);
+                sum = sum is null ? shifted : Engine.TensorAdd(sum, shifted);
+            }
+
+            return Engine.TensorMultiply(sum ?? x, Engine.TensorTile(reciprocal, new[] { batch, 1 }));
+        }
+
+        /// <summary>
+        /// out[f] = x[f + offset] along the feature axis, filling positions past either edge with zero or
+        /// with the edge value.
+        /// </summary>
+        private Tensor<T> Shift(Tensor<T> x, int offset, bool replicateEdge)
+        {
+            int batch = x.Shape[0];
+            int features = x.Shape[1];
+            int magnitude = Math.Min(Math.Abs(offset), features);
+            if (offset == 0 || magnitude == 0) return x;
+
+            Tensor<T> Fill(int edgeColumn) => replicateEdge
+                ? Engine.TensorTile(Engine.TensorSlice(x, new[] { 0, edgeColumn }, new[] { batch, 1 }), new[] { 1, magnitude })
+                : new Tensor<T>(new[] { batch, magnitude });
+
+            if (magnitude == features) return Fill(offset > 0 ? features - 1 : 0);
+
+            return offset > 0
+                ? Engine.TensorConcatenate(new[]
+                {
+                    Engine.TensorSlice(x, new[] { 0, magnitude }, new[] { batch, features - magnitude }),
+                    Fill(features - 1),
+                }, axis: 1)
+                : Engine.TensorConcatenate(new[]
+                {
+                    Fill(0),
+                    Engine.TensorSlice(x, new[] { 0, 0 }, new[] { batch, features - magnitude }),
+                }, axis: 1);
+        }
+
+        private static string WeightKey(int node, int from, int op, string part) => $"node{node}_from{from}_op{op}_{part}";
+
+        /// <summary>
+        /// Makes <see cref="_weights"/> hold exactly the planned operation weights, in plan order: a restored
+        /// weight of the right length is kept, a missing one is initialised, and any other entry is dropped.
+        /// </summary>
+        private void ReconcileWeightsWithPlan()
+        {
+            var restored = new Dictionary<string, Vector<T>>(_weights);
+            _weights.Clear();
+            _weightGradients.Clear();
+            _weightShapes.Clear();
+            for (int node = 0; node < _numNodes; node++)
+            {
+                for (int from = 0; from <= node; from++)
+                {
+                    for (int op = 0; op < _numOperations; op++)
+                    {
+                        foreach (var (part, shape, fanIn) in WeightParts(_operations[op]))
+                        {
+                            string key = WeightKey(node, from, op, part);
+                            int length = shape.Aggregate(1, (a, b) => a * b);
+                            if (!restored.TryGetValue(key, out var weight) || weight.Length != length)
+                            {
+                                // PyTorch's default for convolutions and linear layers: U(-1/sqrt(fan_in),
+                                // 1/sqrt(fan_in)); biases start at zero.
+                                weight = new Vector<T>(length);
+                                double bound = fanIn > 0 ? 1.0 / Math.Sqrt(fanIn) : 0.0;
+                                for (int i = 0; i < length; i++)
+                                {
+                                    weight[i] = NumOps.FromDouble((_random.NextDouble() * 2.0 - 1.0) * bound);
+                                }
+                            }
+
+                            _weights[key] = weight;
+                            _weightGradients[key] = new Vector<T>(length);
+                            _weightShapes[key] = shape;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>The weights one operation owns: name suffix, tape shape, and fan-in for initialisation.</summary>
+        private static IEnumerable<(string Part, int[] Shape, int FanIn)> WeightParts(Operation operation)
+        {
+            int k = operation.KernelSize;
+            int e = operation.Expansion;
+            switch (operation.Kind)
+            {
+                case OperationKind.Convolution:
+                    yield return ("kernel", new[] { 1, 1, k }, k);
+                    break;
+                case OperationKind.ResidualBasic:
+                    yield return ("kernel1", new[] { 1, 1, k }, k);
+                    yield return ("kernel2", new[] { 1, 1, k }, k);
+                    break;
+                case OperationKind.ResidualBottleneck:
+                    yield return ("reduce", new[] { 1, 1, 1 }, 1);
+                    yield return ("kernel", new[] { 1, 1, k }, k);
+                    yield return ("expand", new[] { 1, 1, 1 }, 1);
+                    break;
+                case OperationKind.InvertedResidual:
+                    yield return ("expand", new[] { e, 1, 1 }, 1);
+                    yield return ("depthwise", new[] { e, 1, k }, k);
+                    yield return ("project", new[] { 1, e, 1 }, e);
+                    break;
+                case OperationKind.SqueezeExcitation:
+                    yield return ("w1", new[] { 1, 1 }, 1);
+                    yield return ("b1", new[] { 1, 1 }, 0);
+                    yield return ("w2", new[] { 1, 1 }, 1);
+                    yield return ("b2", new[] { 1, 1 }, 0);
+                    break;
+            }
+        }
+
+        private static readonly Regex SizedOperationName = new Regex(
+            @"^(?<stem>[a-z_]+?)_?(?<k>[0-9])x\k<k>(?:_e(?<e>[0-9]+))?$",
+            RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+        /// <summary>
+        /// Resolves a search-space name to the operation it denotes on this cell's feature axis.
+        /// </summary>
+        /// <exception cref="NotSupportedException">The name has no meaning on a feature vector, for example
+        /// attention; it used to run silently as the identity.</exception>
+        private static Operation ParseOperation(string name)
+        {
+            string normalized = (name ?? string.Empty).Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "none":
+                case "zero":
+                    return new Operation(OperationKind.Zero);
+                case "identity":
+                case "skip":
+                case "skip_connect":
+                    return new Operation(OperationKind.Identity);
+                case "residual_block_basic":
+                    return new Operation(OperationKind.ResidualBasic, kernelSize: 3);
+                case "residual_block_bottleneck":
+                    return new Operation(OperationKind.ResidualBottleneck, kernelSize: 3);
+                case "se_block":
+                    return new Operation(OperationKind.SqueezeExcitation);
+            }
+
+            var match = SizedOperationName.Match(normalized);
+            if (match.Success)
+            {
+                int k = int.Parse(match.Groups["k"].Value, CultureInfo.InvariantCulture);
+                string stem = match.Groups["stem"].Value.TrimEnd('_');
+                bool odd = k % 2 == 1;
+                switch (stem)
+                {
+                    case "conv" or "sep_conv" or "separable_conv" or "depthwise_conv" or "grouped_conv" when odd:
+                        return new Operation(OperationKind.Convolution, kernelSize: k);
+                    case "dil_conv" or "dilated_conv" when odd:
+                        return new Operation(OperationKind.Convolution, kernelSize: k, dilation: 2);
+                    case "maxpool" or "max_pool":
+                        return new Operation(OperationKind.MaxPool, kernelSize: k);
+                    case "avgpool" or "avg_pool":
+                        return new Operation(OperationKind.AveragePool, kernelSize: k);
+                    case "inverted_residual" when odd && match.Groups["e"].Success:
+                        return new Operation(OperationKind.InvertedResidual, kernelSize: k,
+                            expansion: int.Parse(match.Groups["e"].Value, CultureInfo.InvariantCulture));
+                }
+            }
+
+            throw new NotSupportedException(
+                $"SuperNet has no operation for the search-space entry '{name}'. Its cell works on a feature " +
+                "vector, where it supports: none/zero, identity/skip/skip_connect, convKxK with K odd (also " +
+                "sep_conv, separable_conv, depthwise_conv, grouped_conv and dil_conv/dilated_conv), " +
+                "maxpoolKxK/max_pool_KxK, avgpoolKxK/avg_pool_KxK, residual_block_basic, " +
+                "residual_block_bottleneck, inverted_residual_KxK_eE and se_block.");
+        }
+
+        /// <summary>Gets the search space's own name for an operation index.</summary>
+        private string GetOperationName(int opIdx)
+            => opIdx >= 0 && opIdx < _operationNames.Length ? _operationNames[opIdx] : _operationNames[0];
+
+        /// <summary>What a search-space operation name denotes on this cell's feature axis.</summary>
+        private enum OperationKind
+        {
+            Zero,
+            Identity,
+            Convolution,
+            MaxPool,
+            AveragePool,
+            ResidualBasic,
+            ResidualBottleneck,
+            InvertedResidual,
+            SqueezeExcitation,
+        }
+
+        /// <summary>One candidate operation: its kind and the sizes its name states.</summary>
+        private readonly struct Operation
+        {
+            public Operation(OperationKind kind, int kernelSize = 1, int dilation = 1, int expansion = 1)
+            {
+                Kind = kind;
+                KernelSize = kernelSize;
+                Dilation = dilation;
+                Expansion = expansion;
+            }
+
+            public OperationKind Kind { get; }
+
+            public int KernelSize { get; }
+
+            public int Dilation { get; }
+
+            public int Expansion { get; }
         }
 
         // Replaced by the declared parameter source below. Removed under AIDN082.
@@ -914,6 +1147,8 @@ namespace AiDotNet.NeuralNetworks
                 _weights[key] = weight;
                 _weightGradients[key] = new Vector<T>(length);
             }
+
+            ReconcileWeightsWithPlan();
         }
         /// <summary>
         /// Declares the two collections the generator cannot place: the per-node architecture
@@ -956,8 +1191,12 @@ namespace AiDotNet.NeuralNetworks
                 v =>
                 {
                     _weights.Clear();
-                    if (v is null) return;
-                    foreach (var pair in v) _weights[pair.Key] = pair.Value;
+                    if (v is not null)
+                    {
+                        foreach (var pair in v) _weights[pair.Key] = pair.Value;
+                    }
+
+                    ReconcileWeightsWithPlan();
                 });
         }
 
