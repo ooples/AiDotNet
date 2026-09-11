@@ -12192,13 +12192,13 @@ public static partial class LayerHelper<T>
     /// <param name="imageSize">Input image size (default: 512).</param>
     /// <param name="backboneChannels">Backbone output channels (default: 512).</param>
     /// <param name="featureChannels">Feature map channels (default: 128).</param>
-    /// <param name="geometryType">Geometry output type: RBOX or QUAD (default: RBOX).</param>
+    /// <param name="geometryType">Geometry output type (default: rotated box).</param>
     /// <returns>A collection of layers forming an EAST model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultEASTLayers(
         int imageSize = 512,
         int backboneChannels = 512,
         int featureChannels = 128,
-        string geometryType = "RBOX")
+        EASTGeometryType geometryType = EASTGeometryType.RBox)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
@@ -12224,7 +12224,7 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(featureChannels, 3, 1, 1);
 
         // Output heads
-        int geometryChannels = geometryType == "QUAD" ? 8 : 5;
+        int geometryChannels = geometryType == EASTGeometryType.Quad ? 8 : 5;
         yield return new ConvolutionalLayer<T>(1, 1, 1, 0); // Score map
         yield return new ConvolutionalLayer<T>(geometryChannels, 1, 1, 0); // Geometry
     }

@@ -67,7 +67,7 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _featureChannels;
-    private readonly string _geometryType;
+    private readonly EASTGeometryType _geometryType;
 
     // Native mode layers
     private readonly List<ILayer<T>> _backboneLayers = [];
@@ -99,7 +99,7 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// <summary>
     /// Gets the geometry output type (RBOX or QUAD).
     /// </summary>
-    public string GeometryType => _geometryType;
+    public EASTGeometryType GeometryType => _geometryType;
 
     #endregion
 
@@ -111,10 +111,6 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     public EAST(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 512,
-        int backboneChannels = 512,
-        int featureChannels = 128,
-        string geometryType = "RBOX",
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
@@ -129,12 +125,19 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _backboneChannels = backboneChannels;
-        _featureChannels = featureChannels;
-        _geometryType = geometryType;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _backboneChannels = _options.BackboneChannels;
+        _featureChannels = _options.FeatureChannels;
+        _geometryType = _options.GeometryType;
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
+        // and no configured rate can reach the model.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -155,10 +158,6 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </remarks>
     public EAST(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 512,
-        int backboneChannels = 512,
-        int featureChannels = 128,
-        string geometryType = "RBOX",
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
@@ -168,12 +167,19 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         Options = _options;
 
         _useNativeMode = true;
-        _backboneChannels = backboneChannels;
-        _featureChannels = featureChannels;
-        _geometryType = geometryType;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _backboneChannels = _options.BackboneChannels;
+        _featureChannels = _options.FeatureChannels;
+        _geometryType = _options.GeometryType;
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
+        // and no configured rate can reach the model.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
     }
@@ -295,7 +301,7 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     Vector<T> bbox;
                     List<(double x, double y)> polygonPoints;
 
-                    if (_geometryType == "RBOX")
+                    if (_geometryType == EASTGeometryType.RBox)
                     {
                         // RBOX geometry: distances from center to edges + angle
                         double dTop = NumOps.ToDouble(output[0, 1, y, x]);

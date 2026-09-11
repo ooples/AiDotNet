@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 297;
+    private const int Baseline = 295;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -83,7 +83,7 @@ public class OptionsSurfaceRatchetTests
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 327;
+    private const int ConstructorBaseline = 323;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

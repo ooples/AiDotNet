@@ -116,7 +116,7 @@ public class OCRTextDetectionTests
     public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -124,7 +124,7 @@ public class OCRTextDetectionTests
     public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -136,7 +136,7 @@ public class OCRTextDetectionTests
     public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("EAST", meta.Name);
     }
@@ -186,7 +186,7 @@ public class OCRTextDetectionTests
         {
             new CRAFT<double>(arch, imageSize: 64),
             new DBNet<double>(arch, options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 }),
-            new EAST<double>(arch, imageSize: 64),
+            new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 }),
             new PSENet<double>(arch, options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 }),
         };
 
