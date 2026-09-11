@@ -2680,7 +2680,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <inheritdoc />
-    public abstract void Step(TapeStepContext<T> context);
+    /// <remarks>
+    /// The update runs with gradient recording suppressed, as PyTorch's <c>optimizer.step()</c> runs under
+    /// <c>torch.no_grad()</c>. Callers step while the tape they differentiated is still live, so an update
+    /// written with engine tensor ops (RMSProp's momentum-free path among others) was recorded onto that tape
+    /// as if it were part of the model's forward pass (#2155).
+    /// </remarks>
+    public void Step(TapeStepContext<T> context)
+    {
+        using var noGrad = new NoGradScope<T>();
+        StepCore(context);
+    }
+
+    /// <summary>Applies one update from the tape gradients in <paramref name="context"/>.</summary>
+    /// <param name="context">The step's parameters, their gradients and its loss.</param>
+    /// <remarks>Runs with gradient recording suppressed; see <see cref="Step(TapeStepContext{T})"/>.</remarks>
+    protected abstract void StepCore(TapeStepContext<T> context);
 
     /// <inheritdoc />
     private protected override void SerializeExtensionData(BinaryWriter writer)

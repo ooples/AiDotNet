@@ -320,7 +320,7 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
 
     /// <summary>
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
