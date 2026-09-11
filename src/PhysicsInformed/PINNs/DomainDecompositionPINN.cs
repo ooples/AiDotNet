@@ -88,6 +88,19 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>
+    /// Builds nothing: a domain-decomposition model's solution IS its subdomain networks.
+    /// </summary>
+    /// <remarks>
+    /// The base constructor used to build a full global PINN here, and Predict and Train ran it while
+    /// SolveWithDecomposition trained the subdomain networks - so the public entry points answered from
+    /// an untrained network unrelated to the decomposition. The subdomain networks' parameters are
+    /// surfaced by the generated component hook, once each.
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+    }
+
     private readonly List<PhysicsInformedNeuralNetwork<T>> _subdomainNetworks;
     private readonly List<SubdomainDefinition<T>> _subdomains;
     private readonly List<InterfaceDefinition<T>> _interfaces;
@@ -163,12 +176,31 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         _subdomainOptimizers = new List<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>();
 
         // Create or use provided subdomain networks
-        if (subdomainNetworks != null && subdomainNetworks.Count == subdomains.Count)
+        if (subdomainNetworks != null && subdomainNetworks.Count != subdomains.Count)
+        {
+            // This used to fall through to default networks, silently discarding the caller's.
+            throw new ArgumentException(
+                $"{subdomainNetworks.Count} subdomain networks were given for {subdomains.Count} subdomains; " +
+                "pass one network per subdomain, or none to create defaults.",
+                nameof(subdomainNetworks));
+        }
+
+        if (subdomainNetworks != null)
         {
             _subdomainNetworks.AddRange(subdomainNetworks);
         }
         else
         {
+            // A custom layer list is a set of layer INSTANCES. Handing it to several default subdomain
+            // networks would make them all share one set of weights - one network, not several.
+            if (architecture.Layers is not null && architecture.Layers.Count > 0 && subdomains.Count > 1)
+            {
+                throw new ArgumentException(
+                    "An architecture with custom layers cannot seed several subdomain networks: they would " +
+                    "share the same layer instances. Pass one network per subdomain through subdomainNetworks.",
+                    nameof(subdomainNetworks));
+            }
+
             // Create default subdomain networks
             for (int i = 0; i < subdomains.Count; i++)
             {
@@ -402,6 +434,85 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
             PhysicsLoss = physicsLoss
         };
     }
+
+    /// <summary>
+    /// Evaluates the decomposed solution: each row is answered by the network of the subdomain that
+    /// contains it (the first match, bounds inclusive), exactly as GetGlobalSolution chooses.
+    /// </summary>
+    /// <remarks>
+    /// Ownership is a constant 0/1 mask per subdomain, so the evaluation stays on the gradient tape and
+    /// training reaches exactly the network that owns each row. Predict, GetSolution and the PDE residual
+    /// all come through here.
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        bool singlePoint = input.Shape.Length == 1;
+        var rows = singlePoint ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
+        if (rows.Shape.Length != 2)
+        {
+            throw new ArgumentException("Expected points as [count, dimensions] or a single point.", nameof(input));
+        }
+
+        int count = rows.Shape[0];
+        int dimensions = rows.Shape[1];
+        var owners = new int[count];
+        var point = new T[dimensions];
+        for (int r = 0; r < count; r++)
+        {
+            for (int j = 0; j < dimensions; j++)
+            {
+                point[j] = rows[r, j];
+            }
+
+            owners[r] = FindContainingSubdomain(point);
+            if (owners[r] < 0)
+            {
+                throw new ArgumentException($"Point {r} lies outside every subdomain.", nameof(input));
+            }
+        }
+
+        Tensor<T>? solution = null;
+        for (int s = 0; s < _subdomainNetworks.Count; s++)
+        {
+            if (Array.IndexOf(owners, s) < 0)
+            {
+                continue;
+            }
+
+            var output = _subdomainNetworks[s].Forward(rows);
+            int width = output.Shape[output.Shape.Length - 1];
+            var ownership = new Tensor<T>(new[] { count, width });
+            for (int r = 0; r < count; r++)
+            {
+                if (owners[r] != s)
+                {
+                    continue;
+                }
+
+                for (int c = 0; c < width; c++)
+                {
+                    ownership[r, c] = NumOps.One;
+                }
+            }
+
+            var owned = Engine.TensorMultiply(output, ownership);
+            solution = solution is null ? owned : Engine.TensorAdd(solution, owned);
+        }
+
+        if (solution is null)
+        {
+            throw new ArgumentException("There are no points to evaluate.", nameof(input));
+        }
+
+        return singlePoint ? Engine.Reshape(solution, new[] { solution.Length }) : solution;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The decomposed solution - the function Predict and GetSolution evaluate. The default walked
+    /// Layers, which this model does not use.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Gets the solution at a point by finding the appropriate subdomain.
