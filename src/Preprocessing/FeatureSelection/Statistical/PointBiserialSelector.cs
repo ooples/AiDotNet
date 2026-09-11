@@ -106,7 +106,7 @@ public class PointBiserialSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double std = Math.Sqrt(variance) + 1e-10;
 
             // Point-biserial correlation
-            _correlationScores[j] = Math.Abs((mean1 - mean0) / std * Math.Sqrt((double)n0 * n1 / (n * n)));
+            _correlationScores[j] = Math.Abs((mean1 - mean0) / std * Math.Sqrt((double)n0 * n1 / ((double)n * n)));
         }
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

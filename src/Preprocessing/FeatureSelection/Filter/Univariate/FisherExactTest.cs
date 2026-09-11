@@ -110,7 +110,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             _pValues[j] = FisherExactP(a, b, c, d);
 
             // Odds ratio
-            _oddsRatios[j] = (b * c) > 0 ? (double)(a * d) / (b * c) : double.PositiveInfinity;
+            _oddsRatios[j] = b > 0 && c > 0 ? (double)a * d / ((double)b * c) : double.PositiveInfinity;
         }
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);

@@ -121,8 +121,8 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Normal approximation for p-value
             int nPairs = differences.Count;
-            double mean = nPairs * (nPairs + 1) / 4.0;
-            double stdDev = Math.Sqrt(nPairs * (nPairs + 1) * (2 * nPairs + 1) / 24.0);
+            double mean = (double)nPairs * (nPairs + 1) / 4.0;
+            double stdDev = Math.Sqrt((double)nPairs * (nPairs + 1) * (2 * nPairs + 1) / 24.0);
 
             if (stdDev > 0)
             {
