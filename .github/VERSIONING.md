@@ -195,46 +195,49 @@ The release workflow triggers automatically on:
 
 ### Jobs
 
-1. **version-and-build**
-   - Analyzes commits and determines version
-   - Creates git tag
-   - Builds project
-   - Runs tests
-   - Creates NuGet package
-   - Verifies target frameworks (net462, net8.0)
+1. **release-please**
+   - Analyzes commits and maintains the rolling Release PR
+   - Creates the version tag and GitHub release when that PR is merged
 
-2. **publish-nuget** (conditional)
-   - Runs if `NUGET_API_KEY` secret is configured
-   - Publishes package to nuget.org
-   - Handles version conflicts gracefully
+2. **build-release** (conditional on a created release)
+   - Checks out the immutable release tag
+   - Builds, signs, packs, and verifies every package without OIDC access
+   - Uploads the verified packages as an immutable workflow artifact
 
-3. **github-release**
-   - Creates GitHub Release
-   - Attaches NuGet package as artifact
-   - Includes generated changelog
+3. **publish** (conditional on a successful release build)
+   - Downloads the exact artifact ID emitted by `build-release`
+   - Exchanges the job's GitHub OIDC identity for a short-lived NuGet API key
+   - Publishes the verified packages and attaches them to the GitHub release
 
 ## Configuration
 
-### Required Secrets
+### NuGet Trusted-Publishing Policy
 
-| Secret | Description |
-|--------|-------------|
-| `NUGET_API_KEY` | NuGet API key for publishing packages (optional) |
+NuGet publishing does not use a long-lived repository API key. Configure the policy at [nuget.org](https://www.nuget.org/account/trustedpublishing) with owner `ooples`, repository `AiDotNet`, workflow file `release-please.yml`, and no environment. Enter only the filename. See [NuGet trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+
+### Required Secrets and Variables
+
+| Name | Description |
+|------|-------------|
+| `AIDOTNET_BUILD_KEY` | Required build-signing/integrity key; available only to `build-release` |
+| `AUTOFIX_PAT` | Recommended PAT that lets release-please-created events trigger protected CI |
 | `GITHUB_TOKEN` | Automatically provided by GitHub Actions |
+| `AIDOTNET_LICENSE_PUBLIC_KEY_JSON` | Optional variable/secret used during a public-key rotation |
+| `AIDOTNET_LICENSE_REVOCATION_JSON` | Optional variable/secret containing the signed revocation list |
 
 ### Permissions
 
-The workflow requires these permissions:
-- `contents: write` - Create tags and releases
-- `issues: write` - Comment on related issues
-- `pull-requests: write` - Comment on related PRs
-- `id-token: write` - OIDC token generation
+Permissions are scoped by job:
+- `release-please`: `contents: write`, `pull-requests: write`, and `issues: write` to maintain the Release PR, labels, tag, and release
+- `build-release`: `contents: read` only, with no OIDC permission
+- `publish`: `contents: write` for release assets and `id-token: write` for NuGet trusted publishing
 
 ## Target Frameworks
 
 The workflow verifies that NuGet packages contain these target frameworks:
-- `net462` (.NET Framework 4.6.2)
-- `net8.0` (.NET 8.0)
+- `net471` (.NET Framework 4.7.1)
+- `net8.0` (.NET 8)
+- `net10.0` (.NET 10)
 
 ## Best Practices
 
@@ -278,7 +281,7 @@ Look for `feat:`, `fix:`, etc. prefixes.
 
 **Solution:** Check `AiDotNet.csproj` has:
 ```xml
-<TargetFrameworks>net8.0;net462</TargetFrameworks>
+<TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
 ```
 
 ## Manual Version Override (Emergency)
