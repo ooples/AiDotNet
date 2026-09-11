@@ -252,6 +252,8 @@ Assert-Contract ([bool] $resolverCheckoutStep) `
     'validation-source invokes a repository script without checking out the tested tree'
 Assert-Contract ($resolverCheckoutStep.Contains('uses: actions/checkout@')) `
     'validation-source checkout step does not use actions/checkout'
+Assert-Contract ($resolverCheckoutStep.Contains('persist-credentials: false')) `
+    'validation-source persists checkout credentials although it only reads Git history'
 Assert-Contract ([bool] $resolverCheckoutStep -and [bool] $resolveStep -and
     $resolver.IndexOf($resolverCheckoutStep, [StringComparison]::Ordinal) -lt
     $resolver.IndexOf($resolveStep, [StringComparison]::Ordinal)) `
@@ -356,19 +358,17 @@ Assert-Contract ($selectStep.Contains('coverage_run_without_instrumentation=$(Co
 
 # ---- Post-merge delta reuse. A pull request merged while behind master lands a tree its run never
 # validated, so exact-tree reuse never matched and nearly every merge re-ran all 116 shards.
-$sourceJob = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
-$sourceHeader = Get-JobHeader -JobBlock $sourceJob
-Assert-Contract ($sourceJob.Contains("fetch-depth: `${{ github.event_name == 'push' && '0' || '1' }}") -and
-        -not $sourceJob.Contains("== 'push' && 0 ||")) `
+$sourceHeader = Get-JobHeader -JobBlock $resolver
+Assert-Contract ($resolver.Contains("fetch-depth: `${{ github.event_name == 'push' && '0' || '1' }}") -and
+        -not $resolver.Contains("== 'push' && 0 ||")) `
     'validation-source lacks the history to rebuild the validated tree and diff it in map coordinates'
-$deltaMapStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve certified shard map for delta reuse'
+$deltaMapStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve certified shard map for delta reuse'
 Assert-Contract ([regex]::Matches($deltaMapStep, '(?m)^        id: delta-map[ \t]*(?:#[^\r\n]*)?\r?$').Count -eq 1 -and
         [regex]::Matches($deltaMapStep, '(?m)^        id:').Count -eq 1) `
     'the delta-map step lacks the exact unique identity consumed by the reuse resolver'
 Assert-Contract ([bool] $deltaMapStep -and $deltaMapStep.Contains('continue-on-error: true') -and
         $deltaMapStep.Contains('Resolve-CertifiedShardMap.ps1') -and $deltaMapStep.Contains('Test-CertifiedShardMap.ps1')) `
     'delta reuse does not select with an audited map, or a map failure can fail the push instead of disabling delta reuse'
-$resolveStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve exact-tree PR run'
 $mapTimeout = [regex]::Match($deltaMapStep, '(?m)^        timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
 $jobTimeout = [regex]::Match($sourceHeader, '(?m)^    timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
 $evidenceWait = [regex]::Match($resolveStep, '(?m)^            -WaitMinutes (?<minutes>[0-9]+)[ \t]*\r?$')
@@ -390,22 +390,41 @@ Assert-Contract ($validationReuseResolverText.Contains("-DecisionScope Validatio
     'delta reuse can claim Complete scope although CodeQL and Sonar analysed a different tree'
 Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains('PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}')) `
     'a partial post-merge re-run does not reduce the shard matrix'
-$mapStep = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
-Assert-Contract ($mapStep.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
+$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
+Assert-Contract ($mapDownload.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
     'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
 Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `
     'imported shards are reported to regression analysis as deliberately skipped'
 foreach ($consumer in @(
-        @{ Job = 'test-regression-analysis'; Prefix = 'coverage' },
-        @{ Job = 'ci-test-analysis'; Prefix = 'test-results' },
-        @{ Job = 'sonarcloud'; Prefix = 'coverage' })) {
+        @{ Job = 'test-regression-analysis'; Prefix = 'coverage'; Download = 'Download pull-request shard results for delta import'; Import = 'Import pull-request shard results' },
+        @{ Job = 'ci-test-analysis'; Prefix = 'test-results'; Download = 'Download pull-request diagnostics for delta import'; Import = 'Import pull-request diagnostics' },
+        @{ Job = 'sonarcloud'; Prefix = 'coverage'; Download = 'Download pull-request coverage for delta import'; Import = 'Import pull-request coverage' })) {
     $consumerJob = Get-JobBlock -WorkflowText $validation -Job $consumer.Job
-    Assert-Contract ($consumerJob.Contains('Import-PullRequestShardArtifacts.ps1') -and
-            $consumerJob.Contains("-ArtifactPrefix $($consumer.Prefix)") -and
-            $consumerJob.Contains('run-id: ${{ needs.validation-source.outputs.import_run_id }}')) `
-        "$($consumer.Job) does not import the pull request's results for shards a partial run did not re-run"
+    $downloadStep = Get-StepBlock -JobBlock $consumerJob -Step $consumer.Download
+    $importStep = Get-StepBlock -JobBlock $consumerJob -Step $consumer.Import
+    $downloadInputs = [regex]::Match($downloadStep,
+        '(?m)^        with:\r?\n(?<fields>(?:^          [^\r\n]*(?:\r?\n|\z))*)').Groups['fields'].Value
+    $expectedRunId = [regex]::Escape('          run-id: ${{ needs.validation-source.outputs.import_run_id }}')
+    $expectedPattern = [regex]::Escape("          pattern: $($consumer.Prefix)-`${{ needs.validation-source.outputs.import_sha }}-*")
+    Assert-Contract ($downloadStep -match '(?m)^        uses: actions/download-artifact@[^\s#]+(?:[ \t]+#[^\r\n]*)?[ \t]*\r?$' -and
+            $downloadInputs -match ('(?m)^' + $expectedRunId + '[ \t]*\r?$') -and
+            $downloadInputs -match ('(?m)^' + $expectedPattern + '[ \t]*\r?$') -and
+            $downloadInputs -match '(?m)^          path: delta-import-staging[ \t]*\r?$') `
+        "$($consumer.Job) delta download is not bound to the matching PR artifacts"
+    $expectedInvocation = '(?m)^        run: \|\r?\n' +
+        '          \./tools/TestImpact/Import-PullRequestShardArtifacts\.ps1 -StagingDirectory delta-import-staging `\r?\n' +
+        '            -DestinationDirectory [^\s]+ -ArtifactPrefix ' + [regex]::Escape($consumer.Prefix) + ' `\r?\n'
+    Assert-Contract ($importStep -match $expectedInvocation) `
+        "$($consumer.Job) delta importer is not bound to its matching download"
+    foreach ($step in @($downloadStep, $importStep)) {
+        $condition = [regex]::Match($step, '(?m)^        if: (?<expression>[^\r\n]+)').Groups['expression'].Value
+        $expectedCondition = "needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'"
+        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && $expectedCondition }}" }
+        Assert-Contract ($condition.Trim() -ceq $expectedCondition) `
+            "$($consumer.Job) delta import is not disabled after selector escalation"
+    }
 }
 
 # A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
@@ -601,7 +620,9 @@ foreach ($expected in $expectedInventoryShards) {
     if (-not $entry) { continue }
     Assert-Contract ($entry.Contains("filter: '$($expected.Filter)'")) "inventory shard '$($expected.Name)' has the wrong filter"
     Assert-Contract ($entry -match '(?m)^    heavy: true\s*$') "inventory shard '$($expected.Name)' is not on the heavy path"
-    Assert-Contract ($entry -match '(?m)^    hangTimeout: [1-9][0-9]*min\s*$') "inventory shard '$($expected.Name)' keeps the 5-minute hang limit"
+    $hangLimit = [regex]::Match($entry, '(?m)^    hangTimeout: (?<minutes>[1-9][0-9]*)min[ \t]*\r?$')
+    Assert-Contract ($hangLimit.Success -and [int] $hangLimit.Groups['minutes'].Value -gt 5) `
+        "inventory shard '$($expected.Name)' must declare a hang timeout greater than the 5-minute default"
     if ($expected.ContainsKey('MustCover')) {
         Assert-Contract ($entry.Contains("    mustCover: ['$($expected.MustCover)']")) `
             "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
@@ -621,6 +642,8 @@ Assert-Contract ($map.Contains('-CoverageRequirementsFile $requirements')) `
 # returns it to never running.
 $surveys = Get-ShardEntry 'Sweep - Layer and Model Contract Surveys'
 Assert-Contract ([bool] $surveys) 'the contract-survey sweeps have no shard and would never run'
+Assert-Contract ($surveys -match '(?m)^    heavy: true\s*$') 'the contract-survey shard is not on the heavy path'
+Assert-Contract ($surveys -match '(?m)^    hangTimeout: 35min\s*$') 'the contract-survey shard lost its 35-minute hang timeout'
 foreach ($survey in @('LayerOverrideRedundancyTests', 'LayerParameterSurfaceTests', 'ContractShadowSweepTests', 'ModelBaseCoverageTests')) {
     Assert-Contract ($surveys -and $surveys.Contains("FullyQualifiedName~$survey")) "the survey sweep '$survey' is no longer selected by any shard"
 }
@@ -640,7 +663,6 @@ Assert-Contract ($shardRun.Contains("'--blame-hang-timeout', `$hangTimeout,")) `
 $shardRetry = Get-StepBlock -JobBlock $testConsumer -Step 'Rerun PR-new failures once'
 Assert-Contract ($shardRetry.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
     'a targeted retry runs without the shard env and would walk the whole inventory'
-$selectStep = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Select'
 Assert-Contract ($selectStep.Contains("`$declared.PSObject.Properties['heavy'] -and `$declared.heavy -eq `$true")) `
     'a map-feeding run does not treat heavy: true entries as no-coverage shards'
 
@@ -739,7 +761,6 @@ Assert-Contract (
 # Only an explicit audited miss or an unclassified failure revokes older positive evidence.
 # Cancellation and a typed zero-miss/no-reduction result are neutral, so queue cleanup cannot
 # silently disable selective CI across the repository.
-$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
 Assert-Contract ($mapDownload.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1')) `
     'PR selection bypasses the executable certified-map resolver'
 Assert-Contract ($mapDownload.Contains('-ResultFile map-resolution.json')) `

@@ -7,10 +7,11 @@
     real helpers in a child process. No GitHub calls, workflow runs, or remote artifacts are needed.
 #>
 [CmdletBinding()]
-param()
+param([string] $ResolverPath = "$PSScriptRoot/Resolve-CiValidationReuse.ps1")
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReviewFixtureCleanup.ps1')
 
 enum InvalidArtifactCase {
     Expired
@@ -26,7 +27,6 @@ enum DeltaEmissionExpectation {
     WholeResultReuse
 }
 
-$resolverPath = Join-Path $PSScriptRoot 'Resolve-CiValidationReuse.ps1'
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($resolverPath, [ref] $tokens, [ref] $parseErrors)
@@ -57,7 +57,7 @@ foreach ($missing in 0..3) {
         Expectation = [DeltaEmissionExpectation]::Decline; Delta = @('Integration D')
         Artifacts = @(for ($i = 0; $i -lt $valid.Count; $i++) { if ($i -ne $missing) { $valid[$i] } }) })
 }
-foreach ($invalid in [Enum]::GetValues[InvalidArtifactCase]()) {
+foreach ($invalid in [Enum]::GetValues([InvalidArtifactCase])) {
     $artifacts = @($valid | ForEach-Object { $_.PSObject.Copy() })
     switch ($invalid) {
         ([InvalidArtifactCase]::Expired) { $artifacts[0].expired = $true }
@@ -78,7 +78,7 @@ foreach ($invalid in [Enum]::GetValues[InvalidArtifactCase]()) {
     Expectation = [DeltaEmissionExpectation]::WholeResultReuse; Delta = @('Unrelated') })
 
 $setup = @'
-param([string] $CasePath, [string] $GitHubOutput, [string] $MapFile, [string] $ShardManifestFile)
+param([string] $CasePath, [string] $GitHubOutput, [string] $MapFile, [string] $ShardManifestFile, [string] $FixtureSha)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $env:GITHUB_STEP_SUMMARY = ''
@@ -87,7 +87,7 @@ $fixturePlan = @'
 $case = Get-Content -LiteralPath $CasePath -Raw | ConvertFrom-Json
 $prNumber = 42
 $candidateEvidence = [pscustomobject]@{
-    RunId = 123; TestedSha = '0123456789abcdef0123456789abcdef01234567'
+    RunId = 123; TestedSha = $FixtureSha
     RequiresValidation = $true; ArtifactNames = @(Get-UnexpiredArtifactNames -Artifacts @($case.Artifacts))
 }
 $deltaCandidates = @($candidateEvidence)
@@ -117,7 +117,7 @@ try {
         $outputPath = Join-Path $fixture ($case.Name + '.outputs')
         $case | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $casePath -Encoding utf8
         $output = @(& pwsh -NoProfile -File $scriptPath -CasePath $casePath -GitHubOutput $outputPath `
-            -MapFile $mapPath -ShardManifestFile $manifestPath 2>&1)
+            -MapFile $mapPath -ShardManifestFile $manifestPath -FixtureSha $sha 2>&1)
         if ($LASTEXITCODE -ne 0) { throw "$($case.Name): production emission failed: $($output -join [Environment]::NewLine)" }
         $values = @{}
         foreach ($line in Get-Content -LiteralPath $outputPath) {
@@ -125,6 +125,9 @@ try {
             $values[$parts[0]] = $parts[1]
         }
         if ($case.Expectation -eq [DeltaEmissionExpectation]::Decline) {
+            if (($output -join [Environment]::NewLine) -notmatch 'delta reuse declined:') {
+                [void] $failures.Add("$($case.Name): production decline path was not observed: $($output -join [Environment]::NewLine)")
+            }
             if ($values.delta_mode -or $values.import_run_id -or $values.import_sha -or
                 $values.import_shards -cne '[]' -or $values.partial_shards -cne '[]' -or
                 $values.execute_validation -cne 'true' -or $values.reuse_scope -cne 'None') {
@@ -148,18 +151,13 @@ try {
                 $values.import_sha -cne $expectedImportSha -or $values.import_shards -cne $expectedImport -or
                 $values.partial_shards -cne $expectedRerun -or
                 $values.execute_validation -cne 'true' -or $values.execute_quality -cne 'true') {
-                [void] $failures.Add("$($case.Name): valid partial reuse was not preserved")
+                [void] $failures.Add("$($case.Name): valid partial reuse was not preserved: actual=$($values | ConvertTo-Json -Compress); expected import=$expectedImport run=$expectedImportRunId sha=$expectedImportSha rerun=$expectedRerun")
             }
         }
     }
 }
 finally {
-    $resolved = [IO.Path]::GetFullPath($fixture)
-    $prefix = $tempRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    if ($resolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -and
-        [IO.Path]::GetFileName($resolved).StartsWith('aidotnet-reuse-review-', [StringComparison]::Ordinal)) {
-        Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    Remove-ReviewFixtureDirectory -LiteralPath $fixture -ExpectedLeafPrefix 'aidotnet-reuse-review-'
 }
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host $failure }

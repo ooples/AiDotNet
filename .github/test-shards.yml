@@ -988,8 +988,8 @@ shard:
     filter: 'FullyQualifiedName~LayerOverrideRedundancyTests|FullyQualifiedName~LayerParameterSurfaceTests|FullyQualifiedName~ContractShadowSweepTests|FullyQualifiedName~ModelBaseCoverageTests'
     heavy: true
     hangTimeout: 35min
-  # 170 VisionLanguage models in five-model windows, exactly the windows the old job ran. The last
-  # window runs past the end, which the test treats as fewer candidates; a window that lands
+  # VisionLanguage models in five-model windows. The current reflected inventory has 173 models,
+  # so offset 170 covers the final three. A partial final window is valid; a window that lands
   # entirely past the end declares zero contracts and FAILS (asserted in the test), which is the
   # signal that the family shrank and these entries need updating. Five models is the resource
   # envelope: each concrete contract gets up to three minutes and 1 GiB in its own worker.

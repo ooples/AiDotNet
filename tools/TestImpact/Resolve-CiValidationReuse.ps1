@@ -148,9 +148,13 @@ function ConvertTo-CertificateEvidence {
             if ([string] $Certificate.gateConclusion -cne 'success') {
                 throw 'schema-v3 certificate did not pass its gate'
             }
+            if ($Certificate.scope -isnot [string]) {
+                throw 'schema-v3 certificate scope must be a named JSON string'
+            }
             $scopeText = [string] $Certificate.scope
             if (-not [Enum]::TryParse[CiValidationReuseScope]($scopeText, $false, [ref] $scope) -or
-                $scope -eq [CiValidationReuseScope]::None) {
+                -not [Enum]::IsDefined([CiValidationReuseScope], $scope) -or
+                $scope -eq [CiValidationReuseScope]::None -or $scope.ToString() -cne $scopeText) {
                 throw "schema-v3 certificate has unsupported scope '$scopeText'"
             }
             $testedTree = [string] $Certificate.testedTree
@@ -181,7 +185,7 @@ function Select-BestCiEvidence {
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Evidence)
 
     $eligible = @($Evidence | Where-Object {
-        $_.TreeMatches -and
+        $_.CertificateTreeMatches -and $_.TreeMatches -and
         (-not $_.RequiresValidation -or ($_.HasAnalysis -and $_.HasCoverage -and $_.HasLedger))
     })
     if ($eligible.Count -eq 0) { return $null }
@@ -445,6 +449,11 @@ if ($SelfTest) {
     $badScope = $partialJson.PSObject.Copy(); $badScope.scope = 'AlmostComplete'
     Assert-Rejected { ConvertTo-CertificateEvidence $badScope 10 } `
         'an unknown certificate scope was accepted'
+    foreach ($invalidScope in @('999', '-1', '1', '2', 'validation', ' Validation ', 1, 2)) {
+        $numericScope = $partialJson.PSObject.Copy(); $numericScope.scope = $invalidScope
+        Assert-Rejected { ConvertTo-CertificateEvidence $numericScope 10 } `
+            "a non-canonical certificate scope was accepted: '$invalidScope' ($($invalidScope.GetType().Name))"
+    }
     Assert-Rejected { ConvertTo-CertificateEvidence $partialJson 99 } `
         'a certificate bound to another run was accepted'
     $stringRunId = $partialJson.PSObject.Copy(); $stringRunId.runId = '10'
@@ -453,7 +462,7 @@ if ($SelfTest) {
 
     $partialCandidate = [pscustomobject]@{
         Scope = [CiValidationReuseScope]::Validation; RunId = 10; CreatedAt = '2026-01-01T00:00:00Z'
-        TreeMatches = $true; RequiresValidation = $true; HasAnalysis = $true
+        CertificateTreeMatches = $true; TreeMatches = $true; RequiresValidation = $true; HasAnalysis = $true
         HasCoverage = $true; HasLedger = $true
     }
     $completeCandidate = $partialCandidate.PSObject.Copy()
@@ -545,13 +554,14 @@ if ($PlanDelta) {
     $plan = Invoke-DeltaPlan -BaseSha $TestedBaseSha -HeadSha $TestedHeadSha -ExpectedTree $TestedTree `
         -PullRequestShards $shards -Map $MapFile -Manifest $ShardManifestFile -Selector $SelectorPath
     $result = if ($plan -is [string]) {
-        [pscustomobject]@{ mode = 'None'; why = $plan; rerun = @(); import = @(); tree = ''; routes = @() }
+        [pscustomobject]@{ mode = 'None'; why = $plan; reason = ''; rerun = @(); import = @(); tree = ''; routes = @() }
     }
     else {
         [pscustomobject]@{
             mode = $plan.Decision.Mode.ToString(); why = $plan.Decision.Why
             rerun = @($plan.Decision.Rerun); import = @($plan.Decision.Import)
             tree = $plan.Tree; routes = @(Get-OptionalArray $plan.Selection 'routes')
+            reason = if ($plan.Selection.PSObject.Properties['reason']) { [string] $plan.Selection.reason } else { '' }
         }
     }
     $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding utf8
@@ -660,8 +670,10 @@ do {
 
             $testedTree = [string] (& gh api "repos/$Repository/git/commits/$($parsed.TestedSha)" --jq '.tree.sha' 2>$null)
             if ($LASTEXITCODE -ne 0 -or $testedTree -cnotmatch '^[0-9a-f]{40}$') { continue }
-            $treeMatches = $testedTree -ceq $masterTree -and
-                (-not $parsed.TestedTree -or $parsed.TestedTree -ceq $testedTree)
+            # Certificate consistency is independent of whether the base moved after validation.
+            # A forged/inconsistent certificate must never become an eligible delta candidate.
+            $certificateTreeMatches = -not $parsed.TestedTree -or $parsed.TestedTree -ceq $testedTree
+            $treeMatches = $testedTree -ceq $masterTree
 
             $analysisArtifacts = @($artifacts | Where-Object {
                 ([string] $_.name).StartsWith('ci-test-analysis-', [StringComparison]::Ordinal)
@@ -698,6 +710,7 @@ do {
                 Event = [string] $run.event
                 HeadSha = [string] $run.head_sha
                 TreeMatches = $treeMatches
+                CertificateTreeMatches = $certificateTreeMatches
                 RequiresValidation = $parsed.RequiresValidation
                 HasAnalysis = $hasAnalysis
                 HasCoverage = $coverageCount -gt 0
@@ -757,7 +770,7 @@ function Get-DeltaPlan {
 }
 
 $deltaCandidates = @($evidence | Where-Object {
-    $_.Event -ceq 'pull_request' -and -not $_.TreeMatches -and
+    $_.CertificateTreeMatches -and $_.Event -ceq 'pull_request' -and -not $_.TreeMatches -and
     (-not $_.RequiresValidation -or ($_.HasAnalysis -and $_.HasCoverage -and $_.HasLedger))
 } | Sort-Object @{ Expression = { [DateTimeOffset] $_.CreatedAt }; Descending = $true },
                 @{ Expression = { [long] $_.RunId }; Descending = $true })

@@ -7,6 +7,14 @@ param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReviewFixtureCleanup.ps1')
+
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-ReviewFixtureCleanup.ps1')
+if (-not $? -or $LASTEXITCODE -ne 0) { throw 'Review fixture cleanup controls failed.' }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-CertificateEvidenceReview.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Certificate evidence controls failed.' }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-NoCoverageShardPolicy.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'No-coverage parser controls failed.' }
 
 enum InvalidMapFixture {
     Missing
@@ -19,6 +27,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Workflow review negative controls failed.' }
 
 & (Join-Path $PSScriptRoot 'Test-CiValidationReuseReview.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Delta reuse artifact review controls failed.' }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-CiValidationReuseReviewControls.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Artifact review guard controls failed.' }
 
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
 $coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
@@ -500,7 +510,7 @@ try {
             return Get-Content "$Name.json" -Raw | ConvertFrom-Json
         }
 
-        # (a) Master edits a line only Beta executes. Δ selects Beta + Always; the pull request ran
+        # (a) Master edits a line only Beta executes. The delta selects Beta + Always; the pull request ran
         #     Alpha + Always, so only Always is re-run and Alpha's results are imported.
         Invoke-Git checkout --quiet --detach $masterSha
         @('one', 'alpha before', 'three', 'beta changed on master', 'five') |
@@ -518,7 +528,7 @@ try {
 
         # Every fail-closed selector result has the same JSON shape. The delta resolver uses
         # StrictMode and must return an explicit full-matrix plan, not throw on missing routes.
-        foreach ($invalidMapKind in [Enum]::GetValues[InvalidMapFixture]()) {
+        foreach ($invalidMapKind in [Enum]::GetValues([InvalidMapFixture])) {
             $invalidMap = $invalidMapKind.ToString().ToLowerInvariant() + '-map.json'
             if ($invalidMapKind -eq [InvalidMapFixture]::Malformed) {
                 '{ not valid JSON' | Set-Content -LiteralPath $invalidMap -Encoding utf8
@@ -533,6 +543,13 @@ try {
             try { $invalidPlan = Invoke-DeltaPlanFixture $invalidName $testedTree $invalidMap }
             catch { [void] $failures.Add("${invalidMap}: selector fallback threw instead of planning full validation: $($_.Exception.Message)") }
             if ($null -ne $invalidPlan) {
+                $expectedReason = switch ($invalidMapKind) {
+                    ([InvalidMapFixture]::Missing) { 'map-missing' }
+                    ([InvalidMapFixture]::Malformed) { 'map-unreadable' }
+                    ([InvalidMapFixture]::Unresolvable) { 'map-unresolvable' }
+                }
+                Assert-True ($invalidPlan.reason -ceq $expectedReason) `
+                    "$invalidMap used the wrong decline path: expected=$expectedReason actual=$($invalidPlan.reason)"
                 Assert-True ($invalidPlan.mode -ceq 'None' -and @($invalidPlan.routes).Count -eq 0 -and
                     @($invalidPlan.rerun).Count -eq 0 -and @($invalidPlan.import).Count -eq 0) `
                     "$invalidMap did not produce the explicit empty-route, full-validation plan"
@@ -548,9 +565,9 @@ try {
         & git grep -l -w -F -e NewAlphaTests HEAD -- ':(glob)tests/Proj/**/*.cs' 2>$null
         Assert-True ($LASTEXITCODE -eq 1) 'the deleted-test fixture did not exercise a real no-match git grep'
         & $selector -MapFile certified/shard-map.json -BaseSha $testedMergeSha `
-            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile deleted-test-selection.json 6>$null
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile deleted-test-delta-selection.json 6>$null
         Assert-True ($LASTEXITCODE -eq 0) 'a successful deleted-test selection leaked the no-match git grep exit code'
-        $deleted = Get-Content deleted-test-selection.json -Raw | ConvertFrom-Json
+        $deleted = Get-Content deleted-test-delta-selection.json -Raw | ConvertFrom-Json
         Assert-True (-not [bool] $deleted.escalate -and (@($deleted.shards) -join ',') -ceq 'Alpha,Always') `
             'the deleted test did not keep its original Alpha route and always-run shard'
         $plan = Invoke-DeltaPlanFixture 'delta-deleted-test'
@@ -605,16 +622,8 @@ catch {
     throw
 }
 finally {
-    $resolvedFixture = [IO.Path]::GetFullPath($fixture)
-    if ($resolvedFixture.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and
-        (Split-Path -Leaf $resolvedFixture).StartsWith('aidotnet-impact-e2e-', [StringComparison]::Ordinal)) {
-        Remove-Item -LiteralPath $resolvedFixture -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    else {
-        $message = "refusing to remove unexpected fixture path '$resolvedFixture'"
-        if ($null -ne $fixtureFailure) { Write-Warning "$message; preserving the original failure" }
-        else { throw $message }
-    }
+    Remove-ReviewFixtureDirectory -LiteralPath $fixture -ExpectedLeafPrefix 'aidotnet-impact-e2e-' `
+        -ThrowOnUnsafePath:($null -eq $fixtureFailure)
 }
 
 if ($failures.Count -gt 0) {

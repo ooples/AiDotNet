@@ -77,6 +77,29 @@ if ($SelfTest) {
         try { New-RunSettingsXml -BaseText $case.Text -Directory $case.Directory | Out-Null } catch { $rejected++ }
     }
     if ($rejected -ne 3) { throw "self-test: expected 3 rejections, got $rejected" }
+    . (Join-Path $PSScriptRoot '../../tools/TestImpact/ReviewFixtureCleanup.ps1')
+    $fixture = Join-Path $absolute ('aidotnet-runsettings-review-' + [guid]::NewGuid().ToString('N'))
+    $processDirectory = [Environment]::CurrentDirectory
+    New-Item -ItemType Directory -Path (Join-Path $fixture 'shell'), (Join-Path $fixture 'process') | Out-Null
+    try {
+        $basePath = Join-Path $fixture 'base.runsettings'
+        $base | Set-Content -LiteralPath $basePath
+        Push-Location (Join-Path $fixture 'shell')
+        try {
+            [Environment]::CurrentDirectory = Join-Path $fixture 'process'
+            & $PSCommandPath -Base $basePath -IncludeDirectory $fixture -OutFile 'result.runsettings'
+            if ($LASTEXITCODE -ne 0) { throw 'self-test: writer failed' }
+            if (-not (Test-Path -LiteralPath (Join-Path $fixture 'shell/result.runsettings')) -or
+                (Test-Path -LiteralPath (Join-Path $fixture 'process/result.runsettings'))) {
+                throw 'self-test: output did not follow the PowerShell provider location'
+            }
+        }
+        finally { Pop-Location }
+    }
+    finally {
+        [Environment]::CurrentDirectory = $processDirectory
+        Remove-ReviewFixtureDirectory -LiteralPath $fixture -ExpectedLeafPrefix 'aidotnet-runsettings-review-' -ThrowOnUnsafePath
+    }
     Write-Host 'New-CoverageRunSettings self-test passed.'
     exit 0
 }
@@ -85,6 +108,7 @@ if (-not (Test-Path -LiteralPath $IncludeDirectory -PathType Container)) {
     throw "IncludeDirectory '$IncludeDirectory' does not exist; the worker it should instrument was not built into this artifact"
 }
 $document = New-RunSettingsXml -BaseText (Get-Content -LiteralPath $Base -Raw) -Directory (Resolve-Path -LiteralPath $IncludeDirectory).Path
-$document.Save($OutFile)
+$outPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+$document.Save($outPath)
 Write-Host "coverage runsettings: $OutFile also instruments $IncludeDirectory"
 exit 0
