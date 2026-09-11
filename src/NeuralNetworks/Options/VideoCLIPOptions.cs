@@ -43,33 +43,69 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
 
 
     /// <summary>
-    /// Gets or sets the num frames.
+    /// Gets or sets the number of supplied video frames selected for each clip embedding.
     /// </summary>
+    /// <value>A positive count of frames per clip. Defaults to 8, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The encoder selects frames uniformly from the list you provide.
+    /// If there are too few, it repeats the last frame. More frames require more encoding work;
+    /// this count does not decode a video file or determine the source video's playback speed.</para>
+    /// </remarks>
     public int NumFrames { get; set; }
 
     /// <summary>
-    /// Gets or sets the frame rate.
+    /// Gets or sets the nominal sampling rate associated with the supplied video frames.
     /// </summary>
+    /// <value>A rate in frames per second. Defaults to 1.0, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> 1.0 describes one sampled frame per second of source video.
+    /// The current model exposes this as metadata; it does not resample frames or change playback speed.
+    /// Frame selection uses <see cref="NumFrames"/> and the supplied list, so callers prepare the sampling cadence.</para>
+    /// </remarks>
     public double FrameRate { get; set; }
 
     /// <summary>
-    /// Gets or sets the text hidden dim.
+    /// Gets or sets the number of features in each native text-token representation.
     /// </summary>
+    /// <value>The native text width in features. Defaults to 512, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each caption token is represented by this many numbers inside
+    /// the native text encoder. This is distinct from the shared output embedding size.
+    /// The setting does not resize a text encoder loaded from an ONNX graph.</para>
+    /// </remarks>
     public int TextHiddenDim { get; set; }
 
     /// <summary>
-    /// Gets or sets the num frame encoder layers.
+    /// Gets or sets the number of native transformer blocks applied to each selected frame.
     /// </summary>
+    /// <value>A count of per-frame encoder blocks. Defaults to 12, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These blocks extract features from each still image before
+    /// frames are combined. Adding blocks increases native network depth and work;
+    /// it does not change the layers stored in a loaded ONNX graph.</para>
+    /// </remarks>
     public int NumFrameEncoderLayers { get; set; }
 
     /// <summary>
-    /// Gets or sets the num temporal layers.
+    /// Gets or sets the number of native temporal-transformer blocks that combine frame features.
     /// </summary>
+    /// <value>A count of temporal encoder blocks. Defaults to 4, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These blocks process information across frames rather than
+    /// within one image when temporal-transformer aggregation is used. They are native network
+    /// settings, not a way to replace the temporal architecture in an ONNX video encoder.</para>
+    /// </remarks>
     public int NumTemporalLayers { get; set; }
 
     /// <summary>
-    /// Gets or sets the num text layers.
+    /// Gets or sets the number of native text-transformer blocks used to encode a caption.
     /// </summary>
+    /// <value>A count of text encoder blocks. Defaults to 12, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These blocks let caption tokens exchange information before
+    /// projection into the shared video-text embedding. More blocks add native computation;
+    /// the depth of a loaded ONNX text encoder remains defined by that graph.</para>
+    /// </remarks>
     public int NumTextLayers { get; set; }
 
     /// <summary>

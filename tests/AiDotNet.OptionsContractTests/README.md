@@ -1,5 +1,10 @@
 # Sequence options review proof (#2128)
 
+The current runner additionally includes the shared GAN contract and six vision-language
+options classes. Their 34 new cases, actual consumer semantics and separate redirected-output
+proof are documented in [the PR #2130 follow-up](../../.github/PR2130_ADDITIONAL_REVIEW_PROOF.md).
+The historical #2128 counts and evidence below remain unchanged.
+
 This focused project compiles the **actual 17 sequence options classes and their complete
 base chain**, plus `DocumentNeuralNetworkOptions`. It source-links the same behavioral test
 fixture included in the main AiDotNet test project. There are no replacement bases, model

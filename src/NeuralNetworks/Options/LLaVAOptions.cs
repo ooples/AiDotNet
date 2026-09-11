@@ -40,8 +40,14 @@ public class LLaVAOptions : VisionLanguageModelOptions
 
 
     /// <summary>
-    /// Gets or sets the num lm layers.
+    /// Gets or sets the number of native language-model decoder blocks.
     /// </summary>
+    /// <value>A count of decoder blocks. Defaults to 32, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These blocks process text conditioned on the projected image
+    /// features. More blocks deepen the native language model and increase its computation.
+    /// This option does not change the architecture of a language model loaded from ONNX.</para>
+    /// </remarks>
     public int NumLmLayers { get; set; }
 
     /// <summary>

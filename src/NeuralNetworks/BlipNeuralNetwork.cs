@@ -278,9 +278,8 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <param name="textEncoderPath">Path to the text encoder ONNX model.</param>
     /// <param name="textDecoderPath">Path to the text decoder ONNX model.</param>
     /// <param name="tokenizer">The tokenizer for text processing.</param>
-    /// <param name="embeddingDimension">Dimension of the shared embedding space.</param>
-    /// <param name="maxSequenceLength">Maximum text sequence length.</param>
-    /// <param name="imageSize">Expected image size.</param>
+    /// <param name="options">Optional shared embedding, text-length and image-size configuration.
+    /// Null uses the shipped defaults. Native layer-width and depth settings do not reconfigure the loaded ONNX graphs.</param>
     /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     public BlipNeuralNetwork(
@@ -372,17 +371,8 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// Creates a BLIP network using native library layers.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="imageSize">Expected image size (default 384 for BLIP).</param>
-    /// <param name="channels">Number of image channels (default 3 for RGB).</param>
-    /// <param name="patchSize">Patch size for vision transformer.</param>
-    /// <param name="vocabularySize">Text vocabulary size (BERT: 30522).</param>
-    /// <param name="maxSequenceLength">Maximum text sequence length.</param>
-    /// <param name="embeddingDimension">Dimension of shared embedding space.</param>
-    /// <param name="hiddenDim">Hidden dimension for transformers.</param>
-    /// <param name="numEncoderLayers">Number of encoder transformer layers.</param>
-    /// <param name="numDecoderLayers">Number of decoder transformer layers.</param>
-    /// <param name="numHeads">Number of attention heads.</param>
-    /// <param name="mlpDim">MLP hidden dimension.</param>
+    /// <param name="options">Optional native image/text geometry, embedding widths, transformer depths,
+    /// attention heads and feed-forward width. Null uses the shipped BLIP defaults.</param>
     /// <param name="tokenizer">Optional tokenizer for text processing.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
