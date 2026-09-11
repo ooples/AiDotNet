@@ -64,7 +64,25 @@ public class UnreadOptionsRatchetTests
     /// the authority on a model's input shape.
     /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 3;
+    /// <para>
+    /// Raised 3 -> 35 when the scan stopped counting getter calls made from inside the options
+    /// hierarchy itself. That is not a regression: nothing became unread, 32 properties that were
+    /// ALREADY unread stopped being hidden by their own class's copy constructor. The old number
+    /// was measuring the wrong thing, and a metric that flatters itself is worse than a high one.
+    /// </para>
+    /// <para>
+    /// What it exposed, in descending size: ConcertoOptions 10 (a self-supervised pretraining
+    /// configuration -- teacher momentum, loss weights, upcast levels -- that the model never
+    /// consults), FinchOptions 6 (Beta1, Beta2, WeightDecay and the gradient-clipping pair, none
+    /// of which reach an optimizer), WhisperOptions 5 and AudioGenOptions 4 (ONNX component paths
+    /// that nothing loads), TtsOptions 2, then eight singles. Each is the defect #2090 calls the
+    /// worse of the two: a property that advertises configurability which does not exist.
+    /// </para>
+    /// <para>
+    /// Every one of these is real work, not an accounting artefact. Lower this as they are wired
+    /// in or deleted.
+    /// </para>
+    private const int UnreadBaseline = 35;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry
@@ -174,6 +192,18 @@ public class UnreadOptionsRatchetTests
 
         foreach (var type in assembly.GetTypes())
         {
+            // An options class reading its OWN properties proves nothing about whether a model
+            // reads them, and the copy constructor every one of these classes carries reads every
+            // property it declares -- `TeacherMomentum = other.TeacherMomentum;` is a real getter
+            // call in IL. Counting those made the whole hierarchy look consumed: ConcertoOptions'
+            // seven never-read properties were invisible purely because it has a copy
+            // constructor, while MatryoshkaEmbeddingOptions.MaxEmbeddingDimension was caught only
+            // because that class has none. Validate() has the same effect on a smaller scale.
+            //
+            // Skipping the hierarchy asks the question that matters: does anything OUTSIDE the
+            // options classes consume this value?
+            if (IsOptionsType(type)) continue;
+
             IEnumerable<MethodBase> methods;
             try
             {
