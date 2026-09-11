@@ -34,8 +34,9 @@ internal static class TensorModelTrainer<T>
     private static readonly ConditionalWeakTable<object, object> Warmed = new();
 
     /// <summary>
-    /// Runs one tape-based training step: forward under a gradient tape, mean-squared-error loss,
-    /// then a stochastic-gradient update of every live trainable tensor.
+    /// Runs one tape-based training step: forward under a gradient tape, the loss (mean squared
+    /// error unless the model supplies its own), then a stochastic-gradient update of every live
+    /// trainable tensor.
     /// </summary>
     /// <param name="model">The model being trained.</param>
     /// <param name="input">The training input.</param>
@@ -46,13 +47,19 @@ internal static class TensorModelTrainer<T>
     /// records it - a forward that drops to scalar loops severs the chain and the parameters upstream
     /// of the break receive no gradient.
     /// </param>
-    /// <returns>The loss value for this step.</returns>
+    /// <param name="loss">
+    /// The training objective as <c>loss(predicted, target)</c>, a one-element tensor built from engine
+    /// operations. Null means mean squared error. A model whose paper trains it with another objective
+    /// (TrOCR: cross-entropy under teacher forcing) passes it here.
+    /// </param>
+    /// <returns>The loss value for this step, measured before the update.</returns>
     public static T Step(
         ModelBase<T, Tensor<T>, Tensor<T>> model,
         Tensor<T> input,
         Tensor<T> target,
         T learningRate,
-        Func<Tensor<T>, Tensor<T>> forward)
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? loss = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -76,8 +83,8 @@ internal static class TensorModelTrainer<T>
         using (var tape = new GradientTape<T>())
         {
             var predicted = forward(input);
-            var loss = MeanSquaredError(predicted, target);
-            var gradients = tape.ComputeGradients(loss, parameters);
+            var objective = (loss ?? MeanSquaredError)(predicted, target);
+            var gradients = tape.ComputeGradients(objective, parameters);
 
             // The update runs INSIDE the tape's scope. Disposing the outermost tape rewinds the
             // active TensorArena (the per-step recycling of AiDotNet #1804), and the gradients and
@@ -105,7 +112,7 @@ internal static class TensorModelTrainer<T>
                     }
                 }
 
-                return loss.Length > 0 ? loss[0] : numOps.Zero;
+                return objective.Length > 0 ? objective[0] : numOps.Zero;
             }
         }
     }

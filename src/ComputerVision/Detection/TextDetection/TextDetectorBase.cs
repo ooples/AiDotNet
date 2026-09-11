@@ -499,8 +499,17 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
             throw new ArgumentNullException(nameof(expectedOutput));
         }
 
-        TensorModelTrainer<T>.Step(
-            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     /// <inheritdoc />
@@ -591,5 +600,46 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     {
         ResolveDeferredParameters();
         return base.Serialize();
+    }
+
+    /// <summary>
+    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
+    /// its update (zero before the first call).
+    /// </summary>
+    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
+    /// has one.</returns>
+    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
+    public T GetLastLoss() => _lastTrainingLoss;
+
+    /// <summary>Records the loss a training step reported.</summary>
+    /// <param name="loss">The step's loss.</param>
+    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
+
+    /// <summary>
+    /// Whether the model is in training mode.
+    /// </summary>
+    protected bool IsTrainingMode;
+
+    /// <summary>
+    /// Sets the model to training or inference mode.
+    /// </summary>
+    /// <param name="training">True for training mode, false for inference.</param>
+    /// <remarks>
+    /// Batch normalisation depends on it: batch statistics (and running-statistic updates) while
+    /// training, running statistics at inference. The text detectors had no such switch, so their
+    /// backbone's batch-norm layers never left inference mode, even inside <see cref="Train"/> -
+    /// unlike the object detectors, which have always switched theirs. Override to forward the mode to
+    /// head modules that depend on it, calling the base.
+    /// </remarks>
+    public virtual void SetTrainingMode(bool training)
+    {
+        IsTrainingMode = training;
+        Backbone?.SetTrainingMode(training);
     }
 }

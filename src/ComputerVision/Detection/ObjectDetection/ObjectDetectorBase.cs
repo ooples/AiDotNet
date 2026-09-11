@@ -576,8 +576,8 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         SetTrainingMode(true);
         try
         {
-            TensorModelTrainer<T>.Step(
-                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict);
+            RecordTrainingLoss(TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
         }
         finally
         {
@@ -703,4 +703,23 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         ResolveDeferredParameters();
         return base.Serialize();
     }
+
+    /// <summary>
+    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
+    /// its update (zero before the first call).
+    /// </summary>
+    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
+    /// has one.</returns>
+    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
+    public T GetLastLoss() => _lastTrainingLoss;
+
+    /// <summary>Records the loss a training step reported.</summary>
+    /// <param name="loss">The step's loss.</param>
+    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
 }

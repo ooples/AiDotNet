@@ -404,3 +404,157 @@ internal class MultiHeadSelfAttention<T> : IParameterSource<T>, AiDotNet.Models.
     public void ReadParameters(BinaryReader reader) =>
         BackboneSerialization.ReadLayerParameters(reader, _layer);
 }
+
+/// <summary>
+/// Adapter around <see cref="BatchNormalizationLayer{T}"/> for detection heads: 2-D batch
+/// normalisation over the channel axis of an NCHW tensor, with learnable scale and shift and running
+/// statistics for inference.
+/// </summary>
+/// <remarks>
+/// Batch statistics are used while the owning model is in training mode and the running statistics
+/// otherwise, so the owner must forward <see cref="SetTrainingMode"/>. The running statistics are not
+/// trainable, but they are part of the model and are saved and restored with it.
+/// </remarks>
+internal class BatchNorm2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+{
+    private readonly BatchNormalizationLayer<T> _layer;
+    private readonly int _channels;
+
+    public BatchNorm2D(int channels)
+    {
+        if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
+        _channels = channels;
+        _layer = new BatchNormalizationLayer<T>(channels);
+    }
+
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        if (input.Shape.Length != 4 || input.Shape[1] != _channels)
+        {
+            throw new ArgumentException(
+                $"BatchNorm2D expects NCHW input with {_channels} channels; got [{string.Join(",", input.Shape)}].",
+                nameof(input));
+        }
+
+        return _layer.Forward(input);
+    }
+
+    public void SetTrainingMode(bool training) => _layer.SetTrainingMode(training);
+
+    public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public long ParameterCount => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() => _layer.GetParameters();
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        BackboneSerialization.WriteLayerParameters(writer, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
+        foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
+        {
+            writer.Write(statistic.Length);
+            for (int i = 0; i < statistic.Length; i++)
+            {
+                writer.Write(ops.ToDouble(statistic[i]));
+            }
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        BackboneSerialization.ReadLayerParameters(reader, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
+        foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
+        {
+            int length = reader.ReadInt32();
+            if (length != statistic.Length)
+            {
+                throw new InvalidDataException(
+                    $"BatchNorm2D running statistic has {length} values on the wire; the layer has {statistic.Length}.");
+            }
+
+            for (int i = 0; i < length; i++)
+            {
+                statistic[i] = ops.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Adapter around <see cref="DeconvolutionalLayer{T}"/> for detection heads: a transposed 2-D
+/// convolution with no activation (the layer's own default is ReLU, so identity is passed explicitly).
+/// </summary>
+internal class ConvTranspose2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+{
+    private readonly DeconvolutionalLayer<T> _layer;
+    private readonly int _inChannels;
+
+    public ConvTranspose2D(int inChannels, int outChannels, int kernelSize, int stride)
+    {
+        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
+        if (outChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outChannels));
+        _inChannels = inChannels;
+        _layer = new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, padding: 0,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+    }
+
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        if (input.Shape.Length != 4 || input.Shape[1] != _inChannels)
+        {
+            throw new ArgumentException(
+                $"ConvTranspose2D expects NCHW input with {_inChannels} channels; got [{string.Join(",", input.Shape)}].",
+                nameof(input));
+        }
+
+        return _layer.Forward(input);
+    }
+
+    public long GetParameterCount() => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public long ParameterCount => GetParameterCount();
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() => _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => _layer.IsShapeResolved
+            ? ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks()
+            : Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+
+    public void WriteParameters(BinaryWriter writer) => BackboneSerialization.WriteLayerParameters(writer, _layer);
+
+    public void ReadParameters(BinaryReader reader) => BackboneSerialization.ReadLayerParameters(reader, _layer);
+}

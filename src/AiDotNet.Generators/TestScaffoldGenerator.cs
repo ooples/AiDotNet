@@ -11070,12 +11070,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // The detection families additionally pin InputSize to the fixture's 64x64 image:
                 // Detect resizes every image to InputSize, and at the 640x640 default a CPU fixture
                 // spends minutes per call - and DINO/RT-DETR run dense attention over every pyramid
-                // token, which does not fit at all (tracked separately). Only the working resolution
-                // changes; architecture and widths stay at their defaults.
+                // token, which does not fit at all (#2171). Only the working resolution changes;
+                // architecture and widths stay at their defaults. The OCR family likewise pins the
+                // decoding budget: an untrained autoregressive recognizer (TrOCR) almost never emits
+                // its end token, so every Predict runs to MaxSequenceLength (100 by default) - about
+                // six seconds per call on a CPU fixture. Sixteen steps exercise the same decoder.
                 bool pinInputSize = family == TestFamily.ObjectDetection || family == TestFamily.TextDetection;
+                bool pinDecodeLength = family == TestFamily.OCR;
                 constructorExpr = pinInputSize
                     ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }} }})"
-                    : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
+                    : pinDecodeLength
+                        ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ MaxSequenceLength = 16 }})"
+                        : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
             }
             else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
             {

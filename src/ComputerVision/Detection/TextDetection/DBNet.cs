@@ -26,6 +26,12 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 /// - Works well for both regular and irregular text shapes
 /// </para>
 ///
+/// <para>Architecture, as in the paper and its reference implementation: a ResNet backbone; a feature
+/// pyramid whose four levels are reduced to a common width by 1x1 lateral convolutions, merged top-down,
+/// smoothed by 3x3 convolutions to a quarter of that width and upsampled to 1/4 resolution and
+/// concatenated; then two identical heads - convolution, batch norm, ReLU, then two stride-2 transposed
+/// convolutions back to full resolution - predicting the probability map and the threshold map.</para>
+///
 /// <para>Reference: Liao et al., "Real-time Scene Text Detection with Differentiable
 /// Binarization", AAAI 2020</para>
 /// </remarks>
@@ -40,12 +46,9 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
     Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
 public partial class DBNet<T> : TextDetectorBase<T>
 {
-    private readonly Conv2D<T> _inConv;
-    private readonly Conv2D<T> _upConv1;
-    private readonly Conv2D<T> _upConv2;
-    private readonly Conv2D<T> _upConv3;
-    private readonly Conv2D<T> _probHead;
-    private readonly Conv2D<T> _threshHead;
+    private readonly DbFeaturePyramid<T> _pyramid;
+    private readonly DbHead<T> _probabilityHead;
+    private readonly DbHead<T> _thresholdHead;
     private readonly int _hiddenDim;
     private readonly double _k;
 
@@ -65,23 +68,22 @@ public partial class DBNet<T> : TextDetectorBase<T>
         // ResNet backbone
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
 
-        // Feature pyramid for multi-scale fusion
-        var stageChannels = Backbone.OutputChannels;
-        _inConv = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 1);
-        // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
-        // stage, so its input width is the decoder width plus that stage's channel count. These were
-        // declared as twice the decoder width, which matches no backbone stage, so the first merge
-        // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
-        // built for 512) and the model could not run a forward pass at all.
-        _upConv1 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv3 = new Conv2D<T>(_hiddenDim, _hiddenDim / 2, kernelSize: 3, padding: 1);
+        // Feature pyramid (the paper's FPN, mmocr FPNC): the fused map has _hiddenDim channels at 1/4
+        // resolution - 256 at the default size, as in the paper.
+        _pyramid = new DbFeaturePyramid<T>(Backbone.OutputChannels, _hiddenDim);
 
-        // Probability map head (text probability)
-        _probHead = new Conv2D<T>(_hiddenDim / 2, 1, kernelSize: 1);
+        // Probability and threshold heads, each back to full input resolution.
+        _probabilityHead = new DbHead<T>(_hiddenDim);
+        _thresholdHead = new DbHead<T>(_hiddenDim);
+    }
 
-        // Threshold map head (adaptive threshold)
-        _threshHead = new Conv2D<T>(_hiddenDim / 2, 1, kernelSize: 1);
+    /// <inheritdoc />
+    /// <remarks>Also switches the heads' batch-norm layers.</remarks>
+    public override void SetTrainingMode(bool training)
+    {
+        base.SetTrainingMode(training);
+        _probabilityHead.SetTrainingMode(training);
+        _thresholdHead.SetTrainingMode(training);
     }
 
     private static int GetHiddenDim(ModelSize size) => size switch
@@ -122,38 +124,13 @@ public partial class DBNet<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
-        // Extract multi-scale backbone features
-        var features = EnsureBackbone.ExtractFeatures(input);
+        var fused = _pyramid.Forward(EnsureBackbone.ExtractFeatures(input));
 
-        // Feature pyramid fusion
-        var x = _inConv.Forward(features[^1]);
-        x = ApplyReLU(x);
-
-        if (features.Count > 1)
-        {
-            x = UpsampleAndConcat(x, features[^2]);
-            x = _upConv1.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        if (features.Count > 2)
-        {
-            x = UpsampleAndConcat(x, features[^3]);
-            x = _upConv2.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        x = _upConv3.Forward(x);
-        x = ApplyReLU(x);
-
-        // Predict probability and threshold maps
-        var probMap = _probHead.Forward(x);
-        probMap = ApplySigmoid(probMap);
-
-        var threshMap = _threshHead.Forward(x);
-        threshMap = ApplySigmoid(threshMap);
+        var probMap = _probabilityHead.Forward(fused);
+        var threshMap = _thresholdHead.Forward(fused);
 
         // Apply differentiable binarization: DB = 1 / (1 + exp(-k * (P - T)))
         var binaryMap = ApplyDifferentiableBinarization(probMap, threshMap, _k);
@@ -262,15 +239,9 @@ public partial class DBNet<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
     protected override long GetHeadParameterCount()
-    {
-        return _inConv.GetParameterCount() +
-               _upConv1.GetParameterCount() +
-               _upConv2.GetParameterCount() +
-               _upConv3.GetParameterCount() +
-               _probHead.GetParameterCount() +
-               _threshHead.GetParameterCount();
-    }
+        => _pyramid.ParameterCount + _probabilityHead.ParameterCount + _thresholdHead.ParameterCount;
 
     /// <inheritdoc/>
     public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
@@ -299,9 +270,12 @@ public partial class DBNet<T> : TextDetectorBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported DBNet model version: {version}");
+            throw new InvalidDataException(
+                $"Unsupported DBNet model version: {version}. Version 2 is the paper architecture (feature " +
+                "pyramid with two upsampling heads); version 1 files hold the earlier concatenation decoder, " +
+                "whose layout no longer exists and cannot be loaded into it.");
         }
 
         string name = reader.ReadString();
@@ -330,12 +304,9 @@ public partial class DBNet<T> : TextDetectorBase<T>
 
         // Read component weights
         EnsureBackbone.ReadParameters(reader);
-        _inConv.ReadParameters(reader);
-        _upConv1.ReadParameters(reader);
-        _upConv2.ReadParameters(reader);
-        _upConv3.ReadParameters(reader);
-        _probHead.ReadParameters(reader);
-        _threshHead.ReadParameters(reader);
+        _pyramid.ReadParameters(reader);
+        _probabilityHead.ReadParameters(reader);
+        _thresholdHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
@@ -346,51 +317,17 @@ public partial class DBNet<T> : TextDetectorBase<T>
 
         // Write header
         writer.Write(0x44424E54); // "DBNT" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: feature pyramid + upsampling heads
         writer.Write(Name);
         writer.Write(_hiddenDim);
         writer.Write(_k);
 
         // Write component weights
         EnsureBackbone.WriteParameters(writer);
-        _inConv.WriteParameters(writer);
-        _upConv1.WriteParameters(writer);
-        _upConv2.WriteParameters(writer);
-        _upConv3.WriteParameters(writer);
-        _probHead.WriteParameters(writer);
-        _threshHead.WriteParameters(writer);
+        _pyramid.WriteParameters(writer);
+        _probabilityHead.WriteParameters(writer);
+        _thresholdHead.WriteParameters(writer);
     }
-
-    /// <summary>
-    /// Elementwise ReLU, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
-
-    /// <summary>
-    /// Elementwise Sigmoid, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
-
-    private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
-        // Upsample to the skip connection's resolution, then stack along channels. Tape-visible, so
-        // the decoder's gradient reaches the backbone through every skip.
-        => CvTensorOps<T>.ConcatChannels(BilinearUpsample(x, skip.Shape[2], skip.Shape[3]), skip);
-
-    private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
-        // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
-        => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
 
     private List<List<(int H, int W)>> FindConnectedComponents(bool[,] mask, int height, int width)
     {
@@ -539,5 +476,135 @@ public partial class DBNet<T> : TextDetectorBase<T>
         double union = areaA + areaB - intersect;
 
         return union > 0 ? intersect / union : 0;
+    }
+}
+
+/// <summary>
+/// DBNet's feature pyramid (Liao et al. 2020; mmocr <c>FPNC</c>): 1x1 lateral convolutions to a common
+/// width, a top-down merge, 3x3 smoothing to a quarter of that width per level, and all levels
+/// upsampled to the finest level's resolution and concatenated.
+/// </summary>
+internal sealed class DbFeaturePyramid<T> : CvParameterModule<T>
+{
+    private readonly Conv2D<T>[] _lateral;
+    private readonly Conv2D<T>[] _smooth;
+
+    public DbFeaturePyramid(IReadOnlyList<int> stageChannels, int width)
+    {
+        if (width % 4 != 0)
+        {
+            throw new ArgumentException($"The pyramid width must be divisible by 4; got {width}.", nameof(width));
+        }
+
+        _lateral = stageChannels.Select(channels => new Conv2D<T>(channels, width, kernelSize: 1)).ToArray();
+        _smooth = stageChannels.Select(_ => new Conv2D<T>(width, width / 4, kernelSize: 3, padding: 1)).ToArray();
+    }
+
+    public Tensor<T> Forward(List<Tensor<T>> features)
+    {
+        if (features.Count != _lateral.Length)
+        {
+            throw new ArgumentException(
+                $"Expected {_lateral.Length} backbone stages, got {features.Count}.", nameof(features));
+        }
+
+        var engine = AiDotNetEngine.Current;
+        int levels = features.Count;
+        var merged = new Tensor<T>[levels];
+        for (int i = levels - 1; i >= 0; i--)
+        {
+            var lateral = _lateral[i].Forward(features[i]);
+            merged[i] = i == levels - 1
+                ? lateral
+                : engine.TensorAdd(lateral, CvTensorOps<T>.ResizeNearest(merged[i + 1], lateral.Shape[2], lateral.Shape[3]));
+        }
+
+        int height = merged[0].Shape[2], width = merged[0].Shape[3];
+        var smoothed = new Tensor<T>[levels];
+        for (int i = 0; i < levels; i++)
+        {
+            // Deepest level first, as the reference implementation concatenates them.
+            var level = _smooth[levels - 1 - i].Forward(merged[levels - 1 - i]);
+            smoothed[i] = i == levels - 1 ? level : CvTensorOps<T>.ResizeNearest(level, height, width);
+        }
+
+        return engine.TensorConcatenate(smoothed, 1);
+    }
+
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => _lateral.Concat(_smooth);
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        foreach (var conv in _lateral.Concat(_smooth))
+        {
+            conv.WriteParameters(writer);
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        foreach (var conv in _lateral.Concat(_smooth))
+        {
+            conv.ReadParameters(reader);
+        }
+    }
+}
+
+/// <summary>
+/// One DBNet prediction head (probability or threshold): 3x3 convolution to a quarter of the width,
+/// batch norm and ReLU, a stride-2 transposed convolution with batch norm and ReLU, and a stride-2
+/// transposed convolution to one channel, then a sigmoid - from 1/4 resolution back to full.
+/// </summary>
+internal sealed class DbHead<T> : CvParameterModule<T>
+{
+    private readonly Conv2D<T> _conv;
+    private readonly BatchNorm2D<T> _norm1;
+    private readonly ConvTranspose2D<T> _up1;
+    private readonly BatchNorm2D<T> _norm2;
+    private readonly ConvTranspose2D<T> _up2;
+
+    public DbHead(int width)
+    {
+        int inner = width / 4;
+        _conv = new Conv2D<T>(width, inner, kernelSize: 3, padding: 1);
+        _norm1 = new BatchNorm2D<T>(inner);
+        _up1 = new ConvTranspose2D<T>(inner, inner, kernelSize: 2, stride: 2);
+        _norm2 = new BatchNorm2D<T>(inner);
+        _up2 = new ConvTranspose2D<T>(inner, 1, kernelSize: 2, stride: 2);
+    }
+
+    public Tensor<T> Forward(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var h = engine.ReLU(_norm1.Forward(_conv.Forward(x)));
+        h = engine.ReLU(_norm2.Forward(_up1.Forward(h)));
+        return engine.Sigmoid(_up2.Forward(h));
+    }
+
+    public void SetTrainingMode(bool training)
+    {
+        _norm1.SetTrainingMode(training);
+        _norm2.SetTrainingMode(training);
+    }
+
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+        => new IParameterSource<T>?[] { _conv, _norm1, _up1, _norm2, _up2 };
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        _conv.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _up1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+        _up2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        _conv.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _up1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
+        _up2.ReadParameters(reader);
     }
 }

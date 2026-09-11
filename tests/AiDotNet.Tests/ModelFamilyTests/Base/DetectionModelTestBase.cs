@@ -305,10 +305,16 @@ public abstract class DetectionModelTestBase<T>
     /// the wrong way. This asserts the step actually descends.
     /// </para>
     /// <para>
-    /// The target is all zeros, so the loss is the mean squared output. That is the one target whose
-    /// loss means the same thing at every output length: a two-stage detector's output grows and
-    /// shrinks with its proposal count as training moves the weights, and a random target would be
-    /// redrawn each step. The same image is used throughout.
+    /// The loss compared is the one the model's own training step reports (<c>GetLastLoss</c>, measured
+    /// before each update): mean squared error for most models, teacher-forced cross-entropy for
+    /// TrOCR. The first step's value is the loss at the initial weights; one more step after
+    /// <see cref="LossReductionIterations"/> updates reports the loss at the trained weights.
+    /// </para>
+    /// <para>
+    /// The target is all zeros - the one target whose loss means the same thing at every output
+    /// length: a two-stage detector's output grows and shrinks with its proposal count as training
+    /// moves the weights, and a random target would be redrawn each step. The same image is used
+    /// throughout.
     /// </para>
     /// </remarks>
     [Fact(Timeout = 300000)]
@@ -320,43 +326,38 @@ public abstract class DetectionModelTestBase<T>
         using var model = CreateModel();
         var image = CreateRandomImage(rng);
 
-        double before = MeanSquare(model.Predict(image));
-        for (int step = 0; step < LossReductionIterations; step++)
+        double before = double.NaN;
+        for (int step = 0; step <= LossReductionIterations; step++)
         {
             model.Train(image, new Tensor<T>(model.Predict(image)._shape));
+            if (step == 0)
+            {
+                before = LastTrainingLoss(model);
+            }
         }
 
-        double after = MeanSquare(model.Predict(image));
+        double after = LastTrainingLoss(model);
 
         Assert.False(double.IsNaN(after) || double.IsInfinity(after), $"Loss is {after} after training.");
         Assert.True(
             after < before,
-            $"{LossReductionIterations} training steps toward a zero target did not lower the mean squared "
-            + $"output: {before:G6} before, {after:G6} after. The step is not descending the loss - a "
+            $"{LossReductionIterations} training steps toward a zero target did not lower the training "
+            + $"loss: {before:G6} before, {after:G6} after. The step is not descending the loss - a "
             + "sign error, a learning rate that overshoots, or gradients reaching the wrong tensors.");
     }
 
     /// <summary>
-    /// Number of steps <see cref="Train_ShouldReduceLoss"/> takes.
+    /// Number of updates <see cref="Train_ShouldReduceLoss"/> makes before measuring.
     /// </summary>
     protected virtual int LossReductionIterations => 3;
 
-    private double MeanSquare(Tensor<T> output)
+    private double LastTrainingLoss(IFullModel<T, Tensor<T>, Tensor<T>> model) => model switch
     {
-        if (output.Length == 0)
-        {
-            return 0;
-        }
-
-        double sum = 0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            double value = ToD(output[i]);
-            sum += value * value;
-        }
-
-        return sum / output.Length;
-    }
+        AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<T> detector => ToD(detector.GetLastLoss()),
+        AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase<T> textDetector => ToD(textDetector.GetLastLoss()),
+        AiDotNet.ComputerVision.OCR.OCRBase<T> recognizer => ToD(recognizer.GetLastLoss()),
+        _ => throw new InvalidOperationException($"{model.GetType().Name} does not report a training loss."),
+    };
 
     [Fact(Timeout = 300000)]
     public async Task Train_ShouldProduceFinitePredictions()
