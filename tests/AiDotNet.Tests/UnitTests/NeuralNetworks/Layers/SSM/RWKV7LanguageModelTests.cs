@@ -16,6 +16,12 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class RWKV7LanguageModelTests
 {
+    public RWKV7LanguageModelTests()
+    {
+        // Keep focused .NET Framework runs independent of other test classes.
+        TestModuleInitializer.EnsureInitialized();
+    }
+
     private static NeuralNetworkArchitecture<float> CreateArch(int vocabSize = 100)
     {
         return new NeuralNetworkArchitecture<float>(

@@ -113,3 +113,81 @@ Loaded binary SHA-256:
 - `AiDotNet.dll`: `5FFC1C04DE1D4BD5B58E4065F873667FEBA969C192C7084022DBAB52DC6285E4`
 
 This is the combined review filter on the full assembly, not an all-shards run.
+
+## Compatibility integration
+
+The full main test project also built both compatibility targets (`net8.0` and
+`net471`) with **zero errors and 13,445 repository warnings**, in 11m58s:
+
+```powershell
+dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -p:CompatBuildOnly=true -m:1 -p:UseSharedCompilation=false -p:BuildInParallel=false -p:GeneratePackageOnBuild=false
+```
+
+The same 419-case filter then passed on each actual compatibility assembly:
+**419 passed, zero failed, zero skipped on net8.0 and on net471**. The three
+main-assembly targets therefore account for **1,257 passing executions**. These
+compatibility runs used the existing serial collection configuration and
+`AIDOTNET_FORCE_CPU=1`, `DOTNET_gcServer=0`, `COMPlus_gcServer=0`, with the command
+below for each target. Unlike the earlier net10 run, theory pre-enumeration and
+discovery diagnostics were left enabled; the reported 8s/10s test durations
+exclude full-assembly discovery and are not end-to-end timings.
+
+```powershell
+$filter = 'FullyQualifiedName~SequenceModelOptionsContractTests|FullyQualifiedName~SharedOptionsDocumentationContractTests|FullyQualifiedName~GeneratedSequenceFixtureContractTests|FullyQualifiedName~OptionsSurfaceRatchetTests|FullyQualifiedName~RWKV7LanguageModelTests.Model_Constructor_'
+dotnet vstest tests/AiDotNet.Tests/bin/Release/net8.0/AiDotNetTests.dll "/TestCaseFilter:$filter" '/Logger:trx;LogFileName=pr2128-full-net8-review.trx' '/ResultsDirectory:artifacts/options-runtime' -- RunConfiguration.MaxCpuCount=1
+dotnet vstest tests/AiDotNet.Tests/bin/Release/net471/AiDotNetTests.dll "/TestCaseFilter:$filter" '/Logger:trx;LogFileName=pr2128-full-net471-review.trx' '/ResultsDirectory:artifacts/options-runtime' -- RunConfiguration.MaxCpuCount=1
+```
+
+Loaded binary SHA-256:
+
+| Target | Assembly | SHA-256 |
+| --- | --- | --- |
+| net8.0 | AiDotNetTests.dll | `6B646534A41FE389158733B5D7B8CAAEA61484C1E8810845826D4E5F7A94E56E` |
+| net8.0 | AiDotNet.dll | `C3B431114E700958229EF0BAD10EDECBE161038C355119C2FD43796DA55B806D` |
+| net471 | AiDotNetTests.dll | `51EB9BE42199A0664CD2CE1ECBB9E9CE14BC55588C7E9F657C45A931BE280175` |
+| net471 | AiDotNet.dll | `342F97070EE8617B4D8ECE2BDF5AA093A8430D25A2930BCABF74BBF14C9ACD5D` |
+
+This closes local build/target compatibility for the review changes. It does not
+claim all model-family training tests, GPU execution, hosted CI, or the separate
+phase-3 migration are complete. In particular, phase 3 must migrate its new
+vision-base consumers to `VisionDim`/`VisionLayers` when integrating this branch;
+a text-clean merge alone is not semantic compatibility proof.
+
+## Final explicit fixture initialization and replay
+
+The last adversarial check found that .NET Framework excludes the automatic
+module initializer. Both actual-model fixture constructors now explicitly call
+the existing `TestModuleInitializer.EnsureInitialized()`; this makes focused CPU,
+threading and offline-licensing setup independent of other test classes. The
+focused runtime runner now targets all three frameworks and passed **63/63 per
+target**, zero skips. The entire existing RWKV7 unit fixture also passed **49/49
+per target**, zero skips, including forward/state/parameter tests outside the
+17 constructor cases. These overlapping counts are not added to the combined
+filter as if they were distinct tests.
+
+After those final two fixture edits, the main test project was rebuilt against
+the unchanged, already-built core and generator outputs on all three targets:
+**zero errors, 11,800 repository warnings, 5m55s**. The first no-restore attempt
+had only compatibility targets in its assets file and correctly failed NETSDK1005
+for net10.0; that invocation is not counted as build proof. The successful
+invocation restored the complete target set:
+
+```powershell
+dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -m:1 -p:BuildProjectReferences=false -p:UseSharedCompilation=false -p:BuildInParallel=false -p:GeneratePackageOnBuild=false
+```
+
+The primary reviewer then reran the identical combined filter, applying the
+repository's output-only runner hardening on each target: **419 passed, zero
+failed, zero skipped on each of net10.0, net8.0 and net471**. Final TRXs are
+`artifacts/options-runtime/pr2128-final-full-net10.0.trx`,
+`pr2128-final-full-net8.0.trx` and `pr2128-final-full-net471.trx`. The successful
+build log is `artifacts/pr2128-final-restored-test-build.log`.
+
+Final main test-assembly SHA-256 values (superseding the earlier test hashes;
+the core hashes above are unchanged):
+
+| Target | AiDotNetTests.dll SHA-256 |
+| --- | --- |
+| net10.0 | `22311D91F676B2733A09365D5AE0CDD0764F5CABB8AE7909701D6BC2ED17DBDC` |
+| net8.0 | `5740BCE49D35FD7CED80800F4C64DB7E4AFA6A93692ECFDD03C24ECD882D2C60` |
+| net471 | `630CE96149E2CEE5CFF17A43FCDFF337C4FC8AC99C7B1FCE6B9C0568D3318546` |
