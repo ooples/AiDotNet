@@ -162,15 +162,18 @@ public class BuildAsyncFacadeRadianceFieldTests
     public async Task BuildAsync_InstantNGP_ConfigureModel_DoesNotThrowFromFeatureSelection()
     {
         var ngp = new InstantNGP<float>(
-            hashTableSize: 4096,
-            numLevels: 4,
-            featuresPerLevel: 2,
-            finestResolution: 256,
-            coarsestResolution: 16,
-            mlpHiddenDim: 16,
-            mlpNumLayers: 2,
-            occupancyGridResolution: 16,
-            learningRate: 1e-2);
+            new AiDotNet.Models.Options.InstantNGPOptions<float>
+            {
+                HashTableSize = 4096,
+                NumLevels = 4,
+                FeaturesPerLevel = 2,
+                FinestResolution = 256,
+                CoarsestResolution = 16,
+                MlpHiddenDim = 16,
+                MlpNumLayers = 2,
+                OccupancyGridResolution = 16,
+                LearningRate = 1e-2
+            });
 
         var (xTrain, yTrain) = SmallCubeBatch(seed: 18262);
 

@@ -314,120 +314,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes a new instance of the InstantNGP class.
-    /// </summary>
-    /// <param name="hashTableSize">Size of each hash table (typical: 2^19 = 524,288).</param>
-    /// <param name="numLevels">Number of resolution levels (typical: 16).</param>
-    /// <param name="featuresPerLevel">Number of features per hash table level (typical: 2).</param>
-    /// <param name="finestResolution">Finest grid resolution (typical: 512-2048).</param>
-    /// <param name="coarsestResolution">Coarsest grid resolution (typical: 16).</param>
-    /// <param name="mlpHiddenDim">Hidden dimension of tiny MLP (typical: 64).</param>
-    /// <param name="mlpNumLayers">Number of MLP layers (typical: 2).</param>
-    /// <param name="occupancyGridResolution">Resolution of occupancy grid (typical: 128).</param>
-    /// <param name="learningRate">Learning rate for hash table and MLP updates.</param>
-    /// <param name="occupancyDecay">EMA decay for occupancy grid updates.</param>
-    /// <param name="occupancyThreshold">Density threshold for occupancy.</param>
-    /// <param name="occupancyUpdateInterval">Training steps between occupancy updates.</param>
-    /// <param name="sceneMin">Optional scene bounds minimum (defaults to [0, 0, 0]).</param>
-    /// <param name="sceneMax">Optional scene bounds maximum (defaults to [1, 1, 1]).</param>
-    /// <param name="lossFunction">Optional loss function for training.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> Creates an Instant-NGP model for fast 3D scene representation.
-    ///
-    /// Parameters explained:
-    /// - hashTableSize: How many entries in each hash table
-    ///   - Larger = better quality, more memory
-    ///   - Typical: 2^19 = 524K entries
-    ///   - Total memory: numLevels × hashTableSize × featuresPerLevel × 4 bytes
-    ///   - Example: 16 × 524K × 2 × 4 = 64MB
-    ///
-    /// - numLevels: How many resolution scales
-    ///   - More levels = capture more frequency details
-    ///   - Typical: 16 levels
-    ///   - Geometric spacing: each level is ~1.5× finer than previous
-    ///
-    /// - featuresPerLevel: Features stored per hash entry
-    ///   - Typical: 2 (good balance of quality vs speed)
-    ///   - Higher = more expressive but slower
-    ///
-    /// - finestResolution: Highest detail level
-    ///   - Typical: 512-2048
-    ///   - Higher = capture finer details
-    ///   - Limited by hash table size (collisions increase)
-    ///
-    /// - coarsestResolution: Lowest detail level
-    ///   - Typical: 16
-    ///   - Captures overall structure
-    ///
-    /// - mlpHiddenDim: Size of tiny MLP hidden layers
-    ///   - Typical: 64 (much smaller than NeRF's 256)
-    ///   - Smaller is faster, sufficient because hash encoding does heavy lifting
-    ///
-    /// - mlpNumLayers: Depth of tiny MLP
-    ///   - Typical: 2 (vs NeRF's 8)
-    ///   - Simpler network is sufficient with good hash features
-    ///
-    /// - occupancyGridResolution: Voxel grid resolution for empty space skipping
-    ///   - Typical: 128 (128³ = 2M voxels)
-    ///   - Higher = more precise but more memory
-    ///
-    /// Standard Instant-NGP configuration for bounded scenes:
-    /// new InstantNGP(
-    ///     hashTableSize: 524288,     // 2^19
-    ///     numLevels: 16,
-    ///     featuresPerLevel: 2,
-    ///     finestResolution: 2048,
-    ///     coarsestResolution: 16,
-    ///     mlpHiddenDim: 64,
-    ///     mlpNumLayers: 2,
-    ///     occupancyGridResolution: 128
-    /// );
-    ///
-    /// Memory usage estimate:
-    /// - Hash tables: ~64MB
-    /// - Occupancy grid: ~2MB
-    /// - MLP weights: ~50KB
-    /// - Total: ~66MB (vs ~5MB for NeRF, but 100× faster)
-    /// </remarks>
-    public InstantNGP(
-        int hashTableSize = 524288,
-        int numLevels = 16,
-        int featuresPerLevel = 2,
-        int finestResolution = 2048,
-        int coarsestResolution = 16,
-        int mlpHiddenDim = 64,
-        int mlpNumLayers = 2,
-        int occupancyGridResolution = 128,
-        double learningRate = 1e-2,
-        double occupancyDecay = 0.95,
-        double occupancyThreshold = 0.01,
-        int occupancyUpdateInterval = 16,
-        Vector<T>? sceneMin = null,
-        Vector<T>? sceneMax = null,
-        ILossFunction<T>? lossFunction = null)
-        : this(
-            new InstantNGPOptions<T>
-            {
-                HashTableSize = hashTableSize,
-                NumLevels = numLevels,
-                FeaturesPerLevel = featuresPerLevel,
-                FinestResolution = finestResolution,
-                CoarsestResolution = coarsestResolution,
-                MlpHiddenDim = mlpHiddenDim,
-                MlpNumLayers = mlpNumLayers,
-                OccupancyGridResolution = occupancyGridResolution,
-                LearningRate = learningRate,
-                OccupancyDecay = occupancyDecay,
-                OccupancyThreshold = occupancyThreshold,
-                OccupancyUpdateInterval = occupancyUpdateInterval,
-                SceneMin = sceneMin,
-                SceneMax = sceneMax
-            },
-            lossFunction)
-    {
-    }
-
     private static NeuralNetworkArchitecture<T> CreateArchitecture(int hiddenDim)
     {
         return new NeuralNetworkArchitecture<T>(
@@ -1831,10 +1717,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             ModelData = SerializeForMetadata()
         };
     }
-
-
-
-
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
