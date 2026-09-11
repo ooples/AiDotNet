@@ -25,10 +25,12 @@ namespace AiDotNet.Tests.SelfSupervisedLearning;
 /// </remarks>
 public class ContrastiveObjectiveGradientTests
 {
-    private static Tensor<double> Sample(int rows, int cols, int seed)
+    private static Tensor<double> Sample(int rows, int cols, int seed) => Sample(new[] { rows, cols }, seed);
+
+    private static Tensor<double> Sample(int[] shape, int seed)
     {
         var rng = new Random(seed);
-        var t = new Tensor<double>(new[] { rows, cols });
+        var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() * 2 - 1;
         return t;
     }
@@ -49,13 +51,21 @@ public class ContrastiveObjectiveGradientTests
         _ => throw new ArgumentOutOfRangeException(nameof(name)),
     };
 
+    /// <summary>
+    /// The input shape each objective is defined on. The embedding objectives take [batch, dim];
+    /// MAE reconstructs PATCHES and validates rank-3 [batch, patches, patch_dim]. A rank-2 input used
+    /// to be silently normalized by the wrong count, so the loss now rejects it rather than guessing.
+    /// </summary>
+    private static int[] ShapeFor(string name) => name == "MAE" ? new[] { 2, 2, 3 } : new[] { 4, 3 };
+
     [Theory]
     [MemberData(nameof(Objectives))]
     public void Objective_ProducesFiniteNonZeroGradient(string name)
     {
-        const int rows = 4, cols = 3;
-        var view1 = Sample(rows, cols, 11);
-        var view2 = Sample(rows, cols, 29);
+        var shape = ShapeFor(name);
+        int cols = shape[^1];
+        var view1 = Sample(shape, 11);
+        var view2 = Sample(shape, 29);
         var loss = Create(name, cols);
 
         using var tape = new GradientTape<double>();
@@ -84,9 +94,10 @@ public class ContrastiveObjectiveGradientTests
     [MemberData(nameof(Objectives))]
     public void Objective_GradientMatchesFiniteDifferences(string name)
     {
-        const int rows = 4, cols = 3;
-        var view1 = Sample(rows, cols, 7);
-        var view2 = Sample(rows, cols, 13);
+        var shape = ShapeFor(name);
+        int cols = shape[^1];
+        var view1 = Sample(shape, 7);
+        var view2 = Sample(shape, 13);
         var loss = Create(name, cols);
 
         using var tape = new GradientTape<double>();

@@ -221,13 +221,16 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
             Assert.NotNull(model.DefaultLossFunction);
 
-            // Act - train and predict
+            // Act - train and predict. The two series must not be collinear: VAR regresses each on the
+            // lags of both, and with series[1] = 0.5 * series[0] (this test's original data) the lag
+            // columns are linearly dependent, X'X is singular, and OLS is genuinely unidentified - the
+            // model correctly refuses with a zero-pivot error rather than inventing coefficients.
             var features = new Matrix<double>(50, 2);
             var labels = new Vector<double>(50);
             for (int i = 0; i < 50; i++)
             {
-                features[i, 0] = i;
-                features[i, 1] = i * 0.5;
+                features[i, 0] = Math.Sin(i * 0.3) + i * 0.05;
+                features[i, 1] = Math.Cos(i * 0.17) - i * 0.02;
                 labels[i] = i * 2.0;
             }
             model.Train(features, labels);
