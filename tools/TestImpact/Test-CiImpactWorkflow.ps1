@@ -355,6 +355,50 @@ Assert-Contract ($selectStep.Contains('runWithoutInstrumentationShardNames = @($
 Assert-Contract ($selectStep.Contains('coverage_run_without_instrumentation=$(ConvertTo-Json')) `
     'the typed coverage decision is not transported to the shard jobs'
 
+# ---- Post-merge delta reuse. A pull request merged while behind master lands a tree its run never
+# validated, so exact-tree reuse never matched and nearly every merge re-ran all 116 shards.
+$sourceJob = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
+$sourceHeader = Get-JobHeader -JobBlock $sourceJob
+Assert-Contract ($sourceJob.Contains("fetch-depth: `${{ github.event_name == 'push' && '0' || '1' }}") -and
+        -not $sourceJob.Contains("== 'push' && 0 ||")) `
+    'validation-source lacks the history to rebuild the validated tree and diff it in map coordinates'
+$deltaMapStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve certified shard map for delta reuse'
+Assert-Contract ([bool] $deltaMapStep -and $deltaMapStep.Contains('continue-on-error: true') -and
+        $deltaMapStep.Contains('Resolve-CertifiedShardMap.ps1') -and $deltaMapStep.Contains('Test-CertifiedShardMap.ps1')) `
+    'delta reuse does not select with an audited map, or a map failure can fail the push instead of disabling delta reuse'
+$resolveStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve exact-tree PR run'
+Assert-Contract ($resolveStep.Contains("-MapFile '`${{ steps.delta-map.outputs.map_file }}'") -and
+        $resolveStep.Contains("-ShardManifestFile '`${{ steps.delta-map.outputs.manifest_file }}'")) `
+    'the reuse resolver is not given the delta-reuse map and manifest'
+foreach ($output in @('delta_mode', 'partial_shards', 'import_run_id', 'import_sha', 'import_shards')) {
+    Assert-Contract ($sourceHeader.Contains("${output}: `${{ steps.resolve.outputs.$output || steps.defaults.outputs.$output }}")) `
+        "validation-source does not publish the fail-closed delta output '$output'"
+}
+Assert-Contract ($validationReuseResolverText.Contains('function Resolve-ValidatedTree') -and
+        $validationReuseResolverText.Contains('$tree -cne $ExpectedTree')) `
+    'delta reuse does not require the rebuilt tree to equal the validated tree exactly'
+Assert-Contract ($validationReuseResolverText.Contains("-DecisionScope Validation -RunId `$candidate.RunId")) `
+    'delta reuse can claim Complete scope although CodeQL and Sonar analysed a different tree'
+Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains('PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}')) `
+    'a partial post-merge re-run does not reduce the shard matrix'
+$mapStep = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
+Assert-Contract ($mapStep.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
+    'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
+Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
+    'the select step computes its own master delta - a second, unaudited reuse mechanism'
+Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `
+    'imported shards are reported to regression analysis as deliberately skipped'
+foreach ($consumer in @(
+        @{ Job = 'test-regression-analysis'; Prefix = 'coverage' },
+        @{ Job = 'ci-test-analysis'; Prefix = 'test-results' },
+        @{ Job = 'sonarcloud'; Prefix = 'coverage' })) {
+    $consumerJob = Get-JobBlock -WorkflowText $validation -Job $consumer.Job
+    Assert-Contract ($consumerJob.Contains('Import-PullRequestShardArtifacts.ps1') -and
+            $consumerJob.Contains("-ArtifactPrefix $($consumer.Prefix)") -and
+            $consumerJob.Contains('run-id: ${{ needs.validation-source.outputs.import_run_id }}')) `
+        "$($consumer.Job) does not import the pull request's results for shards a partial run did not re-run"
+}
+
 # A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
 # ListArtifacts concurrently and GitHub responds with a secondary-rate-limit 403. The build publishes
 # the immutable ID and digest once; both consumer matrices use the tested direct receiver, retain hard

@@ -1,12 +1,31 @@
 <#
 .SYNOPSIS
-    Resolves exact-tree CI evidence for a landed pull request.
+    Resolves CI evidence for a landed pull request: exact-tree reuse, or delta reuse when the pull
+    request was behind its base branch.
 
 .DESCRIPTION
     A Validation certificate suppresses build/test/model validation but deliberately reruns
     CodeQL and Sonar. A Complete certificate suppresses both stages. Every runtime certificate
     additionally requires the immutable analysis, outcome-ledger, and coverage artifacts that the
     landed run must promote. Missing, malformed, stale, or tree-mismatched evidence fails closed.
+
+    DELTA REUSE. A pull request merged while behind its base branch lands a tree that differs from
+    the one its run validated - by exactly the commits the base branch gained in between (Δ).
+    Exact-tree matching can never reuse that, which is why nearly every merge re-ran the full
+    matrix. With a certified map, Δ is selected like any other change:
+
+      * Δ needs the full matrix (a CI-control, build or unmappable edit)  -> run everything.
+      * Δ touches no shard the pull request ran                          -> reuse its results.
+      * Δ touches some of the pull request's shards                      -> re-run only those,
+        and import the pull request's artifacts for the rest, so the landed commit's ledger,
+        analysis and coverage still describe every shard the pull request validated.
+
+    A shard Δ affects but the pull request did not run was validated by the commits that make up Δ,
+    each on its own run, and this pull request's change does not reach it; that is the same premise
+    pull-request selection itself rests on, and the nightly miss audit measures it.
+
+    Delta reuse is at most Validation-scoped: CodeQL and Sonar analysed a different tree, so they
+    always run again on the landed one.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Resolve')]
 param(
@@ -16,6 +35,22 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Resolve')] [string] $ExpectedBaseBranch,
     [Parameter(Mandatory, ParameterSetName = 'Resolve')] [string] $GitHubOutput,
     [Parameter(ParameterSetName = 'Resolve')] [ValidateRange(0, 120)] [int] $WaitMinutes = 40,
+    # Delta reuse inputs. Without a certified map there is nothing to select with, and an
+    # exact-tree mismatch keeps failing closed exactly as before.
+    [Parameter(ParameterSetName = 'Resolve')]
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $MapFile,
+    [Parameter(ParameterSetName = 'Resolve')]
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $ShardManifestFile,
+    [Parameter(ParameterSetName = 'Resolve')]
+    [Parameter(ParameterSetName = 'PlanDelta')] [string] $SelectorPath = "$PSScriptRoot/Select-Shards.ps1",
+    # Offline delta planning against the checked-out landed commit, for tests and diagnosis:
+    # the tested merge commit's parents and tree, and the shards its run executed.
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [switch] $PlanDelta,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $TestedBaseSha,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $TestedHeadSha,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $TestedTree,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [AllowEmptyString()] [string] $PullRequestShardsJson,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -151,6 +186,116 @@ function Select-BestCiEvidence {
         Select-Object -First 1)[0]
 }
 
+function Get-DeltaReuseDecision {
+    <#
+        Pure: the landed commit's validation plan from the selector's verdict on Δ and the shards
+        the pull request's run executed. Mode is Reuse (nothing to re-run), Partial (re-run Rerun,
+        import Import from the pull request run) or None (run the full matrix).
+    #>
+    param(
+        [Parameter(Mandatory)] [bool] $SelectionEscalated,
+        [Parameter(Mandatory)] [bool] $SelectionRequiresValidation,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $DeltaShards,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $PullRequestShards
+    )
+
+    $pullRequest = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($shard in $PullRequestShards) { if ($shard) { [void] $pullRequest.Add([string] $shard) } }
+
+    if ($SelectionEscalated) {
+        return [pscustomobject]@{ Mode = 'None'; Rerun = @(); Import = @()
+            Why = 'the change since the validated tree needs the full matrix' }
+    }
+    if (-not $SelectionRequiresValidation) {
+        return [pscustomobject]@{ Mode = 'Reuse'; Rerun = @(); Import = @($pullRequest)
+            Why = 'the change since the validated tree is non-runtime' }
+    }
+
+    $delta = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($shard in $DeltaShards) { if ($shard) { [void] $delta.Add([string] $shard) } }
+    # An empty selection for a runtime delta is a selector anomaly, never permission to skip.
+    if ($delta.Count -eq 0) {
+        return [pscustomobject]@{ Mode = 'None'; Rerun = @(); Import = @()
+            Why = 'the selector returned no shards for a runtime change' }
+    }
+
+    $rerun = @($pullRequest | Where-Object { $delta.Contains($_) })
+    $import = @($pullRequest | Where-Object { -not $delta.Contains($_) })
+    if ($rerun.Count -eq 0) {
+        return [pscustomobject]@{ Mode = 'Reuse'; Rerun = @(); Import = $import
+            Why = 'the change since the validated tree reaches none of the shards the pull request ran' }
+    }
+    return [pscustomobject]@{ Mode = 'Partial'; Rerun = $rerun; Import = $import
+        Why = "the change since the validated tree reaches $($rerun.Count) of the $($pullRequest.Count) shard(s) the pull request ran" }
+}
+
+function Resolve-ValidatedTree {
+    <#
+        Rebuilds the tree a pull-request run validated from its merge commit's two parents, and
+        returns it only if it is byte-identical to the tree GitHub reports for that commit.
+
+        The tested merge commit itself is usually unreachable once the pull request merges (its
+        refs/pull/N/merge ref moves or is removed), so it cannot be relied on to be fetchable. Its
+        parents - the base-branch commit and the pull request head - remain reachable. A
+        conflicting rebuild, or any tree difference, returns $null: delta reuse then fails closed.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $BaseSha,
+        [Parameter(Mandatory)] [string] $HeadSha,
+        [Parameter(Mandatory)] [string] $ExpectedTree
+    )
+
+    $output = @(& git merge-tree --write-tree --no-messages $BaseSha $HeadSha 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) { return $null }
+    $tree = ([string] $output[0]).Trim()
+    if ($tree -cne $ExpectedTree) { return $null }
+    return $tree
+}
+
+function Invoke-DeltaPlan {
+    <#
+        Everything delta reuse decides from Git alone: rebuild the validated tree from the tested
+        merge commit's parents, select over what the checked-out landed commit adds to it, and
+        intersect with the shards the pull request ran. Returns a failure string, or the plan.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $BaseSha,
+        [Parameter(Mandatory)] [string] $HeadSha,
+        [Parameter(Mandatory)] [string] $ExpectedTree,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $PullRequestShards,
+        [Parameter(Mandatory)] [string] $Map,
+        [Parameter(Mandatory)] [string] $Manifest,
+        [Parameter(Mandatory)] [string] $Selector
+    )
+
+    $tree = Resolve-ValidatedTree -BaseSha $BaseSha -HeadSha $HeadSha -ExpectedTree $ExpectedTree
+    if ($null -eq $tree) { return "the validated tree $ExpectedTree could not be rebuilt exactly from its parents" }
+
+    $expectedShards = @(Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json | ForEach-Object { [string] $_.name })
+    $selectionFile = Join-Path ([System.IO.Path]::GetTempPath()) "delta-selection-$PID-$([guid]::NewGuid().ToString('N')).json"
+    try {
+        & $Selector -MapFile $Map -DeltaFromTree $tree -ShardManifestFile $Manifest `
+            -ExpectedShards $expectedShards -OutFile $selectionFile | Out-Host
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $selectionFile)) { return 'the delta selector failed' }
+        $selection = Get-Content -LiteralPath $selectionFile -Raw | ConvertFrom-Json
+    }
+    finally { Remove-Item -LiteralPath $selectionFile -ErrorAction SilentlyContinue }
+
+    $decision = Get-DeltaReuseDecision -SelectionEscalated ([bool] $selection.escalate) `
+        -SelectionRequiresValidation ([bool] $selection.requiresValidation) `
+        -DeltaShards @($selection.shards) -PullRequestShards $PullRequestShards
+    return [pscustomobject]@{ Decision = $decision; Tree = $tree; Selection = $selection }
+}
+
+function Get-ShardFromJobName {
+    <# 'Tests (net10.0) - Unit - 01 Activation' -> 'Unit - 01 Activation'; anything else -> $null. #>
+    param([string] $JobName)
+    if (-not $JobName.StartsWith('Tests (', [StringComparison]::Ordinal)) { return $null }
+    $separator = $JobName.IndexOf(') - ', [StringComparison]::Ordinal)
+    if ($separator -lt 0) { return $null }
+    return $JobName.Substring($separator + 4)
+}
+
 function Write-ReuseDecision {
     param(
         [Parameter(Mandatory)] [CiValidationReuseScope] $DecisionScope,
@@ -158,7 +303,12 @@ function Write-ReuseDecision {
         [long] $PrNumber = 0,
         [string] $TestedSha = '',
         [bool] $RequiresValidation = $true,
-        [string] $Summary = ''
+        [string] $Summary = '',
+        [string] $DeltaMode = '',
+        [string[]] $PartialShards = @(),
+        [long] $ImportRunId = 0,
+        [string] $ImportSha = '',
+        [string[]] $ImportShards = @()
     )
 
     $reuse = $DecisionScope -ne [CiValidationReuseScope]::None
@@ -172,7 +322,12 @@ function Write-ReuseDecision {
         "reuse_quality=$($reuseQuality.ToString().ToLowerInvariant())",
         "reused_requires_validation=$($RequiresValidation.ToString().ToLowerInvariant())",
         "execute_validation=$(((-not $reuse)).ToString().ToLowerInvariant())",
-        "execute_quality=$(((-not $reuseQuality)).ToString().ToLowerInvariant())"
+        "execute_quality=$(((-not $reuseQuality)).ToString().ToLowerInvariant())",
+        "delta_mode=$DeltaMode",
+        "partial_shards=$(ConvertTo-Json -InputObject @($PartialShards) -Compress)",
+        "import_run_id=$(if ($ImportRunId -gt 0) { $ImportRunId } else { '' })",
+        "import_sha=$ImportSha",
+        "import_shards=$(ConvertTo-Json -InputObject @($ImportShards) -Compress)"
     )
     $lines | Out-File -LiteralPath $GitHubOutput -Append -Encoding utf8
     if ($Summary -and $env:GITHUB_STEP_SUMMARY) {
@@ -265,12 +420,64 @@ if ($SelfTest) {
     Assert-True ($null -ne (Select-BestCiEvidence @($nonRuntime))) `
         'non-runtime evidence incorrectly required test artifacts'
 
+    # ---- Delta reuse decisions. ----------------------------------------------------------------
+    $pr = @('Integration D', 'Integration E-G', 'Unit - 10 RL')
+    $d = Get-DeltaReuseDecision -SelectionEscalated $true -SelectionRequiresValidation $true -DeltaShards @() -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'None') 'a delta that needs the full matrix was reused'
+    $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $false -DeltaShards @() -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'Reuse' -and @($d.Rerun).Count -eq 0) 'a non-runtime delta was not reused outright'
+    $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
+        -DeltaShards @('Unit - 02 Data', 'ModelFamily - Audio') -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'Reuse') 'a delta reaching none of the pull request''s shards was not reused'
+    Assert-True (((@($d.Import) | Sort-Object) -join ',') -eq ((@($pr) | Sort-Object) -join ',')) `
+        'a full delta reuse did not account for every pull-request shard'
+    $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
+        -DeltaShards @('Integration D', 'Unit - 02 Data') -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'Partial') 'an overlapping delta did not produce a partial re-run'
+    Assert-True ((@($d.Rerun) -join ',') -ceq 'Integration D') 'a partial re-run included shards outside the overlap'
+    Assert-True ((@($d.Import) -join ',') -ceq 'Integration E-G,Unit - 10 RL') `
+        'a partial re-run did not import exactly the pull request''s other shards'
+    Assert-True (-not (@($d.Rerun) -contains 'Unit - 02 Data')) `
+        'a shard only the base branch''s own commits reach was re-run for this pull request'
+    $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true -DeltaShards @() -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'None') 'an empty selection for a runtime delta was treated as permission to skip'
+    $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
+        -DeltaShards @('integration d') -PullRequestShards $pr
+    Assert-True ($d.Mode -ceq 'Reuse') 'shard names were matched ignoring case'
+
+    Assert-True ((Get-ShardFromJobName 'Tests (net10.0) - Unit - 01 Activation/Attention') -ceq 'Unit - 01 Activation/Attention') `
+        'a test job name did not yield its shard'
+    Assert-True ($null -eq (Get-ShardFromJobName 'Build')) 'a non-test job was read as a shard'
+    Assert-True ($null -eq (Get-ShardFromJobName 'Tests')) 'a malformed test job name was read as a shard'
+
     if ($failures.Count -gt 0) {
         Write-Host 'Resolve-CiValidationReuse self-test FAILED:'
         foreach ($failure in $failures) { Write-Host "  - $failure" }
         exit 1
     }
     Write-Host 'Resolve-CiValidationReuse self-test passed.'
+    exit 0
+}
+
+if ($PlanDelta) {
+    $shards = @()
+    if (-not [string]::IsNullOrWhiteSpace($PullRequestShardsJson)) {
+        $shards = @($PullRequestShardsJson | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })
+    }
+    $plan = Invoke-DeltaPlan -BaseSha $TestedBaseSha -HeadSha $TestedHeadSha -ExpectedTree $TestedTree `
+        -PullRequestShards $shards -Map $MapFile -Manifest $ShardManifestFile -Selector $SelectorPath
+    $result = if ($plan -is [string]) {
+        [pscustomobject]@{ mode = 'None'; why = $plan; rerun = @(); import = @(); tree = ''; routes = @() }
+    }
+    else {
+        [pscustomobject]@{
+            mode = $plan.Decision.Mode; why = $plan.Decision.Why
+            rerun = @($plan.Decision.Rerun); import = @($plan.Decision.Import)
+            tree = $plan.Tree; routes = @($plan.Selection.routes)
+        }
+    }
+    $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding utf8
+    Write-Host "delta plan: $($result.mode) - $($result.why)"
     exit 0
 }
 
@@ -408,6 +615,9 @@ do {
                 PrNumber = $prNumber
                 CreatedAt = $createdAt
                 TestedSha = $parsed.TestedSha
+                TestedTree = $testedTree
+                Event = [string] $run.event
+                HeadSha = [string] $run.head_sha
                 TreeMatches = $treeMatches
                 RequiresValidation = $parsed.RequiresValidation
                 HasAnalysis = $hasAnalysis
@@ -430,6 +640,84 @@ do {
     Write-Host "PR #$prNumber validation is still in flight; waiting for reusable evidence."
     Start-Sleep -Seconds 60
 } while ($true)
+
+# ---------------------------------------------------------------- delta reuse
+# No exact-tree evidence. The pull request was validated on a base branch that has since moved on;
+# decide from the certified map whether that movement can have changed any result it certified.
+
+function Get-DeltaPlan {
+    param([Parameter(Mandatory)] $Candidate)
+
+    $commit = Invoke-GhJson @('api', "repos/$Repository/git/commits/$($Candidate.TestedSha)")
+    $parents = @($commit.parents | ForEach-Object { [string] $_.sha })
+    if ($parents.Count -ne 2) { return "the validated commit is not a two-parent pull-request merge" }
+    if ($parents[1] -cne $Candidate.HeadSha) { return "the validated commit's second parent is not the pull request head" }
+
+    foreach ($sha in $parents) {
+        & git cat-file -e "$sha^{commit}" 2>$null
+        if ($LASTEXITCODE -eq 0) { continue }
+        & git fetch --quiet --no-tags origin $sha 2>$null
+        if ($sha -ceq $parents[1]) { & git fetch --quiet --no-tags origin "refs/pull/$prNumber/head" 2>$null }
+        & git cat-file -e "$sha^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) { return "commit $sha is not available to rebuild the validated tree" }
+    }
+    $pullRequestShards = @()
+    if ($Candidate.RequiresValidation) {
+        $jobPages = @(Invoke-GhJson @('api', '--paginate', '--slurp',
+            "repos/$Repository/actions/runs/$($Candidate.RunId)/jobs?per_page=100"))
+        $pullRequestShards = @($jobPages | ForEach-Object { $_.jobs } |
+            Where-Object { [string] $_.conclusion -in @('success', 'failure') } |
+            ForEach-Object { Get-ShardFromJobName ([string] $_.name) } |
+            Where-Object { $_ } | Sort-Object -Unique)
+        # A runtime certificate with no executed shard is not evidence of anything to reuse.
+        if ($pullRequestShards.Count -eq 0) { return 'the validated run executed no test shards' }
+    }
+
+    return Invoke-DeltaPlan -BaseSha $parents[0] -HeadSha $parents[1] -ExpectedTree $Candidate.TestedTree `
+        -PullRequestShards $pullRequestShards -Map $MapFile -Manifest $ShardManifestFile -Selector $SelectorPath
+}
+
+$deltaCandidates = @($evidence | Where-Object {
+    $_.Event -ceq 'pull_request' -and -not $_.TreeMatches -and
+    (-not $_.RequiresValidation -or ($_.HasAnalysis -and $_.HasCoverage -and $_.HasLedger))
+} | Sort-Object @{ Expression = { [DateTimeOffset] $_.CreatedAt }; Descending = $true },
+                @{ Expression = { [long] $_.RunId }; Descending = $true })
+
+if ($deltaCandidates.Count -gt 0 -and $MapFile -and $ShardManifestFile -and
+    (Test-Path -LiteralPath $MapFile) -and (Test-Path -LiteralPath $ShardManifestFile)) {
+    # The newest validated state is the closest to what landed, so it leaves the smallest delta.
+    $candidate = $deltaCandidates[0]
+    $plan = $null
+    try { $plan = Get-DeltaPlan -Candidate $candidate }
+    catch { $plan = "delta planning failed: $($_.Exception.Message)" }
+
+    if ($plan -is [string]) {
+        Write-Host "::notice::delta reuse unavailable for PR #$prNumber run $($candidate.RunId): $plan"
+    }
+    else {
+        $decision = $plan.Decision
+        Write-Host "delta from PR #$prNumber run $($candidate.RunId) (tree $($plan.Tree)): $($decision.Mode) - $($decision.Why)"
+        foreach ($route in @($plan.Selection.routes)) { Write-Host "  delta route: $route" }
+        foreach ($reason in @($plan.Selection.reasons)) { Write-Host "  delta reason: $reason" }
+
+        if ($decision.Mode -ceq 'Reuse') {
+            # Never Complete: CodeQL and Sonar analysed a different tree.
+            $summary = "Reusing Validation evidence from PR #$prNumber run $($candidate.RunId) across the base branch's later commits: $($decision.Why)."
+            Write-ReuseDecision -DecisionScope Validation -RunId $candidate.RunId -PrNumber $prNumber `
+                -TestedSha $candidate.TestedSha -RequiresValidation $candidate.RequiresValidation `
+                -DeltaMode 'Reuse' -ImportShards @($decision.Import) -Summary $summary
+            exit 0
+        }
+        if ($decision.Mode -ceq 'Partial') {
+            $summary = "Re-running $($decision.Rerun.Count) shard(s) and importing $($decision.Import.Count) from PR #$prNumber run $($candidate.RunId): $($decision.Why).`n`nRe-run: $($decision.Rerun -join ', ')"
+            Write-ReuseDecision -DecisionScope None -PrNumber $prNumber -DeltaMode 'Partial' `
+                -PartialShards @($decision.Rerun) -ImportRunId $candidate.RunId `
+                -ImportSha $candidate.TestedSha -ImportShards @($decision.Import) -Summary $summary
+            exit 0
+        }
+        Write-Host "::notice::delta reuse declined: $($decision.Why)"
+    }
+}
 
 Write-ReuseDecision -DecisionScope None -PrNumber $prNumber `
     -Summary "No exact-tree validation evidence is reusable for PR #$prNumber; current-run validation is required."
