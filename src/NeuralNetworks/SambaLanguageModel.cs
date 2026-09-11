@@ -66,14 +66,8 @@ public partial class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public SambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 32000,
-        int modelDimension = 256,
-        int numLayers = 8,
-        int stateDimension = 16,
-        int attentionInterval = 2,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        SambaOptions? options = null)
+        SambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Samba's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateSambaLayers), so the loss must be cross-entropy-with-logits (fused
@@ -88,13 +82,14 @@ public partial class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _attentionInterval = attentionInterval;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _attentionInterval = _options.AttentionInterval;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

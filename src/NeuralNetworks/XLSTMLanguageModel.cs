@@ -67,13 +67,8 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public XLSTMLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 8,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         XLSTMOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // xLSTM is a next-token language model and its LM head emits raw logits.
@@ -83,12 +78,13 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new XLSTMOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _maxSeqLength = _options.MaxSequenceLength;
         // xLSTM (Beck et al., 2024, S4.1) trains with AdamW. No optimizer was wired here at all, so
         // training fell through to the framework default and barely moved: across the memorization
         // task the loss drifted only 0.13% between one and two iterations, leaving the more-data
