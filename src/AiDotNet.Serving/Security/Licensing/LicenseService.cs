@@ -87,7 +87,7 @@ public sealed class LicenseService : ILicenseService
 
             _logger.LogInformation(
                 "Created license key {KeyId} for {CustomerName} (Tier={Tier}, MaxSeats={MaxSeats})",
-                entity.KeyId, entity.CustomerName, entity.Tier, entity.MaxSeats);
+                entity.KeyId, LogSanitizer.Sanitize(entity.CustomerName), entity.Tier, entity.MaxSeats);
 
             return new LicenseCreateResponse
             {
