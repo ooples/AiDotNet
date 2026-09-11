@@ -7618,8 +7618,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// that storage back to the pool while the copy could still read it.
     /// </para>
     /// <para>
-    /// Every resource is released even if one of them throws; the failures are then reported together in one
-    /// <see cref="AggregateException"/>.
+    /// Every resource is released even if one of them throws. A single failure is then rethrown unchanged
+    /// (same type and stack, as when only <see cref="Model"/> was disposed here); two or more are reported
+    /// together in one <see cref="AggregateException"/>.
     /// </para>
     /// </remarks>
     protected virtual void Dispose(bool disposing)

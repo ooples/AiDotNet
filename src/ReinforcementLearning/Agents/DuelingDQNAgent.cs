@@ -316,7 +316,7 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// <see cref="INeuralNetwork{T}"/>, so they cannot be registered in <c>Networks</c> and the base class
     /// never saw them: disposing this agent used to release none of their layers.
     /// </remarks>
-    /// <exception cref="AggregateException">One or more owned resources threw from <c>Dispose</c>.</exception>
+    /// <exception cref="AggregateException">Both networks threw from <c>Dispose</c>; a single failure is rethrown unchanged.</exception>
     public override void Dispose()
     {
         try
@@ -412,7 +412,7 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
     /// <summary>
     /// Releases every dense layer of the shared, value and advantage streams, each at most once.
     /// </summary>
-    /// <exception cref="AggregateException">One or more layers threw from <c>Dispose</c>.</exception>
+    /// <exception cref="AggregateException">Two or more layers threw from <c>Dispose</c>; a single failure is rethrown unchanged.</exception>
     public void Dispose()
     {
         AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(

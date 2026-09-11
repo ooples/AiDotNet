@@ -665,9 +665,10 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// hold the same instance, and calling this method again is harmless: disposal goes through
     /// the same process-wide once-only guard that <see cref="NeuralNetworkBase{T}"/> uses for its layers.
     /// A network whose <c>Dispose</c> throws does not stop the others from being released; every
-    /// failure is reported afterwards in one <see cref="AggregateException"/>.
+    /// failure is reported afterwards: a single failure is rethrown unchanged (same type and stack), two or
+    /// more together in one <see cref="AggregateException"/>.
     /// </remarks>
-    /// <exception cref="AggregateException">One or more networks threw from <c>Dispose</c>.</exception>
+    /// <exception cref="AggregateException">Two or more networks threw from <c>Dispose</c>.</exception>
     public override void Dispose()
     {
         try

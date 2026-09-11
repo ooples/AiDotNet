@@ -129,9 +129,10 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     /// Each network is released at most once, even when it is registered twice or shared with another
     /// owner, through the same once-only guard <see cref="NeuralNetworkBase{T}"/> uses for its layers.
     /// A network whose <c>Dispose</c> throws no longer stops the loop and leaks every network after it:
-    /// all are released first, then every failure is reported in one <see cref="AggregateException"/>.
+    /// all are released first. A single failure is then rethrown unchanged (same type and stack); two or more
+    /// are reported together in one <see cref="AggregateException"/>.
     /// </remarks>
-    /// <exception cref="AggregateException">One or more networks threw from <c>Dispose</c>.</exception>
+    /// <exception cref="AggregateException">Two or more networks threw from <c>Dispose</c>.</exception>
     public override void Dispose()
     {
         try

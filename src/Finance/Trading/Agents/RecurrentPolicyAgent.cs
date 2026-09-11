@@ -253,7 +253,6 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     /// call -- or the cell being released by another path -- is harmless. The head weights
     /// <c>_meanW</c>/<c>_meanB</c> are ordinary tensors with nothing to release.
     /// </remarks>
-    /// <exception cref="AggregateException">The cell threw from <c>Dispose</c>.</exception>
     public void Dispose()
     {
         if (_disposed) return;

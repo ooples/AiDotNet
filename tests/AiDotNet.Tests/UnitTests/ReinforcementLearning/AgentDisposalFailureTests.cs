@@ -14,9 +14,10 @@ namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 /// One network failing to dispose must not leave the agent's other networks alive.
 ///
 /// <para>Both agent bases disposed their networks in a plain loop, so the first network whose Dispose threw
-/// ended the loop and every network after it was never released. Both now release every network and then
-/// report all failures together as an <see cref="AggregateException"/>, the library's convention for
-/// multi-resource disposal (see <c>DataPipeline</c>).</para>
+/// ended the loop and every network after it was never released. Both now release every network first. A
+/// single failure is then rethrown unchanged -- same type, original stack -- so a caller that caught a specific
+/// exception type from <c>Dispose</c> keeps working; two or more failures are reported together as an
+/// <see cref="AggregateException"/>, the library's convention for multi-resource disposal.</para>
 /// </summary>
 public partial class AgentDisposalFailureTests
 {
@@ -27,10 +28,12 @@ public partial class AgentDisposalFailureTests
         var healthy = new CountingNetwork();
         var agent = new TwoNetworkDeepAgent(failing, healthy);
 
-        var thrown = Assert.Throws<AggregateException>(() => agent.Dispose());
+        // Exactly one failure: the original exception, unwrapped, with the stack of the code that threw it.
+        var thrown = Assert.Throws<InvalidOperationException>(() => agent.Dispose());
 
         Assert.Equal(1, healthy.DisposeCalls);
-        Assert.Contains(thrown.InnerExceptions, e => e is InvalidOperationException && e.Message == ThrowingNetwork.Message);
+        Assert.Equal(ThrowingNetwork.Message, thrown.Message);
+        Assert.Contains(nameof(ThrowingNetwork), thrown.StackTrace ?? string.Empty);
     }
 
     [Fact]
@@ -40,10 +43,43 @@ public partial class AgentDisposalFailureTests
         var healthy = new CountingNetwork();
         var agent = new TwoNetworkTradingAgent(failing, healthy);
 
-        var thrown = Assert.Throws<AggregateException>(() => agent.Dispose());
+        // Exactly one failure: the original exception, unwrapped, with the stack of the code that threw it.
+        var thrown = Assert.Throws<InvalidOperationException>(() => agent.Dispose());
 
         Assert.Equal(1, healthy.DisposeCalls);
-        Assert.Contains(thrown.InnerExceptions, e => e is InvalidOperationException && e.Message == ThrowingNetwork.Message);
+        Assert.Equal(ThrowingNetwork.Message, thrown.Message);
+        Assert.Contains(nameof(ThrowingNetwork), thrown.StackTrace ?? string.Empty);
+    }
+
+    [Fact]
+    public void Two_failures_are_reported_together_after_every_network_is_released()
+    {
+        var first = new ThrowingNetwork();
+        var second = new ThrowingNetwork();
+        var agent = new TwoNetworkDeepAgent(first, second);
+
+        var thrown = Assert.Throws<AggregateException>(() => agent.Dispose());
+
+        Assert.Equal(2, thrown.InnerExceptions.Count);
+        Assert.All(thrown.InnerExceptions, e => Assert.IsType<InvalidOperationException>(e));
+    }
+
+    [Fact]
+    public void A_caller_catching_the_specific_exception_type_still_catches_it()
+    {
+        var agent = new TwoNetworkTradingAgent(new ThrowingNetwork(), new CountingNetwork());
+
+        bool caught = false;
+        try
+        {
+            agent.Dispose();
+        }
+        catch (InvalidOperationException)
+        {
+            caught = true;
+        }
+
+        Assert.True(caught);
     }
 
     [Fact]
