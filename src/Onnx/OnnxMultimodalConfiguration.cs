@@ -162,7 +162,7 @@ public sealed class OnnxMultimodalConfiguration
 }
 
 [Flags]
-internal enum OnnxEmbeddingLayouts { Vector = 1, BatchedVector = 2, FirstToken = 4 }
+internal enum OnnxEmbeddingLayouts { Vector = 1, BatchedVector = 2, FirstToken = 4, TokenFeatures = 8 }
 
 internal static class OnnxEmbeddingContract
 {
@@ -180,7 +180,7 @@ internal static class OnnxEmbeddingContract
         {
             1 => (layouts & OnnxEmbeddingLayouts.Vector) != 0,
             2 => (layouts & OnnxEmbeddingLayouts.BatchedVector) != 0,
-            3 => (layouts & OnnxEmbeddingLayouts.FirstToken) != 0,
+            3 => (layouts & (OnnxEmbeddingLayouts.FirstToken | OnnxEmbeddingLayouts.TokenFeatures)) != 0,
             _ => false
         };
         if (!supported) return $"has unsupported embedding rank {rank}";
@@ -206,5 +206,22 @@ internal static class OnnxEmbeddingContract
         var embedding = new T[width];
         for (int index = 0; index < width; index++) embedding[index] = operations.FromDouble(output.GetValue(index));
         return new AiDotNet.Tensors.LinearAlgebra.Vector<T>(embedding);
+    }
+
+    internal static AiDotNet.Tensors.LinearAlgebra.Matrix<T> ReadTokenFeatures<T>(
+        Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output, int width, OnnxModelRole role)
+    {
+        var dimensions = output.Dimensions;
+        int rank = dimensions.Length;
+        string? mismatch = FindMismatch(rank, rank > 1 ? dimensions[0] : (int?)null,
+            rank == 3 ? dimensions[1] : (int?)null, rank > 0 ? dimensions[rank - 1] : (int?)null,
+            width, OnnxEmbeddingLayouts.TokenFeatures);
+        if (mismatch is not null) throw new InvalidOperationException($"ONNX {role} output {mismatch}.");
+        var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var features = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(dimensions[1], width);
+        for (int token = 0; token < features.Rows; token++)
+            for (int column = 0; column < width; column++)
+                features[token, column] = operations.FromDouble(output[0, token, column]);
+        return features;
     }
 }

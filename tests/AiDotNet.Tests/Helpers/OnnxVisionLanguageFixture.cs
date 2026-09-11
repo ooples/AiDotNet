@@ -10,7 +10,11 @@ namespace AiDotNet.Tests.Helpers;
 internal sealed class OnnxVisionLanguageFixture : IDisposable
 {
     internal enum EncoderKind { Image, Video, Text }
-    internal enum OutputKind { FixedEmbedding, TokenSequence, BatchedEmbedding, FirstTokenEmbedding }
+    internal enum OutputKind
+    {
+        FixedEmbedding, TokenSequence, BatchedEmbedding, FirstTokenEmbedding,
+        ContextTokenFeatures, BatchedTokenFeatures, EmptyTokenFeatures
+    }
     internal enum TextInputKind { TokensAndMask, TokensOnly }
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "aidotnet-onnx-contract-" + Guid.NewGuid().ToString("N"));
@@ -60,7 +64,18 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         if (extraRequiredInput)
             builder.AddInput(TensorInfo("unsupported_required_input", TensorProto.Types.DataType.Float, new[] { 1 }));
 
-        if (outputKind == OutputKind.TokenSequence)
+        if (outputKind == OutputKind.ContextTokenFeatures)
+        {
+            if (kind != EncoderKind.Text) throw new ArgumentException("Token features require a text encoder.", nameof(kind));
+            var axes = new TensorProto { Name = "feature_axis", DataType = (int)TensorProto.Types.DataType.Int64 };
+            axes.Dims.Add(1);
+            axes.Int64Data.Add(1);
+            builder.AddInitializer(axes);
+            builder.AddOp("Unsqueeze", new[] { valueInput, axes.Name }, new[] { outputName });
+            builder.AddOutput(TensorInfo(outputName, TensorProto.Types.DataType.Float,
+                new[] { 1, 1, dynamicInputs ? -1 : context }));
+        }
+        else if (outputKind == OutputKind.TokenSequence)
         {
             if (kind != EncoderKind.Text) throw new ArgumentException("Token output requires a text encoder.", nameof(kind));
             builder.AddOp("Identity", new[] { valueInput }, new[] { outputName });
@@ -74,10 +89,11 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
             {
                 Name = "keepdims", Type = AttributeProto.Types.AttributeType.Int, I = 0
             });
-            int batch = outputKind == OutputKind.BatchedEmbedding ? 2 : 1;
-            int[] outputShape = outputKind == OutputKind.FirstTokenEmbedding
-                ? new[] { 1, 2, embedding } : new[] { batch, embedding };
-            int repeats = outputKind == OutputKind.FirstTokenEmbedding ? 2 : batch;
+            int batch = outputKind is OutputKind.BatchedEmbedding or OutputKind.BatchedTokenFeatures ? 2 : 1;
+            bool tokenFeatures = outputKind is OutputKind.FirstTokenEmbedding or OutputKind.BatchedTokenFeatures or OutputKind.EmptyTokenFeatures;
+            int tokenCount = outputKind == OutputKind.EmptyTokenFeatures ? 0 : 2;
+            int[] outputShape = tokenFeatures ? new[] { batch, tokenCount, embedding } : new[] { batch, embedding };
+            int repeats = tokenFeatures ? batch * tokenCount : batch;
             string offsets = builder.AddFloatInitializer("offsets",
                 Enumerable.Range(1, embedding * repeats).Select(value => (float)value).ToArray(), outputShape);
             builder.AddOp("Add", new[] { "input_sum", offsets }, new[] { outputName });

@@ -73,4 +73,20 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
         Require(NumHeads, nameof(NumHeads));
         Require(VocabSize, nameof(VocabSize));
     }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        Require(VisionDim, nameof(VisionDim));
+        Require(ContextWindowSize, nameof(ContextWindowSize));
+        Require(MaxImagesPerRequest, nameof(MaxImagesPerRequest));
+        var defaults = new Gpt4VisionOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
+        RequireNativeDefaultForOnnx(NumLmLayers, defaults.NumLmLayers, nameof(NumLmLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+    }
 }
