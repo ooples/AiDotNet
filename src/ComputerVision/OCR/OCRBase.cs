@@ -325,7 +325,9 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var result = new List<char>();
         int prevIndex = 0;
 
-        for (int t = 0; t < seqLen; t++)
+        // The budget is emitted characters, not timesteps: CTC blanks and repeats consume
+        // sequence positions without consuming the caller's character budget.
+        for (int t = 0; t < seqLen && result.Count < Options.MaxSequenceLength; t++)
         {
             // Find argmax
             int maxIdx = 0;
@@ -366,7 +368,7 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         var result = new List<char>();
 
-        for (int t = 0; t < seqLen; t++)
+        for (int t = 0; t < seqLen && result.Count < Options.MaxSequenceLength; t++)
         {
             int maxIdx = 0;
             double maxVal = double.NegativeInfinity;
@@ -512,10 +514,6 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <summary>
-    /// Runs OCR and returns region info as a tensor [numRegions, 6].
-    /// Columns: confidence, textLength, x1, y1, x2, y2.
-    /// </summary>
-    /// <summary>
     /// Returns the model's raw, differentiable recognition output (see <see cref="ForwardLogits"/>).
     /// </summary>
     /// <remarks>
@@ -626,7 +624,9 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         if (_resolvedInputShape is not null && copy is OCRBase<T> rebuilt)
         {
-            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+            var shape = (int[])_resolvedInputShape.Clone();
+            shape[0] = 1;
+            rebuilt.Predict(new Tensor<T>(shape));
         }
     }
 

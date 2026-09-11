@@ -56,25 +56,8 @@ public partial class CRNN<T> : OCRBase<T>
 
     private readonly Dense<T> _outputLayer;
     private readonly int _hiddenDim;
+    // Part of the native weight-file configuration, even though lazy LSTMs infer their input shape.
     private readonly int _sequenceFeatureDim;
-
-    // LSTM state tracking
-    [Scratch]
-    private Tensor<T>? _lstm1FwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm1FwCell;
-    [Scratch]
-    private Tensor<T>? _lstm1BwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm1BwCell;
-    [Scratch]
-    private Tensor<T>? _lstm2FwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm2FwCell;
-    [Scratch]
-    private Tensor<T>? _lstm2BwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm2BwCell;
 
     /// <inheritdoc/>
     public override string Name => "CRNN";
@@ -85,6 +68,7 @@ public partial class CRNN<T> : OCRBase<T>
     public CRNN(OCROptions<T> options) : base(options)
     {
         _hiddenDim = 256;
+        _sequenceFeatureDim = 512;
 
         // CNN backbone for feature extraction (VGG-style architecture)
         // Stage 1
@@ -102,44 +86,20 @@ public partial class CRNN<T> : OCRBase<T>
         // Stage 4
         _conv7 = new Conv2D<T>(512, 512, kernelSize: 2, padding: 0);
 
-        // After conv layers, assuming input height 32, the feature map height becomes 1
-        // Width is preserved (roughly input_width / 4 due to pooling)
-        // Feature dimension = 512 channels * 1 height = 512
-        _sequenceFeatureDim = 512;
-
         // Bidirectional LSTM Layer 1
         // Input: [batch, seqLen, 512], Output: [batch, seqLen, 256]
-        int[] inputShape1 = new[] { 1, _sequenceFeatureDim }; // [batch, features] for single timestep
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         _lstm1Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
         _lstm1Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Bidirectional LSTM Layer 2
         // Input: [batch, seqLen, 512 (256*2)], Output: [batch, seqLen, 256]
-        int[] inputShape2 = new[] { 1, _hiddenDim * 2 };
         _lstm2Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
         _lstm2Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);
 
-        // Initialize LSTM states
-        ResetLSTMStates(1);
-    }
-
-    /// <summary>
-    /// Resets the LSTM hidden and cell states.
-    /// </summary>
-    private void ResetLSTMStates(int batchSize)
-    {
-        _lstm1FwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1FwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1BwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1BwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2FwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2FwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2BwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2BwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
     }
 
     /// <inheritdoc/>
@@ -190,9 +150,6 @@ public partial class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> ComputeLogits(Tensor<T> croppedImage)
     {
-        int batch = croppedImage.Shape[0];
-        ResetLSTMStates(batch);
-
         var grayImage = ConvertToGrayscale(croppedImage);
 
         var x = _conv1.Forward(grayImage);
@@ -223,7 +180,7 @@ public partial class CRNN<T> : OCRBase<T>
         x = ApplyReLU(x);
 
         var seqFeatures = SqueezeAndPermute(x);
-        var lstmOut = ApplyBidirectionalLSTM(seqFeatures, batch);
+        var lstmOut = ApplyBidirectionalLSTM(seqFeatures);
         return ApplyOutputLayer(lstmOut);
     }
 
@@ -238,10 +195,10 @@ public partial class CRNN<T> : OCRBase<T>
             return image;
         }
 
-        // gray = 0.299 R + 0.587 G + 0.114 B, with a missing G or B channel standing in as R.
+        // gray = 0.299 R + 0.587 G + 0.114 B; a missing blue channel uses red.
         var engine = AiDotNetEngine.Current;
         var r = engine.TensorNarrow(image, 1, 0, 1);
-        var g = channels > 1 ? engine.TensorNarrow(image, 1, 1, 1) : r;
+        var g = engine.TensorNarrow(image, 1, 1, 1);
         var b = channels > 2 ? engine.TensorNarrow(image, 1, 2, 1) : r;
         return engine.TensorAdd(
             engine.TensorAdd(engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.587))),
@@ -251,12 +208,12 @@ public partial class CRNN<T> : OCRBase<T>
     /// <summary>
     /// Applies bidirectional LSTM using proper LSTMLayer cells.
     /// </summary>
-    private Tensor<T> ApplyBidirectionalLSTM(Tensor<T> x, int batch)
+    private Tensor<T> ApplyBidirectionalLSTM(Tensor<T> x)
     {
         var layer1 = ConcatenateBidirectional(
-            RunDirection(_lstm1Forward, x, reverse: false), RunDirection(_lstm1Backward, x, reverse: true), batch, x.Shape[1], _hiddenDim);
+            RunDirection(_lstm1Forward, x, reverse: false), RunDirection(_lstm1Backward, x, reverse: true));
         return ConcatenateBidirectional(
-            RunDirection(_lstm2Forward, layer1, reverse: false), RunDirection(_lstm2Backward, layer1, reverse: true), batch, x.Shape[1], _hiddenDim);
+            RunDirection(_lstm2Forward, layer1, reverse: false), RunDirection(_lstm2Backward, layer1, reverse: true));
     }
 
     /// <summary>
@@ -291,7 +248,7 @@ public partial class CRNN<T> : OCRBase<T>
     /// <summary>
     /// Concatenates forward and backward LSTM outputs.
     /// </summary>
-    private Tensor<T> ConcatenateBidirectional(Tensor<T> forward, Tensor<T> backward, int batch, int seqLen, int hiddenDim)
+    private Tensor<T> ConcatenateBidirectional(Tensor<T> forward, Tensor<T> backward)
         => AiDotNetEngine.Current.TensorConcatenate(new[] { forward, backward }, 2);
 
     /// <summary>

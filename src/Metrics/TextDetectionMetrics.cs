@@ -208,7 +208,7 @@ public class TextDetectionMetrics<T> where T : struct
     /// </summary>
     /// <param name="region">The region to convert.</param>
     /// <returns>The polygon vertices, or an empty list when the region carries neither polygon nor box.</returns>
-    public List<(double X, double Y)> ToPolygon(TextRegion<T> region)
+    internal List<(double X, double Y)> ToPolygon(TextRegion<T> region)
     {
         var polygon = new List<(double X, double Y)>();
         if (region is null)

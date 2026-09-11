@@ -402,7 +402,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                         : entry.StableId + "/" + slot.StableId;
                     var role = entry.Role == ParameterSlotRole.Trainable ? slot.Role : entry.Role;
                     yield return new ParameterChunk<T>(
-                        localId, role, new Tensor<T>(new[] { count }, values));
+                        localId, role, new Tensor<T>(new[] { count }, values),
+                        sourceTensor: null, writableInPlace: false);
                     offset += count;
                 }
                 if (offset != flat.Length)
@@ -416,7 +417,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             // above supplies the model's real backing tensor; this fallback is the explicit,
             // immutable-payload style used by scalar/tree/classical sources.
             yield return new ParameterChunk<T>(entry.StableId, entry.Role,
-                new Tensor<T>(new[] { flat.Length }, flat));
+                new Tensor<T>(new[] { flat.Length }, flat),
+                sourceTensor: null, writableInPlace: false);
         }
     }
 
@@ -1095,6 +1097,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
             case ComponentAccessorParameterSource<T> accessor:
                 return accessor.Current is IParameterChunkSource<T> component
+                    && component is IParameterLayoutSource or IParameterManifestProvider
                     ? component.GetParameterStateChunks()
                     : null;
 
@@ -1102,7 +1105,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 var members = collection.Current.ToList();
                 foreach (var member in members)
                 {
-                    if (member is not IParameterChunkSource<T>)
+                    if (member is not IParameterChunkSource<T>
+                        || member is not (IParameterLayoutSource or IParameterManifestProvider))
                     {
                         return null;
                     }

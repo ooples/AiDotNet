@@ -233,9 +233,6 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     public abstract string Name { get; }
 
     /// <summary>
-    /// Creates a new text detector.
-    /// </summary>
-    /// <summary>
     /// Gets the maximum number of text regions kept for a single image.
     /// </summary>
     public int MaxDetections => Options.MaxDetections;
@@ -245,6 +242,7 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// </summary>
     public double ConfidenceThreshold => NumOps.ToDouble(Options.ConfidenceThreshold);
 
+    /// <summary>Creates a new text detector.</summary>
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
         Options = options;
@@ -274,57 +272,12 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
 
     private Tensor<T> PreprocessCore(Tensor<T> image)
     {
-        // Standard preprocessing: resize to input size, normalize
-        int targetH = Options.InputSize[0];
-        int targetW = Options.InputSize[1];
-
-        int batch = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Create resized output
-        var output = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        // Bilinear interpolation resize
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * height;
-                        double srcX = (double)w / targetW * width;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, height - 1);
-                        int x1 = Math.Min(x0 + 1, width - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = NumOps.ToDouble(image[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(image[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(image[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(image[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-
-                        // Normalize to [0, 1]
-                        val /= 255.0;
-
-                        output[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Keep the original asymmetric pixel mapping, but execute through the selected engine so
+        // prediction/training share inference's pixel domain without forcing GPU data onto the CPU
+        // or cutting the gradient path to an upstream image-producing model.
+        var resized = CvTensorOps<T>.ResizeBilinearAsymmetric(
+            image, Options.InputSize[0], Options.InputSize[1]);
+        return Engine.TensorMultiplyScalar(resized, NumOps.FromDouble(1.0 / 255.0));
     }
 
     /// <summary>
@@ -449,9 +402,6 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     #region ModelBase Overrides
 
     /// <summary>
-    /// Predicts by returning the preprocessed input (text detection is done via Detect method).
-    /// </summary>
-    /// <summary>
     /// Predicts by running the forward pass and returning the primary output map.
     /// </summary>
     /// <remarks>
@@ -464,8 +414,7 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        NoteResolvedInput(input);
-        return CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+        return CvTensorOps<T>.ConcatenateOutputs(Forward(Preprocess(input)));
     }
 
     /// <inheritdoc />
@@ -564,7 +513,9 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     {
         if (_resolvedInputShape is not null && copy is TextDetectorBase<T> rebuilt)
         {
-            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+            var shape = (int[])_resolvedInputShape.Clone();
+            shape[0] = 1;
+            rebuilt.Predict(new Tensor<T>(shape));
         }
     }
 

@@ -59,13 +59,15 @@ public class FpnRoIPoolerTests
 
         var pooled = FpnRoIPooler<double>.Pool(align, levels, Strides, boxes);
         var assignment = FpnRoIPooler<double>.AssignLevels(boxes, Strides);
+        var expectedAssignment = new[] { 2, 0, 2, 1, 2 };
+        Assert.Equal(expectedAssignment, assignment);
 
         Assert.Equal(new[] { 5, 3, 3, 3 }, Enumerable.Range(0, 4).Select(i => pooled.Shape[i]).ToArray());
         int per = 3 * 3 * 3;
         for (int b = 0; b < boxes.Shape[0]; b++)
         {
             var single = Boxes(boxes[b, 0], boxes[b, 1], boxes[b, 2], boxes[b, 3]);
-            var expected = align.Forward(levels[assignment[b]], single, 1.0 / Strides[assignment[b]]);
+            var expected = align.Forward(levels[expectedAssignment[b]], single, 1.0 / Strides[expectedAssignment[b]]);
             for (int k = 0; k < per; k++)
             {
                 Assert.Equal(expected[k], pooled[b * per + k], 12);

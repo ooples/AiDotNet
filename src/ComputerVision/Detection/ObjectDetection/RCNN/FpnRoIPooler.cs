@@ -33,6 +33,7 @@ internal static class FpnRoIPooler<T>
     /// <returns>For each box, the index into <paramref name="strides"/> of its level.</returns>
     internal static int[] AssignLevels(Tensor<T> boxes, IReadOnlyList<int> strides)
     {
+        ValidateStrides(strides);
         var ops = MathHelper.GetNumericOperations<T>();
         int minLevel = Log2(strides[0]);
         int maxLevel = Log2(strides[strides.Count - 1]);
@@ -61,6 +62,7 @@ internal static class FpnRoIPooler<T>
     /// <returns>Pooled features <c>[N, channels, outputSize, outputSize]</c> in the order of <paramref name="boxes"/>.</returns>
     public static Tensor<T> Pool(RoIAlign<T> align, IReadOnlyList<Tensor<T>> levels, IReadOnlyList<int> strides, Tensor<T> boxes)
     {
+        if (strides is null) throw new ArgumentNullException(nameof(strides));
         if (levels.Count != strides.Count)
         {
             throw new ArgumentException(
@@ -116,17 +118,43 @@ internal static class FpnRoIPooler<T>
         return identity ? pooled : CvTensorOps<T>.Select(pooled, positionOf, 0);
     }
 
-    private static int Log2(int stride)
+    private static void ValidateStrides(IReadOnlyList<int> strides)
     {
-        int level = 0;
-        while ((1 << level) < stride)
+        if (strides is null) throw new ArgumentNullException(nameof(strides));
+        if (strides.Count == 0)
         {
-            level++;
+            throw new ArgumentException("At least one pyramid stride is required.", nameof(strides));
         }
 
-        if ((1 << level) != stride)
+        int previous = 0;
+        for (int i = 0; i < strides.Count; i++)
         {
-            throw new ArgumentException($"Pyramid strides must be powers of two; got {stride}.", nameof(stride));
+            int stride = strides[i];
+            if (stride <= 0 || (stride & (stride - 1)) != 0)
+            {
+                throw new ArgumentException(
+                    $"Pyramid strides must be positive powers of two; got {stride}.", nameof(strides));
+            }
+
+            if (i > 0 && stride != 2L * previous)
+            {
+                throw new ArgumentException(
+                    "Each pyramid stride must be exactly double the previous stride.", nameof(strides));
+            }
+
+            previous = stride;
+        }
+    }
+
+    private static int Log2(int stride)
+    {
+        // Shift the value down, rather than shifting 1 past the signed-int boundary.
+        // The latter wraps its shift count and can loop forever on a large invalid stride.
+        int level = 0;
+        while (stride > 1)
+        {
+            stride >>= 1;
+            level++;
         }
 
         return level;

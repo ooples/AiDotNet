@@ -440,9 +440,22 @@ public sealed class SerializedObjectParameterSource<T> :
 /// at its initial value.
 /// </para>
 /// </remarks>
-public sealed class TensorListParameterSource<T> : IParameterSource<T>, IParameterChunkSource<T>
+public sealed class TensorListParameterSource<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly Func<IReadOnlyList<Tensor<T>>>[] _lists;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var slots = new List<ParameterSlotDescriptor>();
+        foreach (var chunk in GetParameterStateChunks())
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                chunk.StableId, chunk.Role, ParameterReadiness.Materialized, chunk.Tensor.Length,
+                shape: chunk.Tensor.Shape.ToArray(), elementType: typeof(T).FullName));
+        }
+        return slots;
+    }
 
     /// <summary>Creates a source over the given tensor lists, in order.</summary>
     public TensorListParameterSource(params Func<IReadOnlyList<Tensor<T>>>[] lists)

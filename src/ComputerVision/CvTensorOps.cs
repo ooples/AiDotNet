@@ -491,6 +491,11 @@ internal static class CvTensorOps<T>
         int rois = batchIndices.Length;
         int side = outputSize * samplingRatio;
 
+        if (rois == 0)
+        {
+            return new Tensor<T>(new[] { 0, c, outputSize, outputSize });
+        }
+
         // Bilinear sampling through the engine's GridSample (align_corners = false, zero padding;
         // NCHW in and out - the IEngine summary says NHWC, but the engine reads [N, C, H, W]): one grid point per sample, so the op stores [rois * side * side, C] values and
         // its backward is the engine's native GridSample gradient. The earlier formulation gathered

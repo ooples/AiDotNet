@@ -193,10 +193,11 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var detector = CreateTextDetector();
 
-        var result = detector.Detect(CreateRandomImage(rng), DetectConfidenceThreshold);
+        var image = CreateRandomImage(rng);
+        var result = detector.Detect(image, DetectConfidenceThreshold);
 
-        Assert.True(result.ImageWidth > 0, "TextDetectionResult.ImageWidth was not populated.");
-        Assert.True(result.ImageHeight > 0, "TextDetectionResult.ImageHeight was not populated.");
+        Assert.Equal(image.Shape[3], result.ImageWidth);
+        Assert.Equal(image.Shape[2], result.ImageHeight);
     }
 
     [Fact(Timeout = 120000)]

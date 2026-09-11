@@ -154,6 +154,8 @@ internal class YOLOHead<T> : CvParameterModule<T>
             int batch = output.Shape[0];
             int featH = output.Shape[2];
             int featW = output.Shape[3];
+            double scaleX = imageWidth / (double)(featW * stride);
+            double scaleY = imageHeight / (double)(featH * stride);
 
             for (int b = 0; b < batch; b++)
             {
@@ -197,8 +199,6 @@ internal class YOLOHead<T> : CvParameterModule<T>
 
                             // Convert to xyxy format
                             // Map from the network-input frame to the source image before clipping.
-                            double scaleX = imageWidth / (double)(output.Shape[3] * stride);
-                            double scaleY = imageHeight / (double)(output.Shape[2] * stride);
                             float x1 = (float)Math.Max(0, (cx - bw / 2) * scaleX);
                             float y1 = (float)Math.Max(0, (cy - bh / 2) * scaleY);
                             float x2 = (float)Math.Min(imageWidth, (cx + bw / 2) * scaleX);
@@ -492,6 +492,8 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
             int batch = clsOutput.Shape[0];
             int featH = clsOutput.Shape[2];
             int featW = clsOutput.Shape[3];
+            double scaleX = imageWidth / (double)(featW * stride);
+            double scaleY = imageHeight / (double)(featH * stride);
 
             for (int b = 0; b < batch; b++)
             {
@@ -526,8 +528,6 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
                         // Decoded in network-input coordinates (the feature grid times its stride);
                         // map to the source image before clipping, or a source image smaller than the
                         // input size yields inverted boxes.
-                        double scaleX = imageWidth / (double)(featW * stride);
-                        double scaleY = imageHeight / (double)(featH * stride);
                         float x1 = (float)Math.Max(0, (cx - left * stride) * scaleX);
                         float y1 = (float)Math.Max(0, (cy - top * stride) * scaleY);
                         float x2 = (float)Math.Min(imageWidth, (cx + right * stride) * scaleX);

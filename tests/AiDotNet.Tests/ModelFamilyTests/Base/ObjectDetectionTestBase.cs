@@ -207,8 +207,8 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
 
         // Compare against the threshold the detector says it applies: set-prediction detectors
         // (DETR, RT-DETR) declare a higher one rather than suppressing at the caller's value.
-        double nmsThreshold = detector.EffectiveNmsThreshold(0.45);
-        var detections = detector.Detect(CreateRandomImage(rng), 0.05, 0.45).Detections;
+        double nmsThreshold = detector.EffectiveNmsThreshold(DetectNmsThreshold);
+        var detections = detector.Detect(CreateRandomImage(rng), DetectConfidenceThreshold, DetectNmsThreshold).Detections;
 
         // Per-class NMS is the standard; a class-agnostic implementation also satisfies this,
         // so the weaker per-class claim is the right one to assert.
@@ -297,6 +297,12 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
             {
                 Assert.Equal(single[d].ClassId, fromBatch[d].ClassId);
                 Assert.Equal(ToD(single[d].Confidence), ToD(fromBatch[d].Confidence), 8);
+                var (singleX1, singleY1, singleX2, singleY2) = single[d].Box.ToXYXY();
+                var (batchX1, batchY1, batchX2, batchY2) = fromBatch[d].Box.ToXYXY();
+                Assert.Equal(singleX1, batchX1, 8);
+                Assert.Equal(singleY1, batchY1, 8);
+                Assert.Equal(singleX2, batchX2, 8);
+                Assert.Equal(singleY2, batchY2, 8);
             }
         }
     }
