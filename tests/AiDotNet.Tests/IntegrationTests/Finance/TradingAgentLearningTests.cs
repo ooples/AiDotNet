@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using AiDotNet.Finance.Trading.Agents;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -39,7 +41,7 @@ public class TradingAgentLearningTests
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Simple,
             inputSize: inputSize,
-            outputSize: outputSize);
+            outputSize: outputSize) { RandomSeed = 271828 };
 
     private static Vector<double> State(int seed)
     {
@@ -159,6 +161,74 @@ public class TradingAgentLearningTests
         Assert.Equal(0.3, agent.Epsilon, 9);
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void Dqn_direct_gradients_share_the_training_and_target_schedule(int frequency)
+    {
+        var options = new FinancialDQNAgentOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = ActionSize,
+            BatchSize = 1,
+            TargetUpdateFrequency = frequency,
+            EpsilonStart = 0.8,
+            EpsilonEnd = 0.01,
+            EpsilonDecay = 0.5,
+            Seed = 99,
+        };
+        using var agent = new FinancialDQNAgent<double>(Actor(), options);
+        var onlineField = typeof(FinancialDQNAgent<double>).GetField("_qNetwork", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("The online-network regression probe must observe the actual online network.");
+        var online = Assert.IsAssignableFrom<INeuralNetwork<double>>(onlineField.GetValue(agent));
+        var targetField = typeof(FinancialDQNAgent<double>).GetField("_targetNetwork", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("The target-network regression probe must observe the actual target network.");
+        var target = Assert.IsAssignableFrom<INeuralNetwork<double>>(targetField.GetValue(agent));
+        var initial = online.GetParameters().ToArray();
+        Assert.NotEmpty(initial);
+        Assert.Equal(initial, target.GetParameters().ToArray());
+
+        // A rejected update must not consume a training step or alter either network.
+        Assert.Throws<ArgumentException>(() => agent.ApplyGradients(new Vector<double>(1), 0.01));
+        Assert.Equal(0.0, agent.GetTradingMetrics()["TrainingSteps"]);
+        Assert.Equal(1.0, agent.GetTradingMetrics()["TargetSyncCount"]);
+        Assert.Equal(options.EpsilonStart, agent.Epsilon);
+        Assert.Equal(initial, online.GetParameters().ToArray());
+        Assert.Equal(initial, target.GetParameters().ToArray());
+
+        for (var step = 1; step <= frequency + 1; step++)
+        {
+            var onlineBefore = online.GetParameters().ToArray();
+            var targetBefore = target.GetParameters().ToArray();
+            agent.ApplyGradients(new Vector<double>(Enumerable.Repeat(0.25, initial.Length).ToArray()), 0.01);
+            var onlineAfter = online.GetParameters().ToArray();
+            Assert.False(onlineBefore.SequenceEqual(onlineAfter), "the direct update must really change the online weights");
+            var metrics = agent.GetTradingMetrics();
+            Assert.Equal((double)step, metrics["TrainingSteps"]);
+            Assert.Equal((double)(1 + step / frequency), metrics["TargetSyncCount"]);
+            Assert.Equal(Math.Max(options.EpsilonEnd, options.EpsilonStart * Math.Pow(options.EpsilonDecay, step)), agent.Epsilon, 12);
+            if (step % frequency == 0)
+            {
+                Assert.Equal(onlineAfter, target.GetParameters().ToArray());
+            }
+            else
+            {
+                Assert.Equal(targetBefore, target.GetParameters().ToArray());
+                Assert.False(onlineAfter.SequenceEqual(target.GetParameters().ToArray()));
+            }
+        }
+
+        // A replay update must advance the same schedule, not restart a second counter.
+        var targetBeforeReplay = target.GetParameters().ToArray();
+        TrainSteps(agent, 1);
+        var completed = frequency + 2;
+        Assert.Equal((double)completed, agent.GetTradingMetrics()["TrainingSteps"]);
+        Assert.Equal((double)(1 + completed / frequency), agent.GetTradingMetrics()["TargetSyncCount"]);
+        Assert.Equal(
+            completed % frequency == 0 ? online.GetParameters().ToArray() : targetBeforeReplay,
+            target.GetParameters().ToArray());
+    }
+
     [Fact]
     public void Dqn_publishes_the_exploration_rate_in_its_trading_metrics()
     {
@@ -239,19 +309,18 @@ public class TradingAgentLearningTests
         {
             StateSize = StateSize,
             ActionSize = ActionSize,
-            // NOTE: this seed does NOT make the sampling below deterministic. It reaches ReplayBuffer
-            // only; SampleAction draws from RandomHelper.CreateSecureRandom(), and Actor() leaves
-            // architecture.RandomSeed unset, so the initial policy varies between runs too. That is the
-            // gap E6.7 tracks - seeding is persisted as a determinism claim the agents do not honour.
-            //
-            // Hence the assertion below is a TOLERANCE on the dominant share rather than a check that
-            // every action was drawn: the latter would be flaky against a policy that legitimately
-            // assigns one action a small probability. The tolerance still fails the defect this test
-            // exists for, where sampling collapsed onto a single tier.
             Seed = 4242,
         };
 
         using var agent = new FinancialA2CAgent<double>(Actor(), Critic(), options);
+
+        // Fix the actual policy, not merely its initialization seed: zero logits give a known
+        // uniform distribution. A direct-logit sampler would fall through to the last action.
+        var parameters = agent.GetParameters();
+        Assert.True(parameters.Length > 0);
+        agent.SetParameters(new Vector<double>(new double[parameters.Length]));
+        Assert.All(agent.GetParameters().ToArray(), value => Assert.Equal(0.0, value));
+        var expectedRandom = RandomHelper.CreateSeededRandom(4242);
 
         var state = State(11);
         var counts = new int[ActionSize];
@@ -259,6 +328,9 @@ public class TradingAgentLearningTests
         for (var i = 0; i < samples; i++)
         {
             var action = agent.SelectTradingAction(state, training: true);
+            var expectedAction = (int)(expectedRandom.NextDouble() * ActionSize);
+            Assert.Equal(1.0, action[expectedAction]);
+            Assert.Equal(1.0, action.ToArray().Sum());
             for (var a = 0; a < action.Length; a++)
             {
                 if (action[a] != 0.0)

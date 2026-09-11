@@ -229,7 +229,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     private int SampleAction(Vector<T> probabilities)
     {
-        double r = RandomHelper.CreateSecureRandom().NextDouble();
+        double r = Random.NextDouble();
         double cumulative = 0;
         for (int i = 0; i < probabilities.Length; i++)
         {

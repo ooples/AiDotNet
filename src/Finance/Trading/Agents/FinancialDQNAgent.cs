@@ -261,10 +261,16 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
         var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
+        CompleteTrainingStep();
 
-        // The inherited counter, which every other agent advances in its own Train() and which the state
-        // generator serialises. This agent never advanced it at all, so nothing downstream could tell how much
-        // training had happened.
+        return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Advances the shared exploration and target-network schedule after a successful online update.
+    /// </summary>
+    private void CompleteTrainingStep()
+    {
         TrainingSteps++;
 
         // Decay epsilon toward EpsilonEnd. Multiplicative, matching what EpsilonDecay (0.995) means and what
@@ -282,7 +288,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             UpdateTargetNetwork();
         }
 
-        return NumOps.Zero;
     }
 
     /// <summary>
@@ -450,7 +455,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _qNetwork.ApplyGradients(gradients, learningRate);
-        UpdateTargetNetwork();
+        CompleteTrainingStep();
     }
 
     #endregion
