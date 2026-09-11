@@ -399,19 +399,6 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
         return reconLoss;
     }
 
-    /// <summary>
-    /// Trains the VAE on a single image.
-    /// </summary>
-    /// <param name="input">Input image to reconstruct.</param>
-    /// <param name="expectedOutput">Target output (usually same as input for VAE).</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Use VAEModelBase tape-based training
-        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
-        var lr = NumOps.FromDouble(1e-4);
-        ApplyGradients(gradients, lr);
-    }
-
     #region Parameter Management
 
 
