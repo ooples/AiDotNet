@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -48,12 +48,6 @@ public abstract class GaussianProcessBase<T> : ModelBase<T, Matrix<T>, Vector<T>
 
     /// <inheritdoc/>
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        return (GaussianProcessBase<T>)MemberwiseClone();
-    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

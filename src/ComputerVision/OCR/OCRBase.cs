@@ -1,4 +1,4 @@
-using AiDotNet.Augmentation.Image;
+﻿using AiDotNet.Augmentation.Image;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
@@ -531,9 +531,6 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (OCRBase<T>)MemberwiseClone();
 
     #endregion
 }

@@ -1,4 +1,4 @@
-using AiDotNet.ComputerVision.Detection.Necks;
+﻿using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.ComputerVision.Weights;
@@ -499,9 +499,6 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (ObjectDetectorBase<T>)MemberwiseClone();
 
     #endregion
 }
