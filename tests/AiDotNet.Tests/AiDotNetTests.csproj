@@ -86,6 +86,11 @@
          targets netstandard2.0 and cannot reference the analysed assembly; if the two ever disagree it
          emits the wrong axis name into generated contracts, which compiles and is silently wrong. -->
     <Compile Include="..\..\src\AiDotNet.Generators\ShapeContractGenerator.cs" Link="Generators\ShapeContractGenerator.cs" />
+    <!-- Linked so GeneratorContainmentWalkTests can drive these two generators through Roslyn and
+         pin their containing-type walks (which types the generated factory table / YAML registry
+         can name). -->
+    <Compile Include="..\..\src\AiDotNet.Generators\LayerStateGenerator.cs" Link="Generators\LayerStateGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\YamlConfigSourceGenerator.cs" Link="Generators\YamlConfigSourceGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
