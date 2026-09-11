@@ -1,6 +1,10 @@
-param([Parameter(Mandatory = $true)][string]$CoveragePath)
+param([Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string[]]$CoveragePath)
 $ErrorActionPreference = 'Stop'
-[xml]$coverageDocument = Get-Content -Raw -LiteralPath $CoveragePath
+# VSTest may copy the same collector attachment beneath its TRX In/ directory. Accept byte-identical
+# copies only; distinct reports still require explicit aggregation rather than arbitrary first-file selection.
+$reportGroups = @($CoveragePath | ForEach-Object { Get-FileHash -LiteralPath $_ -Algorithm SHA256 } | Group-Object Hash)
+if ($reportGroups.Count -ne 1) { throw 'Expected one distinct CLI coverage report.' }
+[xml]$coverageDocument = Get-Content -Raw -LiteralPath $reportGroups[0].Group[0].Path
 $packages = @($coverageDocument.coverage.packages.package)
 if ($packages.Count -ne 1 -or $packages[0].name -cne 'aidotnet-evolve') {
     throw 'Expected coverage for aidotnet-evolve alone; verify the Coverlet include filter.'

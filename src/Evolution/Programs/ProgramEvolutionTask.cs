@@ -150,7 +150,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         foreach (KeyValuePair<string, double> pair in _descriptors.Compute(genome)) merged[pair.Key] = pair.Value;
         foreach (KeyValuePair<string, double> pair in result.Descriptors) merged[pair.Key] = pair.Value;
 
-        return new EvolutionTaskResult(
+        var mergedResult = new EvolutionTaskResult(
             result.Status,
             result.Quality,
             result.Direction,
@@ -161,6 +161,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
             result.Diagnostics,
             result.Metrics,
             result.Artifacts);
+        return result.MeasurementOrigin is null ? mergedResult : mergedResult.WithMeasurementOrigin(result.MeasurementOrigin);
     }
 
     private static string BuildVersionHash(
@@ -171,7 +172,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         EvolveBlockMarkers markers = options.ResolveEvolveBlockMarkers();
         var components = new List<string>
         {
-            "program-evolution-task-v5-cost-semantics-and-marker-identity",
+            "program-evolution-task-v6-measurement-origin",
             options.Language.ToString(),
             markers.Start,
             markers.End,

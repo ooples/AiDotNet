@@ -7,16 +7,23 @@ on:
       - 'src/Evolution/Programs/**'
       - 'src/Configuration/ProgramEvolution*.cs'
       - 'src/AiModelBuilder.Evolution.cs'
+      - 'src/Interfaces/IProgramMeasurementEvidenceStore.cs'
       - 'src/AiDotNet.csproj'
       - 'src/Directory.Build.props'
       - 'AiDotNet.sln'
       - 'tests/AiDotNet.Evolution.CSharp.Tests/**'
+      - 'tests/AiDotNet.Evolution.Integration.Tests/**'
+      - 'tests/AiDotNet.Tests/UnitTests/Evolution/**'
+      - 'tests/AiDotNet.Tests/IntegrationTests/Evolution/**'
+      - 'tests/AiDotNet.Tests/IntegrationTests/AutoML/MapElitesAutoMLIntegrationTests.cs'
+      - 'tests/AiDotNet.Tests/IntegrationTests/Configuration/EvolutionYamlConfigTests.cs'
       - 'tools/AiDotNet.CSharp.Worker/**'
       - 'tools/AiDotNet.Evolve.Cli/**'
       - 'tests/AiDotNet.Evolve.Cli.Tests/**'
       - 'Directory.Packages.props'
       - '.github/workflows/evolution-csharp.yml'
       - '.github/scripts/check-evolution-cli-coverage.ps1'
+      - '.github/scripts/tests/check-evolution-cli-coverage.tests.ps1'
   workflow_dispatch:
 
 permissions:
@@ -50,7 +57,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Evolution
-          ref: 6d9aeb2dd44f5020469c81ad2cb4046f9f3495bb
+          ref: 76d8343939f9ec1a58c4994384a249e6ecc93dc0
           # Keep sibling repositories separate: nesting core under the consumer inherits its CPM file.
           path: evolution
           persist-credentials: false
@@ -75,13 +82,20 @@ jobs:
           dotnet build tests/AiDotNet.Evolve.Cli.Tests/AiDotNet.Evolve.Cli.Tests.csproj -c Release -p:UseLocalEvolution=true -m:2
           # Coverlet rejects literal hyphens in filters; use a wildcard and verify the reported module.
           dotnet test tests/AiDotNet.Evolve.Cli.Tests/AiDotNet.Evolve.Cli.Tests.csproj -c Release --no-build --no-restore -p:UseLocalEvolution=true --logger "trx;LogFileName=cli.trx" --results-directory TestResults/compiler-net10.0/cli --collect:"XPlat Code Coverage" -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[aidotnet*evolve]*"
+      - name: Test the consumer facade and persistent fitness against pinned core
+        run: >-
+          dotnet test tests/AiDotNet.Evolution.Integration.Tests/AiDotNet.Evolution.Integration.Tests.csproj
+          -c Release -f ${{ matrix.framework }} -p:UseLocalEvolution=true -m:2
+          --logger "trx;LogFileName=consumer.trx" --results-directory TestResults/compiler-${{ matrix.framework }}/consumer
+          --collect:"XPlat Code Coverage" -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[AiDotNet]AiDotNet.Evolution.*,[AiDotNet]AiDotNet.AiModelBuilder*"
       - name: Verify CLI module and runtime pilot coverage
         if: matrix.framework == 'net10.0'
         shell: pwsh
         run: |
           $reports = @(Get-ChildItem -Path TestResults/compiler-net10.0/cli -Filter coverage.cobertura.xml -Recurse -File)
-          if ($reports.Count -ne 1) { throw 'Expected one CLI coverage report.' }
-          & .github/scripts/check-evolution-cli-coverage.ps1 -CoveragePath $reports[0].FullName
+          if ($reports.Count -eq 0) { throw 'Expected a CLI coverage report.' }
+          & .github/scripts/tests/check-evolution-cli-coverage.tests.ps1
+          & .github/scripts/check-evolution-cli-coverage.ps1 -CoveragePath $reports.FullName
       - name: Retain verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

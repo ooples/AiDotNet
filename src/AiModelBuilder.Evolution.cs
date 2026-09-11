@@ -719,6 +719,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         EvolutionOptions options = ResolveProgramEvolutionOptions(programOptions);
+        if (programOptions.CustomFitnessEvaluator is PersistentProgramFitnessEvaluator)
+        {
+            if (options.EnableEvaluationCache)
+                throw new NotSupportedException("Persistent program fitness requires EnableEvaluationCache=false so every lookup checks freshness and raw evidence.");
+            if (options.Resume || options.CheckpointInterval > 0 || options.CheckpointDirectory is not null)
+                throw new NotSupportedException("Persistent program fitness requires coordinated ledger/engine checkpoints; automatic resume is not yet supported.");
+        }
         if (programOptions.ResourceAccounting is not null &&
             (options.Resume || options.CheckpointInterval > 0 || options.CheckpointDirectory is not null))
             throw new NotSupportedException("Resource-accounted program runs require coordinated ledger/engine checkpoints; automatic resume is not yet supported.");

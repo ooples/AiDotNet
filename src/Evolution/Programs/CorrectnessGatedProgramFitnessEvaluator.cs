@@ -33,7 +33,7 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         _fitness = fitness;
         VersionHash = EvolutionHash.Combine(new[]
         {
-            "correctness-gated-program-v2-complete-cost-receipts", correctness.Id, correctness.VersionHash, fitness.Id, fitness.VersionHash
+            "correctness-gated-program-v3-measurement-origin", correctness.Id, correctness.VersionHash, fitness.Id, fitness.VersionHash
         });
     }
 
@@ -70,7 +70,10 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         return Copy(fitness, status, validation.CostUnits + fitness.CostUnits);
     }
 
-    private static EvolutionTaskResult Copy(EvolutionTaskResult result, EvolutionEvaluationStatus status, double cost) => new(
-        status, status == EvolutionEvaluationStatus.Completed ? result.Quality : null, result.Direction,
-        result.Descriptors, result.Objectives, result.ConstraintViolations, cost, result.Diagnostics, result.Metrics, result.Artifacts);
+    private static EvolutionTaskResult Copy(EvolutionTaskResult result, EvolutionEvaluationStatus status, double cost)
+    {
+        var copy = new EvolutionTaskResult(status, status == EvolutionEvaluationStatus.Completed ? result.Quality : null, result.Direction,
+            result.Descriptors, result.Objectives, result.ConstraintViolations, cost, result.Diagnostics, result.Metrics, result.Artifacts);
+        return result.MeasurementOrigin is null ? copy : copy.WithMeasurementOrigin(result.MeasurementOrigin);
+    }
 }

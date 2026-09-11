@@ -26,10 +26,22 @@ cannot enter the archive as a completed result.
 Given a valid program, when checking and scoring finish, then their same-unit costs are added and scoring metadata
 is retained. Correctness-stage success metadata is deliberately not merged into fitness metadata.
 
-Given descriptors are enabled, when ProgramEvolutionTask merges them, then metrics and repair artifacts survive.
+Given descriptors are enabled, when ProgramEvolutionTask merges them, then metrics, repair artifacts and original
+measurement provenance survive. A passing correctness gate preserves fitness sample origin while adding only the
+current checking cost; original fitness acquisition cost is not charged again. Rejected checks retain their own origin.
 That preservation and exact-source identity affect future search feedback: task version
-`program-evolution-task-v5-cost-semantics-and-marker-identity` intentionally refuses older checkpoints. It also
+`program-evolution-task-v6-measurement-origin` intentionally refuses older checkpoints. It also
 separately fingerprints start/end markers and declared resource cost-unit semantics.
+
+Gate v3 (`correctness-gated-program-v3-measurement-origin`) preserves this metadata. Persistent fitness reuse must
+use the [explicit consumer reuse contract](evolution-persistent-fitness.md) and
+sit beneath fresh correctness gating; a whole-task cache would bypass the current checks. A legacy outer engine
+memo can also bypass an evaluator's freshness policy: disable it when the policy must run for each dispatch.
+
+LLM judge v2 refuses an origin-bearing measured result before any judge call with
+`program_judge_measurement_origin_unsupported`. The original scalar's standard error or interval does not describe
+a model-blended score. The failure retains received provenance and current costs; disabled judging passes the
+original result through. A calibrated combined-score provenance model is not implemented.
 
 ## Breaking change and migration
 

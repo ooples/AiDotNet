@@ -49,6 +49,11 @@ identities and incorporates declared evaluation cost units. I/O evaluator v2
 (`program-io-evaluator-v2-dispatched-attempt-costs`) counts the current dispatched call when it cancels, and
 propagates fatal runner failures instead of assigning ordinary fitness. These also invalidate old task evidence.
 
+Task v6 (`program-evolution-task-v6-measurement-origin`) subsequently preserves original sample provenance during
+descriptor merging. Correctness gate v3 preserves fitness provenance while charging fresh checking work separately;
+LLM judge v2 refuses unsupported provenance/score blending before a model call. These semantic versions deliberately
+invalidate older task/gate/judge checkpoint identities; they do not rewrite old scores or claim statistical freshness.
+
 This intentionally evaluates some cosmetic-only edits again. A language-aware parser may later prove safe
 equivalence, but language-agnostic whitespace trimming cannot. Source identity is only one part of applicability:
 compiler/runtime, dependencies, public and held-out test sets, environment and fidelity must also match before
