@@ -74,6 +74,7 @@
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\FacadeConfigurationValidationGenerator.cs" Link="Generators\FacadeConfigurationValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\PaperOptimizerAnalyzer.cs" Link="Generators\PaperOptimizerAnalyzer.cs" />
     <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
          execute Roslyn directly. The production project reference is analyzer-only and therefore
          intentionally does not expose generator types as a compile reference. -->
