@@ -2469,12 +2469,50 @@ jobs:
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
       - name: Build (Release)
-        # Windows-only MSBuild flags dropped — file-locking workarounds not needed on Linux.
-        # Match the memory-safe project concurrency used by the artifact build. Sonar's
-        # compiler instrumentation only increases the need to avoid four large csc
-        # processes competing inside the 16-GB runner.
+        # ONE FRAMEWORK, EVERY PROJECT. `dotnet build` of the whole solution compiled every
+        # project for every target framework under Sonar's analyzers - the main library and the
+        # test project three times each (net10.0, net8.0, net471). It never finished: no master
+        # commit since 09-01 completed an analysis; every attempt died or timed out inside this
+        # step (55 minutes under the old limit, 95 under this one; 88364e91's runner died at 66).
+        # The artifact build compiles the same core for net10.0 in about 7 minutes.
+        #
+        # Every shipped and test project targets net10.0, so each is built once for it and every
+        # project is still analysed. The net8.0/net471 builds remain the build-compat job's
+        # responsibility; Sonar no longer reports issues that exist only in their conditional code.
+        # The generator targets netstandard2.0 by necessity (it loads into the compiler) and was
+        # already built above. A project that stops targeting net10.0 fails this step on purpose,
+        # so it cannot silently drop out of analysis.
+        #
+        # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
+        # instrumentation only increases the need to avoid large csc processes competing inside
+        # the 16-GB runner.
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
-        run: dotnet build -c Release --no-restore -m:2
+        shell: pwsh
+        run: |
+          $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
+            ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
+          if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
+          foreach ($project in $projects) {
+            $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
+            $properties = ($evaluated | ConvertFrom-Json).Properties
+            $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
+              Where-Object { $_ })
+            if ($frameworks -contains 'net10.0') {
+              Write-Host "::group::$project (net10.0 of $($frameworks -join ', '))"
+              dotnet build $project -c Release --no-restore -m:2 -f net10.0
+            }
+            elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
+              Write-Host "::group::$project (analyzer, $($frameworks -join ', '))"
+              dotnet build $project -c Release --no-restore -m:2
+            }
+            else {
+              throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
+            }
+            $exit = $LASTEXITCODE
+            Write-Host '::endgroup::'
+            if ($exit -ne 0) { throw "Sonar-instrumented build of $project failed with exit code $exit" }
+          }
 
       - name: End SonarCloud analysis
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}

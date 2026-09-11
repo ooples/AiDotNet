@@ -528,6 +528,16 @@ foreach ($stepName in @(
     Assert-Contract ($step.Contains('fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION')) `
         "SonarCloud step '$stepName' can run for a non-runtime change"
 }
+# The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
+# library and tests for three frameworks under analyzers and never finished inside the job limit.
+$sonarBuild = Get-StepBlock -JobBlock $sonarJob -Step 'Build (Release)'
+Assert-Contract ($sonarBuild.Contains('dotnet build $project -c Release --no-restore -m:2 -f net10.0') -and
+        $sonarBuild.Contains('dotnet sln AiDotNet.sln list')) `
+    'the Sonar build is not scoped to one net10.0 compile per solution project'
+Assert-Contract (-not [Regex]::IsMatch($sonarBuild, '(?m)^\s*(run:\s*)?dotnet build -c Release')) `
+    'the Sonar build compiles the whole solution for every target framework again'
+Assert-Contract ($sonarBuild.Contains('and not net10.0; decide how Sonar should analyse it')) `
+    'a project that stops targeting net10.0 can silently drop out of Sonar analysis'
 $certifiedCoverage = Get-StepBlock -JobBlock $sonarJob -Step 'Download certified coverage artifacts'
 Assert-Contract ($certifiedCoverage.Contains("needs.validation-source.outputs.reuse == 'true'")) `
     'a quality-only landed run cannot consume the certified PR coverage'
