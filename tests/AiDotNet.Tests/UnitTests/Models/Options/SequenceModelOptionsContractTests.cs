@@ -297,7 +297,9 @@ public class SequenceModelOptionsContractTests
     private static void AssertInvalid(Type optionsType, PropertyInfo property, object value)
     {
         var options = Create(optionsType);
-        var validate = optionsType.GetMethod(nameof(GLAOptions.Validate), Type.EmptyTypes)
+        var validate = optionsType.GetMethod(nameof(GLAOptions.Validate),
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null, types: Type.EmptyTypes, modifiers: null)
             ?? throw new InvalidOperationException($"{optionsType.Name} has no Validate method.");
         // Prove the fixture starts valid: a different default cannot cause a false pass.
         validate.Invoke(options, Array.Empty<object>());
