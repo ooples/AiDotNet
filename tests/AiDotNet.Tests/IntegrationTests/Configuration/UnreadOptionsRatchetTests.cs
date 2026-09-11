@@ -40,15 +40,9 @@ public class UnreadOptionsRatchetTests
     /// It must never rise: a new unread property is a new instance of the defect.
     /// </para>
     /// <para>
-    /// The four standing at the time of writing, and why each is here rather than fixed:
+    /// The three standing at the time of writing, and why each is here rather than fixed:
     /// </para>
     /// <list type="bullet">
-    /// <item><description>
-    /// <c>DocumentNeuralNetworkOptions.BackboneChannels</c> — declared on the family base while
-    /// DBNet, EAST, PSENet and DocBank still take <c>backboneChannels</c> as a constructor
-    /// parameter. It becomes read the moment those four migrate, so wiring it now would mean
-    /// wiring it twice.
-    /// </description></item>
     /// <item><description>
     /// <c>MatryoshkaEmbeddingOptions.MaxEmbeddingDimension</c> — the model bounds requested
     /// dimensions against an inherited <c>EmbeddingDimension</c> instead. One of the two is
@@ -70,7 +64,7 @@ public class UnreadOptionsRatchetTests
     /// the authority on a model's input shape.
     /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 4;
+    private const int UnreadBaseline = 3;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

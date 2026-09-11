@@ -10746,7 +10746,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
+                    "options: new AiDotNet.Document.Options.DocBankOptions { ImageSize = 64, " +
+                    "BackboneChannels = 32, NumClasses = 4, HiddenDim = 16 })";
             }
             else if (model.ClassName == "InstantNGP" && model.TypeParameterCount == 1)
             {
