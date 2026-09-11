@@ -891,7 +891,12 @@ internal static class PaperOptimizerFactory
 
         try
         {
-            var ramp = new LinearWarmupScheduler(baseRate, warmupSteps);
+            // warmupInitLr defaults to 0, which makes the very first step a no-op: the update is
+            // multiplied by a rate of exactly zero and the parameters come back bit-identical.
+            // The two other places that build a warmup already start it one increment in, and
+            // this one has to as well -- a model that only gets a few steps otherwise never moves.
+            var ramp = new LinearWarmupScheduler(
+                baseRate, warmupSteps, warmupInitLr: FirstWarmupRate(baseRate, warmupSteps));
             return new SequentialLRScheduler([ramp, scheduler], [warmupSteps]);
         }
         catch (Exception)

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -57,6 +58,23 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EAT: Self-Supervised Pre-Training with Efficient Audio Transformer", "https://arxiv.org/abs/2401.03497", Year = 2024, Authors = "Wenxi Chen, Yuzhe Liang, Ziyang Ma, Zhisheng Zheng, Xie Chen")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0.05, ReferenceBatchSize = 12, MinLearningRate = 1e-6,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Chen et al. 2024, Appendix A.1 Table 4: AdamW with beta1 0.9 and beta2 0.95, "
+                        + "weight decay 0.05, a cosine schedule, a peak learning rate of 0.0005 decaying "
+                        + "to a minimum of 0.000001, and a batch size of 12 over 10 epochs of AS-2M. The "
+                        + "body text calls it Adam while citing Loshchilov and Hutter 2017, which is the "
+                        + "AdamW paper, and the appendix table names AdamW outright. The step and "
+                        + "warm-up rows of that table cannot be assigned to their columns from the "
+                        + "extracted text, so no warm-up length is declared.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5,
+                Phase = TrainingPhase.FineTuning,
+                Provenance = RecipeProvenance.PerDataset,
+                Source = "Chen et al. 2024, Appendix A.1 Table 4: fine-tuning uses a peak learning rate "
+                        + "of 0.00005 on AS-2M, AS-20K and ESC-50, and 0.0002 on SPC-2. The value "
+                        + "declared here is the one shared by three of the four datasets.")]
 public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -101,7 +119,9 @@ public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         _options = options ?? new EATOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);

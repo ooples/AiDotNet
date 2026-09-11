@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -51,6 +53,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.2, ReferenceBatchSize = 10240,
+                WarmupFraction = 0.03125, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Li et al. 2021, Sec. 4.1: FP16 SGD at a batch size of 10,240, starting from a "
+                        + "learning rate of 0.01 and increasing linearly to 0.2 over the first of 32 "
+                        + "epochs, then following a cosine schedule. The warmup is declared as the "
+                        + "fraction 1/32 because the paper gives it in epochs rather than steps.")]
 public partial class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DeCLIPOptions _options;
@@ -107,7 +116,9 @@ public partial class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
         _options = options ?? new DeCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

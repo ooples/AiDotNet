@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -43,6 +45,10 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.004, WarmupSteps = 25000,
+                Source = "Chiu et al. 2022, Sec. 4: the Adam optimizer with a 0.004 peak learning rate "
+                        + "and 25000 warmup steps. The separate constant 1e-4 at batch size 256 in the "
+                        + "same section trains the quantizer, not this model.")]
 public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -64,7 +70,9 @@ public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public BESTRQ(NeuralNetworkArchitecture<T> architecture, string modelPath, BESTRQOptions? options = null) : base(architecture) { _options = options ?? new BESTRQOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public BESTRQ(NeuralNetworkArchitecture<T> architecture, BESTRQOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BESTRQOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public BESTRQ(NeuralNetworkArchitecture<T> architecture, BESTRQOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BESTRQOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using BEST-RQ's random-projection quantizer encoder with CTC.

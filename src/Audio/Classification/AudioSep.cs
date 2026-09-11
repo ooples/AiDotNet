@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -66,6 +67,9 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Separate Anything You Describe", "https://arxiv.org/abs/2308.05037", Year = 2024, Authors = "Xubo Liu, Qiuqiang Kong, Yan Zhao, Haohe Liu, Yi Yuan, Yuzhuo Liu, Rui Xia, Yuxuan Wang, Mark D. Plumbley, Wenwu Wang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 96,
+                Source = "Liu et al. 2023, Sec. 4.1: an Adam optimizer with a learning rate of 1e-3 and "
+                        + "a batch size of 96.")]
 public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -111,7 +115,9 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     {
         _options = options ?? new AudioSepOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;

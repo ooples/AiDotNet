@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,10 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2023,
     Authors = "Blecher et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, ReferenceBatchSize = 192,
+                Source = "Blecher et al. 2023, Sec. 4: an AdamW optimizer trained for 3 epochs at an "
+                        + "effective batch size of 192, with an initial learning rate of 5e-5 that is "
+                        + "reduced by a fixed factor during training.")]
 public partial class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly NougatOptions _options;
@@ -101,7 +107,9 @@ public partial class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstand
     {
         _options = options ?? new NougatOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

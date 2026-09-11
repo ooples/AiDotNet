@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -58,6 +59,9 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Diffusion Variational Autoencoder for Tackling Stochasticity in Multi-Step Regression Stock Price Prediction", "https://arxiv.org/abs/2309.00073")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, ReferenceBatchSize = 16,
+                Source = "Li et al. 2023, Sec. 4: the Adam optimizer with an initial learning rate of "
+                        + "5e-4, a batch size of 16, trained for 20 epochs per stock.")]
 public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -132,7 +136,9 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
         // bubbling up a bare InvalidCastException on first Train().
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
     }
 
@@ -142,7 +148,9 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
     {
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options); InitializeLayers();
     }
 

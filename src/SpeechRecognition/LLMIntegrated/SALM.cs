@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -42,6 +44,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SALM: Speech-augmented Language Model with In-context Learning for Speech Recognition", "https://arxiv.org/abs/2310.09424", Year = 2024, Authors = "Chen et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, WeightDecay = 1e-3,
+                WarmupSteps = 2000, MinLearningRate = 0, MaxGradientNorm = 5.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Chen et al. 2023, Sec. 4: the Adam optimizer with a learning rate of 1e-4 and "
+                        + "a weight decay of 1e-3, cosine annealing with 2000 warm-up steps, and "
+                        + "gradients clipped to 5.0.")]
 public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SALMOptions _options; public override ModelOptions GetOptions() => _options;
@@ -56,7 +64,9 @@ public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // to MeanSquaredErrorLoss, which this model silently inherited, so it was descending MSE on token
     // LOGITS — an objective the paper never uses. The head emits raw logits, so use the fused
     // log-softmax/NLL form, as the other logit-head models here do.
-    public SALM(NeuralNetworkArchitecture<T> architecture, SALMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SALMOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SALM(NeuralNetworkArchitecture<T> architecture, SALMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SALMOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using SALM's in-context learning approach.

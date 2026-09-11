@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +60,15 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Image-to-Image Translation with Conditional Adversarial Networks", "https://arxiv.org/abs/1611.07004", Year = 2017, Authors = "Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, Alexei A. Efros")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, Beta1 = 0.5, Beta2 = 0.999,
+                ReferenceBatchSize = 1,
+                Source = "Isola et al. 2017, Sec. 3.3: minibatch SGD with the Adam solver at a learning "
+                        + "rate of 0.0002 and momentum parameters beta1 0.5 and beta2 0.999, trained for "
+                        + "200 epochs at batch size 1. The beta1 of 0.5 is well below the usual 0.9 and "
+                        + "is the paper value. Both optimizers are verified against this record "
+                        + "rather than built from it: the model builds one for the generator and "
+                        + "one for the discriminator, each targeting a sub-model rather than this "
+                        + "one, so a factory-built optimizer would carry the wrong parameters.")]
 public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
 {
 
@@ -218,8 +229,10 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         // Initialize optimizers (default to Adam if not provided)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
+        _generatorOptimizer = generatorOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator));
+        _discriminatorOptimizer = discriminatorOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator));
 
         InitializeLayers();
     }

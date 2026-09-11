@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,13 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Ren et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Schedule = LearningRateSchedulerType.Noam,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "Ren et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
+                        + "following the learning rate schedule of its reference [35], Vaswani et al. "
+                        + "2017, which is the inverse-square-root schedule with warmup declared here as "
+                        + "Noam. Training runs 320k steps to convergence.")]
 public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly PortaSpeechOptions _options;
@@ -264,15 +273,16 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         if (_options.WeightDecay > 0.0)
         {
-            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    WeightDecay = _options.WeightDecay,
-                    UseAdaptiveBetas = false,
-                    UseAMSGrad = false,
-                });
+            return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = _options.LearningRate,
+                        WeightDecay = _options.WeightDecay,
+                        UseAdaptiveBetas = false,
+                        UseAMSGrad = false,
+                    }));
         }
 
         return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,6 +44,16 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("data2vec 2.0: Highly Efficient Self-Supervised Learning for Vision, Speech and Text", "https://arxiv.org/abs/2212.07525", Year = 2023, Authors = "Alexei Baevski, Arun Babu, Wei-Ning Hsu, Michael Auli")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 7.5e-4, Beta1 = 0.9, Beta2 = 0.98,
+                WeightDecay = 0.01, WarmupSteps = 8000,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Baevski et al. 2023, Table 9, Base Librispeech speech pre-training: Adam with "
+                        + "beta1 0.9 and beta2 0.98, a learning rate of 7.5e-4, weight decay 0.01, a "
+                        + "cosine schedule and 8,000 warmup updates over 400,000 updates. No reference "
+                        + "batch size is declared because the paper gives the batch in seconds of audio "
+                        + "(62.5 per GPU, 1,000 total) rather than in examples, and the linear scaling "
+                        + "rule compares example counts.")]
 public partial class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
@@ -100,7 +111,9 @@ public partial class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationM
     {
         _options = options ?? new Data2Vec2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
