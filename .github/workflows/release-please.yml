@@ -7,8 +7,8 @@ name: Release Please
 #      last release into a rolling "Release PR" (version bump + CHANGELOG). NO release is cut yet —
 #      merges just keep updating that one PR, so a burst of merged PRs bundles into a single version.
 #   2. When a maintainer merges the Release PR, release-please creates the git tag (v<version>) and
-#      the GitHub release. Only then does the `publish` job run: it builds, packs, pushes to NuGet,
-#      and attaches the .nupkg to the release.
+#      the GitHub release. Only then do `build-release` and `publish` run: the first builds and
+#      verifies packages without OIDC access, and the second publishes only those artifacts.
 #
 # This gives deliberate, atomic, batched releases instead of one release per merged PR.
 
@@ -19,8 +19,7 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 # Serialize (never cancel): a release cut / PR update must finish. Runs are cheap when they only
 # update the Release PR, and must be atomic when they actually publish.
@@ -34,10 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     # Scope issues:write (label mutations) to this job only, following least-privilege —
     # a job-level permissions block OVERRIDES the workflow default, so contents/pull-requests
-    # are re-declared here; the publish job keeps the workflow-level contents:write it needs.
+    # are re-declared here; every other job declares only its own narrower permissions.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # Required to create release commits, tags, and GitHub releases.
+      pull-requests: write # Required to create and update the rolling Release PR.
       issues: write # release-please creates/applies the `autorelease:` labels via the Issues API
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
@@ -55,12 +54,16 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  publish:
-    name: Build, pack, publish NuGet
+  build-release:
+    name: Build and verify release packages
+    permissions:
+      contents: read # Required to check out the release tag.
     runs-on: ubuntu-latest
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     timeout-minutes: 25
+    outputs:
+      package-artifact-id: ${{ steps.upload-packages.outputs.artifact-id }}
     steps:
       - name: Free up disk space
         run: |
@@ -163,7 +166,7 @@ jobs:
           [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
 
           files=$(unzip -Z1 "$main")
-          for tfm in net471 net10.0; do
+          for tfm in net471 net8.0 net10.0; do
             echo "$files" | grep -qE "^lib/${tfm}/.+[.]dll$" || { echo "Error: Missing ${tfm} lib in $main"; exit 1; }
             echo "Found ${tfm} in $(basename "$main")"
           done
@@ -188,15 +191,59 @@ jobs:
         shell: pwsh
         run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
 
+      - name: Upload verified release packages
+        id: upload-packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-packages-${{ needs.release-please.outputs.tag_name }}
+          path: out/*.nupkg
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  publish:
+    name: Publish verified packages
+    permissions:
+      contents: write # Required for gh release upload.
+      id-token: write # Required for NuGet trusted publishing.
+    runs-on: ubuntu-latest
+    needs: [release-please, build-release]
+    if: needs.release-please.outputs.release_created == 'true'
+    timeout-minutes: 10
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download verified release packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v7.0.0
+        with:
+          artifact-ids: ${{ needs.build-release.outputs.package-artifact-id }}
+          path: out
+
+      - name: Authenticate to NuGet with trusted publishing
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ooples
+
       - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
+          set -euo pipefail
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::NuGet trusted publishing did not issue a temporary API key."
+            exit 1
+          fi
           shopt -s nullglob
           pkgs=(out/*.nupkg)
           [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No .nupkg files found in out/"; exit 1; }
           for pkg in "${pkgs[@]}"; do
             echo "Publishing $pkg to NuGet..."
             dotnet nuget push "$pkg" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --api-key "$NUGET_API_KEY" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
