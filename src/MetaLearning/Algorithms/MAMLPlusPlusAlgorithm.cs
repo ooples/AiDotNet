@@ -306,11 +306,19 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     /// <param name="taskBatch">Current task batch.</param>
     /// <param name="initParams">Initial backbone parameters.</param>
     /// <param name="outerLR">Outer learning rate.</param>
+    /// <remarks>
+    /// The alpha gradient is taken at the pre-update initialisation, where the meta-loss was measured (Antoniou
+    /// et al. 2019 update theta and alpha from the same loss). Each evaluation leaves the backbone at
+    /// <paramref name="initParams"/>, and MetaTrain calls this after the outer update, so the update used to be
+    /// silently undone: MAML++ reported a falling loss while its initialisation never moved. The parameters the
+    /// model holds on entry are restored on exit.
+    /// </remarks>
     private void UpdatePerStepLearningRates(
         TaskBatch<T, TInput, TOutput> taskBatch,
         Vector<T> initParams,
         double outerLR)
     {
+        var resume = ParamModel.GetParameters();
         double epsilon = 1e-3;
 
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
@@ -345,6 +353,8 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 Math.Min(1.0, NumOps.ToDouble(_perStepLearningRates[step]) - outerLR * grad));
             _perStepLearningRates[step] = NumOps.FromDouble(newLR);
         }
+
+        ParamModel.SetParameters(resume);
     }
 
     /// <summary>
