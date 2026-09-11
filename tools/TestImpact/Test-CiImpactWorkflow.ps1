@@ -167,6 +167,23 @@ Assert-Contract (-not $codeqlHeader.Contains(
 Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
     'CodeQL cannot publish its required result after a selector failure'
 
+# CodeQL analyzes only what the traced build compiles. A project dropped from this step silently
+# disappears from code scanning instead of failing, which is how the Serving API and the
+# playground functions went unanalyzed. Every build must also be restored first (--no-restore).
+$codeqlBuild = Get-StepBlock -JobBlock $codeqlJob -Step 'Build for CodeQL (net10.0)'
+$codeqlRestore = Get-StepBlock -JobBlock $codeqlJob -Step 'Restore dependencies'
+Assert-Contract ([bool] $codeqlBuild) 'CodeQL has no traced build step'
+foreach ($codeqlProject in @(
+        'src/AiDotNet.csproj -c Release --no-restore -f net10.0',
+        'src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore',
+        'src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore')) {
+    Assert-Contract ($codeqlBuild.Contains("dotnet build $codeqlProject")) `
+        "CodeQL's traced build does not compile '$codeqlProject'"
+    $projectPath = $codeqlProject.Split(' ')[0]
+    Assert-Contract ($codeqlRestore.Contains("dotnet restore $projectPath")) `
+        "CodeQL builds '$projectPath' with --no-restore but never restores it"
+}
+
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
