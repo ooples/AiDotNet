@@ -1,0 +1,11 @@
+<Project>
+  <!-- .NET Framework cannot use .runtimeconfig.dev.json NuGet probing. Copy only the
+       SDK's resolved managed runtime assemblies, not native libraries/runtime targets.
+       The actual CPU-native closure is supplied separately when needed. -->
+  <Target Name="CopyPr2154LegacyManagedTestRuntime" AfterTargets="Build"
+          Condition="'$(TargetFramework)' == 'net471'">
+    <Copy SourceFiles="@(RuntimeCopyLocalItems)"
+          DestinationFiles="@(RuntimeCopyLocalItems->'$(TargetDir)%(DestinationSubDirectory)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

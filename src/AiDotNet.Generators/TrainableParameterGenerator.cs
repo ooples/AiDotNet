@@ -644,7 +644,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // Generate the partial class source
             var unguardableAxes = new List<string>();
             var source = GenerateSource(
-                classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
+                compilation, classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
                 useRuntimeParameterRegistry, useConventionalTensorEnumerator,
                 emitParameterFreeContract,
                 suppressGeneratedParameterAccessors, unguardableAxes);
@@ -676,6 +676,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         };
 
     private static string GenerateSource(
+        Compilation compilation,
         INamedTypeSymbol classSymbol,
         List<ParameterFieldInfo> paramFields,
         Dictionary<string, GradientFieldInfo> gradientFields,
@@ -1561,6 +1562,20 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// <summary>Auto-generated: this layer owns child-module structure.</summary>");
             sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override bool HasDeclaredSubLayerStructure => true;");
+            var optionalChildren = subLayerFields
+                .Select(child => classSymbol.GetMembers(child.Name).OfType<IFieldSymbol>().SingleOrDefault())
+                .ToArray();
+            bool childIndependentInitializer = subLayerFields.All(child => !child.IsCollection && child.InputShape is null)
+                && optionalChildren.All(child => child is not null)
+                && LayerStructureInitializationAnalysis.IsChildIndependent(
+                    compilation, classSymbol, optionalChildren.OfType<IFieldSymbol>().ToArray());
+            if (childIndependentInitializer)
+            {
+                sb.AppendLine();
+                sb.AppendLine("    /// <summary>Only this exact initializer is proven independent of child structure.</summary>");
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+                sb.AppendLine($"    protected override bool NeedsDeclaredSubLayerInitialization => GetType() != typeof({classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)});");
+            }
             sb.AppendLine();
             sb.AppendLine("    private bool _subLayersRegistered;");
             sb.AppendLine();

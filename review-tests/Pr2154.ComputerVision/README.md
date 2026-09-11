@@ -65,7 +65,7 @@ The final core build completed with **0 errors, 2,842 warnings**, in 4m29s. The 
 
 `AiDotNet.Tensors.dll` remained `EB681AE60F23B03CF08E0BF3AB70A372673927ACD87A428C74536D424846D5E7`. The documented PowerShell block parsed without errors; its guard accepted the actual clean `ebf7a1c989` baseline and rejected empty input, a missing path, and the wrong-head review worktree. No build was launched by those guard-only checks.
 
-The actual unfiltered follow-up commands, after building the current core, are:
+The historical scoped reproduction commands, after building the current core, are:
 
 ```powershell
 dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -f net10.0 -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests' --logger 'trx;LogFileName=pr2154-text-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly'

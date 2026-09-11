@@ -26,7 +26,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 /// <para>Reference: Ren et al., "Faster R-CNN: Towards Real-Time Object Detection with
 /// Region Proposal Networks", NeurIPS 2015</para>
 /// </remarks>
-public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>, AiDotNet.Models.Parameters.IParameterLayoutSource
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _conv;
@@ -467,6 +467,10 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
 
     /// <inheritdoc />
     long IParameterSource<T>.ParameterCount => Parameters.ParameterCount;
+
+    /// <inheritdoc />
+    IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> AiDotNet.Models.Parameters.IParameterLayoutSource.GetParameterLayout()
+        => Parameters.GetParameterLayout();
 
     /// <inheritdoc />
     Vector<T> IParameterSource<T>.GetParameters() => Parameters.GetParameters();

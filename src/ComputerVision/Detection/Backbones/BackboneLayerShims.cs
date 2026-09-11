@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -15,7 +16,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// written against the pre-lazy parallel-Conv2D contract. Post-#1209 it is a 30-line
 /// adapter, not a parallel implementation.
 /// </summary>
-internal class Conv2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly ConvolutionalLayer<T> _layer;
     private readonly int _inChannels;
@@ -78,6 +79,10 @@ internal class Conv2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IPara
     }
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    /// <remarks>Describes the same underlying state as the live chunks without initializing lazy weights.</remarks>
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
 
     // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
     // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
@@ -163,7 +168,7 @@ internal class Conv2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IPara
 }
 
 /// <summary>Thin adapter around <see cref="DenseLayer{T}"/> for legacy detection-head call sites.</summary>
-internal class Dense<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly DenseLayer<T> _layer;
     private readonly int _inDim;
@@ -239,6 +244,9 @@ internal class Dense<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParam
     }
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
 
     // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
     // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
@@ -328,7 +336,7 @@ internal class Dense<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParam
 }
 
 /// <summary>Thin adapter around <see cref="MultiHeadAttentionLayer{T}"/>.</summary>
-internal class MultiHeadSelfAttention<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+internal class MultiHeadSelfAttention<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
     private readonly int _dim;
@@ -352,6 +360,9 @@ internal class MultiHeadSelfAttention<T> : IParameterSource<T>, AiDotNet.Models.
     public Tensor<T> Forward(Tensor<T> input) => _layer.Forward(input);
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
 
     // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
     // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
@@ -415,7 +426,7 @@ internal class MultiHeadSelfAttention<T> : IParameterSource<T>, AiDotNet.Models.
 /// otherwise, so the owner must forward <see cref="SetTrainingMode"/>. The running statistics are not
 /// trainable, but they are part of the model and are saved and restored with it.
 /// </remarks>
-internal class BatchNorm2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly BatchNormalizationLayer<T> _layer;
     private readonly int _channels;
@@ -442,6 +453,9 @@ internal class BatchNorm2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.
     public void SetTrainingMode(bool training) => _layer.SetTrainingMode(training);
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
 
     /// <inheritdoc />
     public long ParameterCount => _layer.ParameterCount;
@@ -503,7 +517,7 @@ internal class BatchNorm2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.
 /// Adapter around <see cref="DeconvolutionalLayer{T}"/> for detection heads: a transposed 2-D
 /// convolution with no activation (the layer's own default is ReLU, so identity is passed explicitly).
 /// </summary>
-internal class ConvTranspose2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
+internal class ConvTranspose2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly DeconvolutionalLayer<T> _layer;
     private readonly int _inChannels;
@@ -530,6 +544,9 @@ internal class ConvTranspose2D<T> : IParameterSource<T>, AiDotNet.Models.Paramet
     }
 
     public long GetParameterCount() => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
 
     /// <inheritdoc />
     public long ParameterCount => GetParameterCount();

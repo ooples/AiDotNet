@@ -1494,6 +1494,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual bool HasDeclaredSubLayerStructure => false;
 
     /// <summary>
+    /// Whether the lazy initializer may construct declared child modules. The generator may skip
+    /// that initializer for an exact runtime type only after proving its optional children are
+    /// untouched by every reachable owner call. Unknown and inherited paths remain conservative.
+    /// </summary>
+    protected virtual bool NeedsDeclaredSubLayerInitialization => true;
+
+    /// <summary>
     /// Wraps dimensions as a <see cref="TensorShape"/> without copying them.
     /// </summary>
     /// <remarks>
@@ -1916,7 +1923,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private void EnsureDeclaredSubLayerStructure()
     {
-        if (!HasDeclaredSubLayerStructure) return;
+        if (!HasDeclaredSubLayerStructure || !NeedsDeclaredSubLayerInitialization) return;
         if (!IsShapeResolved && !ParametersAreConstructionSized) return;
 
         bool wasResolvingShapesOnly = IsResolvingShapesOnly;

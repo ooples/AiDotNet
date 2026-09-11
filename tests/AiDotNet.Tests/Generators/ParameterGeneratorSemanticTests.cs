@@ -11,7 +11,7 @@ using Xunit;
 namespace AiDotNet.Tests.Generators;
 
 /// <summary>Proves both B1 generators consume declarations rather than tensor conventions.</summary>
-public class ParameterGeneratorSemanticTests
+public partial class ParameterGeneratorSemanticTests
 {
     private const string Infrastructure = @"
 namespace AiDotNet.Attributes
@@ -71,6 +71,8 @@ namespace AiDotNet.NeuralNetworks.Layers
 {
     public abstract class LayerBase<T>
     {
+        protected virtual void EnsureInitialized() { }
+        protected virtual bool NeedsDeclaredSubLayerInitialization => true;
         protected AiDotNet.Tensors.LinearAlgebra.Vector<T> Parameters = new();
         public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => Parameters;
         protected void RegisterTrainableParameter(

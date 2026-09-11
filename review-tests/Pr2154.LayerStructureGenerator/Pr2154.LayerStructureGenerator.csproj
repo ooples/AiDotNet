@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net471;net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- These Roslyn tests do not parse source through TreeSitter. Do not propagate the
+         core project's platform-native Content items into this bounded runner. -->
+    <_GetChildProjectCopyToOutputDirectoryItems>false</_GetChildProjectCopyToOutputDirectoryItems>
+    <GenerateRuntimeConfigDevFile>true</GenerateRuntimeConfigDevFile>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <GeneratorAssemblyPath Condition="'$(GeneratorAssemblyPath)' == ''">../../src/AiDotNet.Generators/bin/Release/netstandard2.0/AiDotNet.Generators.dll</GeneratorAssemblyPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AiDotNet.Generators" HintPath="$(GeneratorAssemblyPath)" />
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/ParameterGeneratorSemanticTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/ParameterGeneratorSemanticTests.LayerStructure.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModuleInitializer.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/GlobalUsings.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Helpers/LicenseTestSupport.cs" />
+    <None Include="../../tests/AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="../Pr2154.ManagedTestClosure.targets" />
+</Project>
