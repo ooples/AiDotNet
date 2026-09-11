@@ -1074,6 +1074,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonIgnore]
     private NeuralNetworkBase<T>? _inferenceOptimizedNeuralModel;
 
+    /// <summary>
+    /// True when <see cref="_inferenceOptimizedNeuralModel"/> is a copy this result made (the optimizer
+    /// cloned <see cref="Model"/> before rewriting it) rather than <see cref="Model"/> itself. Only an owned
+    /// copy is disposed with the result; the wrapped model is released through <see cref="Model"/>.
+    /// </summary>
+    [JsonIgnore]
+    private bool _ownsInferenceOptimizedNeuralModel;
+
     [JsonIgnore]
     private bool _inferenceOptimizationsInitialized;
 
@@ -3050,9 +3058,27 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     var statelessConfig = CreateStatelessInferenceConfig(InferenceOptimizationConfig);
                     var optimizer = new InferenceOptimizer<T>(statelessConfig);
                     var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+                    bool isCopy = !ReferenceEquals(optimizedModel, model);
 
                     _inferenceOptimizer = optimizer;
-                    _inferenceOptimizedNeuralModel = anyApplied ? optimizedModel : null;
+                    if (anyApplied)
+                    {
+                        _inferenceOptimizedNeuralModel = optimizedModel;
+                        _ownsInferenceOptimizedNeuralModel = isCopy;
+                    }
+                    else
+                    {
+                        _inferenceOptimizedNeuralModel = null;
+                        _ownsInferenceOptimizedNeuralModel = false;
+
+                        // The optimizer cloned the model expecting to rewrite it, then found nothing to apply.
+                        // Nothing will ever use that clone again, so release it now instead of leaving its
+                        // layers' pooled buffers for the garbage collector.
+                        if (isCopy)
+                        {
+                            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(optimizedModel);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -3060,6 +3086,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 Console.WriteLine($"Warning: inference optimizations failed: {ex.Message}");
                 _inferenceOptimizer = null;
                 _inferenceOptimizedNeuralModel = null;
+                _ownsInferenceOptimizedNeuralModel = false;
             }
             finally
             {
@@ -3164,6 +3191,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Session-local inference state (populated lazily when used).
         private InferenceOptimizer<T>? _sequenceOptimizer;
         private NeuralNetworkBase<T>? _sequenceOptimizedNeuralModel;
+
+        // True when _sequenceOptimizedNeuralModel is a copy this sequence made (a KV-cache clone or a
+        // Multi-LoRA clone) rather than the result's Model, which the sequence only borrows.
+        private bool _ownsSequenceModel;
         private volatile bool _sequenceInitialized;
         private readonly object _sequenceLock = new();
 
@@ -3283,7 +3314,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 }
 
                 _sequenceOptimizer = null;
-                _sequenceOptimizedNeuralModel = null;
+                ReleaseSequenceModel();
                 _sequenceInitialized = false;
             }
         }
@@ -3305,7 +3336,37 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Best-effort cleanup; disposal must not throw.
             }
 
+            lock (_sequenceLock)
+            {
+                try
+                {
+                    ReleaseSequenceModel();
+                }
+                catch (Exception ex)
+                {
+                    // Disposal must not throw (see above); the copy is unreachable either way.
+                    Console.WriteLine($"Warning: releasing the inference sequence's model copy failed: {ex.Message}");
+                }
+            }
+
             _disposed = true;
+        }
+
+        /// <summary>
+        /// Releases the sequence's model copy when the sequence made it, then forgets it. The result's own
+        /// <c>Model</c> -- which a sequence uses directly when no copy was needed -- is never released
+        /// here; the result owns it.
+        /// </summary>
+        private void ReleaseSequenceModel()
+        {
+            var copy = _sequenceOptimizedNeuralModel;
+            bool owned = _ownsSequenceModel;
+            _sequenceOptimizedNeuralModel = null;
+            _ownsSequenceModel = false;
+            if (owned && copy is not null && !ReferenceEquals(copy, _result.Model))
+            {
+                AiDotNet.Helpers.DisposeOnceGuard.TryDispose(copy);
+            }
         }
 
         // Exposed to AiDotNetTests via InternalsVisibleTo for integration verification without expanding the public API surface.
@@ -3332,6 +3393,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     return _sequenceOptimizedNeuralModel;
                 }
 
+                NeuralNetworkBase<T>? multiLoRACopy = null;
                 try
                 {
                     // Every sequence owns its optimizer and cache, but all sequences clone the same source
@@ -3351,6 +3413,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 try
                                 {
                                     modelForSequence = (NeuralNetworkBase<T>)model.Clone();
+                                    multiLoRACopy = modelForSequence;
 
                                     // Shared with the serving batcher (AiDotNet.LoRA.LoRAAdapterSelection) so the
                                     // "switch every adapter layer to this task" logic lives in exactly one place.
@@ -3397,7 +3460,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
                             _sequenceOptimizer = optimizer;
                             // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
-                            _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
+                            var kept = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
+                            _sequenceOptimizedNeuralModel = kept;
+                            _ownsSequenceModel = kept is not null && !ReferenceEquals(kept, model);
+
+                            // A clone the optimizer made and then found nothing to apply to is never used.
+                            if (kept is null && !ReferenceEquals(optimizedModel, model))
+                            {
+                                AiDotNet.Helpers.DisposeOnceGuard.TryDispose(optimizedModel);
+                            }
+                            else if (multiLoRACopy is not null && !ReferenceEquals(multiLoRACopy, kept))
+                            {
+                                AiDotNet.Helpers.DisposeOnceGuard.TryDispose(multiLoRACopy);
+                            }
                         }
                     }
                 }
@@ -3406,6 +3481,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     Console.WriteLine($"Warning: inference session optimizations failed: {ex.Message}");
                     _sequenceOptimizer = null;
                     _sequenceOptimizedNeuralModel = null;
+                    _ownsSequenceModel = false;
+
+                    // A Multi-LoRA clone made before the failure has no other owner.
+                    if (multiLoRACopy is not null && !ReferenceEquals(multiLoRACopy, model))
+                    {
+                        try { AiDotNet.Helpers.DisposeOnceGuard.TryDispose(multiLoRACopy); }
+                        catch (Exception disposeEx) { Console.WriteLine($"Warning: releasing the Multi-LoRA copy failed: {disposeEx.Message}"); }
+                    }
                 }
                 finally
                 {
@@ -5848,7 +5931,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Reset transient runtime state (will be reinitialized lazily)
                 JitCompiledFunction = null;
                 _inferenceOptimizer = null;
-                _inferenceOptimizedNeuralModel = null;
+                ReleaseInferenceOptimizedModel();
                 _inferenceOptimizationsInitialized = false;
 
                 // Restore the model's internal state from the model-owned serialized payload when available.
@@ -7518,15 +7601,70 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         System.GC.SuppressFinalize(this);
     }
 
-    /// <summary>Disposes the contained model. Override + call base for additional cleanup.</summary>
+    /// <summary>
+    /// Disposes the contained model and every model copy this result made for itself. Override + call base for
+    /// additional cleanup.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Besides <see cref="Model"/>, a result can hold model instances nobody else references: the clone that
+    /// stateless inference optimizations rewrite (<see cref="_inferenceOptimizedNeuralModel"/>) and the extra
+    /// members of a deep ensemble. Each is released once; an instance that is <see cref="Model"/> itself is
+    /// released only as <see cref="Model"/>.
+    /// </para>
+    /// <para>
+    /// The copies are released before <see cref="Model"/>. A copy-on-write clone shares the source's weight
+    /// storage, and only the source holds the pooled array behind it; releasing the source first would hand
+    /// that storage back to the pool while the copy could still read it.
+    /// </para>
+    /// <para>
+    /// Every resource is released even if one of them throws; the failures are then reported together in one
+    /// <see cref="AggregateException"/>.
+    /// </para>
+    /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
         if (_disposed) return;
         if (disposing)
         {
-            (Model as System.IDisposable)?.Dispose();
+            var owned = new List<object?>();
+            if (_ownsInferenceOptimizedNeuralModel && !ReferenceEquals(_inferenceOptimizedNeuralModel, Model))
+            {
+                owned.Add(_inferenceOptimizedNeuralModel);
+            }
+
+            if (_deepEnsembleModels is not null)
+            {
+                foreach (var member in _deepEnsembleModels)
+                {
+                    if (!ReferenceEquals(member, Model)) owned.Add(member);
+                }
+            }
+
+            owned.Add(Model);
+
+            _inferenceOptimizedNeuralModel = null;
+            _ownsInferenceOptimizedNeuralModel = false;
+            _disposed = true;
+            AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(owned, nameof(AiModelResult<T, TInput, TOutput>));
+            return;
         }
         _disposed = true;
+    }
+
+    /// <summary>
+    /// Releases the stateless inference-optimized copy when this result made it, then forgets it.
+    /// </summary>
+    private void ReleaseInferenceOptimizedModel()
+    {
+        var copy = _inferenceOptimizedNeuralModel;
+        bool owned = _ownsInferenceOptimizedNeuralModel;
+        _inferenceOptimizedNeuralModel = null;
+        _ownsInferenceOptimizedNeuralModel = false;
+        if (owned && copy is not null && !ReferenceEquals(copy, Model))
+        {
+            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(copy);
+        }
     }
 
 }
