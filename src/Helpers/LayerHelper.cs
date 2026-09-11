@@ -4764,13 +4764,31 @@ public static partial class LayerHelper<T>
         }
 
         // ============== OUTPUT LAYER ==============
-        // 1x1x1 convolution to produce per-voxel class predictions
+        // 1x1x1 convolution to produce per-voxel class predictions.
+        //
+        // The activation is selected from the TASK TYPE, matching
+        // CreateDefaultVoxelCNNLayers just above. Selecting it from numClasses alone -- which
+        // this did, giving Sigmoid whenever numClasses == 1 -- puts a bounded (0, 1) head on a
+        // regression task whose targets are not bounded that way. UNet3D's parameterless
+        // constructor declares Regression with outputSize 1, so it took that branch: chasing a
+        // target of -1 drives the pre-activation toward negative infinity, and once it passes
+        // about -88 the float32 sigmoid underflows to EXACTLY zero for every input. The network
+        // then returns all-zeros regardless of what it is shown, which is the uniform-output
+        // collapse DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs reports as an
+        // L2 distance of exactly 0. Identity leaves the regression head unbounded, so the
+        // gradient keeps depending on the input.
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
         yield return new Conv3DLayer<T>(
             outputChannels: numClasses,
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activationFunction: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
+            activationFunction: outputActivation);
     }
 
     /// <summary>

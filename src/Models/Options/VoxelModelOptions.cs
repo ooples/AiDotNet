@@ -35,6 +35,25 @@ public abstract class VoxelModelOptions : ModelHyperparameterOptions
     public int BaseFilters { get; set; }
 
     /// <summary>
+    /// Gets or sets the learning rate used when the model creates its own optimizer.
+    /// Default: 1e-3.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> How big a correction the model makes after each training batch.
+    /// Too large and training thrashes; too small and it barely moves.
+    /// </para>
+    /// <para>
+    /// Both volumetric models previously built a BARE optimizer -- `new AdamOptimizer&lt;...&gt;(this)`
+    /// -- so they trained at the optimizer's own default with no way for a caller to say otherwise
+    /// short of constructing an optimizer by hand. 1e-3 is Adam's default and therefore preserves
+    /// the behaviour those models already had; it is a documented library default rather than a
+    /// value from either paper, and supplying an optimizer explicitly still bypasses it.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
+
+    /// <summary>
     /// Throws if a dimension every volumetric model requires has been left unset.
     /// </summary>
     /// <exception cref="ArgumentException">
@@ -45,5 +64,6 @@ public abstract class VoxelModelOptions : ModelHyperparameterOptions
     {
         Require(VoxelResolution, nameof(VoxelResolution));
         Require(BaseFilters, nameof(BaseFilters));
+        Require(LearningRate, nameof(LearningRate));
     }
 }

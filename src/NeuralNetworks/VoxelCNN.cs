@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -173,7 +174,14 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
         NumConvBlocks = options.NumConvBlocks;
         BaseFilters = options.BaseFilters;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own
+        // default and silently ignores anything the caller configured.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate
+            });
 
         InitializeLayers();
     }
