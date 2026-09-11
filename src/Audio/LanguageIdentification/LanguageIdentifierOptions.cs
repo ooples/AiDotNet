@@ -192,6 +192,12 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
     public int IntermediateSize { get; set; } = 3072;
 
     /// <summary>
+    /// Gets or sets the width of each feature-encoder stage.
+    /// </summary>
+    /// <value>Default is 512, the paper's feature-encoder channel count.</value>
+    public int FeatureEncoderDim { get; set; } = 512;
+
+    /// <summary>
     /// Gets or sets the feature projection dropout rate.
     /// </summary>
     /// <value>Default is 0.0.</value>
