@@ -33,6 +33,13 @@ public class FalconMambaOptions : SequenceModelOptions
         MaxSequenceLength = 512;
     }
 
+    /// <summary>Initializes an instance by copying every declared and inherited setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public FalconMambaOptions(FalconMambaOptions other) : base(other)
+    {
+    }
+
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>

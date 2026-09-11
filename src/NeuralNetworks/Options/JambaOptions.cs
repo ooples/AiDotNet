@@ -3,8 +3,20 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Configuration options for the JambaLanguageModel.
+/// Configures the dimensions and attention spacing of the Jamba language model.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Jamba combines a compact recurrent memory with attention,
+/// which can look back at individual tokens. <see cref="SequenceModelOptions.AttentionInterval"/>
+/// controls how frequently this model inserts an attention block.</para>
+/// <para>Lieber et al., <i>Jamba: A Hybrid Transformer-Mamba Language Model</i> (2024),
+/// describe interleaved Transformer/Mamba layers and mixture-of-experts feed-forward layers.
+/// The original release has 52 billion total parameters and 12 billion active per token.
+/// These options expose the library's sequence dimensions, not the paper's complete MoE
+/// configuration. The existing 256-wide, eight-layer defaults remain small library defaults,
+/// not a reproduction of that checkpoint.</para>
+/// </remarks>
+/// <seealso href="https://arxiv.org/abs/2403.19887">Original Jamba paper.</seealso>
 public class JambaOptions : SequenceModelOptions
 {
     /// <summary>
@@ -33,14 +45,23 @@ public class JambaOptions : SequenceModelOptions
         MaxSequenceLength = 512;
     }
 
+    /// <summary>Initializes an instance by copying every declared and inherited setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public JambaOptions(JambaOptions other) : base(other)
+    {
+    }
+
     /// <summary>
-    /// Throws if a value this model requires has been left unset or is not positive.
+    /// Throws if a required model dimension or consumed training setting is invalid.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative.
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
     public void Validate()
     {
         ValidateCore(requiresHeads: false, requiresState: true);
+        Require(AttentionInterval, nameof(AttentionInterval));
     }
 }

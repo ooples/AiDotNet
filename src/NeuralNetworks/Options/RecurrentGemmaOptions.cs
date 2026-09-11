@@ -74,12 +74,9 @@ public class RecurrentGemmaOptions : SequenceModelOptions
 
     /// <summary>Initializes an options instance by copying another.</summary>
     /// <param name="other">The source options.</param>
-    public RecurrentGemmaOptions(RecurrentGemmaOptions other)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public RecurrentGemmaOptions(RecurrentGemmaOptions other) : base(other)
     {
-        if (other is null)
-            throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
         ScaleEmbeddingsBySqrtWidth = other.ScaleEmbeddingsBySqrtWidth;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
@@ -88,20 +85,26 @@ public class RecurrentGemmaOptions : SequenceModelOptions
         Epsilon = other.Epsilon;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
-        VocabSize = other.VocabSize;
-        ModelDimension = other.ModelDimension;
-        NumLayers = other.NumLayers;
-        MaxSequenceLength = other.MaxSequenceLength;
     }
 
     /// <summary>
-    /// Throws if a value this model requires has been left unset or is not positive.
+    /// Throws if a required model dimension or consumed training setting is invalid.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative.
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
     public void Validate()
     {
         ValidateCore(requiresHeads: false, requiresState: false);
+        Require(LearningRate, nameof(LearningRate));
+        RequireNonNegative(WeightDecay, nameof(WeightDecay));
+        RequireDecayCoefficient(Beta1, nameof(Beta1));
+        RequireDecayCoefficient(Beta2, nameof(Beta2));
+        Require(Epsilon, nameof(Epsilon));
+        if (EnableGradientClipping)
+        {
+            Require(MaxGradientNorm, nameof(MaxGradientNorm));
+        }
     }
 }

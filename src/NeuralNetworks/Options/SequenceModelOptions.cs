@@ -39,6 +39,27 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// </remarks>
 public abstract class SequenceModelOptions : ModelHyperparameterOptions
 {
+    /// <summary>Initializes the shared sequence settings with their defaults.</summary>
+    protected SequenceModelOptions()
+    {
+    }
+
+    /// <summary>Copies every shared sequence setting and inherited model setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    protected SequenceModelOptions(SequenceModelOptions other) : base(other)
+    {
+        VocabSize = other.VocabSize;
+        ModelDimension = other.ModelDimension;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        StateDimension = other.StateDimension;
+        MaxSequenceLength = other.MaxSequenceLength;
+        AttentionInterval = other.AttentionInterval;
+        ExpandFactor = other.ExpandFactor;
+        FfnMultiplier = other.FfnMultiplier;
+    }
+
     /// <summary>
     /// Gets or sets the number of distinct tokens the model's embedding table covers.
     /// </summary>
