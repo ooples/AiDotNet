@@ -22662,6 +22662,21 @@ public static partial class LayerHelper<T>
         int numDecoderLayers = 2, int numMels = 80,
         double dropoutRate = 0.1)
     {
+        foreach (var layer in CreateMatchaTextEncoderLayers(textEncoderDim, numTextEncoderLayers,
+                     numTextEncoderHeads, dropoutRate))
+            yield return layer;
+        foreach (var layer in CreateMatchaMelDecoderLayers(decoderDim, numDecoderLayers, numMels))
+            yield return layer;
+    }
+
+    /// <summary>
+    /// Creates Matcha's existing frame projection and token encoder as one ordered group.
+    /// Aligned token input enters after the initial frame projection, at the encoder width.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMatchaTextEncoderLayers(
+        int textEncoderDim = 192, int numTextEncoderLayers = 6,
+        int numTextEncoderHeads = 2, double dropoutRate = 0.1)
+    {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Text encoder (transformer-based)
@@ -22677,15 +22692,17 @@ public static partial class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // NO duration predictor here. In Matcha-TTS it is a PARALLEL head off the text encoder,
-        // predicting a per-token duration used for alignment and upsampling - it does not feed the
-        // decoder. Emitted in series it was a width-1 bottleneck: every input collapsed to a single
-        // scalar before the decoder, so the model produced all-zero output for any input, both
-        // before and after training, and could not represent anything at all. Restoring it as a
-        // real branch needs a multi-head stack; until then the sequential path carries the text
-        // encoder output straight to the decoder, which is the faithful part of the architecture.
+        // The duration predictor belongs to AlignedTextToMelModelBase's parallel branch.
+    }
 
-        // Flow matching decoder (U-Net blocks)
+    /// <summary>
+    /// Creates the existing framewise mel decoder. This stack is not a complete flow-matching
+    /// U-Net; alignment support does not change that independent architectural limitation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMatchaMelDecoderLayers(
+        int decoderDim = 256, int numDecoderLayers = 2, int numMels = 80)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
         for (int i = 0; i < numDecoderLayers; i++)
         {
