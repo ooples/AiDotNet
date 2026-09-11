@@ -23,7 +23,11 @@ jobs:
   build-and-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The functions project references src/AiDotNet.csproj, so this build compiles the library's
+    # net10.0 target too (about 6.5 minutes on a 128-core workstation; several times that on a
+    # 4-core hosted runner, where CodeQL's traced net10.0 build of it takes about 26 minutes).
+    # 15 minutes was sized for restoring a prebuilt AiDotNet package.
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code

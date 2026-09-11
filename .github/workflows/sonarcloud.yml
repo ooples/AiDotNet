@@ -181,8 +181,11 @@ jobs:
     # The traced net10 build takes about 31 minutes on generated-source-heavy PRs. The #2032
     # analysis was still running when the 60-minute ceiling cancelled it, while master's #2026
     # baseline completed in 57:48. Give extraction, SARIF generation, and upload enough margin
-    # for normal hosted-runner variance without hiding a genuinely hung job.
-    timeout-minutes: 75
+    # for normal hosted-runner variance without hiding a genuinely hung job. Recent PR runs took
+    # 66-71 minutes (about 26 traced build + 31 analysis), and the job now also traces Serving and
+    # the playground functions (about 40 s of untraced local compile, under 1% more source), so the
+    # ceiling moves from 75 to 85 minutes to keep the same margin.
+    timeout-minutes: 85
     # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
     # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
@@ -227,7 +230,10 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
-        run: dotnet restore src/AiDotNet.csproj
+        run: |
+          dotnet restore src/AiDotNet.csproj
+          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
+          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
@@ -236,10 +242,19 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
 
-      # CodeQL needs to trace the build - can't reuse artifacts
-      # Build only the main library to avoid file lock issues with AiDotNet.Serving's static web assets
+      # CodeQL needs to trace the build - can't reuse artifacts.
+      # CodeQL only analyzes what the traced build compiles, so every shipped entry point that
+      # takes untrusted input has to be built here: the core library, the Serving API and the
+      # playground's Azure Functions. This step used to build the library alone to avoid a file
+      # lock on AiDotNet.Serving's static web assets; naming each project in its own sequential
+      # command (the pattern the build job uses) builds Serving exactly once, never concurrently.
+      # The core library's command is unchanged and runs first, so its extraction is identical;
+      # the next two builds find it up to date and compile only their own sources.
       - name: Build for CodeQL (net10.0)
-        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
+        run: |
+          dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
+          dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
+          dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
