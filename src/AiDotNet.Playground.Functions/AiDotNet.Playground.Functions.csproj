@@ -22,9 +22,14 @@
     <PackageReference Include="Stripe.net" />
   </ItemGroup>
 
-  <!-- AiDotNet packages for runtime code execution -->
+  <!-- AiDotNet for runtime code execution. A project reference, like every other in-repo consumer
+       (Serving, Dashboard, the Storage satellites, the tests and tools), so the playground compiles
+       and runs the library at this commit. It used to be a PackageReference pinned in
+       Directory.Packages.props; that pin stayed at 0.113.0 while the library moved on, so the
+       playground served an old API and its AiDotNet.Tensors dependency collided with the in-repo
+       Tensors assembly when CodeQL extracted the repository. -->
   <ItemGroup>
-    <PackageReference Include="AiDotNet" />
+    <ProjectReference Include="..\AiDotNet.csproj" />
   </ItemGroup>
 
 </Project>
