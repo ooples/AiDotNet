@@ -10,33 +10,38 @@ This directory contains an automated release pipeline template that provides:
 - **NuGet Publishing** to nuget.org
 - **100% Automated** - no manual version bumps needed
 
-## Why a Template?
+## Release Workflow
 
-GitHub security policies prevent automated tools from directly modifying workflow files in `.github/workflows/`. This template must be manually installed by a repository maintainer with appropriate permissions.
+The installed workflow is `.github/workflows/release-please.yml`. It maintains a rolling Release PR and publishes only after a maintainer merges that Release PR.
 
-## Installation
+## Prerequisites
 
-### Step 1: Copy the Workflow File
+### Step 1: Configure NuGet Trusted Publishing
 
-```bash
-# From the repository root
-cp .github/AUTOMATED_RELEASE_WORKFLOW.yml .github/workflows/release.yml
-```
+Create a trusted-publishing policy at [nuget.org](https://www.nuget.org/account/trustedpublishing) with these exact GitHub Actions values:
 
-### Step 2: Verify Required Secrets
+| Field | Value |
+|-------|-------|
+| Owner | `ooples` |
+| Repository | `AiDotNet` |
+| Workflow file | `release-please.yml` |
+| Environment | Leave blank |
 
-Ensure the following secrets are configured in your repository:
+Enter only the workflow filename, not `.github/workflows/release-please.yml`. NuGet matches the owner, repository, workflow file, and environment values case-insensitively. The policy must authorize every package published by this workflow. `NuGet/login` exchanges the job's GitHub OIDC identity for a short-lived API key; no long-lived NuGet API key is stored in GitHub.
 
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `NUGET_API_KEY` | Optional | NuGet API key for publishing packages. If not set, publishing will be skipped. |
-| `GITHUB_TOKEN` | Automatic | Automatically provided by GitHub Actions |
+Publishing fails closed if the policy does not match or NuGet does not issue a temporary key. See [NuGet trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
 
-To add the NuGet API key:
-1. Go to Repository Settings → Secrets and variables → Actions
-2. Click "New repository secret"
-3. Name: `NUGET_API_KEY`
-4. Value: Your NuGet API key from https://www.nuget.org/account/apikeys
+### Step 2: Verify Repository Secrets and Variables
+
+| Name | Kind | Required | Description |
+|------|------|----------|-------------|
+| `AIDOTNET_BUILD_KEY` | Secret | Required for a release | Strong-name/integrity build key injected only into the unprivileged build job |
+| `AUTOFIX_PAT` | Secret | Recommended | Lets release-please-created events trigger the normal protected CI workflows |
+| `GITHUB_TOKEN` | Automatic | Automatic | Used by GitHub Actions; do not create it manually |
+| `AIDOTNET_LICENSE_PUBLIC_KEY_JSON` | Variable or secret | Optional | Overrides the committed public license-verification key during a key rotation |
+| `AIDOTNET_LICENSE_REVOCATION_JSON` | Variable or secret | Optional | Injects the signed license revocation list |
+
+Configure repository secrets and variables under Repository Settings → Secrets and variables → Actions.
 
 ### Step 3: Review Branch Configuration
 
@@ -52,13 +57,9 @@ on:
 
 If your default branch has a different name, update this in the workflow file.
 
-### Step 4: Commit and Push
+### Step 4: Verify the Installed Workflow
 
-```bash
-git add .github/workflows/release.yml
-git commit -m "feat(ci): Enable automated release pipeline"
-git push origin main
-```
+Confirm that `.github/workflows/release-please.yml` is present on the protected default branch and that GitHub Actions is enabled. The trusted-publishing policy must continue to name `release-please.yml` if the workflow is renamed.
 
 ## How It Works
 
@@ -78,22 +79,20 @@ The workflow analyzes commit messages since the last git tag:
 
 ### Workflow Jobs
 
-1. **version-and-build**
-   - Parses commits and determines version
-   - Creates git tag
-   - Builds and tests project
-   - Creates NuGet package
-   - Verifies target frameworks (net462, net8.0)
-   - Uploads package artifact
+1. **release-please**
+   - Maintains the rolling Release PR
+   - Creates the version tag and GitHub release only when that PR is merged
 
-2. **publish-nuget**
-   - Publishes to NuGet.org (if `NUGET_API_KEY` is set)
-   - Handles duplicate versions gracefully with `--skip-duplicate`
+2. **build-release**
+   - Checks out the immutable release tag
+   - Builds, signs, packs, and verifies all NuGet packages without OIDC permission
+   - Uploads the verified packages as an immutable, 30-day workflow artifact so a failed publish job can be retried without rebuilding packages
 
-3. **github-release**
-   - Creates GitHub Release
-   - Attaches NuGet package
-   - Includes generated changelog
+3. **publish**
+   - Downloads the exact artifact ID produced by `build-release`
+   - Uses `NuGet/login` and OIDC to obtain a short-lived NuGet API key
+   - Publishes the verified packages and attaches them to the GitHub release
+   - Has no source checkout, build scripts, signing key, or package mutation steps
 
 ### Changelog Format
 
@@ -124,29 +123,15 @@ The workflow generates categorized changelogs:
 
 ## Testing the Workflow
 
-### Option 1: Push a Test Commit
+Workflow syntax, action pins, permission boundaries, and artifact handoff should be validated in the pull request before merge. A normal push to `main` or `master` updates the rolling Release PR but does not publish a package.
 
-```bash
-git commit --allow-empty -m "feat: Test automated release pipeline"
-git push origin main
-```
+The complete OIDC exchange can only be proven by merging a release-please Release PR because the publish jobs require `release_created == 'true'`, an immutable release tag, and a matching NuGet trusted-publishing policy. For that release run, verify:
 
-This will trigger the workflow and create version 0.1.0 (or next MINOR bump).
-
-### Option 2: Manual Workflow Trigger
-
-If you want to test without creating a release, you can add workflow_dispatch trigger:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:  # Add this for manual testing
-```
-
-Then trigger it from Actions → Automated Release Pipeline → Run workflow.
+1. `build-release` succeeds without `id-token: write`.
+2. `publish` downloads the artifact ID emitted by `build-release`.
+3. `NuGet/login` issues a temporary key without a repository NuGet secret.
+4. Every expected package appears on nuget.org and on the GitHub release.
+5. The temporary key is never printed and is unavailable to build steps.
 
 ## Conventional Commits
 
@@ -189,23 +174,20 @@ After installation, verify the workflow is working:
 
 1. **Check Workflow File**
    ```bash
-   ls -la .github/workflows/release.yml
+   ls -la .github/workflows/release-please.yml
    ```
 
 2. **View in GitHub**
-   - Go to Actions tab in your repository
-   - Look for "Automated Release Pipeline" workflow
+   - Go to the repository Actions tab
+   - Look for the "Release Please" workflow
 
-3. **Test with a Commit**
-   ```bash
-   git commit --allow-empty -m "feat: test automated release"
-   git push origin main
-   ```
+3. **Verify a Normal Push**
+   - Confirm a conventional commit updates the rolling Release PR without publishing
 
-4. **Monitor Execution**
+4. **Verify the Next Deliberate Release**
    - Go to Actions tab
-   - Click on the running workflow
-   - Watch logs for each job
+   - Merge the reviewed release-please Release PR
+   - Confirm `release-please`, `build-release`, and `publish` complete in sequence
 
 ## Troubleshooting
 
@@ -214,7 +196,7 @@ After installation, verify the workflow is working:
 **Problem**: Pushed to main but workflow didn't run.
 
 **Solutions**:
-- Verify `.github/workflows/release.yml` exists (not in .github/)
+- Verify `.github/workflows/release-please.yml` exists
 - Check branch name matches workflow trigger (main vs master)
 - Ensure GitHub Actions are enabled in repository settings
 
@@ -232,21 +214,22 @@ After installation, verify the workflow is working:
 **Problem**: Package not published to NuGet.
 
 **Solutions**:
-- Verify `NUGET_API_KEY` secret is configured
-- Check API key has not expired
+- Verify the NuGet trusted-publishing policy uses owner `ooples`, repository `AiDotNet`, workflow file `release-please.yml`, and a blank environment
+- Verify the policy authorizes every package produced by the release
+- Confirm the `publish` job has `id-token: write` and `NuGet/login` issued a temporary key
 - Ensure package version doesn't already exist on NuGet
 - Review NuGet publish logs in workflow
 
 ### TFM Verification Fails
 
-**Problem**: "Missing net462 lib in package" error.
+**Problem**: A required target-framework assembly is missing from the package.
 
 **Solutions**:
 - Verify `src/AiDotNet.csproj` has:
   ```xml
-  <TargetFrameworks>net8.0;net462</TargetFrameworks>
+  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
   ```
-- Ensure project builds successfully for both targets locally:
+- Ensure project builds successfully for all targets locally:
   ```bash
   dotnet build src/AiDotNet.csproj -c Release
   ```
@@ -264,7 +247,7 @@ After installation, verify the workflow is working:
 
 - [VERSIONING.md](VERSIONING.md) - Detailed versioning guide
 - [CONVENTIONAL_COMMITS_GUIDE.md](CONVENTIONAL_COMMITS_GUIDE.md) - Commit message guide
-- [AUTOMATED_RELEASE_WORKFLOW.yml](AUTOMATED_RELEASE_WORKFLOW.yml) - Workflow template
+- [workflows/release-please.yml](workflows/release-please.yml) - Installed release workflow
 
 ## Support
 
@@ -281,7 +264,7 @@ If you encounter issues:
 
 To update the workflow:
 
-1. Modify `.github/workflows/release.yml`
+1. Modify `.github/workflows/release-please.yml`
 2. Test changes on a feature branch first
 3. Merge to main when verified
 
@@ -294,13 +277,14 @@ on:
   workflow_dispatch:  # Only manual triggers
 ```
 
-Or delete/rename `.github/workflows/release.yml`.
+Or delete/rename `.github/workflows/release-please.yml` and update the NuGet trusted-publishing policy before re-enabling releases.
 
 ## Security Considerations
 
-- **Secrets**: Never commit `NUGET_API_KEY` or other secrets to the repository
-- **Permissions**: The workflow uses minimal required permissions (contents: write)
-- **Dependencies**: GitHub Actions are pinned to specific versions (e.g., `@v4`)
+- **OIDC**: NuGet credentials are short-lived and exist only in the minimal `publish` job
+- **Isolation**: Build, signing, pack, and verification steps have no `id-token: write` permission
+- **Permissions**: Each job declares only the GitHub and OIDC permissions it needs
+- **Dependencies**: GitHub Actions are pinned to full commit SHAs
 - **Validation**: All inputs are validated before creating releases
 
 ## Benefits
@@ -316,10 +300,10 @@ After installation, you get:
 
 ## Next Steps
 
-1. Install the workflow using instructions above
+1. Create and verify the NuGet trusted-publishing policy described above
 2. Review [CONVENTIONAL_COMMITS_GUIDE.md](CONVENTIONAL_COMMITS_GUIDE.md)
 3. Update team documentation with commit message requirements
-4. Test with a feature commit
-5. Monitor first few releases to ensure everything works correctly
+4. Validate workflow syntax and permissions in a pull request
+5. Monitor the next deliberate release and confirm all expected NuGet packages and GitHub assets
 
 Happy releasing! 🚀
