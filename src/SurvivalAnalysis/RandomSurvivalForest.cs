@@ -323,8 +323,8 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
             // Variance contribution
             if (totalAtRisk > 1)
             {
-                variance += (double)(leftAtRisk * rightAtRisk * totalEvents * (totalAtRisk - totalEvents))
-                           / (totalAtRisk * totalAtRisk * (totalAtRisk - 1));
+                variance += (double)leftAtRisk * rightAtRisk * totalEvents * (totalAtRisk - totalEvents)
+                           / ((double)totalAtRisk * totalAtRisk * (totalAtRisk - 1));
             }
         }
 
