@@ -260,7 +260,11 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             _updateCount++;
         }
 
-        if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
+        // Hard-sync the target network every TargetUpdateFrequency gradient updates. This used to fire on
+        // an unseeded 1-in-N coin flip, which made the target schedule (and so the whole training run)
+        // irreproducible and let the target go stale for arbitrarily long stretches.
+        int targetUpdateFrequency = Math.Max(1, TradingOptions.TargetUpdateFrequency);
+        if (_updateCount % targetUpdateFrequency == 0)
         {
             UpdateTargetNetwork();
         }

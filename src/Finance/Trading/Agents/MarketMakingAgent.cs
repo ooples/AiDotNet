@@ -149,7 +149,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <para><b>For Beginners:</b> This checks that the network matches the input and output sizes
     /// for market-making and fills in a sensible default if no layers were provided.</para>
     /// </remarks>
-    private static void EnsureMarketMakingLayers(NeuralNetworkArchitecture<T> architecture, int stateSize, int actionSize)
+    private void EnsureMarketMakingLayers(NeuralNetworkArchitecture<T> architecture, int stateSize, int actionSize)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -160,9 +160,11 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         if (architecture.OutputSize != actionSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {actionSize}.", nameof(architecture));
 
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.AddRange(LayerHelper<T>.CreateDefaultMarketMakingLayers(
+            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateDefaultMarketMakingLayers(
                 architecture,
                 stateSize,
                 actionSize));

@@ -222,7 +222,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// default multilayer perceptron so the agent can start learning immediately.
     /// </para>
     /// </remarks>
-    protected static void EnsureDefaultLayers(
+    protected void EnsureDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
         int expectedOutputSize,
@@ -238,14 +238,75 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         if (architecture.OutputSize != expectedOutputSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
 
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.AddRange(LayerHelper<T>.CreateDefaultLayers(
+            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateDefaultLayers(
                 architecture,
                 hiddenLayerCount: hiddenLayerCount,
                 hiddenLayerSize: hiddenLayerSize,
                 outputSize: expectedOutputSize));
         }
+    }
+
+    /// <summary>
+    /// Counts the networks this agent has seeded, so each one (actor, critic, Q-network, ...) derives a
+    /// distinct weight-initialization seed from the single options seed.
+    /// </summary>
+    private int _networkSeedOrdinal;
+
+    /// <summary>
+    /// Pins a reproducible weight-initialization seed on an agent network's architecture.
+    /// </summary>
+    /// <param name="architecture">The architecture the agent is about to build a network from.</param>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="TradingAgentOptions{T}.Seed"/> is set and the architecture carries no
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> of its own, the architecture gets a seed derived
+    /// from the options seed and the network's construction ordinal. Weight initialization then no longer
+    /// depends on the process-shared RNG, so two agents built with the same options seed start from
+    /// bit-identical weights. An explicit architecture seed always wins; with no seed at all the
+    /// production (non-reproducible) initialization is unchanged.
+    /// </para>
+    /// <para>
+    /// Call once per network, in construction order, before the network is created. Layers the caller
+    /// constructed before handing the architecture over were already initialized-or-seeded by the caller;
+    /// seed those through the architecture or the layers themselves if they must be reproducible.
+    /// </para>
+    /// </remarks>
+    protected void ApplyNetworkSeed(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        int ordinal = _networkSeedOrdinal++;
+        if (architecture.RandomSeed is null && TradingOptions.Seed is int seed)
+        {
+            architecture.RandomSeed = unchecked((int)(((uint)seed * 2654435761u) ^ ((uint)(ordinal + 1) * 40503u)));
+        }
+    }
+
+    /// <summary>
+    /// Builds an agent's default layers under the architecture's weight-initialization seed and appends them.
+    /// </summary>
+    /// <remarks>
+    /// Layer constructors take their per-layer seed from the ambient initialization-seed scope, which a model
+    /// normally resets when IT is constructed. Default layers are built before the network exists, so without
+    /// resetting the scope here they would inherit whatever scope the previously constructed model left
+    /// behind — making their weights depend on unrelated, earlier work.
+    /// </remarks>
+    protected static void AddSeededDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Func<IEnumerable<ILayer<T>>> buildLayers)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+        if (buildLayers is null)
+            throw new ArgumentNullException(nameof(buildLayers));
+
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        architecture.Layers.AddRange(buildLayers().ToList());
     }
 
     /// <summary>

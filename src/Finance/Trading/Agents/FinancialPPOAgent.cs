@@ -146,7 +146,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #endregion
 
-    private static void EnsurePpoDefaultLayers(
+    private void EnsurePpoDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
         int expectedOutputSize)
@@ -160,11 +160,18 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         if (architecture.OutputSize != expectedOutputSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
 
+        // Derive a reproducible init seed from options.Seed (when the architecture has none) and build the
+        // default layers under it, so identically seeded PPO agents start from identical weights.
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
-            architecture.Layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+            AddSeededDefaultLayers(architecture, () => new ILayer<T>[]
+            {
+                new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()),
+                new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()),
+                new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()),
+            });
         }
     }
 
