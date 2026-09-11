@@ -149,7 +149,6 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// <param name="options">AutoDiffTab-specific configuration options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates an AutoDiff-Tab network. If you provide custom
@@ -157,13 +156,11 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// search discovers the best denoiser configuration automatically.
     /// </para>
     /// </remarks>
-    public AutoDiffTabGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public AutoDiffTabGenerator(NeuralNetworkArchitecture<T> architecture,
         AutoDiffTabOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new AutoDiffTabOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new AutoDiffTabOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

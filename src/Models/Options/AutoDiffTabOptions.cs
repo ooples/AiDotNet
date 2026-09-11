@@ -39,7 +39,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Automated Diffusion Models for Tabular Data" (2024)
 /// </para>
 /// </remarks>
-public class AutoDiffTabOptions<T> : RiskModelOptions<T>
+public class AutoDiffTabOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of search trials to find optimal diffusion configuration.

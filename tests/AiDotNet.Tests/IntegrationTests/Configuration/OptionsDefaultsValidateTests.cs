@@ -137,7 +137,18 @@ public class OptionsDefaultsValidateTests
         // became visible. Giving each a Validate() that checks nothing would satisfy this
         // test while buying no safety, which is why it is a ratchet and not a demand for zero.
         // Each falls off the list when its model is migrated.
-        const int UncoveredBaseline = 23;
+        //
+        // Raised again, 23 -> 81, by the same mechanism one cluster later. The maxGradNorm
+        // migration re-parented FinancialNeuralNetworkOptions onto ModelHyperparameterOptions so
+        // that RiskModelOptions and everything beneath it would inherit MaxGradNorm; that brought
+        // the financial, tabular and synthetic-data options classes into this scan for the first
+        // time. They gained no defect either — CTGANOptions and TabNetOptions have always had no
+        // Validate(); nothing could see them before.
+        //
+        // The precedent above governs: adding 58 Validate() methods that check nothing would turn
+        // this test green and buy no safety at all. Each falls off the list when its model is
+        // migrated and there are values worth requiring.
+        const int UncoveredBaseline = 81;
 
         var all = GetConcreteOptionsTypes().ToList();
         var missing = all

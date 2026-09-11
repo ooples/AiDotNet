@@ -138,13 +138,11 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <summary>
     /// Initializes a new OCT-GAN generator with the specified architecture.
     /// </summary>
-    public OCTGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public OCTGANGenerator(NeuralNetworkArchitecture<T> architecture,
         OCTGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new OCTGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new OCTGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

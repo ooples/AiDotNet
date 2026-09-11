@@ -203,20 +203,17 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <param name="options">medGAN options; defaults reproduce the paper's hyperparameters.</param>
     /// <param name="optimizer">Gradient-based optimizer for the generator (defaults to Adam at the paper's 1e-3).</param>
     /// <param name="lossFunction">Loss function used by the base class's generic training path.</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <exception cref="ArgumentException">
     /// Thrown when a generator width differs from the embedding dimension. The generator's shortcut
     /// connection is an addition, so mismatched widths cannot be added; rejecting this at
     /// construction is deliberate, since silently dropping the shortcut would remove one of the
     /// paper's three named contributions without saying so.
     /// </exception>
-    public MedGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public MedGANGenerator(NeuralNetworkArchitecture<T> architecture,
         MedGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MedGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new MedGANOptions<T>();
 

@@ -112,7 +112,6 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <param name="options">TabFlow-specific options for velocity field configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TabFlow network based on the architecture you provide.
@@ -144,13 +143,11 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
     }
 
-    public TabFlowGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabFlowGenerator(NeuralNetworkArchitecture<T> architecture,
         TabFlowOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabFlowOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new TabFlowOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

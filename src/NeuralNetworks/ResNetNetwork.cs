@@ -128,7 +128,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="configuration">The ResNet-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     /// <exception cref="InvalidInputTypeException">Thrown when the input type is not three-dimensional.</exception>
     /// <exception cref="ArgumentNullException">Thrown when configuration is null.</exception>
     /// <remarks>
@@ -144,14 +143,12 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public ResNetNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public ResNetNetwork(NeuralNetworkArchitecture<T> architecture,
         ResNetConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         ResNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
     {
         _options = options ?? new ResNetOptions();
         Options = _options;

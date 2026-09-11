@@ -105,13 +105,11 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public AutoIntNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public AutoIntNetwork(NeuralNetworkArchitecture<T> architecture,
         AutoIntOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new AutoIntOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new AutoIntOptions<T>();
         // Reuse the same resolved instance that was passed to base(...)

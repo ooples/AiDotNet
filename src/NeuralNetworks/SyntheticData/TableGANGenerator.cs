@@ -142,13 +142,11 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     /// <summary>
     /// Initializes a new TableGAN generator with the specified architecture.
     /// </summary>
-    public TableGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TableGANGenerator(NeuralNetworkArchitecture<T> architecture,
         TableGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TableGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new TableGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

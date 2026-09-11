@@ -38,7 +38,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </para>
 /// </remarks>
-public class DPCTGANOptions<T> : RiskModelOptions<T>
+public class DPCTGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the total privacy budget (epsilon) for the training process.

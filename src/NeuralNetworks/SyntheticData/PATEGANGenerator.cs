@@ -140,7 +140,6 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <param name="options">PATE-GAN-specific options for generator and discriminator configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The architecture parameter controls the generator network.
@@ -160,13 +159,11 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
     }
 
-    public PATEGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public PATEGANGenerator(NeuralNetworkArchitecture<T> architecture,
         PATEGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new PATEGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new PATEGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

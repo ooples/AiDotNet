@@ -60,6 +60,7 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
+        MaxGradNorm = other.MaxGradNorm;
         Seed = other.Seed;
         LearningRate = other.LearningRate;
         EmbeddingDimension = other.EmbeddingDimension;

@@ -164,7 +164,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <param name="options">TimeGAN-specific options for temporal generation configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -177,13 +176,11 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
     }
 
-    public TimeGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TimeGANGenerator(NeuralNetworkArchitecture<T> architecture,
         TimeGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TimeGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new TimeGANOptions<T>();
         ValidateOptions();

@@ -120,7 +120,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// <param name="options">TabLLM-Gen-specific options for generation configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -141,13 +140,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
     }
 
-    public TabLLMGenGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabLLMGenGenerator(NeuralNetworkArchitecture<T> architecture,
         TabLLMGenOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabLLMGenOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new TabLLMGenOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

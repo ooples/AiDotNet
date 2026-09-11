@@ -31,7 +31,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </para>
 /// </remarks>
-public class OCTGANOptions<T> : RiskModelOptions<T>
+public class OCTGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the index of the label column.

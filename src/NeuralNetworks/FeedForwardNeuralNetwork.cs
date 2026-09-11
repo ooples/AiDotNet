@@ -80,7 +80,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="optimizer">The optimization algorithm to use for training. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, an appropriate loss function is selected based on the task type.</param>
-    /// <param name="maxGradNorm">The maximum gradient norm for gradient clipping during training.</param>
     /// <remarks>
     /// <para>
     /// Feed-Forward Neural Networks can work with various input dimensions and are typically used for
@@ -105,12 +104,10 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     {
     }
 
-    public FeedForwardNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public FeedForwardNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
-        FeedForwardNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        FeedForwardNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new FeedForwardNeuralNetworkOptions()).MaxGradNorm)
     {
         _options = options ?? new FeedForwardNeuralNetworkOptions();
         Options = _options;

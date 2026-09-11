@@ -165,7 +165,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// <param name="options">CopulaGAN-specific options for generator and discriminator configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a CopulaGAN network based on the architecture you provide.
@@ -197,13 +196,11 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
     }
 
-    public CopulaGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public CopulaGANGenerator(NeuralNetworkArchitecture<T> architecture,
         CopulaGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CopulaGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new CopulaGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

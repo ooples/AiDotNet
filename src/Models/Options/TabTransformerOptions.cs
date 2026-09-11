@@ -64,6 +64,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
+        MaxGradNorm = other.MaxGradNorm;
         Seed = other.Seed;
 
         // BEFORE CategoricalCardinalities: that property's setter validates the two against each

@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 130;
+    private const int Baseline = 83;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -89,7 +89,14 @@ public class OptionsSurfaceRatchetTests
     /// the diagnostic — not one of those 62 options classes declared a property of a matching
     /// name, so none of them had been drawing name credit.
     /// </para>
-    private const int ConstructorBaseline = 151;
+    /// <para>
+    /// 151 to 104 when the maxGradNorm cluster moved: 47 models, one parameter each. Both counts
+    /// again fell by the same amount, for the same reason as the segmentation family — none of
+    /// those options classes declared a property of a matching name, because 33 of them sat
+    /// outside the <c>ModelHyperparameterOptions</c> hierarchy entirely and so did not inherit
+    /// <c>MaxGradNorm</c> at all.
+    /// </para>
+    private const int ConstructorBaseline = 104;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

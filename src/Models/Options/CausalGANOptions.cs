@@ -33,7 +33,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </para>
 /// </remarks>
-public class CausalGANOptions<T> : RiskModelOptions<T>
+public class CausalGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the weight for the DAG acyclicity penalty (NOTEARS constraint).

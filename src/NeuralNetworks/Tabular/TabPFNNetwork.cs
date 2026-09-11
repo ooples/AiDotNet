@@ -101,13 +101,11 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new TabPFN network with the specified architecture.
     /// </summary>
-    public TabPFNNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabPFNNetwork(NeuralNetworkArchitecture<T> architecture,
         TabPFNOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabPFNOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new TabPFNOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

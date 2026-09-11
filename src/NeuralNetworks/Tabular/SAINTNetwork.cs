@@ -110,7 +110,6 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// <param name="options">SAINT-specific options for dual attention configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 1.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a SAINT network based on the architecture you provide.
@@ -148,13 +147,11 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public SAINTNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAINTNetwork(NeuralNetworkArchitecture<T> architecture,
         SAINTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new SAINTOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new SAINTOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

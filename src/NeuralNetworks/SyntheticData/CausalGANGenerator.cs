@@ -153,7 +153,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// <param name="options">CausalGAN-specific configuration options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -166,13 +165,11 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
     }
 
-    public CausalGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public CausalGANGenerator(NeuralNetworkArchitecture<T> architecture,
         CausalGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CausalGANOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new CausalGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

@@ -82,7 +82,24 @@ public class UnreadOptionsRatchetTests
     /// Every one of these is real work, not an accounting artefact. Lower this as they are wired
     /// in or deleted.
     /// </para>
-    private const int UnreadBaseline = 35;
+    /// <para>
+    /// 35 -> 517 when the maxGradNorm cluster re-parented <c>FinancialNeuralNetworkOptions</c>
+    /// onto <see cref="ModelHyperparameterOptions"/>, bringing that whole hierarchy —
+    /// <c>RiskModelOptions</c> and the tabular and synthetic-data options beneath it — into this
+    /// scan for the first time. The arithmetic is the check that this is visibility and not
+    /// breakage: declared getters went 748 -> 1236, so 488 properties became visible and the
+    /// count rose by 482. A rise cannot exceed what became visible, and it did not.
+    /// </para>
+    /// <para>
+    /// That 482 of 488 newly-visible properties are read by nobody is the finding, not an
+    /// artefact. <c>MedGANOptions</c> and <c>TabPFNOptions</c> declare 19 unread each;
+    /// <c>FTTransformerOptions</c>, <c>SAINTOptions</c>, <c>TabDPTOptions</c>,
+    /// <c>TabNetOptions</c> and <c>TabROptions</c> 17 each — embedding dimensions, dropout rates,
+    /// feed-forward widths, batch sizes: the entire published configuration of those models,
+    /// declared and never consulted. This is issue #2090's central defect at its true scale, and
+    /// it was hidden until the hierarchy came into scope.
+    /// </para>
+    private const int UnreadBaseline = 517;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

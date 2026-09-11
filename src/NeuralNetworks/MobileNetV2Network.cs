@@ -97,7 +97,6 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="configuration">The MobileNetV2-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
     /// <param name="lossFunction">Optional loss function (default: cross-entropy with logits).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
@@ -111,14 +110,12 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     {
     }
 
-    public MobileNetV2Network(
-        NeuralNetworkArchitecture<T> architecture,
+    public MobileNetV2Network(NeuralNetworkArchitecture<T> architecture,
         MobileNetV2Configuration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         MobileNetV2Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), (options ??= new MobileNetV2Options()).MaxGradNorm)
     {
         _options = options ?? new MobileNetV2Options();
         Options = _options;

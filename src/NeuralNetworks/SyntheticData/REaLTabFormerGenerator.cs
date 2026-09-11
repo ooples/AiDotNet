@@ -126,19 +126,16 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     /// <param name="options">REaLTabFormer-specific options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     public REaLTabFormerGenerator()
         : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
     {
     }
 
-    public REaLTabFormerGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public REaLTabFormerGenerator(NeuralNetworkArchitecture<T> architecture,
         REaLTabFormerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new REaLTabFormerOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new REaLTabFormerOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

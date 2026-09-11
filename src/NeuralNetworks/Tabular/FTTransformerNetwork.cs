@@ -106,13 +106,11 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public FTTransformerNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public FTTransformerNetwork(NeuralNetworkArchitecture<T> architecture,
         FTTransformerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ??= NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ??= NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new FTTransformerOptions<T>()).MaxGradNorm)
     {
         _options = options ?? new FTTransformerOptions<T>();
         _lossFunction = lossFunction;

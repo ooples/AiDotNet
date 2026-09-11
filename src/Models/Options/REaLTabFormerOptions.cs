@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// using Transformers" (Solatorio and Dupriez, 2023)
 /// </para>
 /// </remarks>
-public class REaLTabFormerOptions<T> : RiskModelOptions<T>
+public class REaLTabFormerOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of transformer layers.
