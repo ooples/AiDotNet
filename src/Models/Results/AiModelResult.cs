@@ -7608,9 +7608,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <remarks>
     /// <para>
     /// Besides <see cref="Model"/>, a result can hold model instances nobody else references: the clone that
-    /// stateless inference optimizations rewrite (<see cref="_inferenceOptimizedNeuralModel"/>) and the extra
-    /// members of a deep ensemble. Each is released once; an instance that is <see cref="Model"/> itself is
-    /// released only as <see cref="Model"/>.
+    /// stateless inference optimizations rewrite (<see cref="_inferenceOptimizedNeuralModel"/>), the extra
+    /// members of a deep ensemble, and -- on the meta-learning path, where <see cref="Model"/> is the
+    /// meta-learner's base model -- the optimizer's separate <see cref="OptimizationResult"/> best solution.
+    /// Each is released exactly once, even when it is reachable along several of these paths; an instance that
+    /// is <see cref="Model"/> itself is released only as <see cref="Model"/>.
     /// </para>
     /// <para>
     /// The copies are released before <see cref="Model"/>. A copy-on-write clone shares the source's weight
@@ -7640,6 +7642,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     if (!ReferenceEquals(member, Model)) owned.Add(member);
                 }
+            }
+
+            // On the standard path BestSolution IS Model. On the meta-learning path Model is the meta-learner's
+            // BaseModel and BestSolution is a separate instance that only this result holds (OptimizationResult is
+            // never shared: WithParameters/DeepCopy deep-copy it and replace BestSolution). The once-only guard in
+            // DisposeAll keeps it to one release if it is also an ensemble member.
+            var bestSolution = OptimizationResult?.BestSolution;
+            if (bestSolution is not null && !ReferenceEquals(bestSolution, Model))
+            {
+                owned.Add(bestSolution);
             }
 
             owned.Add(Model);

@@ -25,7 +25,7 @@ namespace AiDotNet.Tests.UnitTests.Models;
 /// compiled plans -- lived until the garbage collector ran.</para>
 /// </summary>
 [Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
-public class AiModelResultDerivedCopyDisposalTests
+public partial class AiModelResultDerivedCopyDisposalTests
 {
     private const int SequenceLength = 1;
     private const int EmbeddingDimension = 8;
@@ -97,6 +97,71 @@ public class AiModelResultDerivedCopyDisposalTests
 
         AssertAllLayersReleased(member, "a deep-ensemble member");
         AssertAllLayersReleased(model, "the wrapped model");
+    }
+
+    private static AiModelResult<float, Tensor<float>, Tensor<float>> CreateMetaLearningResult(
+        NeuralNetwork<float> baseModel, NeuralNetwork<float> best)
+    {
+        var metaLearner = new AiDotNet.MetaLearning.Algorithms.MAMLAlgorithm<float, Tensor<float>, Tensor<float>>(
+            new AiDotNet.MetaLearning.Options.MAMLOptions<float, Tensor<float>, Tensor<float>>(baseModel)
+            {
+                LossFunction = new AiDotNet.LossFunctions.MeanSquaredErrorLoss<float>(),
+            });
+        return new AiModelResult<float, Tensor<float>, Tensor<float>>(new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            MetaLearner = metaLearner,
+            MetaTrainingResult = new MetaTrainingResult<float>(
+                new Vector<float>(new[] { 1.0f }), new Vector<float>(new[] { 0.0f }), TimeSpan.Zero),
+            OptimizationResult = new OptimizationResult<float, Tensor<float>, Tensor<float>> { BestSolution = best },
+        });
+    }
+
+    [Fact]
+    public void Meta_learning_result_releases_the_optimizers_separate_best_solution()
+    {
+        // On the meta-learning path Model is the meta-learner's BaseModel, while the optimizer's BestSolution is a
+        // different instance that only this result holds -- previously neither Dispose path reached it.
+        var baseModel = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(inputFeatures: 4, outputSize: 2));
+        var best = new CountingNetwork();
+        var result = CreateMetaLearningResult(baseModel, best);
+
+        // Premise: this really is the case where the two differ.
+        Assert.NotSame(best, result.Model);
+
+        result.Dispose();
+        result.Dispose();
+
+        Assert.Equal(1, best.DisposeCalls);
+        AssertAllLayersReleased(best, "the optimizer's best solution");
+    }
+
+    [Fact]
+    public void A_best_solution_that_is_also_an_ensemble_member_is_released_once()
+    {
+        var baseModel = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(inputFeatures: 4, outputSize: 2));
+        var best = new CountingNetwork();
+        var result = CreateMetaLearningResult(baseModel, best);
+
+        // The builder puts the best solution first in a deep ensemble, so both disposal paths can reach it.
+        result.SetDeepEnsembleModels(new List<IFullModel<float, Tensor<float>, Tensor<float>>> { best });
+        result.Dispose();
+
+        Assert.Equal(1, best.DisposeCalls);
+    }
+
+    private sealed partial class CountingNetwork : NeuralNetwork<float>
+    {
+        public CountingNetwork() : base(new NeuralNetworkArchitecture<float>(inputFeatures: 4, outputSize: 2))
+        {
+        }
+
+        public int DisposeCalls { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            DisposeCalls++;
+            base.Dispose(disposing);
+        }
     }
 
     private static void AssertAllLayersReleased(NeuralNetworkBase<float> network, string what)
