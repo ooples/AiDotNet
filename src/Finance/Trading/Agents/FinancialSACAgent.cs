@@ -55,6 +55,15 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
+    /// <summary>
+    /// Half-width of the symmetric exploration noise added to the actor's output during training.
+    /// </summary>
+    /// <remarks>
+    /// Preserves the previous magnitude (the old noise spanned 0.1) while centring it on zero, so this changes
+    /// the BIAS without changing how far the agent explores.
+    /// </remarks>
+    private const double ExplorationNoiseScale = 0.05;
+
     private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic1;
@@ -133,8 +142,25 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         {
             // Stochastic policy (simplified with noise)
             var noise = new Vector<T>(action.Length);
+            // One generator for the whole vector, not one per element. CreateSecureRandom builds a
+            // cryptographic generator, which costs far more than the single NextDouble draw it was
+            // serving, and SelectAction runs every training step - so this was constructing ActionSize
+            // generators per step. Exploration noise is not a security-sensitive value, and drawing
+            // every element from one generator is no less random than drawing each from its own.
+            var noiseSource = RandomHelper.CreateSecureRandom();
+
             for (int i = 0; i < noise.Length; i++)
-                noise[i] = NumOps.FromDouble(RandomHelper.CreateSecureRandom().NextDouble() * 0.1);
+            {
+                // ZERO-MEAN, symmetric about the actor's output.
+                //
+                // This was `NextDouble() * 0.1`: uniform on [0, 0.1), so its mean is +0.05 and it is NEVER
+                // negative. Every exploratory action was pushed in one direction, which for a trading agent
+                // whose action is a signed position means it explored only the long side - and the bias does
+                // not average out over a run, it accumulates into the experience the critics learn from.
+                // Exploration noise has to be centred on the policy it explores around, or it is not
+                // exploration, it is a drift.
+                noise[i] = NumOps.FromDouble(((noiseSource.NextDouble() * 2.0) - 1.0) * ExplorationNoiseScale);
+            }
             
             return action.Add(noise);
         }
