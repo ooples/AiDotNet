@@ -11,6 +11,7 @@ using AiDotNet.Enums;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.LossFunctions;
 
+// ci-proof canary 2 (delta-reuse harness, partial path): a comment-only change to a runtime file. Never merged to master.
 namespace AiDotNet.Finance.Trading.Agents;
 
 /// <summary>
