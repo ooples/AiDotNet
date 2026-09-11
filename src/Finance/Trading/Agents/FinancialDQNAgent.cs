@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -104,12 +105,104 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         _options = options;
         _architecture = architecture;
 
-        EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
+        EnsureDqnLayers(architecture, options);
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
+    }
+
+    /// <summary>
+    /// Whether this agent decouples action SELECTION from action EVALUATION in the TD target
+    /// (<see cref="FinancialDQNAgentOptions{T}.UseDoubleDQN"/>). Plain <see cref="TradingAgentOptions{T}"/>
+    /// carries no such flag, so a non-DQN options object keeps the single-network maximum.
+    /// </summary>
+    public bool UsesDoubleDQN =>
+        _options is FinancialDQNAgentOptions<T> dqnOptions && dqnOptions.UseDoubleDQN;
+
+    /// <summary>
+    /// Whether the agent-built Q-network uses a dueling head
+    /// (<see cref="FinancialDQNAgentOptions{T}.UseDuelingNetwork"/>).
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful for a network this agent built: an architecture that arrived carrying its own layers
+    /// is used exactly as given, so the option cannot silently rebuild it.
+    /// </remarks>
+    public bool UsesDuelingNetwork { get; private set; }
+
+    /// <summary>
+    /// Builds the Q-network's default layers, honouring
+    /// <see cref="FinancialDQNAgentOptions{T}.UseDuelingNetwork"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With dueling off this is the shared ReLU MLP every trading agent builds. With it on, the hidden
+    /// trunk is followed by a <see cref="DuelingCombinationLayer{T}"/>, which holds its own V(s) and
+    /// A(s,a) projections and emits Q(s,a) = V(s) + (A(s,a) - mean_a A(s,a)) — the identifiability form of
+    /// Wang et al. 2016, Eq. 9. The layer is a valid network output head, so the dueling network is still
+    /// an ordinary sequential <see cref="NeuralNetwork{T}"/> and every other code path is unchanged.
+    /// </para>
+    /// <para><b>For Beginners:</b> A dueling network learns "how good is this state" separately from "how
+    /// much better is each action than average", which learns faster in states where the action barely
+    /// matters — most bars of a price series.</para>
+    /// </remarks>
+    private void EnsureDqnLayers(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+
+        bool wantsDueling = options is FinancialDQNAgentOptions<T> dqnOptions && dqnOptions.UseDuelingNetwork;
+        if (!wantsDueling)
+        {
+            EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
+            return;
+        }
+
+        if (architecture.CalculatedInputSize != options.StateSize)
+        {
+            throw new ArgumentException(
+                $"Architecture input size {architecture.CalculatedInputSize} does not match expected {options.StateSize}.",
+                nameof(architecture));
+        }
+
+        if (architecture.OutputSize != options.ActionSize)
+        {
+            throw new ArgumentException(
+                $"Architecture output size {architecture.OutputSize} does not match expected {options.ActionSize}.",
+                nameof(architecture));
+        }
+
+        ApplyNetworkSeed(architecture);
+
+        if (architecture.Layers.Count != 0)
+        {
+            // Caller-supplied layers win, exactly as for the non-dueling path.
+            return;
+        }
+
+        var hiddenSizes = GetHiddenLayerSizes();
+        if (hiddenSizes.Length == 0)
+        {
+            throw new ArgumentException(
+                "UseDuelingNetwork requires at least one hidden layer: the dueling head projects TRUNK "
+                + "features into its value and advantage streams, so HiddenLayers must not be empty.",
+                nameof(options));
+        }
+
+        int trunkWidth = hiddenSizes[hiddenSizes.Length - 1];
+        AddSeededDefaultLayers(architecture, () =>
+        {
+            var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+            foreach (int width in hiddenSizes)
+            {
+                layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>()));
+            }
+
+            layers.Add(new DuelingCombinationLayer<T>(trunkWidth, options.ActionSize, architecture.RandomSeed));
+            return layers;
+        });
+
+        UsesDuelingNetwork = true;
     }
 
     #endregion
@@ -233,17 +326,41 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         var nextQ = _targetNetwork.Predict(nextStates).ToVector();  // [n * actionCount]
         int actionCount = currentQ.Length / n;
 
-        // Targets = current Q with the taken-action slot overwritten by reward + gamma * max_a' Q'.
+        // Double DQN (van Hasselt et al. 2016) decouples selection from evaluation: the ONLINE network
+        // picks argmax_a' Q(s',a') and the TARGET network supplies that action's value. Plain DQN takes
+        // max_a' Q'(s',a') from the target alone, where the same network both picks and scores the action
+        // and its own positive noise is therefore systematically selected for — the overestimation bias.
+        bool doubleDqn = UsesDoubleDQN;
+        var onlineNextQ = doubleDqn ? _qNetwork.Predict(nextStates).ToVector() : null;
+
+        // Targets = current Q with the taken-action slot overwritten by the TD target.
         var expectedData = currentQ.Clone();
         for (int i = 0; i < n; i++)
         {
-            T maxNextQ = nextQ[i * actionCount];
-            for (int a = 1; a < actionCount; a++)
+            T maxNextQ;
+            if (onlineNextQ is not null)
             {
-                var q = nextQ[i * actionCount + a];
-                if (NumOps.GreaterThan(q, maxNextQ))
+                int bestAction = 0;
+                for (int a = 1; a < actionCount; a++)
                 {
-                    maxNextQ = q;
+                    if (NumOps.GreaterThan(onlineNextQ[(i * actionCount) + a], onlineNextQ[(i * actionCount) + bestAction]))
+                    {
+                        bestAction = a;
+                    }
+                }
+
+                maxNextQ = nextQ[(i * actionCount) + bestAction];
+            }
+            else
+            {
+                maxNextQ = nextQ[i * actionCount];
+                for (int a = 1; a < actionCount; a++)
+                {
+                    var q = nextQ[(i * actionCount) + a];
+                    if (NumOps.GreaterThan(q, maxNextQ))
+                    {
+                        maxNextQ = q;
+                    }
                 }
             }
 
@@ -367,7 +484,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var experience = new Experience<T>(state, action, reward, nextState, done);
+        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }
 
