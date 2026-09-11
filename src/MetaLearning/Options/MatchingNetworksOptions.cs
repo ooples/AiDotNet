@@ -49,11 +49,13 @@ public enum MatchingNetworksAttentionFunction
     Euclidean,
 
     /// <summary>
-    /// Learned similarity function.
+    /// Learned bilinear kernel on unit-normalised embeddings.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Uses a learned network to compute similarity.
+    /// An extension: <c>c(f, g) = f_hat' W g_hat</c> with <c>f_hat</c>, <c>g_hat</c> the unit-length embeddings and
+    /// <c>W</c> learned on the episode loss. <c>W</c> starts at the identity, where the kernel is exactly the paper's
+    /// cosine similarity. It used to fall back to cosine silently, learning nothing.
     /// </para>
     /// </remarks>
     Learned
@@ -105,8 +107,8 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
     #region Optional Properties with Defaults
 
     /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses cross-entropy loss internally).
+    /// Gets or sets the loss that scores the attention class probabilities against the class indices.
+    /// Default: null, which uses cross-entropy - on these probabilities the paper's <c>-log P(y | x, S)</c> (eq. 2).
     /// </summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
@@ -214,28 +216,46 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets whether to use bidirectional encoding.
+    /// Gets or sets whether to embed the support set in context with a bidirectional LSTM.
     /// </summary>
     /// <value>Default is false.</value>
     /// <remarks>
     /// <para>
-    /// When enabled, uses bidirectional LSTM to encode sequences,
-    /// allowing information to flow in both directions.
+    /// The support half of the paper's full context embeddings (appendix A.2):
+    /// <c>g(x_i, S) = h_fwd_i + h_bwd_i + g'(x_i)</c>, a bidirectional LSTM run over the support set as a sequence,
+    /// with a skip connection from the embedding network's output <c>g'(x_i)</c>. Its weights are learned on the
+    /// episode loss. <see cref="UseFullContextEmbedding"/> turns this on as well.
     /// </para>
     /// </remarks>
     public bool UseBidirectionalEncoding { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to use full context embedding.
+    /// Gets or sets whether to use the paper's full context embeddings for both the support set and the queries.
     /// </summary>
     /// <value>Default is false.</value>
     /// <remarks>
     /// <para>
-    /// When enabled, each example's embedding considers all other examples
-    /// in the episode through attention mechanisms.
+    /// Full context embeddings (section 2.1.2, appendix A): the support set is embedded by the bidirectional LSTM of
+    /// <see cref="UseBidirectionalEncoding"/>, and each query by <c>f(x, S) = attLSTM(f'(x), g(S), K)</c> - an LSTM
+    /// that runs <see cref="ProcessingSteps"/> steps, each reading the embedded support set by content-based
+    /// attention, <c>h_k = LSTM(f'(x), [h_(k-1), r_(k-1)], c_(k-1)) + f'(x)</c>. The paper evaluates this on
+    /// miniImageNet. All LSTM weights are learned on the episode loss.
     /// </para>
     /// </remarks>
     public bool UseFullContextEmbedding { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets <c>K</c>, the number of attention read steps of the query context embedding.
+    /// </summary>
+    /// <value>Default is 5.</value>
+    /// <remarks>
+    /// <para>
+    /// Used only with <see cref="UseFullContextEmbedding"/>. The paper does not state <c>K</c>: appendix A.1 defers
+    /// to the "Process" block of Vinyals et al. 2015 (Order Matters), whose experiments try 0, 1, 5 and 10
+    /// processing steps and find accuracy rising with the count. Five is our choice, the middle of that range.
+    /// </para>
+    /// </remarks>
+    public int ProcessingSteps { get; set; } = 5;
 
     /// <summary>
     /// Gets or sets the L2 regularization strength.
@@ -298,6 +318,7 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
                OuterLearningRate > 0 &&
                Temperature > 0 &&
                NumClasses > 0 &&
+               ProcessingSteps >= 1 &&
                MetaBatchSize > 0 &&
                NumMetaIterations > 0;
     }
@@ -329,6 +350,7 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
             NumClasses = NumClasses,
             UseBidirectionalEncoding = UseBidirectionalEncoding,
             UseFullContextEmbedding = UseFullContextEmbedding,
+            ProcessingSteps = ProcessingSteps,
             L2Regularization = L2Regularization,
             Temperature = Temperature
         };
