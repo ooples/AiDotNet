@@ -356,10 +356,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 
     /// <inheritdoc/>
     public Vector<T> GetImageEmbedding(Tensor<T> image)
-    {
-        var features = EncodeImage(image);
-        return PoolFeatures(features);
-    }
+        => TensorToVector(ForwardImageEmbedding(image));
 
     /// <inheritdoc/>
     public IEnumerable<Vector<T>> GetImageEmbeddings(IEnumerable<Tensor<T>> images)
@@ -982,55 +979,61 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     }
 
     private Matrix<T> EncodeImageNative(Tensor<T> image)
+        => TensorToMatrix(EncodeImageTokens(image));
+
+    /// <summary>
+    /// Runs the native vision encoder - patch embedding, CLS token, positional table, encoder layers,
+    /// final norm - returning [tokens, D] for one image or [batch, tokens, D] for a batch.
+    /// </summary>
+    /// <remarks>
+    /// Every step is an engine op, so the gradient tape reaches the patch embedding, the CLS token,
+    /// the positional table and every encoder layer. This used to copy them element by element into a
+    /// fresh tensor, which the tape cannot see through: nothing upstream of the copy could receive a
+    /// gradient. It also silently truncated a mismatched positional table; a mismatch now says so.
+    /// </remarks>
+    private Tensor<T> EncodeImageTokens(Tensor<T> image)
     {
-        // Validate required components are initialized
         var patchEmbedding = _visionPatchEmbedding ?? throw new InvalidOperationException("Vision patch embedding has not been initialized.");
         var clsToken = _visionClsToken ?? throw new InvalidOperationException("Vision CLS token has not been initialized.");
         var positionalEmbeddings = _visionPositionalEmbeddings ?? throw new InvalidOperationException("Vision positional embeddings have not been initialized.");
         var layerNorm = _visionLayerNorm ?? throw new InvalidOperationException("Vision layer norm has not been initialized.");
 
-        // Patch embedding
-        var patchEmbeddings = patchEmbedding.Forward(image);
-        int numPatches = patchEmbeddings.Shape[0];
-
-        // Create tensor for transformer processing
-        var embeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionEmbeddingDim], NumOps.Zero);
-
-        // Add CLS token
-        for (int j = 0; j < _visionEmbeddingDim && j < clsToken.Shape[1]; j++)
+        // [numPatches, D] for one image, [batch, numPatches, D] for a batch.
+        var patches = patchEmbedding.Forward(image);
+        bool batched = patches.Shape.Length == 3;
+        int numPatches = batched ? patches.Shape[1] : patches.Shape[0];
+        int dim = patches.Shape[patches.Shape.Length - 1];
+        if (clsToken.Shape[1] != dim
+            || positionalEmbeddings.Shape[0] != numPatches + 1
+            || positionalEmbeddings.Shape[1] != dim)
         {
-            embeddings[0, j] = clsToken[0, j];
+            throw new InvalidOperationException(
+                $"The patch embedding produced {numPatches} patches of width {dim}, but the CLS token is " +
+                $"{clsToken.Shape[1]} wide and the positional table is [{positionalEmbeddings.Shape[0]}, " +
+                $"{positionalEmbeddings.Shape[1]}]. The image size, patch size and vision width must agree.");
         }
 
-        // Add patch embeddings
-        for (int i = 0; i < numPatches; i++)
+        Tensor<T> tokens;
+        if (batched)
         {
-            for (int j = 0; j < _visionEmbeddingDim && j < patchEmbeddings.Shape[1]; j++)
-            {
-                embeddings[i + 1, j] = patchEmbeddings[i, j];
-            }
+            int batch = patches.Shape[0];
+            var cls = Engine.TensorTile(Engine.Reshape(clsToken, new[] { 1, 1, dim }), new[] { batch, 1, 1 });
+            var positions = Engine.TensorTile(
+                Engine.Reshape(positionalEmbeddings, new[] { 1, numPatches + 1, dim }), new[] { batch, 1, 1 });
+            tokens = Engine.TensorAdd(Engine.TensorConcatenate(new[] { cls, patches }, axis: 1), positions);
+        }
+        else
+        {
+            tokens = Engine.TensorAdd(
+                Engine.TensorConcatenate(new[] { clsToken, patches }, axis: 0), positionalEmbeddings);
         }
 
-        // Add positional embeddings
-        for (int i = 0; i < embeddings.Shape[0] && i < positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _visionEmbeddingDim && j < positionalEmbeddings.Shape[1]; j++)
-            {
-                embeddings[i, j] = NumOps.Add(embeddings[i, j], positionalEmbeddings[i, j]);
-            }
-        }
-
-        // Pass through transformer layers
-        var current = embeddings;
         foreach (var layer in _visionEncoderLayers)
         {
-            current = layer.Forward(current);
+            tokens = layer.Forward(tokens);
         }
 
-        // Layer norm
-        current = layerNorm.Forward(current);
-
-        return TensorToMatrix(current);
+        return layerNorm.Forward(tokens);
     }
 
     private Matrix<T> EncodeImageOnnx(Tensor<T> image)
@@ -1077,6 +1080,45 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         return matrix;
+    }
+
+    /// <summary>
+    /// Projects vision tokens into the language embedding space with the two-layer MLP (GELU between).
+    /// </summary>
+    private Tensor<T> ProjectVisionTokens(Tensor<T> tokens)
+    {
+        var projector1 = _visionProjector1 ?? throw new InvalidOperationException("Vision projector has not been initialized.");
+        var projector2 = _visionProjector2 ?? throw new InvalidOperationException("Vision projector has not been initialized.");
+
+        // A per-token MLP, run over every token at once as a [tokens, D] batch.
+        var shape = tokens.Shape.ToArray();
+        int width = shape[shape.Length - 1];
+        var hidden = projector1.Forward(Engine.Reshape(tokens, new[] { tokens.Length / width, width }));
+        hidden = Engine.GELU(hidden);
+        hidden = projector2.Forward(hidden);
+        shape[shape.Length - 1] = hidden.Shape[hidden.Shape.Length - 1];
+        return Engine.Reshape(hidden, shape);
+    }
+
+    /// <summary>
+    /// The image embedding: vision tokens projected into the language space and mean-pooled over tokens.
+    /// </summary>
+    /// <remarks>
+    /// Prediction, training and GetImageEmbedding all evaluate this one function. PredictCore used to
+    /// pool the UNPROJECTED vision features (visionEmbeddingDim wide) while Train fit the projected ones
+    /// (embeddingDimension wide), so the two optimized different functions, and ComputeSimilarity
+    /// compared an image vector with a language-space text vector of a different width.
+    /// </remarks>
+    private Tensor<T> ForwardImageEmbedding(Tensor<T> image)
+    {
+        if (!_useNativeMode)
+        {
+            return VectorToTensor(PoolFeatures(EncodeImageOnnx(image)));
+        }
+
+        var projected = ProjectVisionTokens(EncodeImageTokens(image));
+        int tokenAxis = projected.Shape.Length - 2;
+        return Engine.ReduceMean(projected, new[] { tokenAxis }, keepDims: false);
     }
 
     private Matrix<T> ProjectVisionFeatures(Matrix<T> visionFeatures)
@@ -1452,92 +1494,33 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             return gpuResult;
 
         SetTrainingMode(false);
-        return Accelerate(input, () =>
-        {
-            var embedding = GetImageEmbedding(input);
-            return VectorToTensor(embedding);
-        });
+        return Accelerate(input, () => ForwardImageEmbedding(input));
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Forward pass
-        var imageFeatures = EncodeImage(input);
-        var projected = ProjectVisionFeatures(imageFeatures);
-
-        // Compute loss using the loss function
-        var predictedEmbedding = PoolFeatures(projected);
-        var targetEmbedding = TensorToVector(expectedOutput);
-        LastLoss = LossFunction.CalculateLoss(predictedEmbedding, targetEmbedding);
-
-        // Get parameter gradients and apply gradient descent update
-        var paramGradients = GetGpt4VParameterGradients();
-        UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape runs the forward, loss, backward and optimizer step. This used to pass the
+            // collected GRADIENTS to UpdateParameters(Vector) - the value setter, so a successful call
+            // would have overwritten every weight with its gradient - and that vector covered only some
+            // of the layers, so the length check threw first.
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    /// <summary>
-    /// Gets the gradients for all trainable parameters.
-    /// </summary>
-    private Vector<T> GetGpt4VParameterGradients()
-    {
-        var gradients = new List<T>();
-
-        // Get gradients from vision encoder layers
-        foreach (var layer in _visionEncoderLayers)
-        {
-            var layerGrads = layer.GetParameterGradients();
-            for (int i = 0; i < layerGrads.Length; i++)
-            {
-                gradients.Add(layerGrads[i]);
-            }
-        }
-
-        // Get gradients from language model layers
-        foreach (var layer in _languageModelLayers)
-        {
-            var layerGrads = layer.GetParameterGradients();
-            for (int i = 0; i < layerGrads.Length; i++)
-            {
-                gradients.Add(layerGrads[i]);
-            }
-        }
-
-        // Get gradients from cross-attention layers
-        foreach (var layer in _crossAttentionLayers)
-        {
-            var layerGrads = layer.GetParameterGradients();
-            for (int i = 0; i < layerGrads.Length; i++)
-            {
-                gradients.Add(layerGrads[i]);
-            }
-        }
-
-        // Get gradients from projection layers
-        if (_visionProjector1 is not null)
-        {
-            var projGrads = _visionProjector1.GetParameterGradients();
-            for (int i = 0; i < projGrads.Length; i++)
-            {
-                gradients.Add(projGrads[i]);
-            }
-        }
-
-        if (_visionProjector2 is not null)
-        {
-            var projGrads = _visionProjector2.GetParameterGradients();
-            for (int i = 0; i < projGrads.Length; i++)
-            {
-                gradients.Add(projGrads[i]);
-            }
-        }
-
-        return new Vector<T>([.. gradients]);
-    }
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The function PredictCore evaluates, so training optimizes what prediction returns.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => ForwardImageEmbedding(input);
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
