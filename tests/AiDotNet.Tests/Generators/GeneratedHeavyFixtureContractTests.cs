@@ -125,7 +125,91 @@ public sealed class GeneratedHeavyFixtureContractTests
         AssertShape(fixture, "OutputShape", 1, 1, 256);
     }
 
-    private static ClassDeclarationSyntax GenerateFixture(string name)
+    public enum TransformerFixture
+    {
+        DistilBERTNER, ELECTRANER, FinBERTNER, LegalBERTNER, XLMRoBERTaNER, TemplateNER,
+        DeBERTaNER, SECBertNER, SpanBERTNER, RELNER, RoBERTaNER, SciBERTNER, BLINKNER,
+        ClinicalBERTNER, InstructionNER, ONNXNER, PubMedBERTNER, BioBERTNER
+    }
+
+    [Theory]
+    [InlineData(TransformerFixture.DistilBERTNER)]
+    [InlineData(TransformerFixture.ELECTRANER)]
+    [InlineData(TransformerFixture.FinBERTNER)]
+    [InlineData(TransformerFixture.LegalBERTNER)]
+    [InlineData(TransformerFixture.XLMRoBERTaNER)]
+    [InlineData(TransformerFixture.TemplateNER)]
+    [InlineData(TransformerFixture.DeBERTaNER)]
+    [InlineData(TransformerFixture.SECBertNER)]
+    [InlineData(TransformerFixture.SpanBERTNER)]
+    [InlineData(TransformerFixture.RELNER)]
+    [InlineData(TransformerFixture.RoBERTaNER)]
+    [InlineData(TransformerFixture.SciBERTNER)]
+    [InlineData(TransformerFixture.BLINKNER)]
+    [InlineData(TransformerFixture.ClinicalBERTNER)]
+    [InlineData(TransformerFixture.InstructionNER)]
+    [InlineData(TransformerFixture.ONNXNER)]
+    [InlineData(TransformerFixture.PubMedBERTNER)]
+    [InlineData(TransformerFixture.BioBERTNER)]
+    public void TransformerSmokeFactory_ExplicitlyConfiguresItsPositiveWarmupBeforeConstruction(
+        TransformerFixture fixtureKind)
+    {
+        string modelName = fixtureKind.ToString();
+        ClassDeclarationSyntax fixture = GenerateTransformerFixture(fixtureKind);
+        ObjectCreationExpressionSyntax creation = ModelConstructor(fixture, modelName);
+        ObjectCreationExpressionSyntax options = Assert.Single(creation.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>(), node => node.Type.ToString().EndsWith("TransformerNEROptions"));
+        var argument = Assert.IsType<ArgumentSyntax>(options.Parent);
+        var arguments = Assert.IsType<ArgumentListSyntax>(argument.Parent);
+        var configuration = Assert.IsType<InvocationExpressionSyntax>(arguments.Parent);
+        Assert.Equal("WithPositiveSmokeWarmup", configuration.Expression.ToString());
+        Assert.Single(arguments.Arguments);
+        Assert.Contains("TransformerNERTestBase", fixture.BaseList?.ToString() ?? string.Empty);
+    }
+
+    [Theory]
+    [InlineData(TransformerFixture.TemplateNER)]
+    [InlineData(TransformerFixture.XLMRoBERTaNER)]
+    public void LargeTransformerSmokeFactory_BoundsItsEncoderAndKeepsTheInputShapeInSync(
+        TransformerFixture fixtureKind)
+    {
+        ClassDeclarationSyntax fixture = GenerateTransformerFixture(fixtureKind);
+        ObjectCreationExpressionSyntax creation = ModelConstructor(fixture, fixtureKind.ToString());
+        ObjectCreationExpressionSyntax architecture = Assert.Single(creation.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>(), node => node.Type.ToString().Contains("NeuralNetworkArchitecture"));
+        AssertNamedInteger(architecture, "inputSize", 32);
+        AssertNamedInteger(architecture, "outputSize", 9);
+        ObjectCreationExpressionSyntax options = Assert.Single(creation.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>(), node => node.Type.ToString().EndsWith("TransformerNEROptions"));
+        AssertAssignedInteger(options, "HiddenDimension", 32);
+        AssertAssignedInteger(options, "NumAttentionHeads", 4);
+        AssertAssignedInteger(options, "NumTransformerLayers", 2);
+        AssertAssignedInteger(options, "IntermediateDimension", 64);
+        AssertAssignedInteger(options, "MaxSequenceLength", 16);
+        AssertAssignedInteger(options, "NumLabels", 9);
+        AssertShape(fixture, "InputShape", 8, 32);
+    }
+
+    private static ClassDeclarationSyntax GenerateTransformerFixture(TransformerFixture fixtureKind)
+    {
+        string modelName = fixtureKind.ToString();
+        string modelSource = Models + $$"""
+            namespace AiDotNet.NER.Options { public class TransformerNEROptions { } }
+            namespace AiDotNet.NER.TransformerBased
+            {
+                public abstract class TransformerNERBase<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T> { }
+                [AiDotNet.Attributes.ModelDomain(0)]
+                public class {{modelName}}<T> : TransformerNERBase<T>
+                {
+                    public {{modelName}}(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T> architecture,
+                        AiDotNet.NER.Options.TransformerNEROptions? options = null) { }
+                }
+            }
+            """;
+        return GenerateFixture(modelName + "Tests", modelSource);
+    }
+
+    private static ClassDeclarationSyntax GenerateFixture(string name, string models = Models)
     {
         var references = AppDomain.CurrentDomain.GetAssemblies()
             .Where(assembly => !assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
@@ -135,7 +219,7 @@ public sealed class GeneratedHeavyFixtureContractTests
             .Select(assembly => assembly.Location).Distinct(StringComparer.Ordinal)
             .Select(path => MetadataReference.CreateFromFile(path)).ToImmutableArray<MetadataReference>();
         CSharpCompilation compilation = CSharpCompilation.Create("AiDotNetTests",
-            new[] { CSharpSyntaxTree.ParseText(Models) }, references,
+            new[] { CSharpSyntaxTree.ParseText(models) }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         Assert.DoesNotContain(compilation.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
 
@@ -166,6 +250,13 @@ public sealed class GeneratedHeavyFixtureContractTests
         ArgumentSyntax argument = Assert.Single(creation.ArgumentList.Arguments,
             candidate => candidate.NameColon?.Name.Identifier.ValueText == name);
         Assert.Equal(expected, Assert.IsType<LiteralExpressionSyntax>(argument.Expression).Token.Value);
+    }
+
+    private static void AssertAssignedInteger(ObjectCreationExpressionSyntax creation, string name, int expected)
+    {
+        AssignmentExpressionSyntax assignment = Assert.Single(creation.DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>(), candidate => candidate.Left.ToString() == name);
+        Assert.Equal(expected, Assert.IsType<LiteralExpressionSyntax>(assignment.Right).Token.Value);
     }
 
     private static void AssertShape(ClassDeclarationSyntax fixture, string name, params int[] expected)

@@ -1,4 +1,6 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NER.Options;
+using AiDotNet.NER.TransformerBased;
 using AiDotNet.TextToSpeech.Vocoders;
 using AiDotNet.Video.Motion;
 using Xunit;
@@ -63,6 +65,58 @@ public sealed class GeneratedHeavyFixtureRuntimeTests
         Assert.Equal(defaults.SampleRate, options.SampleRate);
     }
 
+    [Fact]
+    public void TemplateNER_GeneratedFactoryBoundsTheRealEncoderAndRetainsDropout()
+    {
+        var fixture = new TemplateNERProbe();
+        using var model = fixture.CreateModel();
+
+        Assert.Equal(new[] { 8, 32 }, fixture.DeclaredInputShape);
+        AssertBoundedTransformerTopology(model);
+    }
+
+    [Fact]
+    public void XLMRoBERTaNER_GeneratedFactoryBoundsTheRealEncoderAndRetainsDropout()
+    {
+        var fixture = new XLMRoBERTaNERProbe();
+        using var model = fixture.CreateModel();
+
+        Assert.Equal(new[] { 8, 32 }, fixture.DeclaredInputShape);
+        AssertBoundedTransformerTopology(model);
+    }
+
+    private static void AssertBoundedTransformerTopology(TransformerNERBase<float> model)
+    {
+        var options = Assert.IsType<TransformerNEROptions>(model.GetOptions());
+        Assert.Equal(32, model.Architecture.InputSize);
+        Assert.Equal(9, model.Architecture.OutputSize);
+        Assert.Equal(new[] { 16, 32 }, model.ExpectedInputShape);
+        Assert.Equal(32, options.HiddenDimension);
+        Assert.Equal(4, options.NumAttentionHeads);
+        Assert.Equal(2, options.NumTransformerLayers);
+        Assert.Equal(64, options.IntermediateDimension);
+        Assert.Equal(16, options.MaxSequenceLength);
+        Assert.Equal(9, options.NumLabels);
+        Assert.Equal(5e-6, options.LearningRate);
+        Assert.Equal(options.LearningRate / options.WarmupSteps, options.WarmupInitialLearningRate);
+        Assert.Equal(0.1, options.DropoutRate);
+        Assert.Collection(model.Layers,
+            layer => Assert.IsType<TransformerEncoderLayer<float>>(layer),
+            layer => Assert.IsType<DropoutLayer<float>>(layer),
+            layer => Assert.IsType<TransformerEncoderLayer<float>>(layer),
+            layer => Assert.IsType<DropoutLayer<float>>(layer),
+            layer => Assert.IsType<DenseLayer<float>>(layer));
+
+        var defaults = new TransformerNEROptions();
+        Assert.Equal(768, defaults.HiddenDimension);
+        Assert.Equal(12, defaults.NumTransformerLayers);
+        Assert.Equal(12, defaults.NumAttentionHeads);
+        Assert.Equal(3072, defaults.IntermediateDimension);
+        Assert.Equal(256, defaults.MaxSequenceLength);
+        Assert.Equal(5e-5, defaults.LearningRate);
+        Assert.Equal(0.0, defaults.WarmupInitialLearningRate);
+    }
+
     private sealed class MemFlowProbe : ModelFamilyTests.Generated.MemFlowTests
     {
         public int[] DeclaredInputShape => InputShape;
@@ -75,5 +129,17 @@ public sealed class GeneratedHeavyFixtureRuntimeTests
         public int[] DeclaredInputShape => InputShape;
         public int[] DeclaredOutputShape => OutputShape;
         public MelGAN<float> CreateModel() => Assert.IsType<MelGAN<float>>(CreateNetwork());
+    }
+
+    private sealed class TemplateNERProbe : ModelFamilyTests.Generated.TemplateNERTests
+    {
+        public int[] DeclaredInputShape => InputShape;
+        public TemplateNER<float> CreateModel() => Assert.IsType<TemplateNER<float>>(CreateNetwork());
+    }
+
+    private sealed class XLMRoBERTaNERProbe : ModelFamilyTests.Generated.XLMRoBERTaNERTests
+    {
+        public int[] DeclaredInputShape => InputShape;
+        public XLMRoBERTaNER<float> CreateModel() => Assert.IsType<XLMRoBERTaNER<float>>(CreateNetwork());
     }
 }
