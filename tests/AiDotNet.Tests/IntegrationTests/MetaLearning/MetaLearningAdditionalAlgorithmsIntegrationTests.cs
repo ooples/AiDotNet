@@ -153,10 +153,13 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ANIL_MetaTrainAndAdapt_Run()
     {
+        // LinearVectorModel emits one value per example, so the head reads a 1-wide representation. The old
+        // FeatureDimension of 2 only worked because ANIL used to flatten the whole 2-row batch into one "feature
+        // vector" (Raghu et al. 2020 apply the head to each example).
         var model = new LinearVectorModel(2);
         var options = new ANILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
@@ -174,16 +177,18 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.ANIL, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score per class for EACH query example: 2 rows x 2 classes. It used to be one row for the batch.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
     public async Task BOIL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // One value per example from LinearVectorModel: a 1-wide representation (see ANIL_MetaTrainAndAdapt_Run).
         var options = new BOILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
@@ -202,7 +207,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.BOIL, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score per class for EACH query example (Oh et al. 2021 classify each example).
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
