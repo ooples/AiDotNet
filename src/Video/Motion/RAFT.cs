@@ -264,8 +264,31 @@ public partial class RAFT<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Takes a stacked frame pair <c>[batch, 2*channels, height, width]</c> or, unbatched,
+    /// <c>[2*channels, height, width]</c> - the two forms the inherited <see cref="OpticalFlowBase{T}"/>
+    /// input layout declares. The unbatched pair is promoted to a batch of one and the unit batch axis is
+    /// removed from the flow, so it returns <c>[2, height, width]</c>. It used to index <c>Shape[3]</c> of
+    /// whatever it was given, so an unbatched pair threw IndexOutOfRange.
+    /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (input.Rank == 3)
+        {
+            var flow = PredictCore(PromoteToBatchedTensor(input));
+            return flow.Rank == 4 && flow.Shape[0] == 1
+                ? Engine.Reshape(flow, [flow.Shape[1], flow.Shape[2], flow.Shape[3]])
+                : flow;
+        }
+
+        if (input.Rank != 4)
+            throw new ArgumentException(
+                "RAFT expects a stacked frame pair [2*channels, height, width] or [batch, 2*channels, height, width], "
+                + $"got rank {input.Rank}.", nameof(input));
+
         var frame1 = SliceChannels(input, 0, _channels);
         var frame2 = SliceChannels(input, _channels, _channels * 2);
         var flowIterations = ForwardIterative(frame1, frame2);

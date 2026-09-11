@@ -261,6 +261,19 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         // inference through RunImagePath makes Predict reflect the learned weights, exactly as
         // ForwardForTraining does, so the two agree. The flow/warp/blend branch of InpaintFrame is
         // a non-differentiable, dead pathway and is intentionally omitted here too.
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        // A single frame [C, H, W] - the shape this model's default architecture declares - is the
+        // one-frame clip: frames are reconstructed independently (the image path treats the frame axis
+        // as its batch), so it runs as [1, C, H, W] and comes back without that axis. The image path
+        // reads axis 3, so a rank-3 frame used to throw IndexOutOfRange.
+        if (input.Rank == 3)
+        {
+            var frame = RunReconstruction(Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]));
+            return Engine.Reshape(frame, [frame.Shape[1], frame.Shape[2], frame.Shape[3]]);
+        }
+
         return RunReconstruction(input);
     }
 

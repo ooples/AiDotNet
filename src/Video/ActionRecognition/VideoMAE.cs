@@ -38,6 +38,14 @@ namespace AiDotNet.Video.ActionRecognition;
 /// - Joint space-time attention mechanism
 /// </para>
 /// <para>
+/// <b>Pretraining:</b> call <see cref="PretrainMAE"/> repeatedly on unlabeled clips; each call is one
+/// optimizer step on the masked-patch reconstruction loss (per-patch normalised pixel targets by default,
+/// see <see cref="VideoMAEOptions.NormalizeTarget"/>). Then fine-tune the classifier with <c>Train</c>.
+/// The encoder here is a convolutional stand-in for the paper's ViT: masked patches are kept at zero
+/// through every encoder block (the sparse-convolution form of dropping them), and the decoder is a small
+/// convolutional stack with a per-patch pixel head.
+/// </para>
+/// <para>
 /// <b>Reference:</b> Tong et al., "VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training"
 /// NeurIPS 2022.
 /// </para>
@@ -265,26 +273,11 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// ignored it and always used <c>numFrames</c> (default 16), so an architecture declaring 8-frame
     /// clips produced a model reporting and masking for 16. An explicit <c>numFrames</c> that disagrees
     /// with the declared count is rejected rather than silently overridden. The parameter's default
-    /// value cannot be told apart from an explicit 16, so it defers to the architecture.
+    /// value cannot be told apart from an explicit 16, so it defers to the architecture. The rule lives
+    /// in <see cref="VideoClipFrameCount"/>, shared with TimeSformer.
     /// </remarks>
     private static int ResolveNumFrames(NeuralNetworkArchitecture<T> architecture, int numFrames)
-    {
-        int declared = architecture.InputFrames;
-        if (declared <= 0)
-        {
-            return numFrames;
-        }
-
-        if (numFrames != declared && numFrames != DefaultNumFrames)
-        {
-            throw new ArgumentException(
-                $"numFrames ({numFrames}) conflicts with the architecture's declared InputFrames ({declared}). " +
-                "Pass the same value, or omit numFrames to use the architecture's frame count.",
-                nameof(numFrames));
-        }
-
-        return declared;
-    }
+        => VideoClipFrameCount.Resolve(architecture, numFrames, DefaultNumFrames);
 
     #endregion
 
@@ -338,10 +331,27 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs masked autoencoder pretraining on a video.
+    /// Performs one masked-autoencoder pretraining step on a video clip: masks it, reconstructs the
+    /// masked tubelet patches, and updates the encoder, decoder and reconstruction head to reduce the
+    /// reconstruction error.
     /// </summary>
     /// <param name="video">Video tensor [T, C, H, W] or [B, T, C, H, W].</param>
-    /// <returns>Reconstruction loss.</returns>
+    /// <returns>This step's reconstruction loss, measured before the weight update.</returns>
+    /// <remarks>
+    /// <para>
+    /// Call this repeatedly over unlabeled clips to pretrain (Tong et al. 2022, Sec. 3), then fine-tune
+    /// with <see cref="Train(Tensor{T}, Tensor{T})"/>. Each call samples a new tube mask at the configured mask ratio, runs the
+    /// masked encoder and the reconstruction decoder on the autodiff tape, takes the mean squared error
+    /// over the masked patches only (against per-patch normalised pixels by default - see
+    /// <see cref="VideoMAEOptions.NormalizeTarget"/>), and applies one optimizer step through the
+    /// library's standard caller-owned-tape training path. The optimizer is the one passed to the
+    /// constructor, or the model's default Adam.
+    /// </para>
+    /// <para>
+    /// It used to compute the loss and return it without back-propagating or updating anything, so
+    /// "pretraining" never changed a weight.
+    /// </para>
+    /// </remarks>
     public T PretrainMAE(Tensor<T> video)
     {
         if (!_useNativeMode)
@@ -349,26 +359,42 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Pretraining is not supported in ONNX mode.");
         }
 
-        bool hasBatch = video.Rank == 5;
-        if (!hasBatch)
+        if (video is null)
         {
-            video = AddBatchDimension5D(video);
+            throw new ArgumentNullException(nameof(video));
         }
+
+        if (video.Rank != 4 && video.Rank != 5)
+        {
+            throw new ArgumentException("PretrainMAE expects a clip [T, C, H, W] or a batch of clips [B, T, C, H, W].", nameof(video));
+        }
+
+        // The clip is data, not a parameter, so promoting it with a copy costs no gradient path.
+        var clip = video.Rank == 5 ? video : AddBatchDimension5D(video);
 
         // Create the tube mask on this clip's own patch grid (one spatial mask per clip, shared by
         // every tubelet).
-        var mask = CreateTubeMask(video.Shape[0], video.Shape[3] / _patchSize, video.Shape[4] / _patchSize);
+        var mask = CreateTubeMask(clip.Shape[0], clip.Shape[3] / _patchSize, clip.Shape[4] / _patchSize);
 
-        // Encode visible patches
-        var visibleFeatures = EncodeVisiblePatches(video, mask);
-
-        // Decode to reconstruct full video
-        var reconstruction = DecodeForReconstruction(visibleFeatures);
-
-        // Compute reconstruction loss on masked patches
-        T loss = ComputeReconstructionLoss(reconstruction, video, mask);
-
-        return loss;
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            // The forward and the loss are recorded on this tape; BackwardAndStepOnPrecomputedLoss runs
+            // backward over it and applies the optimizer step, the same entry point the library's other
+            // custom-objective models (NeRF, TVAE, TabDDPM, the GANs) train through.
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+            var reconstruction = DecodeForReconstruction(EncodeVisiblePatches(clip, mask));
+            var loss = ReconstructionObjective(reconstruction, clip, mask);
+            return BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+        }
+        finally
+        {
+            if (!wasTraining)
+            {
+                SetTrainingMode(false);
+            }
+        }
     }
 
     /// <summary>
@@ -715,38 +741,58 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         return mask;
     }
 
-    private Tensor<T> EncodeVisiblePatches(Tensor<T> video, bool[,,] mask)
+    /// <summary>
+    /// Runs the pretraining encoder over only the VISIBLE tubelet patches of a clip.
+    /// </summary>
+    /// <param name="video">The clip [B, T, C, H, W].</param>
+    /// <param name="mask">Tube mask [B, patchesH, patchesW] (true = masked), shared by all tubelets.</param>
+    /// <returns>Encoder features [B * numTubelets, numFeatures, patchesH, patchesW], exactly zero at
+    /// every masked patch.</returns>
+    /// <remarks>
+    /// <para>
+    /// The paper's encoder drops masked tokens and runs its transformer on the visible ones only
+    /// (Tong et al. 2022, Sec. 3.3), so masked patches contribute nothing to it. This model's encoder is
+    /// a stack of 3x3 convolutions over the patch grid, which cannot drop grid positions: a convolution
+    /// needs the whole grid. It is made sparse the way masked-image-modelling work on convolutional
+    /// encoders does it (SparK, Tian et al. 2023; ConvNeXt V2's FCMAE, Woo et al. 2023): the binary
+    /// visibility mask is applied to the patch embedding and again after EVERY encoder block. A masked
+    /// position then holds exactly zero at every block input, so it adds nothing to its visible
+    /// neighbours (the same as zero padding), and it never accumulates a value of its own.
+    /// </para>
+    /// <para>
+    /// Previously the mask was applied once, to the embedding, by writing zeros into it in place. Two
+    /// defects followed. The 3x3 blocks immediately refilled every masked position from its visible
+    /// neighbours plus the block's bias, so from the second block on the encoder was processing masked
+    /// positions as ordinary tokens. And the in-place write was invisible to the autodiff tape, so the
+    /// backward pass still routed gradient through the embedding's masked outputs into the
+    /// patch-embedding weights - weighted by the masked patches' own pixels, i.e. the very content the
+    /// model is meant to predict without seeing. Both masks here are recorded multiplies, so the
+    /// masked positions receive neither a value nor a gradient.
+    /// </para>
+    /// <para>
+    /// The decoder receives these features with zeros at the masked positions; the paper's learned mask
+    /// token is not added (it would be a new parameter), so a masked position enters the decoder as a
+    /// fixed zero "mask token" and the decoder's convolutions fill it from the visible context.
+    /// </para>
+    /// </remarks>
+    internal Tensor<T> EncodeVisiblePatches(Tensor<T> video, bool[,,] mask)
     {
         var patchEmbedded = PatchEmbed(video);
 
-        // Apply mask (zero out masked patches)
-        // Note: patchEmbedded has shape [B * numTubelets, C, H, W] while mask has shape [B, patchesH, patchesW]
+        // patchEmbedded is [B * numTubelets, F, patchesH, patchesW]; mask is [B, patchesH, patchesW].
         int batchSize = video.Shape[0];
         int numTubelets = video.Shape[1] / _tubeletSize;
-        int channels = patchEmbedded.Shape[1];
-        int height = patchEmbedded.Shape[2];
-        int width = patchEmbedded.Shape[3];
-
-        for (int b = 0; b < batchSize; b++)
+        if (mask.GetLength(0) != batchSize
+            || mask.GetLength(1) != patchEmbedded.Shape[2]
+            || mask.GetLength(2) != patchEmbedded.Shape[3])
         {
-            for (int t = 0; t < numTubelets; t++)
-            {
-                int tubeletIdx = b * numTubelets + t;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        if (mask[b, h % mask.GetLength(1), w % mask.GetLength(2)])
-                        {
-                            for (int c = 0; c < channels; c++)
-                            {
-                                patchEmbedded[tubeletIdx, c, h, w] = NumOps.Zero;
-                            }
-                        }
-                    }
-                }
-            }
+            throw new ArgumentException(
+                $"The mask [{mask.GetLength(0)}, {mask.GetLength(1)}, {mask.GetLength(2)}] does not match the clip's " +
+                $"batch size {batchSize} and patch grid [{patchEmbedded.Shape[2]}, {patchEmbedded.Shape[3]}].",
+                nameof(mask));
         }
+
+        var visible = BuildPatchMask(mask, numTubelets, patchEmbedded.Shape[1], keepMasked: false);
 
         // Apply encoder blocks. Each Layers[i] is a shape-preserving
         // Conv(numFeatures, 3, 1, 1) whose built-in ReLU records on the autodiff
@@ -759,14 +805,59 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         // magnitude grow monotonically across the 12-block stack, blowing up the
         // classification logits and saturating the softmax so the output stops
         // responding to input changes.
-        var features = patchEmbedded;
+        var features = Engine.TensorMultiply(patchEmbedded, visible);
         int encoderLayerCount = Math.Min(VideoMAELayerLayout.EncoderEndIndex, Layers.Count);
         for (int i = VideoMAELayerLayout.FirstEncoderBlockIndex; i < encoderLayerCount; i++)
         {
-            features = Layers[i].Forward(features);
+            features = Engine.TensorMultiply(Layers[i].Forward(features), visible);
         }
 
         return features;
+    }
+
+    /// <summary>
+    /// Expands a tube mask to a 0/1 tensor over a per-tubelet feature or prediction map.
+    /// </summary>
+    /// <param name="mask">Tube mask [B, patchesH, patchesW] (true = masked).</param>
+    /// <param name="numTubelets">Tubelets per clip.</param>
+    /// <param name="channels">Channel extent of the map the result multiplies.</param>
+    /// <param name="keepMasked">True for 1 at masked patches (the loss), false for 1 at visible patches
+    /// (the encoder).</param>
+    /// <returns>A [B * numTubelets, channels, patchesH, patchesW] constant.</returns>
+    private Tensor<T> BuildPatchMask(bool[,,] mask, int numTubelets, int channels, bool keepMasked)
+    {
+        int batchSize = mask.GetLength(0);
+        int patchesH = mask.GetLength(1);
+        int patchesW = mask.GetLength(2);
+        int plane = patchesH * patchesW;
+
+        var result = new Tensor<T>([batchSize * numTubelets, channels, patchesH, patchesW]);
+        var span = result.Data.Span;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < numTubelets; t++)
+            {
+                int rowOffset = (b * numTubelets + t) * channels * plane;
+                for (int ph = 0; ph < patchesH; ph++)
+                {
+                    for (int pw = 0; pw < patchesW; pw++)
+                    {
+                        if (mask[b, ph, pw] != keepMasked)
+                        {
+                            continue;
+                        }
+
+                        int position = ph * patchesW + pw;
+                        for (int c = 0; c < channels; c++)
+                        {
+                            span[rowOffset + c * plane + position] = NumOps.One;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -775,10 +866,20 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// <param name="features">Encoder features [B * numTubelets, numFeatures, patchesH, patchesW].</param>
     /// <returns>Per-patch pixel predictions [B * numTubelets, channels * tubeletSize * P * P, patchesH, patchesW].</returns>
     /// <remarks>
+    /// <para>
     /// The decoder slice is addressed through <see cref="VideoMAELayerLayout"/>. It used to start at a
     /// hard-coded index 15 — the classifier's <c>DenseLayer</c> — so pretraining pushed the encoder maps
     /// through the class head, ran three of the four decoder blocks, used the fourth as the "head", and
     /// never reached the real reconstruction head (whose output is the only one sized to a tubelet patch).
+    /// </para>
+    /// <para>
+    /// Each decoder block is a Conv(numFeatures, 3, 1, 1) with its own ReLU, and nothing else is applied
+    /// between blocks. A second, <c>Tensor.Transform</c>-based GELU used to be stacked on every block's
+    /// output. Transform records no autodiff node, so it severed the tape after every block: a
+    /// reconstruction loss could reach the head and nothing before it - no decoder block, no encoder
+    /// block, no patch embedding. It was also numerically redundant (GELU of a ReLU output is a mild
+    /// squash of a non-negative value). The encoder had the identical defect and was fixed the same way.
+    /// </para>
     /// </remarks>
     internal Tensor<T> DecodeForReconstruction(Tensor<T> features)
     {
@@ -789,7 +890,6 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             for (int i = VideoMAELayerLayout.FirstDecoderBlockIndex; i < VideoMAELayerLayout.ReconstructionHeadIndex; i++)
             {
                 decoded = Layers[i].Forward(decoded);
-                decoded = ApplyGELU(decoded);
             }
 
             decoded = Layers[VideoMAELayerLayout.ReconstructionHeadIndex].Forward(decoded);
@@ -799,7 +899,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Mean squared error between the predicted and the true pixels of the MASKED tubelet patches.
+    /// Mean squared error between the predicted and the target pixels of the MASKED tubelet patches.
     /// </summary>
     /// <param name="reconstructed">Reconstruction-head output
     /// [B * numTubelets, channels * tubeletSize * P * P, patchesH, patchesW].</param>
@@ -821,11 +921,28 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// as a clip had two or more tubelets (IndexOutOfRange from <see cref="PretrainMAE"/>).
     /// </para>
     /// <para>
-    /// The target is raw pixels. The reference implementation's optional per-patch target normalisation
-    /// (<c>normlize_target</c>) is not applied.
+    /// The target is the per-patch normalised pixels by default and the raw pixels when
+    /// <see cref="VideoMAEOptions.NormalizeTarget"/> is off; see <see cref="BuildReconstructionTarget"/>.
+    /// This is the value of the same objective <see cref="PretrainMAE"/> differentiates.
     /// </para>
     /// </remarks>
     internal T ComputeReconstructionLoss(Tensor<T> reconstructed, Tensor<T> original, bool[,,] mask)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var loss = ReconstructionObjective(reconstructed, original, mask);
+        return loss.Length > 0 ? loss.Data.Span[0] : NumOps.Zero;
+    }
+
+    /// <summary>
+    /// The masked-patch reconstruction objective as a scalar tensor on the autodiff tape.
+    /// </summary>
+    /// <remarks>
+    /// Expressed as engine operations (subtract, square, multiply by a 0/1 masked-patch tensor, sum, scale)
+    /// so that, recorded on a tape, it back-propagates into the reconstruction head, the decoder, the
+    /// encoder and the patch embedding. The squared error of a VISIBLE patch is multiplied by zero, so it
+    /// contributes neither loss nor gradient.
+    /// </remarks>
+    private Tensor<T> ReconstructionObjective(Tensor<T> reconstructed, Tensor<T> original, bool[,,] mask)
     {
         if (original.Rank != 5)
         {
@@ -860,38 +977,134 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             throw new ArgumentException("The mask does not match the clip's batch size and patch grid.", nameof(mask));
         }
 
-        T loss = NumOps.Zero;
-        int count = 0;
-
+        int maskedPatches = 0;
         for (int b = 0; b < batchSize; b++)
         {
             for (int ph = 0; ph < patchesH; ph++)
             {
                 for (int pw = 0; pw < patchesW; pw++)
                 {
-                    if (!mask[b, ph, pw])
+                    if (mask[b, ph, pw])
                     {
-                        continue;
+                        maskedPatches++;
                     }
+                }
+            }
+        }
 
-                    for (int t = 0; t < numTubelets; t++)
+        // Every masked patch contributes patchDim values in each of the clip's tubelets.
+        long count = (long)maskedPatches * numTubelets * patchDim;
+
+        var target = BuildReconstructionTarget(original, patchesH, patchesW);
+        var maskedOnly = BuildPatchMask(mask, numTubelets, patchDim, keepMasked: true);
+
+        var diff = Engine.TensorSubtract(reconstructed, target);
+        var squaredMasked = Engine.TensorMultiply(Engine.TensorMultiply(diff, diff), maskedOnly);
+        var allAxes = Enumerable.Range(0, squaredMasked.Rank).ToArray();
+        var total = Engine.ReduceSum(squaredMasked, allAxes, keepDims: false);
+
+        // With nothing masked the objective is an honest zero (and so is every gradient).
+        return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / Math.Max(1L, count)));
+    }
+
+    /// <summary>
+    /// The per-patch reconstruction target for a clip, laid out like the reconstruction head's output.
+    /// </summary>
+    /// <param name="original">The clip [B, T, C, H, W].</param>
+    /// <param name="patchesH">Patch rows.</param>
+    /// <param name="patchesW">Patch columns.</param>
+    /// <returns>[B * numTubelets, C * tubeletSize * P * P, patchesH, patchesW]: channel
+    /// <c>((ts * C + c) * P + y) * P + x</c> at patch <c>(ph, pw)</c> of tubelet <c>t</c> holds pixel
+    /// <c>original[b, t * tubeletSize + ts, c, ph * P + y, pw * P + x]</c>, normalised or raw.</returns>
+    /// <remarks>
+    /// <para>
+    /// With <see cref="VideoMAEOptions.NormalizeTarget"/> on (the default, as in the paper), every channel
+    /// of every tubelet patch is normalised over its own <c>tubeletSize x P x P</c> pixels:
+    /// <c>(x - mean) / (std + 1e-6)</c> with the unbiased standard deviation. This is the reference
+    /// implementation's <c>normlize_target=True</c> (VideoMAE <c>engine_for_pretraining.py</c>: a
+    /// <c>b (t h w) (p0 p1 p2) c</c> view normalised over the <c>p0 p1 p2</c> axis), which the paper
+    /// inherits from MAE (He et al. 2022, Sec. 4), where it improves representation quality. With it off,
+    /// the target is the raw pixels.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BuildReconstructionTarget(Tensor<T> original, int patchesH, int patchesW)
+    {
+        if (original.Rank != 5)
+        {
+            throw new ArgumentException("The original clip must be [B, T, C, H, W].", nameof(original));
+        }
+
+        int batchSize = original.Shape[0];
+        int numTubelets = original.Shape[1] / _tubeletSize;
+        int channels = original.Shape[2];
+        int patch = _patchSize;
+        int patchDim = channels * _tubeletSize * patch * patch;
+        int pixelsPerPatchChannel = _tubeletSize * patch * patch;
+        bool normalize = _options.NormalizeTarget;
+
+        var target = new Tensor<T>([batchSize * numTubelets, patchDim, patchesH, patchesW]);
+        var destination = target.Data.Span;
+        int plane = patchesH * patchesW;
+        var values = new double[pixelsPerPatchChannel];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < numTubelets; t++)
+            {
+                int row = b * numTubelets + t;
+                for (int ph = 0; ph < patchesH; ph++)
+                {
+                    for (int pw = 0; pw < patchesW; pw++)
                     {
-                        int row = b * numTubelets + t;
-                        for (int ts = 0; ts < _tubeletSize; ts++)
+                        for (int c = 0; c < channels; c++)
                         {
-                            int frame = t * _tubeletSize + ts;
-                            for (int c = 0; c < channels; c++)
+                            int k = 0;
+                            for (int ts = 0; ts < _tubeletSize; ts++)
+                            {
+                                int frame = t * _tubeletSize + ts;
+                                for (int y = 0; y < patch; y++)
+                                {
+                                    for (int x = 0; x < patch; x++)
+                                    {
+                                        values[k++] = NumOps.ToDouble(
+                                            original[b, frame, c, ph * patch + y, pw * patch + x]);
+                                    }
+                                }
+                            }
+
+                            double mean = 0.0;
+                            double scale = 1.0;
+                            if (normalize)
+                            {
+                                for (int i = 0; i < values.Length; i++)
+                                {
+                                    mean += values[i];
+                                }
+                                mean /= values.Length;
+
+                                double sumSquares = 0.0;
+                                for (int i = 0; i < values.Length; i++)
+                                {
+                                    double d = values[i] - mean;
+                                    sumSquares += d * d;
+                                }
+
+                                double unbiasedVariance = values.Length > 1 ? sumSquares / (values.Length - 1) : 0.0;
+                                scale = 1.0 / (Math.Sqrt(unbiasedVariance) + 1e-6);
+                            }
+
+                            k = 0;
+                            for (int ts = 0; ts < _tubeletSize; ts++)
                             {
                                 for (int y = 0; y < patch; y++)
                                 {
                                     for (int x = 0; x < patch; x++)
                                     {
                                         int channel = (((ts * channels) + c) * patch + y) * patch + x;
-                                        T diff = NumOps.Subtract(
-                                            reconstructed[row, channel, ph, pw],
-                                            original[b, frame, c, ph * patch + y, pw * patch + x]);
-                                        loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-                                        count++;
+                                        double value = normalize ? (values[k] - mean) * scale : values[k];
+                                        destination[(row * patchDim + channel) * plane + ph * patchesW + pw] =
+                                            NumOps.FromDouble(value);
+                                        k++;
                                     }
                                 }
                             }
@@ -901,7 +1114,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             }
         }
 
-        return count > 0 ? NumOps.Divide(loss, NumOps.FromDouble(count)) : NumOps.Zero;
+        return target;
     }
 
     private Tensor<T> GlobalAveragePool(Tensor<T> input)
@@ -920,17 +1133,6 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         var reshaped = Engine.Reshape(input, new[] { batchSize, channels, height * width });
         var meanBC = Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);  // [B, C]
         return Engine.Reshape(meanBC, new[] { batchSize, channels, 1, 1 });
-    }
-
-    private Tensor<T> ApplyGELU(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-            return NumOps.FromDouble(gelu);
-        });
     }
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
