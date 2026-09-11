@@ -60,7 +60,10 @@ public static class CloneEngine
             throw new ArgumentNullException(nameof(getDestinationParameterCount));
         if (source.GetType() != destination.GetType()) return;
 
-        int currentCount = getDestinationParameterCount();
+        // A fresh shell whose fitted state lives in buffers (a detector's standardisation statistics,
+        // say) has a deferred layout until Deserialize restores that state, and reading its count throws.
+        // Unknown is a mismatch like any other; Deserialize restores declared state before parameters.
+        long? currentCount = CountOrUnknown(getDestinationParameterCount);
         if (currentCount == expectedParameterCount) return;
 
         const BindingFlags Flags =
@@ -106,11 +109,16 @@ public static class CloneEngine
                 try
                 {
                     field.SetValue(destination, duplicate);
-                    int candidateCount = getDestinationParameterCount();
+                    long? candidateCount = CountOrUnknown(getDestinationParameterCount);
                     if (candidateCount == expectedParameterCount) return;
 
-                    if (Math.Abs((long)expectedParameterCount - candidateCount)
-                        < Math.Abs((long)expectedParameterCount - currentCount))
+                    // While the layout is deferred, a candidate that leaves it deferred is progress, not a
+                    // regression: every fitted slot has to be supplied before the count can resolve at all.
+                    bool keep = candidateCount is long candidate
+                        ? currentCount is not long closest
+                          || Math.Abs(expectedParameterCount - candidate) < Math.Abs(expectedParameterCount - closest)
+                        : currentCount is null;
+                    if (keep)
                     {
                         currentCount = candidateCount;
                     }
@@ -128,6 +136,19 @@ public static class CloneEngine
                     catch (Exception) { /* best-effort topology candidate rollback */ }
                 }
             }
+        }
+    }
+
+    /// <summary>The destination's parameter count, or null while its layout is still deferred.</summary>
+    private static long? CountOrUnknown(Func<int> getParameterCount)
+    {
+        try
+        {
+            return getParameterCount();
+        }
+        catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
+        {
+            return null;
         }
     }
 
@@ -497,6 +518,116 @@ public static class CloneEngine
     /// untouched, exactly as before.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Copies a fitted model's learned state field by field into a configuration copy of it, deep-copying
+    /// everything mutable so the two share nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For models whose learned state is not all carried by the flat parameter vector: shapes that exist only
+    /// after fitting (a detector's weight matrices), the member models of an ensemble, and the training data a
+    /// distance-based model keeps. A serialize-and-restore clone has no structure to pour those values into.
+    /// </para>
+    /// <para>
+    /// Sub-models go through their clone contract, tensors, matrices and vectors through their own
+    /// <c>Clone()</c>, and collections through the same deep-container policy as configuration. Options and
+    /// objects that carry no learned state - a <see cref="Random"/>, a lock, a delegate, a stateless
+    /// collaborator with no clone - stay as the constructor built them. <c>[Scratch]</c> fields are skipped.
+    /// This is what the shallow <c>MemberwiseClone</c> overrides removed in #2150 should have been.
+    /// </para>
+    /// </remarks>
+    internal static void CopyFittedFields(object source, object destination)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        if (source.GetType() != destination.GetType())
+            throw new ArgumentException("Source and destination must be the same runtime type.", nameof(destination));
+
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        // One duplicate per source object. Two fields that alias one object in the source - a cached
+        // interface view of the model beside the model itself - must alias one duplicate in the copy, or
+        // the copy trains one and predicts with the other.
+        var copies = new Dictionary<object, object?>(ReferenceIdentityComparer.Instance);
+        for (var type = source.GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            // ModelBase's own fields are per-instance bookkeeping - registries whose accessors close over the
+            // instance that registered them, and their registered flags - not fitted state. Copying the flag
+            // without the registry left a copy marked registered with nothing declared.
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ModelBase<,,>)) continue;
+
+            foreach (var field in type.GetFields(Flags))
+            {
+                if (field.IsLiteral) continue;
+                if (field.GetCustomAttributesData().Any(attribute => attribute.AttributeType.Name == "ScratchAttribute"))
+                    continue;
+
+                object? value = field.GetValue(source);
+                object? copy;
+                if (value is not null && !value.GetType().IsValueType && copies.TryGetValue(value, out object? existing))
+                {
+                    copy = existing;
+                }
+                else
+                {
+                    if (!TryCopyFittedValue(value, out copy)) continue;
+                    if (value is not null && !value.GetType().IsValueType) copies[value] = copy;
+                }
+
+                if (copy is not null && !field.FieldType.IsInstanceOfType(copy)) continue;
+                field.SetValue(destination, copy);
+            }
+        }
+    }
+
+    /// <summary>Compares by reference, so a duplicate is keyed on the object rather than on its value.</summary>
+    private sealed class ReferenceIdentityComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceIdentityComparer Instance = new ReferenceIdentityComparer();
+
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
+    private static bool TryCopyFittedValue(object? value, out object? copy)
+    {
+        copy = value;
+        if (value is null || value is string) return true;
+        if (value is ModelOptions || value is Random || value is Delegate) return false;
+
+        var type = value.GetType();
+        if (type.IsValueType) return true;
+
+        object? component = DuplicateSubModel(value);
+        if (!ReferenceEquals(component, value))
+        {
+            copy = component;
+            return true;
+        }
+
+        var clone = type.GetMethod("Clone", BindingFlags.Public | BindingFlags.Instance, binder: null, Type.EmptyTypes, modifiers: null);
+        if (clone is not null && clone.ReturnType != typeof(void))
+        {
+            object? cloned = clone.Invoke(value, null);
+            if (cloned is not null && type.IsInstanceOfType(cloned) && !ReferenceEquals(cloned, value))
+            {
+                copy = cloned;
+                return true;
+            }
+        }
+
+        if (value is Array || value is IDictionary || value is IList
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)))
+        {
+            copy = Duplicate(value);
+            return true;
+        }
+
+        return false;
+    }
+
     private static object? DuplicateSubModel(object? value)
     {
         if (value is null) return null;
