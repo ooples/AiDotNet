@@ -32,7 +32,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegNeXt_Construction_Succeeds()
     {
-        var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
+        var model = new SegNeXt<double>(Arch(), options: new SegNeXtOptions { ModelSize = SegNeXtModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -40,7 +40,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegNeXt_Predict_ReturnsOutput()
     {
-        var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
+        var model = new SegNeXt<double>(Arch(), options: new SegNeXtOptions { ModelSize = SegNeXtModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -49,7 +49,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegNeXt_Train_DoesNotThrow()
     {
-        var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
+        var model = new SegNeXt<double>(Arch(), options: new SegNeXtOptions { ModelSize = SegNeXtModelSize.Tiny });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -70,7 +70,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task InternImage_Construction_Succeeds()
     {
-        var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
+        var model = new InternImage<double>(Arch(), options: new InternImageOptions { ModelSize = InternImageModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -78,7 +78,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task InternImage_Predict_ReturnsOutput()
     {
-        var model = new InternImage<double>(Arch(), modelSize: InternImageModelSize.Tiny);
+        var model = new InternImage<double>(Arch(), options: new InternImageOptions { ModelSize = InternImageModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -98,7 +98,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ViTAdapter_Construction_Succeeds()
     {
-        var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
+        var model = new ViTAdapter<double>(Arch(), options: new ViTAdapterOptions { ModelSize = ViTAdapterModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -106,7 +106,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ViTAdapter_Predict_ReturnsOutput()
     {
-        var model = new ViTAdapter<double>(Arch(), modelSize: ViTAdapterModelSize.Base);
+        var model = new ViTAdapter<double>(Arch(), options: new ViTAdapterOptions { ModelSize = ViTAdapterModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -126,7 +126,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ViTCoMer_Construction_Succeeds()
     {
-        var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
+        var model = new ViTCoMer<double>(Arch(), options: new ViTCoMerOptions { ModelSize = ViTCoMerModelSize.Small });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -134,7 +134,7 @@ public class SemanticSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ViTCoMer_Predict_ReturnsOutput()
     {
-        var model = new ViTCoMer<double>(Arch(), modelSize: ViTCoMerModelSize.Small);
+        var model = new ViTCoMer<double>(Arch(), options: new ViTCoMerOptions { ModelSize = ViTCoMerModelSize.Small });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

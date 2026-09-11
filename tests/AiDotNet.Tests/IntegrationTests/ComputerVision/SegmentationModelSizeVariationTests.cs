@@ -59,7 +59,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SegFormerModelSize.B5)]
     public void SegFormer_AllModelSizes_ConstructAndPredict(SegFormerModelSize size)
     {
-        var model = new SegFormer<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new SegFormer<float>(Arch(), options: new SegFormerOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0, $"SegFormer-{size} has no parameters");
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -93,7 +93,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SAMModelSize.ViTHuge)]
     public void SAM_AllModelSizes_ConstructAndPredict(SAMModelSize size)
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: size);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -110,7 +110,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SAM21ModelSize.Large)]
     public void SAM21_AllModelSizes_ConstructAndPredict(SAM21ModelSize size)
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: size);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -127,7 +127,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SegNeXtModelSize.Large)]
     public void SegNeXt_AllModelSizes_ConstructAndPredict(SegNeXtModelSize size)
     {
-        var model = new SegNeXt<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new SegNeXt<float>(Arch(), options: new SegNeXtOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -145,7 +145,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(YOLOv8SegModelSize.X)]
     public void YOLOv8Seg_AllModelSizes_ConstructAndPredict(YOLOv8SegModelSize size)
     {
-        var model = new YOLOv8Seg<float>(Arch(), modelSize: size);
+        var model = new YOLOv8Seg<float>(Arch(), options: new YOLOv8SegOptions { ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -156,7 +156,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(YOLOv9SegModelSize.E)]
     public void YOLOv9Seg_AllModelSizes_ConstructAndPredict(YOLOv9SegModelSize size)
     {
-        var model = new YOLOv9Seg<float>(Arch(), modelSize: size);
+        var model = new YOLOv9Seg<float>(Arch(), options: new YOLOv9SegOptions { ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -170,7 +170,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(YOLO11SegModelSize.X)]
     public void YOLO11Seg_AllModelSizes_ConstructAndPredict(YOLO11SegModelSize size)
     {
-        var model = new YOLO11Seg<float>(Arch(), modelSize: size);
+        var model = new YOLO11Seg<float>(Arch(), options: new YOLO11SegOptions { ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -184,7 +184,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(YOLOv12SegModelSize.X)]
     public void YOLOv12Seg_AllModelSizes_ConstructAndPredict(YOLOv12SegModelSize size)
     {
-        var model = new YOLOv12Seg<float>(Arch(), modelSize: size);
+        var model = new YOLOv12Seg<float>(Arch(), options: new YOLOv12SegOptions { ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -198,7 +198,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(YOLO26SegModelSize.X)]
     public void YOLO26Seg_AllModelSizes_ConstructAndPredict(YOLO26SegModelSize size)
     {
-        var model = new YOLO26Seg<float>(Arch(), modelSize: size);
+        var model = new YOLO26Seg<float>(Arch(), options: new YOLO26SegOptions { ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -214,7 +214,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(NnUNetModelSize.UNet3DCascade)]
     public void NnUNet_AllModelSizes_ConstructAndPredict(NnUNetModelSize size)
     {
-        var model = new NnUNet<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new NnUNet<float>(Arch(), options: new NnUNetOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -227,7 +227,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(MedNeXtModelSize.Large)]
     public void MedNeXt_AllModelSizes_ConstructAndPredict(MedNeXtModelSize size)
     {
-        var model = new MedNeXt<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new MedNeXt<float>(Arch(), options: new MedNeXtOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -243,7 +243,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(VisionMambaModelSize.Base)]
     public void VisionMamba_AllModelSizes_ConstructAndPredict(VisionMambaModelSize size)
     {
-        var model = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -255,7 +255,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(VMambaModelSize.Base)]
     public void VMamba_AllModelSizes_ConstructAndPredict(VMambaModelSize size)
     {
-        var model = new VMamba<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new VMamba<float>(Arch(), options: new VMambaOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -271,7 +271,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(PIDNetModelSize.Large)]
     public void PIDNet_AllModelSizes_ConstructAndPredict(PIDNetModelSize size)
     {
-        var model = new PIDNet<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new PIDNet<float>(Arch(), options: new PIDNetOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -286,7 +286,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(KMaXDeepLabModelSize.ConvNeXtLarge)]
     public void KMaXDeepLab_AllModelSizes_ConstructAndPredict(KMaXDeepLabModelSize size)
     {
-        var model = new KMaXDeepLab<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new KMaXDeepLab<float>(Arch(), options: new KMaXDeepLabOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -311,7 +311,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SegGPTModelSize.ViTLarge)]
     public void SegGPT_AllModelSizes_ConstructAndPredict(SegGPTModelSize size)
     {
-        var model = new SegGPT<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new SegGPT<float>(Arch(), options: new SegGPTOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -322,7 +322,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SEEMModelSize.Large)]
     public void SEEM_AllModelSizes_ConstructAndPredict(SEEMModelSize size)
     {
-        var model = new SEEM<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new SEEM<float>(Arch(), options: new SEEMOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -337,7 +337,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(DEVAModelSize.Large)]
     public void DEVA_AllModelSizes_ConstructAndPredict(DEVAModelSize size)
     {
-        var model = new DEVA<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new DEVA<float>(Arch(), options: new DEVAOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -348,7 +348,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(EfficientTAMModelSize.Small)]
     public void EfficientTAM_AllModelSizes_ConstructAndPredict(EfficientTAMModelSize size)
     {
-        var model = new EfficientTAM<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -363,7 +363,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(PointTransformerV3ModelSize.Large)]
     public void PointTransformerV3_AllModelSizes_ConstructAndPredict(PointTransformerV3ModelSize size)
     {
-        var model = new PointTransformerV3<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new PointTransformerV3<float>(Arch(), options: new PointTransformerV3Options { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -374,7 +374,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SonataModelSize.Large)]
     public void Sonata_AllModelSizes_ConstructAndPredict(SonataModelSize size)
     {
-        var model = new Sonata<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new Sonata<float>(Arch(), options: new SonataOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -385,7 +385,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(ConcertoModelSize.Large)]
     public void Concerto_AllModelSizes_ConstructAndPredict(ConcertoModelSize size)
     {
-        var model = new Concerto<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new Concerto<float>(Arch(), options: new ConcertoOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -401,7 +401,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(SAMHQModelSize.ViTHuge)]
     public void SAMHQ_AllModelSizes_ConstructAndPredict(SAMHQModelSize size)
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: size);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -438,7 +438,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(InternImageModelSize.Huge)]
     public void InternImage_AllModelSizes_ConstructAndPredict(InternImageModelSize size)
     {
-        var model = new InternImage<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new InternImage<float>(Arch(), options: new InternImageOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -460,8 +460,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SegNeXt_LargerSizeHasMoreParameters()
     {
-        var small = new SegNeXt<float>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
-        var large = new SegNeXt<float>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Large);
+        var small = new SegNeXt<float>(Arch(), options: new SegNeXtOptions { NumClasses = 5, ModelSize = SegNeXtModelSize.Tiny });
+        var large = new SegNeXt<float>(Arch(), options: new SegNeXtOptions { NumClasses = 5, ModelSize = SegNeXtModelSize.Large });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"Large ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
@@ -469,8 +469,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_LargerSizeHasMoreParameters()
     {
-        var small = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
-        var large = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTHuge);
+        var small = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
+        var large = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTHuge });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"ViTHuge ({large.ParameterCount}) should have more params than ViTBase ({small.ParameterCount})");
     }
@@ -478,8 +478,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task NnUNet_LargerSizeHasMoreParameters()
     {
-        var small = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
-        var large = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet3DCascade);
+        var small = new NnUNet<float>(Arch(), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet2D });
+        var large = new NnUNet<float>(Arch(), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet3DCascade });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"UNet3DCascade ({large.ParameterCount}) should have more params than UNet2D ({small.ParameterCount})");
     }
@@ -487,8 +487,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task VisionMamba_LargerSizeHasMoreParameters()
     {
-        var small = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
-        var large = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Base);
+        var small = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Tiny });
+        var large = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Base });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"Base ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
@@ -496,8 +496,8 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task PIDNet_LargerSizeHasMoreParameters()
     {
-        var small = new PIDNet<float>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
-        var large = new PIDNet<float>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Large);
+        var small = new PIDNet<float>(Arch(), options: new PIDNetOptions { NumClasses = 5, ModelSize = PIDNetModelSize.Small });
+        var large = new PIDNet<float>(Arch(), options: new PIDNetOptions { NumClasses = 5, ModelSize = PIDNetModelSize.Large });
         Assert.True(large.ParameterCount > small.ParameterCount,
             $"Large ({large.ParameterCount}) should have more params than Small ({small.ParameterCount})");
     }

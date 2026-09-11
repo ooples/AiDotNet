@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new MedSAM2&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new MedSAM2&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new MedSAM2&lt;double&gt;(architecture,
+///     options: new MedSAM2Options { NumClasses = 1, DropRate = 0, ModelSize = MedSAM2ModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for endoscopy and 3D volume segmentation
-/// var onnxModel = new MedSAM2&lt;double&gt;(architecture, "medsam2.onnx", numClasses: 1);
+/// var onnxModel = new MedSAM2&lt;double&gt;(architecture, "medsam2.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -101,9 +104,6 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -112,21 +112,20 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public MedSAM2(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        MedSAM2ModelSize modelSize = MedSAM2ModelSize.Tiny, double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         MedSAM2Options? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture,
         // defaults the loss to CrossEntropyWithLogitsLoss and stores the modality list - exactly
         // what the deleted lines did by hand. `optimizer` is passed straight through INCLUDING
         // null, and the base stores it verbatim in _optimizer; MedSAM2 never asks for the base's
         // lazy default, so a null here still routes training through GetOrCreateBaseOptimizer.
-        : base(architecture, optimizer, lossFunction, numClasses, MedSAM2Modalities)
+        : base(architecture, optimizer, lossFunction, (options ??= new MedSAM2Options()).NumClasses, MedSAM2Modalities)
     {
-        _options = options ?? new MedSAM2Options(); Options = _options;
+        _options = options; Options = _options;
         ApplyMedSAM2InputFallback(architecture);
-        _modelSize = modelSize; _dropRate = dropRate;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
     }
 
@@ -152,8 +151,6 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -163,18 +160,18 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public MedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1, MedSAM2ModelSize modelSize = MedSAM2ModelSize.Tiny,
+    public MedSAM2(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         MedSAM2Options? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry, stores the modality list and opens the InferenceSession - the same lines this
         // used to repeat.
-        : base(architecture, onnxModelPath, numClasses, MedSAM2Modalities)
+        : base(architecture, onnxModelPath, (options ??= new MedSAM2Options()).NumClasses, MedSAM2Modalities)
     {
-        _options = options ?? new MedSAM2Options(); Options = _options;
+        _options = options; Options = _options;
         ApplyMedSAM2InputFallback(architecture);
-        _modelSize = modelSize; _dropRate = 0;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
     }
     #endregion

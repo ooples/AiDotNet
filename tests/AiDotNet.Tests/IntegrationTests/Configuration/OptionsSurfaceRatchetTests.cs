@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 286;
+    private const int Baseline = 130;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -83,7 +83,13 @@ public class OptionsSurfaceRatchetTests
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 307;
+    /// <para>
+    /// 307 to 151 in one step when the segmentation family moved: 62 models x numClasses,
+    /// dropRate and (for 32 of them) modelSize. Both counts fell by the same 156, which is itself
+    /// the diagnostic — not one of those 62 options classes declared a property of a matching
+    /// name, so none of them had been drawing name credit.
+    /// </para>
+    private const int ConstructorBaseline = 151;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

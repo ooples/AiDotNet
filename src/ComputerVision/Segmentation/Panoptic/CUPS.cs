@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new CUPS&lt;double&gt;(architecture, numClasses: 133);
+/// var model = new CUPS&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new CUPS&lt;double&gt;(architecture,
+///     options: new CUPSOptions { NumClasses = 133, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for scene understanding
-/// var onnxModel = new CUPS&lt;double&gt;(architecture, "cups.onnx", numClasses: 133);
+/// var onnxModel = new CUPS&lt;double&gt;(architecture, "cups.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -95,8 +98,6 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -105,17 +106,16 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     /// </remarks>
     public CUPS(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 133,
-        double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         CUPSOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
         // The stuff/thing split is the same one/two-thirds rule the explicit interface members used.
-        : base(architecture, optimizer, lossFunction, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, (options ??= new CUPSOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new CUPSOptions(); Options = _options;
-        _dropRate = dropRate;
+        _options = options; Options = _options;
+        _dropRate = _options.DropRate;
         if (_options.ChannelDimensions.Length != 4 || _options.StageDepths.Length != 4)
             throw new ArgumentException("CUPS requires exactly four encoder stage widths and depths.", nameof(options));
         if (_options.ChannelDimensions.Any(d => d <= 0)
@@ -133,7 +133,6 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -143,16 +142,16 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public CUPS(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 133,
+    public CUPS(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         CUPSOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, (options ??= new CUPSOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new CUPSOptions(); Options = _options;
-        _dropRate = 0.1;
+        _options = options; Options = _options;
+        _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
         _decoderDim = 256;

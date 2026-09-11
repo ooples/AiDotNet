@@ -4878,9 +4878,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     $"optimizer: {conservativeSmokeAdamWOptimizer}, " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), numClasses: 1, " +
+                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2Options { " +
-                    "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumClasses = 1, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 4, PatchSize = 8 })";
             }
             else if (model.ClassName == "DannaSep" && model.TypeParameterCount == 1)
@@ -4959,9 +4959,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     $"optimizer: {noDecaySmokeAdamWOptimizer}, " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), numClasses: 1, " +
+                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16, UseGroupNormalization = true })";
             }
             else if (model.ClassName == "DepthAnythingV2" && model.TypeParameterCount == 1)
@@ -5307,16 +5307,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Efficient.FastSAMOptions { " +
-                    "ChannelDims = new[] { 8, 16, 24, 32 }, Depths = new[] { 1, 1, 1, 1 }, DecoderDim = 8 })";
+                    "NumClasses = 1, ChannelDims = new[] { 8, 16, 24, 32 }, Depths = new[] { 1, 1, 1, 1 }, DecoderDim = 8 })";
             }
             else if (model.ClassName == "EfficientSAM" && model.TypeParameterCount == 1)
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
-                    "options: new AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAMOptions { EncoderLayerCount = 1 })";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAMOptions { NumClasses = 1, EncoderLayerCount = 1 })";
             }
             else if (model.ClassName == "DiffCutSegmentation" && model.TypeParameterCount == 1)
             {
@@ -5326,9 +5326,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentationOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 8 })";
             }
             else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
@@ -5362,9 +5362,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // failed: at 32 the stride-4 stem declared [96, 8, 8] against an actual
                     // [96, 28, 28] (32/4 vs 112/4), taking out nine invariants. Seventh instance.
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SAM21ModelSize.Tiny, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
-                    "{ MemoryBankSize = 2 })";
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
+                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAM21ModelSize.Tiny, DropRate = 0.0, MemoryBankSize = 2 })";
             }
             else if (model.ClassName == "SAM" && model.TypeParameterCount == 1 &&
                      model.FullyQualifiedName.IndexOf(
@@ -5387,9 +5386,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SAMModelSize.ViTBase, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
-                    "{ LearningRate = 1e-5 })";
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
+                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAMModelSize.ViTBase, DropRate = 0.0, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "SegGPT" && model.TypeParameterCount == 1)
             {
@@ -5401,8 +5399,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SegGPTModelSize.ViTLarge, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Interactive.SegGPTOptions { " +
+                    "NumClasses = 1, ModelSize = AiDotNet.Enums.SegGPTModelSize.ViTLarge, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16 })";
             }
@@ -5423,10 +5421,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // layers claim, not what they compute; the bounded ChannelDimensions /
                     // StageDepths that keep this off the OOM path are untouched.
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
-                    "DecoderDimension = 16, DropoutRate = 0.0, LearningRate = 1e-4, WeightDecay = 0.01 })";
+                    "NumClasses = 1, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "DecoderDimension = 16, LearningRate = 1e-4, WeightDecay = 0.01 })";
             }
             else if (model.ClassName == "SegMamba" && model.TypeParameterCount == 1)
             {
@@ -5439,9 +5437,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 1, outputSize: 14), " +
-                    "numClasses: 14, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.SegMambaOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 14, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "StateDimension = 4 })";
             }
             else if (model.ClassName == "EDVR" && model.TypeParameterCount == 1)
@@ -5973,7 +5970,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAMOptions { NumClasses = 2 })";
             }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1)
             {
@@ -5982,7 +5980,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { NumClasses = 2 })";
             }
             else if (model.ClassName == "MaskAdapter" && model.TypeParameterCount == 1)
             {
@@ -5993,7 +5992,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     // 128, matching the emitted fixture. Also predicted by ADNTEST002: at 32 the
                     // stride-4 stem declared [64, 8, 8] against an actual [64, 32, 32]. Eighth instance.
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4)";
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions { NumClasses = 4 })";
             }
             else if (model.ClassName == "Mask2Former" && model.TypeParameterCount == 1)
             {
@@ -6039,7 +6039,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSegDiffV2Options { NumClasses = 2 })";
             }
             else if (model.ClassName == "MoG" && model.TypeParameterCount == 1)
             {
@@ -6620,9 +6621,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
+                    "NumClasses = 1, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
                     "StageDepths = new[] { 1, 1, 1, 1 }, DecoderDimension = 16, " +
                     "OptimizerBatchSize = 1 })";
             }
@@ -7572,9 +7573,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Diffusion.ODISESegmentationOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
+                    "NumClasses = 4, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
                     "StageDepths = new[] { 1, 1, 1, 1 }, DecoderDimension = 16 })";
             }
             else if (model.ClassName == "NaturalSpeech2" && model.TypeParameterCount == 1)
@@ -7866,9 +7867,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "optimizer: null, lossFunction: null, numClasses: 4, " +
-                    "modelSize: AiDotNet.Enums.SEEMModelSize.Tiny, dropRate: 0.0, " +
+                    "optimizer: null, lossFunction: null, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Interactive.SEEMOptions { " +
+                    "NumClasses = 4, ModelSize = AiDotNet.Enums.SEEMModelSize.Tiny, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16, LearningRate = 1e-5, WeightDecay = 0.01 })";
             }
@@ -8809,10 +8810,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
                     "new AiDotNet.NeuralNetworks.Layers.ViTCoMerSegmentationLayer<double>(" +
                     "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0) }), " +
-                    "optimizer: null, lossFunction: null, numClasses: 4, " +
-                    "modelSize: AiDotNet.Enums.ViTCoMerModelSize.Small, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMerOptions " +
-                    "{ LearningRate = 6e-5 })";
+                    "optimizer: null, lossFunction: null, " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMerOptions " +
+                    "{ NumClasses = 4, ModelSize = AiDotNet.Enums.ViTCoMerModelSize.Small, DropRate = 0.0, LearningRate = 6e-5 })";
             }
             else if (model.ClassName == "Vocos" && model.TypeParameterCount == 1)
             {
@@ -10010,9 +10010,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions { " +
-                    "ChannelDimensions = new[] { 16, 32, 64, 128 }, " +
+                    "NumClasses = 4, DropRate = 0.0, ChannelDimensions = new[] { 16, 32, 64, 128 }, " +
                     "StageDepths = new[] { 1, 1, 2, 1 }, DecoderDimension = 32 })";
             }
             else if (model.ClassName == "OpenVocabSAM" && model.TypeParameterCount == 1)
@@ -10028,8 +10027,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 16), " +
-                    "numClasses: 1, options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions { " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "NeckEmbeddingDimension = 32, DecoderDimension = 16, LearningRate = 1e-3, " +
                     "WeightDecay = 0.0 })";
             }

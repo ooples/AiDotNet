@@ -48,10 +48,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new SegNeXt&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new SegNeXt&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SegNeXt&lt;double&gt;(architecture,
+///     options: new SegNeXtOptions { NumClasses = 150, DropRate = 0.1, ModelSize = SegNeXtModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for inference
-/// var onnxModel = new SegNeXt&lt;double&gt;(architecture, "segnext.onnx", numClasses: 150);
+/// var onnxModel = new SegNeXt&lt;double&gt;(architecture, "segnext.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -121,12 +124,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// rates with decoupled weight decay for better generalization.</param>
     /// <param name="lossFunction">The loss function used to measure prediction error during training
     /// (default: CrossEntropyLoss, the standard for multi-class segmentation tasks).</param>
-    /// <param name="numClasses">Number of semantic classes to predict. Set this to match your dataset
-    /// (default: 150 for the ADE20K benchmark, use 19 for Cityscapes, or your custom class count).</param>
-    /// <param name="modelSize">Model size variant controlling the number of parameters and
-    /// accuracy (default: Tiny, the smallest and fastest variant with 4.3M parameters).</param>
-    /// <param name="dropRate">Dropout rate applied for regularization (default: 0.1). Higher values
-    /// reduce overfitting but may slow convergence.</param>
     /// <param name="options">Optional model options including random seed for reproducibility.</param>
     /// <remarks>
     /// <para>
@@ -140,22 +137,18 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// by a Hamburger decoder that aggregates global context using matrix decomposition.
     /// </para>
     /// </remarks>
-    public SegNeXt(
-        NeuralNetworkArchitecture<T> architecture,
+    public SegNeXt(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
-        double dropRate = 0.1,
         SegNeXtOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SegNeXtOptions()).NumClasses)
     {
-        _options = options ?? new SegNeXtOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }
@@ -167,10 +160,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// should match the ONNX model's expected input (typically 512x512x3 or 1024x1024x3).</param>
     /// <param name="onnxModelPath">Absolute or relative path to the pre-trained ONNX model file.
     /// Pre-trained SegNeXt ONNX models can be exported from the MMSegmentation framework.</param>
-    /// <param name="numClasses">Number of semantic classes the ONNX model was trained to predict
-    /// (default: 150 for ADE20K). This must match the model's training configuration.</param>
-    /// <param name="modelSize">Model size variant for metadata purposes (default: Tiny). This should
-    /// match the ONNX model's architecture so metadata accurately reflects the model.</param>
     /// <param name="options">Optional model options including random seed for reproducibility.</param>
     /// <remarks>
     /// <para>
@@ -185,20 +174,17 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SegNeXt(
-        NeuralNetworkArchitecture<T> architecture,
+    public SegNeXt(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
         SegNeXtOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SegNeXtOptions()).NumClasses)
     {
-        _options = options ?? new SegNeXtOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }
@@ -280,7 +266,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// <summary>
     /// Returns the architecture configuration for a given SegNeXt model size.
     /// </summary>
-    /// <param name="modelSize">The SegNeXt model size variant.</param>
     /// <returns>A tuple containing channel dimensions per stage, depths per stage,
     /// and the Hamburger decoder hidden dimension.</returns>
     /// <remarks>

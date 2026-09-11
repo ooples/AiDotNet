@@ -47,10 +47,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new ViTAdapter&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new ViTAdapter&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new ViTAdapter&lt;double&gt;(architecture,
+///     options: new ViTAdapterOptions { NumClasses = 150, DropRate = 0.1, ModelSize = ViTAdapterModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for inference
-/// var onnxModel = new ViTAdapter&lt;double&gt;(architecture, "vitadapter.onnx", numClasses: 150);
+/// var onnxModel = new ViTAdapter&lt;double&gt;(architecture, "vitadapter.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -108,9 +111,6 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW, as used in all ViT-Adapter
     /// experiments with layer-wise learning rate decay).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of semantic classes (default: 150 for ADE20K).</param>
-    /// <param name="modelSize">Model size variant (default: Base, 86M params).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -120,22 +120,18 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// adapt it for segmentation with minimal extra parameters.
     /// </para>
     /// </remarks>
-    public ViTAdapter(
-        NeuralNetworkArchitecture<T> architecture,
+    public ViTAdapter(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
-        double dropRate = 0.1,
         ViTAdapterOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new ViTAdapterOptions()).NumClasses)
     {
-        _options = options ?? new ViTAdapterOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }
@@ -145,8 +141,6 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of semantic classes (default: 150).</param>
-    /// <param name="modelSize">Model size for metadata (default: Base).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -157,20 +151,17 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if ONNX path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if ONNX file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if ONNX runtime fails.</exception>
-    public ViTAdapter(
-        NeuralNetworkArchitecture<T> architecture,
+    public ViTAdapter(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
         ViTAdapterOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new ViTAdapterOptions()).NumClasses)
     {
-        _options = options ?? new ViTAdapterOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }

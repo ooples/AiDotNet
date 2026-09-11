@@ -38,5 +38,27 @@
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
   </ItemGroup>
+  <!--
+    SQLitePCLRaw.lib.e_sqlite3 2.1.12 dropped the win-arm (ARM32) runtime: the package ships only
+    win-arm64, win-x64 and win-x86. Its own buildTransitive/net461 targets were not updated to
+    match and still declare runtimes\win-arm\native\e_sqlite3.dll as Content, so every .NET
+    Framework build of this project fails with MSB3030 on a file the package does not contain.
+    2.1.11 shipped that file; 2.1.12 does not. It arrives transitively as
+    Microsoft.Data.Sqlite -> SQLitePCLRaw.bundle_e_sqlite3.
+
+    Dropping the item rather than pinning back to 2.1.11 keeps the native SQLite binary current,
+    and removes nothing that could ever be loaded here: the reference is to a 32-bit ARM build of
+    .NET Framework, which this project does not target.
+
+    Remove this once the upstream package declares only files it ships.
+  -->
+  <Target Name="DropMissingWinArmSqliteContent"
+          AfterTargets="ResolvePackageAssets"
+          Condition="'$(TargetFramework)' == 'net471'">
+    <ItemGroup>
+      <Content Remove="@(Content)"
+               Condition="$([System.String]::Copy('%(Identity)').Contains('win-arm\native\e_sqlite3.dll'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>

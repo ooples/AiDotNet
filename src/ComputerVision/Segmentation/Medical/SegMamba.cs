@@ -163,14 +163,13 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
     /// <summary>Initializes SegMamba in native (trainable) mode.</summary>
     public SegMamba(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 14,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         SegMambaOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // lazily via CreateDefaultOptimizer(), overridden below to keep SegMamba's 1e-4 AdamW.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SegMambaOptions()).NumClasses)
     {
-        _options = options ?? new SegMambaOptions(); Options = _options;
+        _options = options; Options = _options;
         // InputHeight/InputWidth stay verbatim from the architecture (SegMamba reported them that
         // way); the base's 512 fallback would otherwise invent a size this 3D model never uses.
         _height = architecture.InputHeight;
@@ -182,7 +181,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         // single-channel volume, and the first real forward reported
         //     ArgumentException : Input channels (1) must match kernel in_channels (3).
         _inChannels = _options.InputChannels;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
     }
@@ -196,17 +195,17 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
             this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
     /// <summary>Initializes SegMamba in ONNX (inference-only) mode.</summary>
-    public SegMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 14,
+    public SegMamba(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         SegMambaOptions? options = null)
         // The base validates the path, sets ONNX mode and opens the InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SegMambaOptions()).NumClasses)
     {
-        _options = options ?? new SegMambaOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight;
         _width = architecture.InputWidth;
         _inChannels = _options.InputChannels;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
     }

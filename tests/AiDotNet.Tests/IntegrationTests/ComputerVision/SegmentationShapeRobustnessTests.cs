@@ -54,7 +54,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]     // 4D batched B=1
     public void SegFormer_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SegFormer<float>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(), options: new SegFormerOptions { NumClasses = 5, ModelSize = SegFormerModelSize.B0 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -65,7 +65,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SegNeXt_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SegNeXt<float>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
+        var model = new SegNeXt<float>(Arch(), options: new SegNeXtOptions { NumClasses = 5, ModelSize = SegNeXtModelSize.Tiny });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -76,7 +76,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void InternImage_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new InternImage<float>(Arch(), numClasses: 5, modelSize: InternImageModelSize.Tiny);
+        var model = new InternImage<float>(Arch(), options: new InternImageOptions { NumClasses = 5, ModelSize = InternImageModelSize.Tiny });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -87,7 +87,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void ViTAdapter_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new ViTAdapter<float>(Arch(), numClasses: 5, modelSize: ViTAdapterModelSize.Small);
+        var model = new ViTAdapter<float>(Arch(), options: new ViTAdapterOptions { NumClasses = 5, ModelSize = ViTAdapterModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -98,7 +98,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void ViTCoMer_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new ViTCoMer<float>(Arch(), numClasses: 5, modelSize: ViTCoMerModelSize.Small);
+        var model = new ViTCoMer<float>(Arch(), options: new ViTCoMerOptions { NumClasses = 5, ModelSize = ViTCoMerModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -109,7 +109,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void DiffCut_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new DiffCut<float>(Arch(), numClasses: 5);
+        var model = new DiffCut<float>(Arch(), options: new DiffCutOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -120,7 +120,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void DiffSeg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new DiffSeg<float>(Arch(), numClasses: 5);
+        var model = new DiffSeg<float>(Arch(), options: new DiffSegOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -168,7 +168,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -179,7 +179,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAM21_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.BasePlus);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.BasePlus });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -190,7 +190,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAMHQ_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = SAMHQModelSize.ViTBase });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -227,7 +227,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void PIDNet_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new PIDNet<float>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<float>(Arch(), options: new PIDNetOptions { NumClasses = 5, ModelSize = PIDNetModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -238,7 +238,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void FastSAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new FastSAM<float>(Arch(), numClasses: 1);
+        var model = new FastSAM<float>(Arch(), options: new FastSAMOptions { NumClasses = 1 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -249,7 +249,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void MobileSAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new MobileSAM<float>(Arch(), numClasses: 1);
+        var model = new MobileSAM<float>(Arch(), options: new MobileSAMOptions { NumClasses = 1 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -260,7 +260,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void EfficientSAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new EfficientSAM<float>(Arch(), numClasses: 1);
+        var model = new EfficientSAM<float>(Arch(), options: new EfficientSAMOptions { NumClasses = 1 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -275,7 +275,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void NnUNet_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet2D });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -286,7 +286,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void TransUNet_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new TransUNet<float>(Arch(), numClasses: 5, modelSize: TransUNetModelSize.Base);
+        var model = new TransUNet<float>(Arch(), options: new TransUNetOptions { NumClasses = 5, ModelSize = TransUNetModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -297,7 +297,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SwinUNETR_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SwinUNETR<float>(Arch(), numClasses: 5, modelSize: SwinUNETRModelSize.Base);
+        var model = new SwinUNETR<float>(Arch(), options: new SwinUNETROptions { NumClasses = 5, ModelSize = SwinUNETRModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -308,7 +308,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void MedSAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new MedSAM<float>(Arch(), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<float>(Arch(), options: new MedSAMOptions { NumClasses = 5, ModelSize = MedSAMModelSize.ViTBase });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -319,7 +319,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void MedNeXt_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new MedNeXt<float>(Arch(), numClasses: 5, modelSize: MedNeXtModelSize.Small);
+        var model = new MedNeXt<float>(Arch(), options: new MedNeXtOptions { NumClasses = 5, ModelSize = MedNeXtModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -334,7 +334,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void VisionMamba_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Tiny });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -345,7 +345,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void VMamba_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new VMamba<float>(Arch(), numClasses: 5, modelSize: VMambaModelSize.Tiny);
+        var model = new VMamba<float>(Arch(), options: new VMambaOptions { NumClasses = 5, ModelSize = VMambaModelSize.Tiny });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -356,7 +356,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void ViMUNet_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new ViMUNet<float>(Arch(), numClasses: 5);
+        var model = new ViMUNet<float>(Arch(), options: new ViMUNetOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -371,7 +371,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void DEVA_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new DEVA<float>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
+        var model = new DEVA<float>(Arch(), options: new DEVAOptions { NumClasses = 5, ModelSize = DEVAModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -382,7 +382,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void EfficientTAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new EfficientTAM<float>(Arch(), numClasses: 5, modelSize: EfficientTAMModelSize.Small);
+        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = EfficientTAMModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -393,7 +393,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAN_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAN<float>(Arch(), numClasses: 5);
+        var model = new SAN<float>(Arch(), options: new SANOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -404,7 +404,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void LISA_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new LISA<float>(Arch(), numClasses: 5);
+        var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -415,7 +415,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void DiffCutSegmentation_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new DiffCutSegmentation<float>(Arch(), numClasses: 5);
+        var model = new DiffCutSegmentation<float>(Arch(), options: new DiffCutSegmentationOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -431,7 +431,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(64, 32)]  // 2:1 aspect ratio
     public void SegFormer_Predict_NonSquare_ReturnsOutput(int h, int w)
     {
-        var model = new SegFormer<float>(Arch(h, w, 3), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(h, w, 3), options: new SegFormerOptions { NumClasses = 5, ModelSize = SegFormerModelSize.B0 });
         var output = model.Predict(Rand(1, 3, h, w));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -453,7 +453,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void NnUNet_Predict_NonSquare_ReturnsOutput(int h, int w)
     {
-        var model = new NnUNet<float>(Arch(h, w, 3), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(h, w, 3), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet2D });
         var output = model.Predict(Rand(1, 3, h, w));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -464,7 +464,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void PIDNet_Predict_NonSquare_ReturnsOutput(int h, int w)
     {
-        var model = new PIDNet<float>(Arch(h, w, 3), numClasses: 5, modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<float>(Arch(h, w, 3), options: new PIDNetOptions { NumClasses = 5, ModelSize = PIDNetModelSize.Small });
         var output = model.Predict(Rand(1, 3, h, w));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -475,7 +475,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void VisionMamba_Predict_NonSquare_ReturnsOutput(int h, int w)
     {
-        var model = new VisionMamba<float>(Arch(h, w, 3), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<float>(Arch(h, w, 3), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, h, w));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -490,7 +490,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void SegFormer_Train_NonSquare_DoesNotThrow(int h, int w)
     {
-        var model = new SegFormer<float>(Arch(h, w, 3), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(h, w, 3), options: new SegFormerOptions { NumClasses = 5, ModelSize = SegFormerModelSize.B0 });
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -514,7 +514,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void NnUNet_Train_NonSquare_DoesNotThrow(int h, int w)
     {
-        var model = new NnUNet<float>(Arch(h, w, 3), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(h, w, 3), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet2D });
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -526,7 +526,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(32, 48)]
     public void SAM_Train_NonSquare_DoesNotThrow(int h, int w)
     {
-        var model = new SAM<float>(Arch(h, w, 3), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(h, w, 3), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -540,7 +540,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SegFormer_Predict_SingleChannel_ReturnsOutput()
     {
-        var model = new SegFormer<float>(Arch(32, 32, 1), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(32, 32, 1), options: new SegFormerOptions { NumClasses = 5, ModelSize = SegFormerModelSize.B0 });
         var output = model.Predict(Rand(1, 1, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -550,7 +550,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     public async Task NnUNet_Predict_SingleChannel_ReturnsOutput()
     {
         // Medical images are often single-channel (grayscale CT/MRI)
-        var model = new NnUNet<float>(Arch(32, 32, 1), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(32, 32, 1), options: new NnUNetOptions { NumClasses = 5, ModelSize = NnUNetModelSize.UNet2D });
         var output = model.Predict(Rand(1, 1, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -559,7 +559,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task TransUNet_Predict_SingleChannel_ReturnsOutput()
     {
-        var model = new TransUNet<float>(Arch(32, 32, 1), numClasses: 5, modelSize: TransUNetModelSize.Base);
+        var model = new TransUNet<float>(Arch(32, 32, 1), options: new TransUNetOptions { NumClasses = 5, ModelSize = TransUNetModelSize.Base });
         var output = model.Predict(Rand(1, 1, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -568,7 +568,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MedSAM_Predict_SingleChannel_ReturnsOutput()
     {
-        var model = new MedSAM<float>(Arch(32, 32, 1), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<float>(Arch(32, 32, 1), options: new MedSAMOptions { NumClasses = 5, ModelSize = MedSAMModelSize.ViTBase });
         var output = model.Predict(Rand(1, 1, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -583,7 +583,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void YOLOv8Seg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new YOLOv8Seg<float>(Arch(), modelSize: YOLOv8SegModelSize.N);
+        var model = new YOLOv8Seg<float>(Arch(), options: new YOLOv8SegOptions { ModelSize = YOLOv8SegModelSize.N });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -594,7 +594,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void YOLOv9Seg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new YOLOv9Seg<float>(Arch(), modelSize: YOLOv9SegModelSize.C);
+        var model = new YOLOv9Seg<float>(Arch(), options: new YOLOv9SegOptions { ModelSize = YOLOv9SegModelSize.C });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -605,7 +605,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void YOLO11Seg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new YOLO11Seg<float>(Arch(), modelSize: YOLO11SegModelSize.N);
+        var model = new YOLO11Seg<float>(Arch(), options: new YOLO11SegOptions { ModelSize = YOLO11SegModelSize.N });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -616,7 +616,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void YOLOv12Seg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new YOLOv12Seg<float>(Arch(), modelSize: YOLOv12SegModelSize.N);
+        var model = new YOLOv12Seg<float>(Arch(), options: new YOLOv12SegOptions { ModelSize = YOLOv12SegModelSize.N });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -627,7 +627,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void YOLO26Seg_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new YOLO26Seg<float>(Arch(), modelSize: YOLO26SegModelSize.N);
+        var model = new YOLO26Seg<float>(Arch(), options: new YOLO26SegOptions { ModelSize = YOLO26SegModelSize.N });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -642,7 +642,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void PointTransformerV3_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new PointTransformerV3<float>(Arch(), numClasses: 5, modelSize: PointTransformerV3ModelSize.Base);
+        var model = new PointTransformerV3<float>(Arch(), options: new PointTransformerV3Options { NumClasses = 5, ModelSize = PointTransformerV3ModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -653,7 +653,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void Sonata_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new Sonata<float>(Arch(), numClasses: 5, modelSize: SonataModelSize.Base);
+        var model = new Sonata<float>(Arch(), options: new SonataOptions { NumClasses = 5, ModelSize = SonataModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -664,7 +664,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void Concerto_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new Concerto<float>(Arch(), numClasses: 5, modelSize: ConcertoModelSize.Base);
+        var model = new Concerto<float>(Arch(), options: new ConcertoOptions { NumClasses = 5, ModelSize = ConcertoModelSize.Base });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

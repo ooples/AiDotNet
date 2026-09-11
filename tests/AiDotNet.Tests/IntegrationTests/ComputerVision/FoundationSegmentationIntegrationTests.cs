@@ -41,7 +41,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Construction_NativeMode_Succeeds()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -49,7 +49,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Predict_ReturnsOutput()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -58,7 +58,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Train_DoesNotThrow()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -68,7 +68,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Metadata_ReturnsCorrectModelType()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var meta = model.GetModelMetadata();
         Assert.Equal("SAM", meta.AdditionalInfo["ModelName"]);
     }
@@ -83,7 +83,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_PromptableSegmentation_SetImageAndSegmentFromPoints()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var promptable = (IPromptableSegmentation<float>)model;
         Assert.True(promptable.SupportsPointPrompts);
         promptable.SetImage(Rand(3, 32, 32));
@@ -99,7 +99,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Construction_NativeMode_Succeeds()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -107,7 +107,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Predict_ReturnsOutput()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -116,7 +116,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Train_DoesNotThrow()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -137,7 +137,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAMHQ_Construction_NativeMode_Succeeds()
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = SAMHQModelSize.ViTBase });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -145,7 +145,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAMHQ_Predict_ReturnsOutput()
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = SAMHQModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

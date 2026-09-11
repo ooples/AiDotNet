@@ -68,7 +68,7 @@ public class SwinUNETRTests : SegmentationTestBase
             inputWidth: Width,
             inputDepth: InputChannels,
             outputSize: NumClasses);
-        return new SwinUNETR<double>(arch, numClasses: NumClasses);
+        return new SwinUNETR<double>(arch, options: new SwinUNETROptions { NumClasses = NumClasses });
     }
 
     protected override int[] InputShape => new[] { InputChannels, Height, Width };

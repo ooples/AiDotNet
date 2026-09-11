@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new OMGLLaVA&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new OMGLLaVA&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new OMGLLaVA&lt;double&gt;(architecture,
+///     options: new OMGLLaVAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for visual question answering with segmentation
-/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx", numClasses: 1);
+/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -87,8 +90,6 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -97,18 +98,17 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// </remarks>
     public OMGLLaVA(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         OMGLLaVAOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new OMGLLaVAOptions()).NumClasses)
     {
-        _options = options ?? new OMGLLaVAOptions(); Options = _options;
+        _options = options; Options = _options;
         // OMGLLaVA's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
         _decoderDim = 256;
@@ -120,7 +120,6 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -130,18 +129,18 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public OMGLLaVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public OMGLLaVA(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         OMGLLaVAOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new OMGLLaVAOptions()).NumClasses)
     {
-        _options = options ?? new OMGLLaVAOptions(); Options = _options;
+        _options = options; Options = _options;
         // OMGLLaVA's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
         _decoderDim = 256;

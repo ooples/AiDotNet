@@ -8,10 +8,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CUPS model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class CUPSOptions : NeuralNetworkOptions
+public class CUPSOptions : SegmentationModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public CUPSOptions() { }
+    public CUPSOptions()
+    {
+        NumClasses = 133;
+        DropRate = 0.1;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -23,6 +27,9 @@ public class CUPSOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        MaxGradNorm = other.MaxGradNorm;
+        NumClasses = other.NumClasses;
+        DropRate = other.DropRate;
         ChannelDimensions = (int[])other.ChannelDimensions.Clone();
         StageDepths = (int[])other.StageDepths.Clone();
         DecoderDimension = other.DecoderDimension;
@@ -36,4 +43,13 @@ public class CUPSOptions : NeuralNetworkOptions
 
     /// <summary>Feature width used by the panoptic decoder.</summary>
     public int DecoderDimension { get; set; } = 256;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
+    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// </exception>
+    public void Validate() => ValidateSegmentationCore();
 }

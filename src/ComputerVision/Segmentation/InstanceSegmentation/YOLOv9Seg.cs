@@ -48,10 +48,13 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 640, inputWidth: 640, inputDepth: 3, outputSize: 80);
-/// var model = new YOLOv9Seg&lt;double&gt;(architecture, numClasses: 80);
+/// var model = new YOLOv9Seg&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new YOLOv9Seg&lt;double&gt;(architecture,
+///     options: new YOLOv9SegOptions { NumClasses = 80, DropRate = 0.0, ModelSize = YOLOv9SegModelSize.C });
 ///
 /// // Or load a pre-trained ONNX model for industrial inspection
-/// var onnxModel = new YOLOv9Seg&lt;double&gt;(architecture, "yolov9c-seg.onnx", numClasses: 80);
+/// var onnxModel = new YOLOv9Seg&lt;double&gt;(architecture, "yolov9c-seg.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -92,9 +95,6 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of object classes (default: 80 for COCO).</param>
-    /// <param name="modelSize">Model size variant (default: C).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.0 — YOLO models rarely use dropout).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -104,20 +104,19 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     /// </remarks>
     public YOLOv9Seg(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 80,
-        YOLOv9SegModelSize modelSize = YOLOv9SegModelSize.C, double dropRate = 0.0,
+        ILossFunction<T>? lossFunction = null,
         YOLOv9SegOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
         // hand. `optimizer` is passed straight through INCLUDING null; the base's lazy
         // CreateDefaultOptimizer() produces the same `new AdamWOptimizer<...>(this)` default, which
         // could never be written as a base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new YOLOv9SegOptions()).NumClasses)
     {
-        _options = options ?? new YOLOv9SegOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyYoloInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -143,8 +142,6 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of object classes (default: 80).</param>
-    /// <param name="modelSize">Model size for metadata (default: C).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -154,17 +151,17 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public YOLOv9Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 80, YOLOv9SegModelSize modelSize = YOLOv9SegModelSize.C,
+    public YOLOv9Seg(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         YOLOv9SegOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new YOLOv9SegOptions()).NumClasses)
     {
-        _options = options ?? new YOLOv9SegOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyYoloInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = 0.0;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

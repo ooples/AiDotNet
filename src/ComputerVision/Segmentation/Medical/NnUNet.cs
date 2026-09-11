@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
-/// var model = new NnUNet&lt;double&gt;(architecture, numClasses: 14);
+/// var model = new NnUNet&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new NnUNet&lt;double&gt;(architecture,
+///     options: new NnUNetOptions { NumClasses = 14, DropRate = 0, ModelSize = NnUNetModelSize.UNet2D });
 ///
 /// // Or load a pre-trained ONNX model for organ segmentation
-/// var onnxModel = new NnUNet&lt;double&gt;(architecture, "nnunet.onnx", numClasses: 14);
+/// var onnxModel = new NnUNet&lt;double&gt;(architecture, "nnunet.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -87,9 +90,6 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="modelSize">Model size variant (default: UNet2D).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -98,19 +98,18 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public NnUNet(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 14,
-        NnUNetModelSize modelSize = NnUNetModelSize.UNet2D, double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         NnUNetOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new NnUNetOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new NnUNetOptions(); Options = _options;
+        _options = options; Options = _options;
         // nnU-Net defaults to 256x256, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -119,8 +118,6 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="modelSize">Model size for metadata (default: UNet2D).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -130,18 +127,18 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public NnUNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 14, NnUNetModelSize modelSize = NnUNetModelSize.UNet2D,
+    public NnUNet(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         NnUNetOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, onnxModelPath, (options ??= new NnUNetOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new NnUNetOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _modelSize = modelSize; _dropRate = 0;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

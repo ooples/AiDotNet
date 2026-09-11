@@ -45,10 +45,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
-/// var model = new SwinUNETR&lt;double&gt;(architecture, numClasses: 14);
+/// var model = new SwinUNETR&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SwinUNETR&lt;double&gt;(architecture,
+///     options: new SwinUNETROptions { NumClasses = 14, DropRate = 0.1, ModelSize = SwinUNETRModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for brain MRI segmentation
-/// var onnxModel = new SwinUNETR&lt;double&gt;(architecture, "swinunetr.onnx", numClasses: 14);
+/// var onnxModel = new SwinUNETR&lt;double&gt;(architecture, "swinunetr.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -97,9 +100,6 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -108,19 +108,18 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public SwinUNETR(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 14,
-        SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         SwinUNETROptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // lazily via CreateDefaultOptimizer(), overridden below to keep the paper's AdamW recipe.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new SwinUNETROptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new SwinUNETROptions(); Options = _options;
+        _options = options; Options = _options;
         // Swin UNETR defaults to 96x96 crops, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 96;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 96;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -152,8 +151,6 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -163,17 +160,17 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SwinUNETR(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 14, SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny,
+    public SwinUNETR(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         SwinUNETROptions? options = null)
         // The base validates the path, sets ONNX mode and opens the InferenceSession.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, onnxModelPath, (options ??= new SwinUNETROptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new SwinUNETROptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 96;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 96;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

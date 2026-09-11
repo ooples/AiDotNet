@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 640, inputWidth: 640, inputDepth: 3, outputSize: 80);
-/// var model = new YOLO11Seg&lt;double&gt;(architecture, numClasses: 80);
+/// var model = new YOLO11Seg&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new YOLO11Seg&lt;double&gt;(architecture,
+///     options: new YOLO11SegOptions { NumClasses = 80, DropRate = 0, ModelSize = YOLO11SegModelSize.N });
 ///
 /// // Or load a pre-trained ONNX model for edge deployment
-/// var onnxModel = new YOLO11Seg&lt;double&gt;(architecture, "yolo11n-seg.onnx", numClasses: 80);
+/// var onnxModel = new YOLO11Seg&lt;double&gt;(architecture, "yolo11n-seg.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -88,9 +91,6 @@ public partial class YOLO11Seg<T> : Common.InstanceSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 80).</param>
-    /// <param name="modelSize">Model size variant (default: N).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -99,22 +99,21 @@ public partial class YOLO11Seg<T> : Common.InstanceSegmentationBase<T>
     /// </remarks>
     public YOLO11Seg(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 80,
-        YOLO11SegModelSize modelSize = YOLO11SegModelSize.N, double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         YOLO11SegOptions? options = null)
         // The base resolves numClasses/native-mode plus the maxInstances=100, confidenceThreshold=0.5
         // and nmsThreshold=0.5 defaults this model used to keep as private fields. `optimizer` is
         // passed straight through INCLUDING null - the base defaults it lazily via
         // CreateDefaultOptimizer(), which `optimizer ?? new AdamWOptimizer<...>(this)` could never do
         // in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new YOLO11SegOptions()).NumClasses)
     {
-        _options = options ?? new YOLO11SegOptions(); Options = _options;
+        _options = options; Options = _options;
         // YOLO11Seg's own 640x640 input default, which differs from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -123,8 +122,6 @@ public partial class YOLO11Seg<T> : Common.InstanceSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 80).</param>
-    /// <param name="modelSize">Model size for metadata (default: N).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -134,18 +131,18 @@ public partial class YOLO11Seg<T> : Common.InstanceSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public YOLO11Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 80, YOLO11SegModelSize modelSize = YOLO11SegModelSize.N,
+    public YOLO11Seg(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         YOLO11SegOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same fifteen lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new YOLO11SegOptions()).NumClasses)
     {
-        _options = options ?? new YOLO11SegOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _modelSize = modelSize; _dropRate = 0;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion
