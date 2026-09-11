@@ -1,3 +1,4 @@
+using AiDotNet.Serving.Security;
 using System.Diagnostics;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
@@ -57,7 +58,7 @@ public class EmbeddingsController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received text embedding request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received text embedding request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             if (request.Texts == null || request.Texts.Length == 0)
@@ -69,13 +70,13 @@ public class EmbeddingsController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
                 return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
             if (!modelInfo.IsMultimodal)
             {
-                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", LogSanitizer.Sanitize(modelName));
                 return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
@@ -108,13 +109,13 @@ public class EmbeddingsController : ControllerBase
 
             _logger.LogInformation(
                 "Text embedding completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
-                modelName, sw.ElapsedMilliseconds, request.Texts.Length);
+                LogSanitizer.Sanitize(modelName), sw.ElapsedMilliseconds, request.Texts.Length);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during text embedding for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during text embedding for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { error = "An unexpected error occurred during text embedding." });
         }
@@ -141,7 +142,7 @@ public class EmbeddingsController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received image embedding request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received image embedding request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             if (request.Images == null || request.Images.Length == 0)
@@ -153,13 +154,13 @@ public class EmbeddingsController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
                 return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
             if (!modelInfo.IsMultimodal)
             {
-                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", LogSanitizer.Sanitize(modelName));
                 return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
@@ -192,13 +193,13 @@ public class EmbeddingsController : ControllerBase
 
             _logger.LogInformation(
                 "Image embedding completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
-                modelName, sw.ElapsedMilliseconds, request.Images.Length);
+                LogSanitizer.Sanitize(modelName), sw.ElapsedMilliseconds, request.Images.Length);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during image embedding for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during image embedding for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { error = "An unexpected error occurred during image embedding." });
         }
@@ -225,7 +226,7 @@ public class EmbeddingsController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received similarity request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received similarity request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             if (request.TextEmbeddings == null || request.TextEmbeddings.Length == 0)
@@ -242,13 +243,13 @@ public class EmbeddingsController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
                 return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
             if (!modelInfo.IsMultimodal)
             {
-                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", LogSanitizer.Sanitize(modelName));
                 return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
@@ -283,13 +284,13 @@ public class EmbeddingsController : ControllerBase
 
             _logger.LogInformation(
                 "Similarity computed for model '{ModelName}' in {ElapsedMs}ms",
-                modelName, sw.ElapsedMilliseconds);
+                LogSanitizer.Sanitize(modelName), sw.ElapsedMilliseconds);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during similarity computation for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during similarity computation for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { error = "An unexpected error occurred during similarity computation." });
         }
@@ -316,7 +317,7 @@ public class EmbeddingsController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received zero-shot classification request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received zero-shot classification request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             if (request.ImageData == null || request.ImageData.Length == 0)
@@ -333,13 +334,13 @@ public class EmbeddingsController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
                 return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
             if (!modelInfo.IsMultimodal)
             {
-                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", LogSanitizer.Sanitize(modelName));
                 return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
@@ -375,13 +376,13 @@ public class EmbeddingsController : ControllerBase
 
             _logger.LogInformation(
                 "Zero-shot classification completed for model '{ModelName}' in {ElapsedMs}ms (labels: {LabelCount})",
-                modelName, sw.ElapsedMilliseconds, request.ClassLabels.Length);
+                LogSanitizer.Sanitize(modelName), sw.ElapsedMilliseconds, request.ClassLabels.Length);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during zero-shot classification for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during zero-shot classification for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { error = "An unexpected error occurred during zero-shot classification." });
         }
