@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 333;
+    private const int Baseline = 312;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -83,7 +83,7 @@ public class OptionsSurfaceRatchetTests
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 444;
+    private const int ConstructorBaseline = 421;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
@@ -222,7 +222,13 @@ public class OptionsSurfaceRatchetTests
 
         foreach (var model in GetModelTypes())
         {
-            Type? optionsType = null;
+            // Resolved in a FIRST pass over every constructor, because most models declare their
+            // options parameter LAST. Resolving it lazily while walking parameters in declaration
+            // order labelled each preceding tunable "(no options parameter)" even when the model
+            // took a perfectly good options object -- FEDformer reported that way while
+            // FEDformerOptions<T> declared all twelve of the properties in question. The COUNT was
+            // never affected, only the label, but the label is what a reader plans from.
+            Type? optionsType = ResolveOptionsType(model);
             var seen = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var ctor in model.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
@@ -232,7 +238,7 @@ public class OptionsSurfaceRatchetTests
                     var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType)
                         ?? parameter.ParameterType;
 
-                    if (IsOptionsType(parameterType)) { optionsType ??= parameterType; continue; }
+                    if (IsOptionsType(parameterType)) { continue; }
                     if (!parameter.HasDefaultValue || parameter.Name == null) continue;
                     if (ExcludedParameterNames.Contains(parameter.Name)) continue;
                     if (!IsTunable(parameterType)) continue;
@@ -382,6 +388,27 @@ public class OptionsSurfaceRatchetTests
         return type == typeof(int) || type == typeof(long) || type == typeof(double)
             || type == typeof(float) || type == typeof(bool) || type == typeof(decimal)
             || type == typeof(string);
+    }
+
+    /// <summary>
+    /// The options type a model accepts, taken from any of its public constructors.
+    /// </summary>
+    /// <param name="model">The model type.</param>
+    /// <returns>The options type, or null when no constructor accepts one.</returns>
+    private static Type? ResolveOptionsType(Type model)
+    {
+        foreach (var ctor in model.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        {
+            foreach (var parameter in ctor.GetParameters())
+            {
+                var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType)
+                    ?? parameter.ParameterType;
+
+                if (IsOptionsType(parameterType)) return parameterType;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsOptionsType(Type type)
