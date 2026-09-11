@@ -13980,7 +13980,7 @@ public static partial class LayerHelper<T>
 
         // Final output projection
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
@@ -15183,7 +15183,7 @@ public static partial class LayerHelper<T>
         //     linearly project to the forecast horizon ===
         yield return new LayerNormalizationLayer<T>();
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -15468,7 +15468,7 @@ public static partial class LayerHelper<T>
         // instead of one per token.
         yield return new LayerNormalizationLayer<T>();
         yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -16010,7 +16010,7 @@ public static partial class LayerHelper<T>
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
+            outputSize: forecastHorizon,
             activationFunction: null);
     }
 
@@ -17417,7 +17417,7 @@ public static partial class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
 
         // Classification head
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -22260,7 +22260,7 @@ public static partial class LayerHelper<T>
         }
 
         // Output projection to codebook
-        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : codebookSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for VALL-E AR stage.</summary>
@@ -36620,7 +36620,7 @@ public static partial class LayerHelper<T>
         // === Forecast Head (default task) ===
         yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
 
         // numClasses is consumed by MOMENT.cs when building the classification
@@ -36790,7 +36790,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -36855,7 +36855,7 @@ public static partial class LayerHelper<T>
         // via a single linear. Weight is [numPatches · hiddenDim, forecastHorizon]
         // = 64·1024 × 96 × 8B ≈ 48 MiB at paper defaults, tractable.
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37204,7 +37204,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37240,7 +37240,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37642,7 +37642,7 @@ public static partial class LayerHelper<T>
 
         // Forecast head: applied AFTER the model pools the token sequence to a
         // single [B, hiddenDim] vector, producing [B, forecastHorizon].
-        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>(outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
