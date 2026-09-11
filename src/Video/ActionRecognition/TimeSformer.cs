@@ -89,6 +89,9 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
 
     private readonly bool _useNativeMode;
 
+    /// <summary>Default clip length (frames), as in the TimeSformer paper's 8-frame clips.</summary>
+    private const int DefaultNumFrames = 8;
+
     #endregion
 
     #region ONNX Mode Fields
@@ -164,14 +167,22 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
     /// <param name="patchSize">Patch size for tokenization (default: 16).</param>
     /// <param name="attentionType">Type of space-time attention (default: DividedSpaceTime).</param>
     /// <summary>
-    /// Initializes a new instance with default architecture settings.
+    /// Initializes a new instance with default architecture settings (8-frame 224x224 RGB clips, 400 classes).
     /// </summary>
+    /// <remarks>
+    /// The declared input is the clip the model is built for, <c>[8, 3, 224, 224]</c>
+    /// (<see cref="Enums.InputType.FourDimensional"/> with <c>inputFrames</c> equal to the default
+    /// <c>numFrames</c>). It used to be <see cref="Enums.InputType.ThreeDimensional"/>, i.e. a single
+    /// <c>[3, 224, 224]</c> frame, so everything that sizes an input from <c>GetInputShape()</c> — the
+    /// auto-batching rank check among them — treated a one-frame image as this video model's input.
+    /// </remarks>
     public TimeSformer()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
+            inputType: Enums.InputType.FourDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 224, inputWidth: 224, inputDepth: 3,
-            outputSize: 400))
+            outputSize: 400,
+            inputFrames: DefaultNumFrames))
     {
     }
 
@@ -183,7 +194,7 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         int embedDim = 768,
         int numHeads = 12,
         int numLayers = 12,
-        int numFrames = 8,
+        int numFrames = DefaultNumFrames,
         int patchSize = 16,
         AttentionType attentionType = AttentionType.DividedSpaceTime,
         TimeSformerOptions? options = null)

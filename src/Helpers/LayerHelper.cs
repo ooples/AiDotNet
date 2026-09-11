@@ -9368,8 +9368,9 @@ public static partial class LayerHelper<T>
         // 3D patch embedding (spatiotemporal)
         yield return new ConvolutionalLayer<T>(numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Transformer encoder blocks (12 blocks)
-        for (int i = 0; i < 12; i++)
+        // Transformer encoder blocks. The model addresses every slice of this list through
+        // VideoMAELayerLayout, so the counts here must come from the same place.
+        for (int i = 0; i < AiDotNet.Video.ActionRecognition.VideoMAELayerLayout.EncoderBlockCount; i++)
         {
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
@@ -9390,7 +9391,7 @@ public static partial class LayerHelper<T>
         // Note: In a real VideoMAE implementation, the decoder would receive encoder features
         // and upsample back to original resolution. This factory provides encoder + classifier;
         // full reconstruction with unpatching is handled by the VideoMAE model class.
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < AiDotNet.Video.ActionRecognition.VideoMAELayerLayout.DecoderBlockCount; i++)
         {
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
