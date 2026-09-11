@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
     "https://arxiv.org/abs/1904.01941",
     Year = 2019,
     Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
-public class CRAFT<T> : TextDetectorBase<T>
+public partial class CRAFT<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _upConv1;
     private readonly Conv2D<T> _upConv2;
@@ -318,27 +318,27 @@ public class CRAFT<T> : TextDetectorBase<T>
         _affinityHead.WriteParameters(writer);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
-    private Tensor<T> ApplySigmoid(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Sigmoid, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
 
     private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
     {

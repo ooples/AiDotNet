@@ -39,7 +39,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://arxiv.org/abs/2402.13616",
     Year = 2024,
     Authors = "Chien-Yao Wang, I-Hau Yeh, Hong-Yuan Mark Liao")]
-public class YOLOv9<T> : ObjectDetectorBase<T>
+public partial class YOLOv9<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;
@@ -227,17 +227,16 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
         return count;
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = NumOps.FromDouble(silu);
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Swish, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySiLU(Tensor<T> x) => Engine.Swish(x);
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {

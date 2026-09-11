@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
@@ -677,23 +678,16 @@ internal class YOLOv8Head<T>
         }
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            // Numerically stable SiLU: x * sigmoid(x)
-            // For large positive x: sigmoid(x) ≈ 1, so SiLU ≈ x
-            // For large negative x: sigmoid(x) ≈ 0, so SiLU ≈ 0
-            // Clamp to prevent overflow in exp(-val) when val is very negative
-            double clampedVal = MathHelper.Clamp(val, -88.0, 88.0);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-clampedVal));
-            double silu = val * sigmoid;
-            result[i] = _numOps.FromDouble(silu);
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Swish, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySiLU(Tensor<T> x) => AiDotNetEngine.Current.Swish(x);
 
     private static double Sigmoid(double x)
     {

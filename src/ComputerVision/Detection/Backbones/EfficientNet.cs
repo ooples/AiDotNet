@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -463,14 +464,14 @@ internal class SqueezeExcitation<T>
 
     // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 
-    private Tensor<T> ApplySigmoid(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            result[i] = _numOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Sigmoid, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySigmoid(Tensor<T> x) => AiDotNetEngine.Current.Sigmoid(x);
 }

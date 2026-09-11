@@ -231,6 +231,16 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// <summary>
     /// Creates a new text detector.
     /// </summary>
+    /// <summary>
+    /// Gets the maximum number of text regions kept for a single image.
+    /// </summary>
+    public int MaxDetections => Options.MaxDetections;
+
+    /// <summary>
+    /// Gets the default minimum confidence a text region needs to be reported.
+    /// </summary>
+    public double ConfidenceThreshold => NumOps.ToDouble(Options.ConfidenceThreshold);
+
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
         Options = options;
@@ -430,10 +440,55 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// <summary>
     /// Predicts by returning the preprocessed input (text detection is done via Detect method).
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input) => Preprocess(input);
+    /// <summary>
+    /// Predicts by running the forward pass and returning the primary output map.
+    /// </summary>
+    /// <remarks>
+    /// This used to return <c>Preprocess(input)</c> -- the resized, normalised INPUT IMAGE -- so
+    /// the model reported its own input back as a prediction. Nothing downstream could tell,
+    /// because the returned tensor has a plausible shape. It now runs the network, matching
+    /// <c>ObjectDetectorBase.Predict</c>.
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        var outputs = Forward(input);
+        return outputs.Count > 0 ? outputs[0] : new Tensor<T>(new[] { 1, 0 });
+    }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Gets the step size used by <see cref="Train"/>.
+    /// </summary>
+    /// <remarks>
+    /// Detection losses are large early in training, so this is deliberately conservative.
+    /// Override it to match a paper recipe.
+    /// </remarks>
+    protected virtual double TrainingLearningRate => 0.001;
+
+    /// <summary>
+    /// Runs one training step against the model's public prediction.
+    /// </summary>
+    /// <param name="input">The training image.</param>
+    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
+    /// <remarks>
+    /// Previously an empty method, so text detectors ignored training entirely. See
+    /// <c>ObjectDetectorBase.Train</c> for the mechanism and its limits.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        TensorModelTrainer<T>.Step(
+            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict);
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
@@ -447,8 +502,8 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (TextDetectorBase<T>)MemberwiseClone();
+    // See the note on ObjectDetectorBase: MemberwiseClone gave a shallow copy that shared
+    // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
 }

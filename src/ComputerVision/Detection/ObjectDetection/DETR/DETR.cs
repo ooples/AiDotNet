@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2005.12872",
     Year = 2020,
     Authors = "Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko")]
-public class DETR<T> : ObjectDetectorBase<T>
+public partial class DETR<T> : ObjectDetectorBase<T>
 {
     private readonly DETREncoder<T> _encoder;
     private readonly DETRDecoder<T> _decoder;

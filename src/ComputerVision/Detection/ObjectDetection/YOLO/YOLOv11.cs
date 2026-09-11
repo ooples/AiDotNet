@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines;
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -436,17 +437,16 @@ internal class SPPFBlock<T>
         return AiDotNetEngine.Current.TensorConcatenate(tensors, axis: 1);
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(silu);
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Swish, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySiLU(Tensor<T> x) => AiDotNetEngine.Current.Swish(x);
 }
 
 /// <summary>

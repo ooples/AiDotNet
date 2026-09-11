@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2203.03605",
     Year = 2023,
     Authors = "Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, Heung-Yeung Shum")]
-public class DINO<T> : ObjectDetectorBase<T>
+public partial class DINO<T> : ObjectDetectorBase<T>
 {
     private readonly DINOEncoder<T> _encoder;
     private readonly DINODecoder<T> _decoder;

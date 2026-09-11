@@ -37,7 +37,7 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
     "https://arxiv.org/abs/1704.03155",
     Year = 2017,
     Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
-public class EAST<T> : TextDetectorBase<T>
+public partial class EAST<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _mergeConv1;
     private readonly Conv2D<T> _mergeConv2;
@@ -381,16 +381,16 @@ public class EAST<T> : TextDetectorBase<T>
         return result;
     }
 
-    private Tensor<T> ApplySigmoid(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Sigmoid, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
 
     private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
     {

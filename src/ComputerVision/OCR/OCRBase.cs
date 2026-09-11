@@ -216,6 +216,21 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     protected readonly Dictionary<char, int> CharToIndex;
 
     /// <summary>
+    /// Gets the set of characters this model can emit.
+    /// </summary>
+    /// <remarks>
+    /// Recognition decodes class indices into characters from this set, so a caller needs it to
+    /// know what the model is capable of reading -- and every character in the recognised text
+    /// must come from it.
+    /// </remarks>
+    public string CharacterSet => Options.CharacterSet ?? DefaultCharacterSet;
+
+    /// <summary>
+    /// Gets the maximum number of characters the decoder will emit for one text region.
+    /// </summary>
+    public int MaxSequenceLength => Options.MaxSequenceLength;
+
+    /// <summary>
     /// Index to character mapping.
     /// </summary>
     protected readonly Dictionary<int, char> IndexToChar;
@@ -532,8 +547,8 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (OCRBase<T>)MemberwiseClone();
+    // See the note on ObjectDetectorBase: MemberwiseClone gave a shallow copy that shared
+    // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
 }

@@ -15,7 +15,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// written against the pre-lazy parallel-Conv2D contract. Post-#1209 it is a 30-line
 /// adapter, not a parallel implementation.
 /// </summary>
-internal class Conv2D<T>
+internal class Conv2D<T> : IParameterSource<T>
 {
     private readonly ConvolutionalLayer<T> _layer;
     private readonly int _inChannels;
@@ -79,6 +79,35 @@ internal class Conv2D<T>
 
     public long GetParameterCount() => _layer.ParameterCount;
 
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
 
@@ -118,7 +147,7 @@ internal class Conv2D<T>
 }
 
 /// <summary>Thin adapter around <see cref="DenseLayer{T}"/> for legacy detection-head call sites.</summary>
-internal class Dense<T>
+internal class Dense<T> : IParameterSource<T>
 {
     private readonly DenseLayer<T> _layer;
     private readonly int _inDim;
@@ -163,6 +192,35 @@ internal class Dense<T>
 
     public long GetParameterCount() => _layer.ParameterCount;
 
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
 
@@ -206,7 +264,7 @@ internal class Dense<T>
 }
 
 /// <summary>Thin adapter around <see cref="MultiHeadAttentionLayer{T}"/>.</summary>
-internal class MultiHeadSelfAttention<T>
+internal class MultiHeadSelfAttention<T> : IParameterSource<T>
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
     private readonly int _dim;
@@ -230,6 +288,35 @@ internal class MultiHeadSelfAttention<T>
     public Tensor<T> Forward(Tensor<T> input) => _layer.Forward(input);
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
 
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);

@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1506.01497",
     Year = 2015,
     Authors = "Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun")]
-public class FasterRCNN<T> : ObjectDetectorBase<T>
+public partial class FasterRCNN<T> : ObjectDetectorBase<T>
 {
     private readonly RPN<T> _rpn;
     private readonly RoIAlign<T> _roiAlign;

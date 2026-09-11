@@ -86,6 +86,30 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     public string[] ClassNames { get; protected set; }
 
     /// <summary>
+    /// Gets the number of object classes this detector was configured for.
+    /// </summary>
+    /// <remarks>
+    /// Every <see cref="Detection{T}.ClassId"/> the detector emits indexes into a label set of
+    /// this size, so callers need it to interpret the output.
+    /// </remarks>
+    public int NumClasses => Options.NumClasses;
+
+    /// <summary>
+    /// Gets the maximum number of detections kept for a single image after non-maximum suppression.
+    /// </summary>
+    public int MaxDetections => Options.MaxDetections;
+
+    /// <summary>
+    /// Gets the default minimum confidence a detection needs to be reported.
+    /// </summary>
+    public double ConfidenceThreshold => Options.ConfidenceThreshold;
+
+    /// <summary>
+    /// Gets the default IoU threshold used by non-maximum suppression.
+    /// </summary>
+    public double NmsThreshold => Options.NmsThreshold;
+
+    /// <summary>
     /// Name of this detector architecture.
     /// </summary>
     public abstract string Name { get; }
@@ -484,9 +508,57 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     }
 
     /// <summary>
-    /// Training object detectors requires specialized loss. Override in subclasses.
+    /// Gets the step size used by <see cref="Train"/>.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <remarks>
+    /// Detection losses are large early in training, so this is deliberately conservative.
+    /// Override it to match a paper recipe.
+    /// </remarks>
+    protected virtual double TrainingLearningRate => 0.001;
+
+    /// <summary>
+    /// Runs one training step against the model's public prediction.
+    /// </summary>
+    /// <param name="input">The training image.</param>
+    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
+    /// <remarks>
+    /// <para>
+    /// This used to be an empty method whose comment said "override in subclasses" -- and no
+    /// subclass ever did, so every detector in the library silently ignored training and left
+    /// its weights at their initial values.
+    /// </para>
+    /// <para>
+    /// The step records the forward pass on a gradient tape, takes mean squared error against
+    /// <paramref name="expectedOutput"/>, and applies a stochastic-gradient update to every
+    /// trainable tensor reachable from this model. A detector-specific loss (assignment plus
+    /// box regression plus classification) is the right objective for a full training recipe and
+    /// belongs in an override; this base step is what makes the model trainable at all.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
@@ -499,9 +571,12 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (ObjectDetectorBase<T>)MemberwiseClone();
+    // DeepCopy is deliberately NOT overridden here. It used to return MemberwiseClone(), which
+    // is a SHALLOW copy: the clone shared every layer, backbone and neck reference with the
+    // original, so fine-tuning a clone silently rewrote the source model's weights. ModelBase
+    // rebuilds the model from its recorded constructor and reloads state through
+    // Serialize/Deserialize, giving the copy its own storage -- the same reasoning already
+    // recorded on NeckBase.
 
     #endregion
 }

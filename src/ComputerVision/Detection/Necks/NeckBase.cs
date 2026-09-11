@@ -242,55 +242,27 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int height = input.Shape[2];
         int width = input.Shape[3];
         int outChannels = weights.Shape[0];
-
-        // 1x1 conv = matmul: reshape [B,C_in,H,W] -> [B*H*W, C_in] @ W^T -> [B*H*W, C_out]
-        // Transpose input from NCHW to NHWC: [B, C_in, H, W] -> permute to get [B*H*W, C_in]
         int spatialSize = height * width;
-        var inputFlat = new Tensor<T>(new[] { batch * spatialSize, inChannels });
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = b * spatialSize + h * width + w;
-                    for (int ic = 0; ic < inChannels; ic++)
-                    {
-                        inputFlat[spatialIdx, ic] = input[b, ic, h, w];
-                    }
-                }
-            }
-        }
 
-        // MatMul: [B*H*W, C_in] @ [C_out, C_in]^T = [B*H*W, C_out]
+        // A 1x1 convolution is a matmul over the channel axis. The matmul itself was always an
+        // engine op, but it used to sit between two hand-written scalar loops that copied NCHW
+        // into a flat [B*H*W, C] buffer and back again. Those loops severed the autodiff tape, so
+        // no gradient could pass THROUGH a neck -- which meant the backbone of every detector
+        // that uses FPN, PANet or BiFPN received nothing and never trained. Permute and reshape
+        // are tape-visible, so the chain now survives the round trip.
+        var inputNhwc = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
+        var inputFlat = inputNhwc.Reshape(batch * spatialSize, inChannels);
+
         var weightsT = weights.Transpose(new[] { 1, 0 });
         var outputFlat = Engine.TensorMatMul(inputFlat, weightsT);
 
-        // Add bias if present
         if (bias is not null)
         {
-            var biasBroadcast = bias.Reshape(1, outChannels);
-            outputFlat = Engine.TensorAdd(outputFlat, biasBroadcast);
+            outputFlat = Engine.TensorAdd(outputFlat, bias.Reshape(1, outChannels));
         }
 
-        // Reshape back to NCHW: [B*H*W, C_out] -> [B, C_out, H, W]
-        var output = new Tensor<T>(new[] { batch, outChannels, height, width });
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = b * spatialSize + h * width + w;
-                    for (int oc = 0; oc < outChannels; oc++)
-                    {
-                        output[b, oc, h, w] = outputFlat[spatialIdx, oc];
-                    }
-                }
-            }
-        }
-
-        return output;
+        var outputNhwc = outputFlat.Reshape(batch, height, width, outChannels);
+        return Engine.TensorPermute(outputNhwc, new[] { 0, 3, 1, 2 });
     }
 
     /// <summary>
@@ -306,12 +278,10 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Feature maps must have the same shape for addition");
         }
 
-        var output = new Tensor<T>(a._shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            output[i] = NumOps.Add(a[i], b[i]);
-        }
-        return output;
+        // Engine op rather than a scalar loop so the tape records the addition: FPN's top-down
+        // pathway adds the upsampled higher level into the lateral one, and a severed add there
+        // cuts every level below it out of the gradient.
+        return Engine.TensorAdd(a, b);
     }
 
     #region ModelBase Overrides

@@ -38,7 +38,7 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
     "https://arxiv.org/abs/2109.10282",
     Year = 2023,
     Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
-public class TrOCR<T> : OCRBase<T>
+public partial class TrOCR<T> : OCRBase<T>
 {
     private readonly Conv2D<T> _patchEmbed;
     private readonly TrOCREncoderLayer<T>[] _encoderLayers;
