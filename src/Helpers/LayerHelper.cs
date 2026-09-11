@@ -4723,31 +4723,30 @@ public static partial class LayerHelper<T>
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
         //
-        // Note: a full U-Net would concatenate encoder skip-connections at
-        // each decoder level, doubling the channel count into the first
-        // Conv3D. This implementation does NOT actually perform the
-        // concatenation, so the "*2" previously applied to
-        // encoderFilters[block + 1] told the Upsample and first-Conv3D to
-        // expect twice the channels they would actually receive from the
-        // preceding decoder block's Second-Conv3D output. That produced
-        //   "Input channels (128) must match kernel in_channels (256)"
-        // at the first decoder block after the bottleneck-adjacent one.
-        // Matching the actual tensor-channel count (= encoderFilters[block + 1])
-        // keeps the stack consistent; adding real skip concatenation is a
-        // separate architectural improvement tracked independently.
+        // Cicek et al. (2016) decoder: a 2x2x2 up-convolution that doubles the resolution AND
+        // HALVES the channel count, then a channel-wise concatenation of the encoder tap at the
+        // matching resolution, then two convolutions. UNet3D.Forward performs the concatenation;
+        // the halving happens here.
+        //
+        // The halving is what makes the skip affordable. Concatenating onto a non-halved upsample
+        // gave the first decoder block 512 + 128 = 640 input channels, and an 8^3 convolution at
+        // that width ran the suite past its 120 s budget. Halving first gives 256 + 128 = 384,
+        // which is the arithmetic the paper specifies.
         for (int block = numEncoderBlocks - 2; block >= 0; block--)
         {
             int outputFilters = encoderFilters[block];
             int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1];
 
-            // Upsample3D to increase resolution
-            yield return new Upsample3DLayer<T>(scaleFactor: 2);
+            // Up-convolution: 2x resolution, half the channels.
+            yield return new Conv3DTransposeLayer<T>(
+                outputChannels: inChannels / 2,
+                kernelSize: 2,
+                stride: 2);
             currentResolution *= 2;
 
-            // First Conv3D after upsample (would concatenate with skip in full U-Net)
-            // For simplicity, we assume channels are doubled from skip connection
+            // First Conv3D, fed by the concatenation of the up-convolved features
+            // (inChannels / 2) with this level's encoder tap (encoderFilters[block]).
             yield return new Conv3DLayer<T>(
-                // In full U-Net: inChannels + encoderFilters[block] from skip
                 outputChannels: outputFilters,
                 kernelSize: 3,
                 stride: 1,
