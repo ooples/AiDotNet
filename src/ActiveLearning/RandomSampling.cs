@@ -39,6 +39,17 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Random _random;
+
+    /// <summary>
+    /// Mixed into every sample's score hash, so the seed actually selects the random draw.
+    /// </summary>
+    /// <remarks>
+    /// Scores are hashed from the pool data so one instance always ranks a pool the same way (the
+    /// k=1 pick is always inside the k=5 picks). Without a salt that hash ignored the seed entirely:
+    /// every RandomSampling, whatever its seed, selected the identical samples, so "random" sampling
+    /// was a fixed ordering of the data and a caller's seed had no effect.
+    /// </remarks>
+    private readonly uint _salt;
     private bool _useBatchDiversity;
     private T _lastMinScore;
     private T _lastMaxScore;
@@ -52,6 +63,7 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        _salt = unchecked((uint)_random.Next() ^ ((uint)_random.Next() << 16));
         _useBatchDiversity = false;
         _lastMinScore = _numOps.Zero;
         _lastMaxScore = _numOps.Zero;
@@ -116,8 +128,10 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         // The randomness comes from hashing each sample's data values.
         for (int i = 0; i < numSamples; i++)
         {
-            // Hash the sample's features to produce a deterministic pseudo-random score
-            uint hash = (uint)(i * 2654435761L); // Knuth multiplicative hash seed
+            // Hash the sample's features, salted by this instance's seed, to produce a deterministic
+            // pseudo-random score. The salt is what makes two seeds rank the pool differently.
+            uint hash = unchecked((uint)(i * 2654435761L) ^ _salt); // Knuth multiplicative hash seed
+            hash = unchecked((uint)(hash * 2654435761L));
             int featureDim = unlabeledPool.Length / numSamples;
             for (int f = 0; f < Math.Min(featureDim, 8); f++)
             {
