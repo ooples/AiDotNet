@@ -25,7 +25,7 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     public Gpt4VisionOptions()
     {
         EmbeddingDimension = 4096;
-        VisionEmbeddingDim = 1024;
+        VisionDim = 1024;
         MaxSequenceLength = 2048;
         ContextWindowSize = 128000;
         ImageSize = 336;
@@ -38,11 +38,6 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
         VocabSize = 128256;
     }
 
-
-    /// <summary>
-    /// Gets or sets the vision embedding dim.
-    /// </summary>
-    public int VisionEmbeddingDim { get; set; }
 
     /// <summary>
     /// Gets or sets the context window size.
@@ -68,5 +63,6 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VisionDim, nameof(VisionDim));
     }
 }

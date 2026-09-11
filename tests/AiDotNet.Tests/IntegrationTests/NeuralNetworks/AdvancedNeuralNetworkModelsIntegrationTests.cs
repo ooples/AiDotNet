@@ -4706,7 +4706,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         // Create a simple tokenizer for testing
         var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
 
-        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, MaxSequenceLength = 32, ContextWindowSize = 256, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14, VocabSize = 1000, MaxImagesPerRequest = 2 });
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionDim = 64, MaxSequenceLength = 32, ContextWindowSize = 256, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14, VocabSize = 1000, MaxImagesPerRequest = 2 });
 
         // Use image-like input
         var input = CreateRandomTensor([3, 56, 56]);
@@ -4732,7 +4732,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
 
-        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14 });
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionDim = 64, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14 });
 
         // Act
         int parameterCount = (int)gpt4v.ParameterCount;

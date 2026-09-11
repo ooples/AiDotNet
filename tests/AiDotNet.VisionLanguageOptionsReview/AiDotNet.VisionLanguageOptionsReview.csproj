@@ -16,8 +16,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
-    <ProjectReference Include="$(ReviewProductionProject)" />
-    <ProjectReference Include="$(ReviewGeneratorProject)" />
+    <ProjectReference Include="$(ReviewProductionProject)" GlobalPropertiesToRemove="$(ReviewReferencePropertiesToRemove)" />
+    <ProjectReference Include="$(ReviewGeneratorProject)" GlobalPropertiesToRemove="$(ReviewReferencePropertiesToRemove)" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" Link="GlobalUsings.cs" />
@@ -28,6 +28,8 @@
   <ItemGroup Condition="'$(ReviewGeneratorOnly)' != 'true'">
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/VisionLanguageNativeOptionsTests.cs" Link="VisionLanguageNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/VisionLanguageNativeConstructionTests.cs" Link="VisionLanguageNativeConstructionTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/Gpt4VisionWidthContractTests.cs" Link="Gpt4VisionWidthContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/Gpt4VisionOptionsContractTests.cs" Link="Gpt4VisionOptionsContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/Layers/SSM/VisionMambaModelTests.cs" Link="VisionMambaModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchetTests.cs" Link="OptionsSurfaceRatchetTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceModelOptionsContractTests.cs" Link="SequenceModelOptionsContractTests.cs" />
