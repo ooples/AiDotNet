@@ -80,7 +80,7 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
     }
 
     /// <summary>

@@ -49,6 +49,8 @@ public class UnifiedMultimodalNetworkOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text);
+        if (NumTransformerLayers < 0)
+            throw new ArgumentException($"{GetType().Name}.{nameof(NumTransformerLayers)} must be non-negative.", OptionsParameterName);
     }
 }

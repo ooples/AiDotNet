@@ -27,6 +27,7 @@ public class FlamingoOptions : VisionLanguageModelOptions
         EmbeddingDimension = 768;
         MaxSequenceLength = 2048;
         ImageSize = 224;
+        PatchSize = 14;
         NumPerceiverTokens = 64;
         MaxImagesInContext = 5;
         Channels = 3;
@@ -80,7 +81,14 @@ public class FlamingoOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(LearningRate, nameof(LearningRate));
+        if (NumLmLayers < 4)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{nameof(NumLmLayers)} must be at least 4 so the language model contains gated cross-attention to its image features.",
+                OptionsParameterName);
+        }
     }
 
     /// <summary>

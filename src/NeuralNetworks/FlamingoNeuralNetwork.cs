@@ -245,16 +245,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     {
         _options = options ?? new FlamingoOptions();
         _options.Validate();
-        _options.Validate();
-        // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
-        // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so
-        // a zero or negative value surfaces as a DivideByZeroException or an invalid tensor shape from
-        // somewhere well downstream of the argument that caused it.
-        if (_options.Channels <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(_options.Channels), _options.Channels, "The channel count must be positive.");
-        }
 
         Options = _options;
         _useNativeMode = true;
@@ -268,7 +258,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _numVisionLayers = _options.NumVisionLayers;
         _numLmLayers = _options.NumLmLayers;
         _numHeads = _options.NumHeads;
-        _patchSize = 14;
+        _patchSize = _options.PatchSize;
         _vocabularySize = _options.VocabSize;
         _languageModelBackbone = _options.LanguageModelBackbone;
         _numPerceiverLayers = _options.NumPerceiverLayers;

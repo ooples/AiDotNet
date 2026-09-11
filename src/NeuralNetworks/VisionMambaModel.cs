@@ -152,8 +152,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     {
         _options = options ?? new VisionMambaOptions();
         _options.Validate();
-        if (_options.ImageHeight % _options.PatchSize != 0) throw new ArgumentException($"Image height ({_options.ImageHeight}) must be divisible by patch size ({_options.PatchSize}).", nameof(_options.ImageHeight));
-        if (_options.ImageWidth % _options.PatchSize != 0) throw new ArgumentException($"Image width ({_options.ImageWidth}) must be divisible by patch size ({_options.PatchSize}).", nameof(_options.ImageWidth));
 
         Options = _options;
         _imageHeight = _options.ImageHeight;
