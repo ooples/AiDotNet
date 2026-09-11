@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Kharitonov et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, Phase = TrainingPhase.PreTraining,
+                Source = "Kharitonov et al. 2023, Sec. 7.2: the first stage uses the Adafactor optimizer with inverse square-root learning rate decay. No rate is declared because the paper states none and Adafactor derives its own.")]
+[PaperOptimizer(OptimizerKind.Unspecified, Phase = TrainingPhase.FineTuning,
+                InheritsFrom = TrainingPhase.PreTraining,
+                Source = "Kharitonov et al. 2023, Sec. 7.2: the optimizer and the learning rate schedule are the same as for S1, so this stage inherits rather than restating them.")]
 public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SPEARTTSOptions _options;
@@ -102,7 +109,9 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new SPEARTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

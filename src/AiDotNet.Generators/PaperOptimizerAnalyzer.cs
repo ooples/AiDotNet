@@ -54,6 +54,19 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         description: "A model variant identifies one complete training recipe. Multiple optimizer "
             + "kinds for the same variant make resolution depend on attribute ordering.");
 
+    private static readonly DiagnosticDescriptor MalformedCitation = new(
+        "AIDN105",
+        "Citation URL is not a usable arXiv reference",
+        "'{0}' cites arXiv id '{1}', which cannot exist: an arXiv identifier is YYMM.NNNNN and "
+            + "this one has month {2}. A wrong citation makes every value declared from it wrong "
+            + "while looking sourced.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description:
+            "Only URLs on arxiv.org are checked. A DOI contains digit runs of the same shape, and "
+            + "parsing ids out of arbitrary URLs reports valid DOIs as broken.");
+
     private static readonly DiagnosticDescriptor DeclarationNotWired = new(
         "AIDN104",
         "Declared paper recipe is never used, because the optimizer is still hardcoded",
@@ -69,7 +82,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired);
+        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired, MalformedCitation);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -136,6 +149,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
 
         var declaredRecipes = type.GetAttributes().Where(IsPaperOptimizer).ToArray();
         ValidateOwnedRecipes(context, type, declarations[0], declaredRecipes);
+        ValidateCitations(context, type, declarations[0]);
 
         // Abstract bases own and are diagnosed for their declarations, but wiring is a concrete
         // model responsibility. Derived types consume inherited recipes without repeating their
@@ -176,7 +190,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         {
             foreach (var inherited in current.GetAttributes().Where(IsPaperOptimizer))
             {
-                seenVariants.Add(GetStringArgument(inherited, "Variant") ?? string.Empty);
+                seenVariants.Add(RecipeKey(inherited));
             }
         }
 
@@ -187,13 +201,14 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
                 : fallbackDeclaration.Identifier.GetLocation();
             string source = GetStringArgument(attribute, "Source") ?? string.Empty;
             string variant = GetStringArgument(attribute, "Variant") ?? string.Empty;
+            string key = RecipeKey(attribute);
 
             if (string.IsNullOrWhiteSpace(source))
             {
                 context.ReportDiagnostic(Diagnostic.Create(MissingSource, location, type.Name));
             }
 
-            if (!seenVariants.Add(variant))
+            if (!seenVariants.Add(key))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     DuplicateDeclaration,
@@ -221,7 +236,14 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         while (selection.Parent is ParenthesizedExpressionSyntax
             or CastExpressionSyntax
             or BinaryExpressionSyntax
-            or ConditionalExpressionSyntax)
+            or ConditionalExpressionSyntax
+            // A construction passed INTO the factory is reached through the argument list, not
+            // through an assignment. Stopping at the argument missed exactly the shape
+            // VerifyHandBuilt takes -- a bare `new SomeOptimizer(this)` handed to it as the
+            // fallback -- and reported those models as unwired.
+            or ArgumentSyntax
+            or ArgumentListSyntax
+            or InvocationExpressionSyntax)
         {
             selection = selection.Parent;
         }
@@ -248,9 +270,136 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     {
         if (semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method) return false;
 
-        return method.Name == "CreateFor"
+        // VerifyHandBuilt counts as reaching the factory as much as CreateFor does. Models that
+        // already build their paper correctly -- a dimension-aware Noam schedule, options that
+        // deliberately disable clipping the paper does not use -- keep their own optimizer and have
+        // the declaration verify it. Recognising only CreateFor would report those as unwired and
+        // push them towards being replaced by something less faithful.
+        return method.Name is "CreateFor" or "VerifyHandBuilt"
             && method.ContainingType.Name == "PaperOptimizerFactory"
             && method.ContainingType.ContainingNamespace.ToDisplayString() == "AiDotNet.Optimizers";
+    }
+
+    /// <summary>The key a declaration is unique on: its variant AND its component.</summary>
+    /// <remarks>
+    /// Component is part of the identity, not a detail of it. A composite model legitimately
+    /// declares one row per part -- Stable Audio Open gives separate rates for its autoencoder,
+    /// its discriminators and its DiT -- and keying on variant alone would report every one of
+    /// those as a duplicate of the others.
+    /// </remarks>
+    private static string RecipeKey(AttributeData attribute)
+        => DescribePhase(attribute)
+            + "|" + (GetStringArgument(attribute, "Variant") ?? string.Empty)
+            + "|" + (GetStringArgument(attribute, "Component") ?? string.Empty);
+
+    /// <summary>Rejects an arXiv id whose month cannot exist.</summary>
+    /// <remarks>
+    /// Structural only. Whether a citation points at the RIGHT paper cannot be decided without
+    /// fetching it, which is why the two real mis-citations here were found by comparing the
+    /// declared title against the PDF rather than by any analyzer.
+    /// </remarks>
+    private static void ValidateCitations(SymbolAnalysisContext context, INamedTypeSymbol type,
+        ClassDeclarationSyntax fallbackDeclaration)
+    {
+        foreach (var citation in type.GetAttributes().Where(IsResearchPaper))
+        {
+            string url = citation.ConstructorArguments.Length > 1
+                ? citation.ConstructorArguments[1].Value?.ToString() ?? string.Empty
+                : string.Empty;
+            if (url.Length == 0) continue;
+
+            if (!TryGetModernArxivId(url, out string identifier, out int month)) continue;
+            if (month >= 1 && month <= 12) continue;
+
+            Location location = citation.ApplicationSyntaxReference is { } reference
+                ? Location.Create(reference.SyntaxTree, reference.Span)
+                : fallbackDeclaration.Identifier.GetLocation();
+            context.ReportDiagnostic(Diagnostic.Create(
+                MalformedCitation, location, type.Name, identifier, month));
+        }
+    }
+
+    /// <summary>Parses a modern arXiv identifier from an arXiv URL in bounded linear time.</summary>
+    /// <remarks>
+    /// This deliberately uses URI and character parsing rather than a timed regular expression.
+    /// Analyzer callbacks execute concurrently with a memory-intensive compilation, and regex
+    /// timeouts include scheduler/GC pauses. A harmless citation could therefore crash the compiler
+    /// with AD0001 even though the old pattern itself was simple. Structural parsing cannot time out,
+    /// and checking the host also prevents an <c>example.com/arxiv.org/...</c> path from being treated
+    /// as an arXiv citation.
+    /// </remarks>
+    private static bool TryGetModernArxivId(string url, out string identifier, out int month)
+    {
+        identifier = string.Empty;
+        month = 0;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || uri is null) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        string host = uri.Host;
+        if (!host.Equals("arxiv.org", StringComparison.OrdinalIgnoreCase)
+            && !host.EndsWith(".arxiv.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string[] segments = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2) return false;
+        if (!segments[0].Equals("abs", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("pdf", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("html", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string candidate = segments[1];
+        if (candidate.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = candidate.Substring(0, candidate.Length - 4);
+        }
+
+        if (candidate.Length < 5) return false;
+        int versionIndex = candidate.IndexOf('v', 5);
+        if (versionIndex < 0) versionIndex = candidate.IndexOf('V', 5);
+        if (versionIndex >= 0)
+        {
+            if (versionIndex == candidate.Length - 1) return false;
+            for (int index = versionIndex + 1; index < candidate.Length; index++)
+            {
+                if (!IsAsciiDigit(candidate[index])) return false;
+            }
+
+            candidate = candidate.Substring(0, versionIndex);
+        }
+
+        if (candidate.Length is not (9 or 10) || candidate[4] != '.') return false;
+        for (int index = 0; index < candidate.Length; index++)
+        {
+            if (index == 4) continue;
+            if (!IsAsciiDigit(candidate[index])) return false;
+        }
+
+        identifier = candidate;
+        month = (candidate[2] - '0') * 10 + candidate[3] - '0';
+        return true;
+    }
+
+    private static bool IsAsciiDigit(char value) => value >= '0' && value <= '9';
+
+    /// <summary>The declared phase, as part of a recipe identity.</summary>
+    /// <remarks>
+    /// A model declaring both a pre-training and a fine-tuning recipe records what its paper
+    /// says rather than repeating itself. Keying without the phase reports every multi-stage
+    /// model as a duplicate, which is exactly what happened when the phase key was introduced.
+    /// </remarks>
+    private static string DescribePhase(AttributeData attribute)
+    {
+        foreach (var named in attribute.NamedArguments.Where(named => named.Key == "Phase" && named.Value.Value is not null))
+        {
+            return named.Value.Value.ToString() ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 
     private static IEnumerable<AttributeData> EnumerateEffectiveRecipes(INamedTypeSymbol type)

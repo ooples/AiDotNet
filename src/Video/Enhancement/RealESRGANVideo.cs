@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,8 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 48,
+                Source = "Wang et al. 2021, Training details: Adam with a total batch size of 48, training Real-ESRGAN for 400K iterations at a learning rate of 1e-4.")]
 public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -89,7 +92,9 @@ public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new RealESRGANVideoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();

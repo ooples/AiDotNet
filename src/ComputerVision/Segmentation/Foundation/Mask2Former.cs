@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +63,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0001, WeightDecay = 0.05,
+                Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
+                MilestoneFractions = [0.9, 0.95],
+                Source = "Cheng et al. 2022, Sec. 4: AdamW with an initial learning rate of 0.0001 and weight decay 0.05 for all backbones, the rate decayed by a factor of 10 at 0.9 and 0.95 fractions of the total training steps. The paper also applies a 0.1 rate multiplier to the backbone, which is a per-parameter-group setting this recipe does not express.")]
 public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly Mask2FormerOptions _options;
@@ -187,15 +192,16 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         if (_options.MaxGradientNorm < 0.0)
             throw new ArgumentOutOfRangeException(nameof(_options.MaxGradientNorm), "Maximum gradient norm cannot be negative.");
 
-        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
-                MaxGradientNorm = _options.MaxGradientNorm,
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                    MaxGradientNorm = _options.MaxGradientNorm,
+                }));
     }
 
     /// <summary>

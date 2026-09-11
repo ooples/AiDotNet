@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,6 +61,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ViT-CoMer: Vision Transformer with Convolutional Multi-scale Feature Interaction for Dense Predictions", "https://arxiv.org/abs/2403.07392", Year = 2024, Authors = "Xia et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 16,
+                Source = "Xia et al. 2024, Settings: AdamW with a learning rate of 1e-4 and weight decay 0.05, total batch size 16.")]
 public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
 {
     /// <inheritdoc />

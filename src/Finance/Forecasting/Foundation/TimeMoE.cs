@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -64,6 +65,13 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Time-MoE: Billion-Scale Time Series Foundation Models with Mixture of Experts", "https://arxiv.org/abs/2409.16040", Year = 2025, Authors = "Xiaoming Shi, Shiyu Wang, Yuqi Nie, Dianqi Li, Zhou Ye, Qingsong Wen, Ming Jin")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0.1, ReferenceBatchSize = 1024, WarmupSteps = 10000,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Shi et al. 2024, Sec. 4.1: AdamW with a learning rate of 1e-3, weight decay "
+                        + "1e-1, beta1 0.9 and beta2 0.95, trained for 100,000 steps at a batch size of "
+                        + "1024.")]
 public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -142,7 +150,9 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -166,7 +176,9 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);

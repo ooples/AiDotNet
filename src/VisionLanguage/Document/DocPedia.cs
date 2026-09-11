@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,14 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Feng et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, ReferenceBatchSize = 8,
+                Phase = TrainingPhase.FineTuning,
+                Schedule = LearningRateSchedulerType.OneCycle,
+                Source = "Feng et al. 2023, Sec. 4: the fine-tuning stage peaks at 1e-5 with a batch size of 8, under the same one-cycle strategy.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, ReferenceBatchSize = 64,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.OneCycle,
+                Source = "Feng et al. 2023, Sec. 4: a one-cycle learning rate strategy with a peak of 1e-3 and batch size 64 for pre-training. Fine-tuning is declared separately as its own phase.")]
 public partial class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DocPediaOptions _options;
@@ -102,7 +112,9 @@ public partial class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUndersta
     {
         _options = options ?? new DocPediaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

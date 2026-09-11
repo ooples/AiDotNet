@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -48,6 +50,8 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
+    [PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.05,
+                    Source = "Bojanowski et al. 2017, Sec. 4.2 (Optimization) and Sec. 4.3: SGD with a linearly decaying step size, initial rate 0.05 for the proposed model (skipgram uses 0.025). Verified against the paper.")]
     public partial class FastText<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly FastTextOptions _options;
@@ -161,7 +165,9 @@ namespace AiDotNet.NeuralNetworks
             // failures). CategoricalCrossEntropyLoss is the correct softmax-classifier pairing
             // (codebase convention: SoftmaxActivation + CategoricalCrossEntropyLoss).
             _lossFunction = lossFunction ?? new CategoricalCrossEntropyLoss<T>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+                ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+                ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayersCore(false);
         }

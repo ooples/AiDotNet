@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -46,6 +48,13 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8,
+                WeightDecay = 0, ReferenceBatchSize = 256, WarmupSteps = 500,
+                MaxGradientNorm = 1.0, Phase = TrainingPhase.Distillation,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                MinLearningRate = 0,
+                Source = "Gandhi et al. 2023, Appendix B: AdamW with beta1 0.9, beta2 0.999, eps 1e-8 and weight decay 0.0, batch 256, 500 warmup steps and linear decay over 80,000 updates, max grad norm 1.0. The zero weight decay is the paper value, not an omission. The table states no peak learning rate, so none is declared.")]
 public partial class DistilWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly DistilWhisperOptions _options; public override ModelOptions GetOptions() => _options;
@@ -55,7 +64,9 @@ public partial class DistilWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public bool SupportsWordTimestamps => true;
 
     public DistilWhisper(NeuralNetworkArchitecture<T> architecture, string modelPath, DistilWhisperOptions? options = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, DistilWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, DistilWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using the distilled encoder-decoder pipeline.

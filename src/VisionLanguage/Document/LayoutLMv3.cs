@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,13 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2022,
     Authors = "Huang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 2048, WarmupFraction = 0.048,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                Source = "Huang et al. 2022, Sec. 3.4: Adam with a batch size of 2,048 for 500,000 "
+                        + "steps, a learning rate of 1e-4 for the BASE model and a linear warmup over "
+                        + "the first 4.8 percent of steps. The paper states no post-warmup decay, so "
+                        + "none is declared. The LARGE model uses 1e-5.")]
 public partial class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly LayoutLMv3Options _options;
@@ -101,7 +110,9 @@ public partial class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnders
     {
         _options = options ?? new LayoutLMv3Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -107,6 +108,10 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [PreprocessesInput("Tokenize quantizes the real-valued series into token bins before the stack runs, "
     + "so Layers[0] receives token indices - see PredictCore's Forward(Tokenize(input)).")]
 [StackInputLayout(TensorAxis.Batch, TensorAxis.Time, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.001, WeightDecay = 0.01,
+                Schedule = LearningRateSchedulerType.Polynomial, DecayRate = 1.0,
+                MinLearningRate = 0,
+                Source = "Ansari et al. 2024, Sec. 5.1: AdamW with weight decay 0.01, the learning rate annealed linearly from 0.001 to 0 over 200K training steps. Linear annealing is the polynomial schedule with power 1.")]
 public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
@@ -294,7 +299,9 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
@@ -343,7 +350,9 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 

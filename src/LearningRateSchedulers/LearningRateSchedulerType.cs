@@ -57,6 +57,38 @@ public enum LearningRateSchedulerType
     LinearWarmup,
 
     /// <summary>
+    /// Linear warmup, then a constant hold, then linear decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule wav2vec 2.0 fine-tunes with, and widely reused after it. Distinct from
+    /// <see cref="LinearWarmup"/>, which has no hold phase, and from the Noam-hold schedule, whose
+    /// final stage decays as a power of the step rather than linearly.
+    /// </remarks>
+    TriStage,
+
+    /// <summary>
+    /// The Noam schedule: linear warmup, then inverse-square-root decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule of Vaswani et al. 2017 Sec. 5.3, and the one a large part of the transformer
+    /// literature means by "the transformer learning rate schedule". Its peak is a function of the
+    /// model dimension rather than a stated constant, so unlike every other member here it cannot
+    /// be built from the recipe alone.
+    /// </remarks>
+    Noam,
+
+    /// <summary>
+    /// Noam with a hold phase: linear warmup, then a hold at the peak, then a power decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule Squeezeformer introduced and the NeMo speech models reuse. Its decay is
+    /// <c>peak * warmup^d / (t - hold)^d</c>, a power of the STEP, which is a different curve from
+    /// <see cref="TriStage"/>, whose decay is a power of the remaining FRACTION of the run.
+    /// Ordinary Noam is the special case with no hold and d = 0.5.
+    /// </remarks>
+    NoamHoldAnnealing,
+
+    /// <summary>
     /// Cyclic learning rate: oscillate between bounds.
     /// </summary>
     Cyclic,

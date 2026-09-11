@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -46,6 +47,12 @@ namespace AiDotNet.Audio.Emotion;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("emotion2vec: Self-Supervised Pre-Training for Speech Emotion Representation", "https://arxiv.org/abs/2312.15185", Year = 2023, Authors = "Ziyang Ma, Zhisheng Zheng, Jiaxin Ye, Jinchao Li, Zhifu Gao, Shiliang Zhang, Xie Chen")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 7.5e-5, WeightDecay = 0.01,
+                WarmupFraction = 0.05,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Ma et al. 2023, Sec. 3.1: Adam with a learning rate of 7.5e-5 and a weight "
+                        + "decay of 1e-2, under a cosine learning rate scheduler with a linear warm-up "
+                        + "over 5 percent of training.")]
 public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields
@@ -89,7 +96,9 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
     {
         _options = options ?? new Emotion2VecOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -49,6 +50,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
+[PaperOptimizer(OptimizerKind.RmsProp, Momentum = 0.9, WeightDecay = 1e-5,
+                LearningRate = 0.1, ReferenceBatchSize = 4096,
+                Schedule = LearningRateSchedulerType.Step, StepSize = 3, DecayRate = 0.01,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Howard et al. 2019, Sec. 6: RMSProp with 0.9 momentum, an initial learning rate of 0.1 at batch size 4096, a decay rate of 0.01 every 3 epochs, and l2 weight decay of 1e-5. This model does NOT currently train with RMSProp: our implementation drives the loss to infinity on this network at 1e-3 and at the 7.8e-4 the linear scaling rule produces, where Adam trains at the same rate. The optimizer built here is therefore Adam and the report says so, rather than the paper value being deleted to hide the difference.")]
 public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV3Options _options;
@@ -110,7 +116,11 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
             InputType.ThreeDimensional,
             nameof(MobileNetV3Network<T>));
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Verified rather than built from the recipe: see the declaration above. The paper
+        // specifies RMSProp, our RMSProp diverges on this network, and the report states that
+        // difference instead of the declaration being trimmed to match what works.
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // Per Howard et al. ICCV 2019: ensure deterministic BLAS for reproducible

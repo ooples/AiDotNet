@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,12 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Vainer and Durnov"
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.002, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Vainer and Dusek 2020, Sec. 4: the Adam optimizer with its default "
+                        + "parameters, gradient clipping at 1, and a base learning rate of 0.002. The "
+                        + "paper tried inverse-square-root decay and reduce-on-plateau and settled on "
+                        + "reduce-on-plateau.")]
 public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly SpeedySpeechOptions _options;
@@ -97,13 +105,14 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         // AdamWOptimizer(this) silently takes AdamWOptimizerOptions' global 1e-3 default and drops
         // SpeedySpeechOptions.LearningRate (1e-4, inherited from TtsModelOptions) — a 10x over-rate,
         // and not the paper's rate either (Vainer & Dusek 2020 train SpeedySpeech with Adam at 1e-4).
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

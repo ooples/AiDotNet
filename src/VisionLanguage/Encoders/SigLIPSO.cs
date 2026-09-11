@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -55,6 +57,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
+[PaperOptimizer(OptimizerKind.Lion, WeightDecay = 1e-7, LearningRate = 1e-4,
+                WarmupSteps = 6500, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhai et al. 2023: the Lion optimizer with decoupled weight decay 1e-7, a linear warm-up over 6.5k steps to a peak of 1e-4, then a cosine decay to 0.")]
 public partial class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SigLIPSOOptions _options;
@@ -99,7 +105,9 @@ public partial class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             _options = new SigLIPSOOptions(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

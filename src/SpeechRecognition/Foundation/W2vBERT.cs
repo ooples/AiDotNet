@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,6 +45,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("w2v-BERT: Combining Contrastive Learning and Masked Language Modeling for Self-Supervised Speech Pre-Training", "https://arxiv.org/abs/2108.06209", Year = 2021, Authors = "Chung et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-3, ReferenceBatchSize = 2048,
+                WarmupSteps = 25000, Schedule = LearningRateSchedulerType.Noam,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "Chung et al. 2021, Sec. 4: w2v-BERT XL trains at a batch size of 2048 with "
+                        + "Adam under the transformer learning rate schedule of its reference, a peak "
+                        + "learning rate of 2e-3 and 25k warm-up steps. The schedule shape comes from "
+                        + "the cited work rather than being restated here, which is what the provenance "
+                        + "records.")]
 public partial class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly W2vBERTOptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +62,9 @@ public partial class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     public bool SupportsWordTimestamps => false;
 
     public W2vBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, W2vBERTOptions? options = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public W2vBERT(NeuralNetworkArchitecture<T> architecture, W2vBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public W2vBERT(NeuralNetworkArchitecture<T> architecture, W2vBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using w2v-BERT's dual-objective SSL encoder with CTC.

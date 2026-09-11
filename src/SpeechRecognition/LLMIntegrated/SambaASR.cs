@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,14 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAMBA-ASR: State-of-the-Art Speech Recognition Leveraging Structured State-Space Models", "https://arxiv.org/abs/2501.02832", Year = 2025, Authors = "Yadav et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Epsilon = 1e-8,
+                WeightDecay = 0.01, ReferenceBatchSize = 256, MinLearningRate = 0,
+                DecayRate = 1.0, Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Bhatia et al. 2025, Sec. 6 and Table 1: AdamW with gradient norm clipping and "
+                        + "a linear learning rate decay, a batch size of 256 over 80 epochs, an initial "
+                        + "learning rate of 1e-4, a weight decay of 0.01 and an Adam epsilon of 1e-8. "
+                        + "The linear decay is declared as a polynomial schedule of power 1, which is "
+                        + "the same curve.")]
 public partial class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +60,9 @@ public partial class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     public bool SupportsWordTimestamps => false;
 
     public SambaASR(NeuralNetworkArchitecture<T> architecture, string modelPath, SambaASROptions? options = null) : base(architecture) { _options = options ?? new SambaASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public SambaASR(NeuralNetworkArchitecture<T> architecture, SambaASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SambaASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SambaASR(NeuralNetworkArchitecture<T> architecture, SambaASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SambaASROptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Mamba SSM encoder with CTC decoding.

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -42,6 +44,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Granite-speech: open-source speech-aware LLMs with strong English ASR capabilities", "https://arxiv.org/abs/2505.08699", Year = 2025, Authors = "IBM Research")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, ReferenceBatchSize = 256,
+                MinLearningRate = 5e-6, Schedule = LearningRateSchedulerType.Cyclic,
+                CyclicPolicy = CyclicLRScheduler.CyclicMode.Triangular,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Saon et al. 2025, Sec. 4: the acoustic encoder trains for 20 epochs at a "
+                        + "batch size of 256 utterances under a triangular learning rate schedule that "
+                        + "ramps from 5e-5 to 5e-4 over the first 6 epochs and decays to 5e-6 "
+                        + "thereafter.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 128,
+                WarmupSteps = 1000, Phase = TrainingPhase.FineTuning,
+                Source = "Saon et al. 2025, Sec. 4: the speech-aware LLM stage trains over three epochs "
+                        + "and 660000 updates at a peak learning rate of 1e-4 with a 1000-step warm-up, "
+                        + "at a batch size of 128 utterances.")]
 public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GraniteSpeechOptions _options; public override ModelOptions GetOptions() => _options;
@@ -51,7 +66,9 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public bool SupportsWordTimestamps => false;
 
     public GraniteSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, GraniteSpeechOptions? options = null) : base(architecture) { _options = options ?? new GraniteSpeechOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public GraniteSpeech(NeuralNetworkArchitecture<T> architecture, GraniteSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GraniteSpeechOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public GraniteSpeech(NeuralNetworkArchitecture<T> architecture, GraniteSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GraniteSpeechOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Granite's speech encoder + enterprise LLM decoder.

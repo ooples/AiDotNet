@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,6 +46,9 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0025, WeightDecay = 1e-6,
+                Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 15000,
+                Source = "Han et al. 2020, Sec. 3: Adam with the transformer (Noam) learning rate schedule, 15k warm-up steps, a peak learning rate of 0.0025, and L2 regularization of 1e-6 on all trainable weights. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ContextNetOptions _options;
@@ -86,9 +91,10 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         // N-BEATS blow-up. Paired with the residual connections restored in
         // CreateDefaultDeepCNNCTCLayers -- the architecture bounds the gain, this bounds
         // the step.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { EnableGradientClipping = true, MaxGradientNorm = 1.0 }));
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         SupportedLanguages = new[] { _options.Language };

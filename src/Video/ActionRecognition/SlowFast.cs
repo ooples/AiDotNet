@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -63,6 +65,15 @@ namespace AiDotNet.Video.ActionRecognition;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 1.6, WeightDecay = 1e-4,
+                Momentum = 0.9, ReferenceBatchSize = 1024, WarmupSteps = 1000,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Feichtenhofer et al. 2019, Sec. 4.1: synchronized SGD with a momentum of 0.9, "
+                        + "a weight decay of 1e-4 and a mini-batch of 1024 clips, under a half-period "
+                        + "cosine decay from a base learning rate of 1.6, with linear warm-up over the "
+                        + "first 1k iterations. The AVA experiments instead warm up over 8k iterations "
+                        + "and use a weight decay of 1e-7.")]
 public partial class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;
@@ -231,7 +242,8 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         SetBaseTrainOptimizer(_optimizer);
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
         _customFastLayers = customFastLayers;

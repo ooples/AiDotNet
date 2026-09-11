@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -84,6 +85,8 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2101.12072", Year = 2021, Authors = "Kashif Rasul, Calvin Seward, Ingmar Schuster, Roland Vollgraf")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 64,
+                Source = "Rasul et al. 2021, Sec. 4: Adam with a learning rate of 1e-3 and batches of size 64.")]
 public partial class TimeGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -235,7 +238,9 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
         _options = options ?? new TimeGradOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -278,7 +283,9 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
         _options = options ?? new TimeGradOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;

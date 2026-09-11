@@ -275,7 +275,7 @@ public class PaperOptimizerDefaultsTests
         var unsupported = new PaperOptimizerAttribute(OptimizerKind.Adam)
         {
             Source = "Synthetic fixture",
-            Schedule = LearningRateSchedulerType.CosineAnnealing,
+            Schedule = LearningRateSchedulerType.Lambda,
         };
 
         Assert.Throws<ArgumentException>(() => PaperOptimizerFactory.BuildScheduler(missingDecay, 0.1));

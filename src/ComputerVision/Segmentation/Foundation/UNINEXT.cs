@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +63,8 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2303.06674", Year = 2023, Authors = "Yan et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 0.05,
+                Source = "Yan et al. 2023: AdamW with a weight decay of 0.05. No learning rate is declared because the paper states none in its training description.")]
 public partial class UNINEXT<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly UNINEXTOptions _options;

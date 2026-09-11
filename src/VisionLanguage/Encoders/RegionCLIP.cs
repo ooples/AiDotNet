@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
@@ -54,6 +56,9 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Zhong et al."
 )]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.002, ReferenceBatchSize = 96,
+                Source = "Zhong et al. 2021, Sec. 4.1: SGD with an image batch of 96, an initial "
+                        + "learning rate of 0.002 and a maximum of 600k iterations.")]
 public partial class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RegionCLIPOptions _options;
@@ -110,13 +115,14 @@ public partial class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
         _options = options ?? new RegionCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    UseAdaptiveLearningRate = false,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

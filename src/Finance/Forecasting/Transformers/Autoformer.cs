@@ -66,6 +66,8 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting", "https://arxiv.org/abs/2106.13008", Year = 2021, Authors = "Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 32,
+                Source = "Wu et al. 2021, Implementation details: Adam with an initial learning rate of 1e-4 and batch size 32. Built here rather than by the factory so a caller-configured rate still wins; the declaration then reports any difference from the paper.")]
 public partial class Autoformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -223,7 +225,8 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? CreateDefaultOptimizer(options));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;
@@ -267,7 +270,8 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? CreateDefaultOptimizer(options));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;

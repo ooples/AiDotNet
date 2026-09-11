@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -49,6 +50,9 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training", "https://arxiv.org/abs/2106.01342", Year = 2021, Authors = "Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C. Bayan Bruss, Tom Goldstein")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01,
+                LearningRate = 0.0001, ReferenceBatchSize = 256,
+                Source = "Somepalli et al. 2021, Training: AdamW with beta1 0.9, beta2 0.999, decay 0.01 and a learning rate of 0.0001 with batches of size 256.")]
 public partial class SAINT<T> : RiskModelBase<T>
 {
     #region Shared Fields
@@ -103,7 +107,9 @@ public partial class SAINT<T> : RiskModelBase<T>
         _options = options ?? new SAINTOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -138,7 +144,9 @@ public partial class SAINT<T> : RiskModelBase<T>
         _options = options ?? new SAINTOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

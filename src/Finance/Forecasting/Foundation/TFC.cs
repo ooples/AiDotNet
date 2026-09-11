@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -63,6 +64,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", "https://arxiv.org/abs/2206.08496", Year = 2022, Authors = "Xiang Zhang, Ziyuan Zhao, Theodoros Tsiligkaridis, Marinka Zitnik")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0003, WeightDecay = 0.0005,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Zhang et al. 2022, Sec. 5: pre-training uses Adam with a learning rate of "
+                        + "0.0003 and a 2-norm penalty coefficient of 0.0005, declared here as the "
+                        + "weight decay.")]
+[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 16,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Zhang et al. 2022, Sec. 5: fine-tuning uses a batch size of 16 over 20 to 80 "
+                        + "epochs. No learning rate is stated for this stage, so none is declared.")]
 public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -172,7 +182,9 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -196,7 +208,9 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);

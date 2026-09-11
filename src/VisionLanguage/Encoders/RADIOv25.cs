@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -56,6 +58,12 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Ranzinger et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.001, WeightDecay = 0,
+                ReferenceBatchSize = 1024, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Ranzinger et al. 2023, Sec. 4: AdamW at a batch size of 1024 with a cosine "
+                        + "annealing schedule and a base learning rate of 0.001, with a weight decay of "
+                        + "0. The zero weight decay is the paper value rather than an omission.")]
 public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly RADIOv25Options _options;
@@ -110,7 +118,9 @@ public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             _options = new RADIOv25Options(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;
