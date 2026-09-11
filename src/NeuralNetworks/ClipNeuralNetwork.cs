@@ -89,10 +89,9 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
     /// <param name="imageEncoderPath">Path to the ONNX image encoder model.</param>
     /// <param name="textEncoderPath">Path to the ONNX text encoder model.</param>
     /// <param name="tokenizer">The tokenizer for text processing.</param>
+    /// <param name="options">Optional embedding dimension, text sequence length and image-size configuration.
+    /// Null uses the shipped defaults. Values must match the supplied ONNX models; these settings do not resize their graphs.</param>
     /// <param name="lossFunction">The loss function (optional for inference-only use).</param>
-    /// <param name="embeddingDimension">The embedding dimension (typically 512 or 768).</param>
-    /// <param name="maxSequenceLength">Maximum sequence length for text (typically 77 for CLIP).</param>
-    /// <param name="imageSize">Expected image size in pixels (typically 224 for CLIP).</param>
     public ClipNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string imageEncoderPath,

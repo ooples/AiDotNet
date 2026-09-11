@@ -41,23 +41,47 @@ public class ImageBindOptions : VisionLanguageModelOptions
 
 
     /// <summary>
-    /// Gets or sets the audio sample rate.
+    /// Gets or sets the nominal waveform rate used when sizing the native audio encoder.
     /// </summary>
+    /// <value>A rate in samples per second. Defaults to 16000, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Together with <see cref="AudioMaxDuration"/>, this sets native
+    /// audio sequence capacity. It does not resample waveforms or override the sample-rate
+    /// argument supplied when encoding audio. A loaded ONNX graph retains its input contract.</para>
+    /// </remarks>
     public int AudioSampleRate { get; set; }
 
     /// <summary>
-    /// Gets or sets the audio max duration.
+    /// Gets or sets the audio duration used to size native audio sequence and position storage.
     /// </summary>
+    /// <value>A duration in seconds. Defaults to 10, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The native encoder combines this duration with the configured
+    /// audio rate when allocating capacity. It is not an automatic waveform-trimming operation
+    /// and does not change the shape required by an ONNX audio encoder.</para>
+    /// </remarks>
     public int AudioMaxDuration { get; set; }
 
     /// <summary>
-    /// Gets or sets the imu timesteps.
+    /// Gets or sets the number of inertial-sensor time steps used for native IMU sequence storage.
     /// </summary>
+    /// <value>A count of sequential observations, not milliseconds. Defaults to 2000, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each observation contains the sensor readings for one time
+    /// step. This count sizes the native IMU encoder and its positional embeddings; it does not
+    /// specify a sensor sampling rate. IMU encoding is supported only in native mode.</para>
+    /// </remarks>
     public int ImuTimesteps { get; set; }
 
     /// <summary>
-    /// Gets or sets the num video frames.
+    /// Gets or sets the number of frames selected for the native video embedding path.
     /// </summary>
+    /// <value>A positive count of frames per clip. Defaults to 2, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Native video encoding selects uniformly from the supplied
+    /// frames and repeats the last frame when needed. It does not decode a video file.
+    /// The current ONNX video path uses the first supplied frame instead of this native frame count.</para>
+    /// </remarks>
     public int NumVideoFrames { get; set; }
 
     /// <summary>

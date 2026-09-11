@@ -32,13 +32,25 @@ public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
 
 
     /// <summary>
-    /// Gets or sets the audio sample rate.
+    /// Gets or sets the waveform sampling rate used to construct the model's log-mel front end.
     /// </summary>
+    /// <value>A positive rate in samples per second. Defaults to 16000, preserving the implementation's former DEFAULT_SAMPLE_RATE constant.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells the audio front end how many waveform measurements
+    /// represent one second, which determines the frequencies represented by its mel filters.
+    /// It must match the input waveform's rate; assigning this option does not resample the waveform.</para>
+    /// </remarks>
     public int AudioSampleRate { get; set; }
 
     /// <summary>
-    /// Gets or sets the video frame rate.
+    /// Gets or sets the nominal rate associated with the supplied video frames.
     /// </summary>
+    /// <value>A finite, positive rate in frames per second. Defaults to 25.0, preserving the implementation's former DEFAULT_FRAME_RATE constant.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This records the expected frame cadence as metadata. The
+    /// current visual encoder averages the frames you supply; it does not resample or select
+    /// them using this rate. Callers are responsible for preparing frames at the intended cadence.</para>
+    /// </remarks>
     public double VideoFrameRate { get; set; }
 
     /// <summary>

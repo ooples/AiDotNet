@@ -39,13 +39,24 @@ public class BlipOptions : VisionLanguageModelOptions
 
 
     /// <summary>
-    /// Gets or sets the num decoder layers.
+    /// Gets or sets the number of native text-decoder transformer blocks.
     /// </summary>
+    /// <value>A count of decoder blocks. Defaults to 12, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The decoder generates text using the image representation and
+    /// preceding tokens. This controls its native depth; a loaded ONNX decoder keeps its own layers.</para>
+    /// </remarks>
     public int NumDecoderLayers { get; set; }
 
     /// <summary>
-    /// Gets or sets the mlp dim.
+    /// Gets or sets the intermediate feature width of the native transformer's feed-forward sublayers.
     /// </summary>
+    /// <value>The feed-forward width in features. Defaults to 3072, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Inside a transformer block, a small neural network expands
+    /// each token to this width before projecting it back. A wider expansion uses more parameters
+    /// and memory. This native construction setting does not resize loaded ONNX graphs.</para>
+    /// </remarks>
     public int MlpDim { get; set; }
 
     /// <summary>
