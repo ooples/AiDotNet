@@ -153,9 +153,9 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <value>Default: 0.001.</value>
     /// <remarks>
     /// <para>
-    /// This controls how quickly the per-parameter learning rates, momentums, and
-    /// directions are updated during meta-training. A lower value provides more
-    /// stable learning but slower convergence.
+    /// This is beta in Li et al. 2017, Algorithm 1: the step size of the single SGD update applied to the
+    /// initialization theta and to every learned per-parameter coefficient, along the gradient of the
+    /// query losses summed over the task batch.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This controls how fast Meta-SGD learns the optimal
@@ -167,20 +167,19 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets the number of gradient steps to take during inner loop adaptation.
     /// </summary>
-    /// <value>Default: 5 (typical for few-shot learning).</value>
+    /// <value>Default: 1, the paper's setting.</value>
     /// <remarks>
     /// <para>
-    /// Meta-SGD uses first-order optimization, so more adaptation steps are computationally
-    /// cheaper than in MAML. However, too many steps can lead to overfitting on the
-    /// support set.
+    /// Li et al. 2017 adapt "in just one step": theta' = theta - alpha o grad L_train(theta). More steps are
+    /// supported and differentiated exactly.
     /// </para>
     /// </remarks>
-    public int AdaptationSteps { get; set; } = 5;
+    public int AdaptationSteps { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the number of inner steps during meta-training.
     /// </summary>
-    /// <value>Default: 5 (matches AdaptationSteps by default).</value>
+    /// <value>Default: 1, the paper's one-step adaptation.</value>
     /// <remarks>
     /// <para>
     /// This can be different from AdaptationSteps to allow for different behavior
@@ -188,7 +187,7 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// during training for efficiency.
     /// </para>
     /// </remarks>
-    public int InnerSteps { get; set; } = 5;
+    public int InnerSteps { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the number of tasks to sample per meta-training iteration.
@@ -218,19 +217,17 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets whether to use first-order approximation.
     /// </summary>
-    /// <value>Default: true (Meta-SGD is inherently first-order).</value>
+    /// <value>Default: false, the paper's exact gradient.</value>
     /// <remarks>
     /// <para>
-    /// Meta-SGD is designed as a first-order algorithm. Unlike MAML, it doesn't
-    /// require computing gradients through the adaptation process. This property
-    /// is always effectively true for standard Meta-SGD.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> First-order means Meta-SGD doesn't need to compute
-    /// complex second-order derivatives, making it much faster than MAML.
+    /// Meta-SGD's objective L_test(theta - alpha o grad L_train(theta)) is differentiated with respect to both
+    /// theta and alpha (Li et al. 2017, eq. 3). The gradient for theta passes through the inner step, which
+    /// brings in the support loss's Hessian; it is computed with Hessian-vector products. Setting this to
+    /// true drops that term and uses the query gradient at the adapted parameters, as first-order MAML does.
+    /// The coefficients' gradients are exact either way.
     /// </para>
     /// </remarks>
-    public bool UseFirstOrder { get; set; } = true;
+    public bool UseFirstOrder { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the maximum gradient norm for gradient clipping.
@@ -335,12 +332,12 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets whether to learn per-parameter update direction signs.
     /// </summary>
-    /// <value>Default: true (helps with gradient sign ambiguity).</value>
+    /// <value>Default: false, the paper's setting.</value>
     /// <remarks>
     /// <para>
-    /// The direction parameter can flip or scale the gradient direction for each
-    /// parameter. This helps when the natural gradient direction isn't optimal
-    /// for fast adaptation.
+    /// An extension. In Li et al. 2017 alpha alone "decides both the update direction and learning rate": a
+    /// negative entry steps against the gradient. A separate learned d_i duplicates that, so it is off unless
+    /// asked for; when on, it is trained on its exact gradient.
     /// </para>
     /// <para>
     /// <b>Mathematical formulation:</b>
@@ -348,7 +345,7 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// where d_i is the learned direction scaling factor.
     /// </para>
     /// </remarks>
-    public bool LearnDirection { get; set; } = true;
+    public bool LearnDirection { get; set; } = false;
 
     #endregion
 
@@ -385,26 +382,25 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets the minimum allowed per-parameter learning rate.
     /// </summary>
-    /// <value>Default: 1e-6 (prevents learning rates from becoming too small).</value>
+    /// <value>Default: null (no lower bound), the paper's setting.</value>
     /// <remarks>
     /// <para>
-    /// Clipping learning rates to a minimum prevents parameters from becoming
-    /// "frozen" during adaptation.
+    /// Alpha is unconstrained in Li et al. 2017: its sign sets the update direction. A positive floor would
+    /// make that impossible, so the bound applies only when set.
     /// </para>
     /// </remarks>
-    public double MinLearningRate { get; set; } = 1e-6;
+    public double? MinLearningRate { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum allowed per-parameter learning rate.
     /// </summary>
-    /// <value>Default: 1.0 (prevents learning rates from becoming too large).</value>
+    /// <value>Default: null (no upper bound), the paper's setting.</value>
     /// <remarks>
     /// <para>
-    /// Clipping learning rates to a maximum prevents unstable updates that
-    /// could blow up during adaptation.
+    /// Applies only when set, as a guard against divergence.
     /// </para>
     /// </remarks>
-    public double MaxLearningRate { get; set; } = 1.0;
+    public double? MaxLearningRate { get; set; }
 
     /// <summary>
     /// Gets or sets the L2 regularization coefficient for learned learning rates.
@@ -707,11 +703,12 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
         if (EvaluationTasks <= 0)
             return false;
 
-        // Learning rate bounds validation
-        if (MinLearningRate <= 0 || MinLearningRate >= MaxLearningRate)
+        // Learning rate bounds apply only when set. A floor exists to keep a parameter from freezing, so a set
+        // floor must be positive; a set ceiling keeps its earlier limit and must lie above the floor.
+        if (MinLearningRate is double floor && floor <= 0)
             return false;
 
-        if (MaxLearningRate <= MinLearningRate || MaxLearningRate > 10.0)
+        if (MaxLearningRate is double ceiling && (ceiling > 10.0 || (MinLearningRate is double below && below >= ceiling)))
             return false;
 
         // Initialization range validation
