@@ -4435,7 +4435,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var blip2 = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 16, EmbeddingDimension = 64, QformerHiddenDim = 128, VisionHiddenDim = 128, LmHiddenDim = 128, NumQformerLayers = 2, NumQueryTokens = 8, NumHeads = 4, NumLmDecoderLayers = 2 });
+        var blip2 = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 16, EmbeddingDimension = 64, QformerHiddenDim = 128, VisionDim = 128, LmHiddenDim = 128, NumQformerLayers = 2, NumQueryTokens = 8, NumHeads = 4, NumLmDecoderLayers = 2 });
 
         // Use image-like input: [channels, height, width]
         var input = CreateRandomTensor([3, 56, 56]);
@@ -4479,7 +4479,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var flamingo = new FlamingoNeuralNetwork<float>(architecture, options: new FlamingoOptions { EmbeddingDimension = 64, MaxSequenceLength = 32, ImageSize = 56, Channels = 3, NumPerceiverTokens = 8, MaxImagesInContext = 2, VisionHiddenDim = 64, LmHiddenDim = 128, NumVisionLayers = 2, NumLmLayers = 2, NumHeads = 4, VocabSize = 1000, NumPerceiverLayers = 2 });
+        var flamingo = new FlamingoNeuralNetwork<float>(architecture, options: new FlamingoOptions { EmbeddingDimension = 64, MaxSequenceLength = 32, ImageSize = 56, Channels = 3, NumPerceiverTokens = 8, MaxImagesInContext = 2, VisionDim = 64, LmHiddenDim = 128, VisionLayers = 2, NumLmLayers = 4, NumHeads = 4, VocabSize = 1000, NumPerceiverLayers = 2 });
 
         // Use image-like input
         var input = CreateRandomTensor([3, 56, 56]);
@@ -4503,7 +4503,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var flamingo = new FlamingoNeuralNetwork<float>(architecture, options: new FlamingoOptions { EmbeddingDimension = 64, ImageSize = 56, VisionHiddenDim = 64, LmHiddenDim = 128, NumVisionLayers = 2, NumLmLayers = 2, NumHeads = 4 });
+        var flamingo = new FlamingoNeuralNetwork<float>(architecture, options: new FlamingoOptions { EmbeddingDimension = 64, ImageSize = 56, VisionDim = 64, LmHiddenDim = 128, VisionLayers = 2, NumLmLayers = 4, NumHeads = 4 });
 
         // Act
         int parameterCount = (int)flamingo.ParameterCount;
@@ -4523,7 +4523,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var llava = new LLaVANeuralNetwork<float>(architecture, options: new LLaVAOptions { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 32, EmbeddingDimension = 128, VisionHiddenDim = 64, NumVisionLayers = 2, NumLmLayers = 2, NumHeads = 4 });
+        var llava = new LLaVANeuralNetwork<float>(architecture, options: new LLaVAOptions { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 32, EmbeddingDimension = 128, VisionDim = 64, VisionLayers = 2, NumLmLayers = 2, NumHeads = 4 });
 
         // Use image-like input
         var input = CreateRandomTensor([3, 56, 56]);
@@ -4547,7 +4547,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var llava = new LLaVANeuralNetwork<float>(architecture, options: new LLaVAOptions { ImageSize = 56, PatchSize = 14, EmbeddingDimension = 128, VisionHiddenDim = 64, NumVisionLayers = 2, NumLmLayers = 2, NumHeads = 4 });
+        var llava = new LLaVANeuralNetwork<float>(architecture, options: new LLaVAOptions { ImageSize = 56, PatchSize = 14, EmbeddingDimension = 128, VisionDim = 64, VisionLayers = 2, NumLmLayers = 2, NumHeads = 4 });
 
         // Act
         int parameterCount = (int)llava.ParameterCount;
@@ -4612,7 +4612,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var videoCLIP = new VideoCLIPNeuralNetwork<float>(architecture, options: new VideoCLIPOptions { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 16, EmbeddingDimension = 64, VisionHiddenDim = 128, TextHiddenDim = 64, NumFrameEncoderLayers = 2, NumTemporalLayers = 2, NumTextLayers = 2, NumHeads = 4, NumFrames = 4, FrameRate = 1.0 });
+        var videoCLIP = new VideoCLIPNeuralNetwork<float>(architecture, options: new VideoCLIPOptions { ImageSize = 56, Channels = 3, PatchSize = 14, VocabSize = 1000, MaxSequenceLength = 16, EmbeddingDimension = 64, VisionDim = 128, TextHiddenDim = 64, NumFrameEncoderLayers = 2, NumTemporalLayers = 2, NumTextLayers = 2, NumHeads = 4, NumFrames = 4, FrameRate = 1.0 });
 
         // Use video-like input: [frames, channels, height, width]
         var input = CreateRandomTensor([4, 3, 56, 56]);
@@ -4637,7 +4637,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 256,
             outputSize: 10);
 
-        var videoCLIP = new VideoCLIPNeuralNetwork<float>(architecture, options: new VideoCLIPOptions { ImageSize = 56, PatchSize = 14, EmbeddingDimension = 64, VisionHiddenDim = 128, TextHiddenDim = 64, NumFrameEncoderLayers = 2, NumTemporalLayers = 2, NumTextLayers = 2, NumHeads = 4, NumFrames = 4 });
+        var videoCLIP = new VideoCLIPNeuralNetwork<float>(architecture, options: new VideoCLIPOptions { ImageSize = 56, PatchSize = 14, EmbeddingDimension = 64, VisionDim = 128, TextHiddenDim = 64, NumFrameEncoderLayers = 2, NumTemporalLayers = 2, NumTextLayers = 2, NumHeads = 4, NumFrames = 4 });
 
         // Act
         int parameterCount = (int)videoCLIP.ParameterCount;
@@ -4706,7 +4706,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         // Create a simple tokenizer for testing
         var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
 
-        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, MaxSequenceLength = 32, ContextWindowSize = 256, ImageSize = 56, HiddenDim = 128, NumVisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14, VocabSize = 1000, MaxImagesPerRequest = 2 });
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, MaxSequenceLength = 32, ContextWindowSize = 256, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14, VocabSize = 1000, MaxImagesPerRequest = 2 });
 
         // Use image-like input
         var input = CreateRandomTensor([3, 56, 56]);
@@ -4732,7 +4732,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
 
-        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, ImageSize = 56, HiddenDim = 128, NumVisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14 });
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(architecture, tokenizer, options: new Gpt4VisionOptions { EmbeddingDimension = 128, VisionEmbeddingDim = 64, ImageSize = 56, HiddenDim = 128, VisionLayers = 2, NumLanguageLayers = 2, NumHeads = 4, PatchSize = 14 });
 
         // Act
         int parameterCount = (int)gpt4v.ParameterCount;

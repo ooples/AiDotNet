@@ -12,15 +12,21 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 public class VisionLanguageNativeConstructionTests
 {
+    public VisionLanguageNativeConstructionTests() => TestModuleInitializer.EnsureInitialized();
+
+    public enum ModelChange { Width, Depth }
+
     [Fact]
     public void VisionMamba_SmallNativeConstructorDoesNotRequireVocabulary()
     {
-        var model = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), new VisionMambaOptions
+        var options = new VisionMambaOptions
         {
             ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1,
             ModelDimension = 16, NumLayers = 1, StateDimension = 4, NumClasses = 3
-        });
+        };
+        using var model = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), options);
 
+        Assert.Same(options, model.GetOptions());
         Assert.Equal(16, model.NumPatches);
         Assert.Equal(1, model.NumLayers);
         Assert.NotEmpty(model.Layers);
@@ -31,7 +37,7 @@ public class VisionLanguageNativeConstructionTests
     [Fact]
     public void Correspondence_SmallNativeConstructorDoesNotRequireTextOrImageOptions()
     {
-        var model = new AudioVisualCorrespondenceNetwork<float>(VectorArchitecture(32, 2),
+        using var model = new AudioVisualCorrespondenceNetwork<float>(VectorArchitecture(32, 2),
             new AudioVisualCorrespondenceOptions { EmbeddingDimension = 16, NumEncoderLayers = 1 });
 
         Assert.Equal(16, model.EmbeddingDimension);
@@ -43,7 +49,7 @@ public class VisionLanguageNativeConstructionTests
     [Fact]
     public void EventLocalization_SmallNativeConstructorBuildsRealDualStreamLayers()
     {
-        var model = new AudioVisualEventLocalizationNetwork<float>(VectorArchitecture(16, 3),
+        using var model = new AudioVisualEventLocalizationNetwork<float>(VectorArchitecture(16, 3),
             new AudioVisualEventLocalizationOptions
             {
                 EmbeddingDimension = 16, NumEncoderLayers = 1,
@@ -57,7 +63,7 @@ public class VisionLanguageNativeConstructionTests
     [Fact]
     public void UnifiedMultimodal_SmallNativeConstructorDoesNotRequireImageGeometry()
     {
-        var model = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
+        using var model = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
             new UnifiedMultimodalNetworkOptions
             {
                 EmbeddingDimension = 8, MaxSequenceLength = 8, NumTransformerLayers = 1
@@ -74,7 +80,7 @@ public class VisionLanguageNativeConstructionTests
     [InlineData(2)]
     public void EventLocalization_EncoderDepthChangesTheActualAttentionGraph(int layers)
     {
-        var model = new AudioVisualEventLocalizationNetwork<float>(VectorArchitecture(16, 3),
+        using var model = new AudioVisualEventLocalizationNetwork<float>(VectorArchitecture(16, 3),
             new AudioVisualEventLocalizationOptions
             {
                 EmbeddingDimension = 16, NumEncoderLayers = layers,
@@ -88,9 +94,9 @@ public class VisionLanguageNativeConstructionTests
     [Fact]
     public void UnifiedMultimodal_WidthAndDepthAlterRealLayers()
     {
-        var small = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
+        using var small = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
             new UnifiedMultimodalNetworkOptions { EmbeddingDimension = 8, MaxSequenceLength = 8, NumTransformerLayers = 1 });
-        var wide = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
+        using var wide = new UnifiedMultimodalNetwork<float>(VectorArchitecture(8, 3),
             new UnifiedMultimodalNetworkOptions { EmbeddingDimension = 16, MaxSequenceLength = 8, NumTransformerLayers = 2 });
 
         small.Predict(new Tensor<float>(new[] { 1, 8 }));
@@ -102,24 +108,30 @@ public class VisionLanguageNativeConstructionTests
         Assert.True(wide.Layers[0].GetParameters().Length > small.Layers[0].GetParameters().Length);
     }
 
-    [Fact]
-    public void VisionMamba_WidthAndDepthAlterMaterializedParameters()
+    [Theory]
+    [InlineData(ModelChange.Width)]
+    [InlineData(ModelChange.Depth)]
+    public void VisionMamba_WidthAndDepthIndependentlyAlterMaterializedParameters(ModelChange change)
     {
-        var small = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), new VisionMambaOptions
+        using var small = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), new VisionMambaOptions
         {
             ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1,
             ModelDimension = 8, NumLayers = 1, StateDimension = 4, NumClasses = 3
         });
-        var wide = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), new VisionMambaOptions
+        using var changed = new VisionMambaModel<float>(ImageArchitecture(16, 1, 3), new VisionMambaOptions
         {
             ImageHeight = 16, ImageWidth = 16, PatchSize = 4, Channels = 1,
-            ModelDimension = 16, NumLayers = 2, StateDimension = 4, NumClasses = 3
+            ModelDimension = change == ModelChange.Width ? 16 : 8,
+            NumLayers = change == ModelChange.Depth ? 2 : 1, StateDimension = 4, NumClasses = 3
         });
 
         small.Predict(new Tensor<float>(new[] { 1, 1, 16, 16 }));
-        wide.Predict(new Tensor<float>(new[] { 1, 1, 16, 16 }));
-        Assert.True(wide.Layers.Count > small.Layers.Count);
-        Assert.True(wide.GetParameters().Length > small.GetParameters().Length);
+        changed.Predict(new Tensor<float>(new[] { 1, 1, 16, 16 }));
+        if (change == ModelChange.Depth)
+            Assert.True(changed.Layers.Count > small.Layers.Count);
+        else
+            Assert.Equal(small.Layers.Count, changed.Layers.Count);
+        Assert.True(changed.GetParameters().Length > small.GetParameters().Length);
     }
 
     [Theory]
@@ -127,7 +139,7 @@ public class VisionLanguageNativeConstructionTests
     [InlineData(31, 8, 9)]
     public void Flamingo_ConfiguredPatchesControlTheRealVisionTokenCount(int imageSize, int patchSize, int tokens)
     {
-        var model = CreateSmallFlamingo(imageSize, patchSize);
+        using var model = CreateSmallFlamingo(imageSize, patchSize);
         var activations = model.GetNamedLayerActivations(new Tensor<float>(new[] { 3, imageSize, imageSize }));
 
         Assert.Equal(new[] { tokens, 32 }, activations["vision_features"].Shape.ToArray());
@@ -137,9 +149,28 @@ public class VisionLanguageNativeConstructionTests
     }
 
     [Fact]
+    public void Blip_NondivisibleImagePreservesTheNativeFloorCropContract()
+    {
+        using var model = new BlipNeuralNetwork<float>(ImageArchitecture(31, 3, 3),
+            new BlipOptions
+            {
+                ImageSize = 31, PatchSize = 8, Channels = 3, EmbeddingDimension = 8,
+                HiddenDim = 8, MaxSequenceLength = 4, VocabSize = 512,
+                NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, MlpDim = 16
+            }, tokenizer: ClipTokenizerFactory.CreateShapeCompatibleForTesting(512, new[] { "a" }));
+        var image = new Tensor<float>(new[] { 3, 31, 31 });
+        var patches = model.Layers[0].Forward(image);
+        Assert.Equal(new[] { 9, 8 }, patches.Shape.ToArray());
+        var embedding = model.GetImageEmbedding(image);
+        Assert.Equal(8, embedding.Length);
+        for (int index = 0; index < embedding.Length; index++)
+            Assert.True(!float.IsNaN(embedding[index]) && !float.IsInfinity(embedding[index]));
+    }
+
+    [Fact]
     public void Flamingo_PublicGenerationActuallySuppliesImageContextToTheLanguageGate()
     {
-        var model = CreateSmallFlamingo(32, 8);
+        using var model = CreateSmallFlamingo(32, 8);
         var attention = model.Layers.OfType<CrossAttentionLayer<float>>().ToArray();
         Assert.Equal(2, attention.Length);
         var languageGate = attention[1];
@@ -172,7 +203,7 @@ public class VisionLanguageNativeConstructionTests
         {
             EmbeddingDimension = 32, MaxSequenceLength = 8, ImageSize = imageSize, PatchSize = patchSize,
             Channels = 3, NumPerceiverTokens = 4, MaxImagesInContext = 1,
-            VisionHiddenDim = 32, LmHiddenDim = 32, NumVisionLayers = 1, NumLmLayers = 4,
+            VisionDim = 32, LmHiddenDim = 32, VisionLayers = 1, NumLmLayers = 4,
             NumHeads = 2, VocabSize = 512, NumPerceiverLayers = 1
         },
         tokenizer: ClipTokenizerFactory.CreateShapeCompatibleForTesting(512, new[] { "a" }));

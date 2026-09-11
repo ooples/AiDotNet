@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -9,19 +9,29 @@
     <AssemblyName>AiDotNetTests</AssemblyName>
     <!-- Point this at the untouched baseline's real project for red controls. -->
     <ReviewProductionProject Condition="'$(ReviewProductionProject)' == ''">../../src/AiDotNet.csproj</ReviewProductionProject>
+    <ReviewGeneratorProject Condition="'$(ReviewGeneratorProject)' == ''">../../src/AiDotNet.Generators/AiDotNet.Generators.csproj</ReviewGeneratorProject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <ProjectReference Include="$(ReviewProductionProject)" />
+    <ProjectReference Include="$(ReviewGeneratorProject)" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" Link="GlobalUsings.cs" />
     <Compile Include="../AiDotNet.Tests/ModuleInitializer.cs" Link="ModuleInitializer.cs" />
     <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" Link="LicenseTestSupport.cs" />
+    <Compile Include="../AiDotNet.Tests/Generators/GeneratedVisionLanguageFixtureContractTests.cs" Link="GeneratedVisionLanguageFixtureContractTests.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReviewGeneratorOnly)' != 'true'">
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/VisionLanguageNativeOptionsTests.cs" Link="VisionLanguageNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/VisionLanguageNativeConstructionTests.cs" Link="VisionLanguageNativeConstructionTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/Layers/SSM/VisionMambaModelTests.cs" Link="VisionMambaModelTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchetTests.cs" Link="OptionsSurfaceRatchetTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceModelOptionsContractTests.cs" Link="SequenceModelOptionsContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SharedOptionsDocumentationContractTests.cs" Link="SharedOptionsDocumentationContractTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />

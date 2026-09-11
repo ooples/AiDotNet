@@ -32,7 +32,7 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
         Channels = 3;
         PatchSize = 16;
         VocabSize = 49408;
-        VisionHiddenDim = 768;
+        VisionDim = 768;
         TextHiddenDim = 512;
         NumFrameEncoderLayers = 12;
         NumTemporalLayers = 4;

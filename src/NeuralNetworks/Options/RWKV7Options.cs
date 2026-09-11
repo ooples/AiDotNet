@@ -33,14 +33,23 @@ public class RWKV7Options : SequenceModelOptions
         MaxSequenceLength = 512;
     }
 
+    /// <summary>Initializes an instance by copying every declared and inherited setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public RWKV7Options(RWKV7Options other) : base(other)
+    {
+    }
+
     /// <summary>
-    /// Throws if a value this model requires has been left unset or is not positive.
+    /// Throws if a required model dimension or consumed training setting is invalid.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative.
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
     public void Validate()
     {
         ValidateCore(requiresHeads: true, requiresState: false);
+        Require(FfnMultiplier, nameof(FfnMultiplier));
     }
 }

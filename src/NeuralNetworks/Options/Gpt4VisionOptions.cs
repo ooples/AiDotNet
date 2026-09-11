@@ -31,7 +31,7 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
         ImageSize = 336;
         MaxImagesPerRequest = 10;
         HiddenDim = 4096;
-        NumVisionLayers = 24;
+        VisionLayers = 24;
         NumLanguageLayers = 32;
         NumHeads = 32;
         PatchSize = 14;

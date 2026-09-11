@@ -41,6 +41,33 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DocumentNeuralNetworkOptions : ModelHyperparameterOptions
 {
+    /// <summary>Initializes the shared document settings with their defaults.</summary>
+    public DocumentNeuralNetworkOptions()
+    {
+    }
+
+    /// <summary>Copies every shared document setting and inherited model setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    protected DocumentNeuralNetworkOptions(DocumentNeuralNetworkOptions other) : base(other)
+    {
+        ImageSize = other.ImageSize;
+        ImageWidth = other.ImageWidth;
+        ImageHeight = other.ImageHeight;
+        PatchSize = other.PatchSize;
+        MaxSequenceLength = other.MaxSequenceLength;
+        VocabSize = other.VocabSize;
+        HiddenDim = other.HiddenDim;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        VisionDim = other.VisionDim;
+        VisionLayers = other.VisionLayers;
+        BackboneChannels = other.BackboneChannels;
+        NumClasses = other.NumClasses;
+    }
+
     /// <summary>
     /// Gets or sets the side length, in pixels, of the page image the model expects.
     /// </summary>

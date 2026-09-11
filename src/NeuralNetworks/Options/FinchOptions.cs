@@ -15,18 +15,13 @@ public class FinchOptions : SequenceModelOptions
         NumLayers = 4;
         NumHeads = 8;
         MaxSequenceLength = 512;
-        LearningRate = 0.001;
     }
 
     /// <summary>Initializes a new instance by copying every property from another instance.</summary>
     /// <param name="other">The instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
-    public FinchOptions(FinchOptions other)
+    public FinchOptions(FinchOptions other) : base(other)
     {
-        if (other is null)
-            throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
         LearningRate = other.LearningRate;
         MinLearningRate = other.MinLearningRate;
         Beta1 = other.Beta1;
@@ -34,11 +29,6 @@ public class FinchOptions : SequenceModelOptions
         WeightDecay = other.WeightDecay;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
-        VocabSize = other.VocabSize;
-        ModelDimension = other.ModelDimension;
-        NumLayers = other.NumLayers;
-        NumHeads = other.NumHeads;
-        MaxSequenceLength = other.MaxSequenceLength;
     }
 
     /// <summary>Gets or sets the maximum (peak) learning rate.</summary>
