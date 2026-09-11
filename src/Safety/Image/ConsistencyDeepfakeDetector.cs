@@ -43,10 +43,8 @@ namespace AiDotNet.Safety.Image;
     "https://arxiv.org/abs/2407.10550",
     Year = 2024,
     Authors = "Yinglong Nie, et al.")]
-public class ConsistencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
+public class ConsistencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
 {
-
-    private readonly double _threshold;
     private readonly int _gridSize;
 
     private static readonly T Zero = NumOps.Zero;
@@ -62,8 +60,8 @@ public class ConsistencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
     /// <param name="gridSize">Grid size for region-level analysis. Default: 4.</param>
     public ConsistencyDeepfakeDetector(double threshold = 0.5, int gridSize = 4)
+        : base(threshold)
     {
-        _threshold = threshold;
         _gridSize = gridSize;
     }
 
@@ -71,47 +69,84 @@ public class ConsistencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
     public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
-        var span = image.Data.Span;
-        if (span.Length == 0) return findings;
+        var analysis = Analyze(image);
+        if (analysis is null) return findings;
 
-        var layout = DetermineLayout(image._shape, span.Length);
-        if (layout.Height < 16 || layout.Width < 16) return findings;
-
-        // 1. Noise inconsistency: different regions should have similar noise levels
-        double noiseInconsistency = ComputeNoiseInconsistency(span, layout);
-
-        // 2. Edge coherence: edges should have consistent profiles
-        double edgeAnomaly = ComputeEdgeAnomaly(span, layout);
-
-        // 3. Symmetry anomaly: AI images often have unnatural symmetry
-        double symmetryAnomaly = ComputeSymmetryAnomaly(span, layout);
-
-        // 4. Color consistency: smooth color transitions vs. abrupt changes
-        double colorAnomaly = ComputeColorConsistencyAnomaly(span, layout);
-
-        // Combined score
-        double finalScore = 0.30 * noiseInconsistency +
-                           0.25 * edgeAnomaly +
-                           0.20 * symmetryAnomaly +
-                           0.25 * colorAnomaly;
-
-        if (finalScore >= _threshold)
+        double finalScore = analysis.Score;
+        if (finalScore >= Threshold)
         {
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.Deepfake,
                 Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                Confidence = Math.Min(1.0, finalScore),
+                Confidence = finalScore,
                 Description = $"Spatial consistency analysis: potential deepfake/AI-generated image " +
-                              $"(score: {finalScore:F3}). Noise inconsistency: {noiseInconsistency:F3}, " +
-                              $"edge anomaly: {edgeAnomaly:F3}, symmetry: {symmetryAnomaly:F3}, " +
-                              $"color consistency: {colorAnomaly:F3}.",
+                              $"(score: {finalScore:F3}). Noise inconsistency: {analysis.NoiseInconsistency:F3}, " +
+                              $"edge anomaly: {analysis.EdgeAnomaly:F3}, symmetry: {analysis.SymmetryAnomaly:F3}, " +
+                              $"color consistency: {analysis.ColorAnomaly:F3}.",
                 RecommendedAction = SafetyAction.Warn,
                 SourceModule = ModuleName
             });
         }
 
         return findings;
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The image is smaller than 16x16 pixels. A score of 0 would read as "authentic" for an image that
+    /// was never analysed.
+    /// </exception>
+    public override double GetDeepfakeScore(Tensor<T> image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        var analysis = Analyze(image);
+        if (analysis is null)
+        {
+            throw new ArgumentException(
+                "Spatial consistency analysis needs an image of at least 16x16 pixels.", nameof(image));
+        }
+
+        return analysis.Score;
+    }
+
+    /// <summary>The four natural-image-statistics measurements and their weighted score.</summary>
+    private sealed class Analysis
+    {
+        public double NoiseInconsistency { get; set; }
+        public double EdgeAnomaly { get; set; }
+        public double SymmetryAnomaly { get; set; }
+        public double ColorAnomaly { get; set; }
+        public double Score { get; set; }
+    }
+
+    /// <summary>Measures the image, or returns null when it is too small to analyse.</summary>
+    private Analysis? Analyze(Tensor<T> image)
+    {
+        var span = image.Data.Span;
+        if (span.Length == 0) return null;
+
+        var layout = DetermineLayout(image._shape, span.Length);
+        if (layout.Height < 16 || layout.Width < 16) return null;
+
+        var analysis = new Analysis
+        {
+            // 1. Noise inconsistency: different regions should have similar noise levels
+            NoiseInconsistency = ComputeNoiseInconsistency(span, layout),
+            // 2. Edge coherence: edges should have consistent profiles
+            EdgeAnomaly = ComputeEdgeAnomaly(span, layout),
+            // 3. Symmetry anomaly: AI images often have unnatural symmetry
+            SymmetryAnomaly = ComputeSymmetryAnomaly(span, layout),
+            // 4. Color consistency: smooth color transitions vs. abrupt changes
+            ColorAnomaly = ComputeColorConsistencyAnomaly(span, layout),
+        };
+        analysis.Score = Math.Min(1.0,
+            0.30 * analysis.NoiseInconsistency +
+            0.25 * analysis.EdgeAnomaly +
+            0.20 * analysis.SymmetryAnomaly +
+            0.25 * analysis.ColorAnomaly);
+        return analysis;
     }
 
     /// <summary>
