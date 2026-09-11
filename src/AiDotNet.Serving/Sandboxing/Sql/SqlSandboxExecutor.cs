@@ -207,6 +207,7 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
 
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        ConfineSqliteToPrivateDatabase(connection);
 
         await ExecuteOptionalScriptAsync(connection, schemaSql, cancellationToken).ConfigureAwait(false);
         await ExecuteOptionalScriptAsync(connection, seedSql, cancellationToken).ConfigureAwait(false);
@@ -216,6 +217,23 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
             createCommand: sql => CreateSqliteCommand(connection, sql),
             query: query,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Keeps caller SQL inside the connection's private <c>:memory:</c> database.
+    /// </summary>
+    /// <remarks>
+    /// The sandbox deliberately executes caller-authored SQL, so the containment boundary is the
+    /// connection itself. SQLite lets any statement open other database files on the host:
+    /// <c>ATTACH DATABASE '/path/app.db' AS x</c> reads or creates arbitrary files with the server's
+    /// permissions (for example the Serving persistence database holding license and API keys), and
+    /// <c>VACUUM INTO '/path/file'</c> writes one. Both go through SQLite's attach machinery, so capping
+    /// the number of attachable databases at zero closes them without restricting anything a
+    /// single-database schema/seed/query needs.
+    /// </remarks>
+    private static void ConfineSqliteToPrivateDatabase(SqliteConnection connection)
+    {
+        SQLitePCL.raw.sqlite3_limit(connection.Handle, SQLitePCL.raw.SQLITE_LIMIT_ATTACHED, 0);
     }
 
     private async Task<SqlExecuteResponse> ExecutePostgresAsync(
