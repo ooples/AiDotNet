@@ -97,7 +97,6 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
 
         // Phase 2: Learn structure for each segment
         var segmentGraphs = new List<Matrix<T>>();
-        var segmentLengths = new List<int>();
 
         int prevEnd = 0;
         for (int seg = 0; seg <= changePoints.Count; seg++)
@@ -116,7 +115,6 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                 // Learn structure for this segment using DYNOTEARS
                 var segGraph = LearnSegmentStructure(segData, segLen, d);
                 segmentGraphs.Add(segGraph);
-                segmentLengths.Add(segLen);
             }
 
             prevEnd = segEnd;

@@ -1264,16 +1264,10 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         // Create a dictionary to track nodes that feed into each node
         var incomingConnections = new Dictionary<int, List<Connection<T>>>();
 
-        // Create a set of all nodes
-        var allNodes = new HashSet<int>();
-
-        // Populate incoming connections and collect all nodes
+        // Populate incoming connections
         foreach (var conn in genome.Connections)
         {
             if (!conn.IsEnabled) continue;
-
-            allNodes.Add(conn.FromNode);
-            allNodes.Add(conn.ToNode);
 
             if (!incomingConnections.ContainsKey(conn.ToNode))
             {

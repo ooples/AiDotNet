@@ -299,8 +299,6 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         double expected = 0;
         double variance = 0;
 
-        var leftSet = new HashSet<int>(leftIndices);
-
         foreach (double t in allEventTimes)
         {
             int leftAtRisk = leftIndices.Count(i => NumOps.ToDouble(times[i]) >= t);

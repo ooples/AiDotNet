@@ -193,7 +193,6 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         var lossHistory = new List<T>();
         var constraintViolationHistory = new List<T>();
-        var validationLossHistory = new List<T>();
 
         var memoryStrength = _options.MemoryStrength ?? 0.5;
         var projectionMargin = _options.ProjectionMargin ?? 0.0;
@@ -323,7 +322,6 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             {
                 var valResult = EvaluateOnDataset(validationData);
                 validationLoss = valResult.Loss;
-                validationLossHistory.Add(valResult.Loss);
 
                 // Early stopping check
                 if (NumOps.Compare(valResult.Loss, bestValidationLoss) < 0)
