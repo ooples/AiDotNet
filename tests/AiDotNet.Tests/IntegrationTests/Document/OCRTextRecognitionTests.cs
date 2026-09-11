@@ -64,7 +64,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -72,7 +72,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<double>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -84,7 +84,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRNN", meta.Name);
     }
@@ -203,7 +203,7 @@ public class OCRTextRecognitionTests
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
-            new CRNN<double>(arch, imageWidth: 128),
+            new CRNN<double>(arch),
             CreateSmallTrOCR(arch),
             new SVTR<double>(arch),
             new ABINet<double>(arch),
