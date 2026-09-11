@@ -929,8 +929,8 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Use Engine operations for GPU/CPU acceleration
-        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelGradients, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+        Engine.TensorSubtractInPlace(_kernels, Engine.TensorMultiplyScalar(_kernelGradients, learningRate));
+        Engine.TensorSubtractInPlace(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);

@@ -1073,23 +1073,26 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentumFactor);
 
         // Update kernel momentum: momentum = momentum_factor * momentum + (1 - momentum_factor) * gradient
-        _kernelMomentum = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(_kernelMomentum, _momentumFactor),
-            Engine.TensorMultiplyScalar(_kernelGradients, oneMinusMomentum));
+        // In-place: see SeparableConvolutionalLayer. Momentum state is read on the NEXT step,
+        // so an arena-scratch buffer here corrupts the update rather than just the current value.
+        Engine.TensorMultiplyScalarInPlace(_kernelMomentum, _momentumFactor);
+        Engine.TensorAddInPlace(_kernelMomentum, Engine.TensorMultiplyScalar(_kernelGradients, oneMinusMomentum));
 
         // Update kernels with momentum and weight decay
         T lrTimesWd = NumOps.Multiply(learningRate, _weightDecay);
         var kernelUpdate = Engine.TensorMultiplyScalar(_kernelMomentum, learningRate);
         var weightDecayTerm = Engine.TensorMultiplyScalar(_kernels, lrTimesWd);
-        _kernels = Engine.TensorSubtract(Engine.TensorSubtract(_kernels, kernelUpdate), weightDecayTerm);
+        Engine.TensorSubtractInPlace(_kernels, kernelUpdate);
+        Engine.TensorSubtractInPlace(_kernels, weightDecayTerm);
 
         // Update bias momentum
-        _biasMomentum = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(_biasMomentum, _momentumFactor),
-            Engine.TensorMultiplyScalar(_biasGradients, oneMinusMomentum));
+        // In-place: see SeparableConvolutionalLayer. Momentum state is read on the NEXT step,
+        // so an arena-scratch buffer here corrupts the update rather than just the current value.
+        Engine.TensorMultiplyScalarInPlace(_biasMomentum, _momentumFactor);
+        Engine.TensorAddInPlace(_biasMomentum, Engine.TensorMultiplyScalar(_biasGradients, oneMinusMomentum));
 
         // Update biases with momentum (no weight decay for biases)
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasMomentum, learningRate));
+        Engine.TensorSubtractInPlace(_biases, Engine.TensorMultiplyScalar(_biasMomentum, learningRate));
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_kernels);

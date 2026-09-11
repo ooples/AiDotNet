@@ -451,11 +451,11 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        _featureSelectionWeights = Engine.TensorSubtract(_featureSelectionWeights,
+        Engine.TensorSubtractInPlace(_featureSelectionWeights,
             Engine.TensorMultiplyScalar(_featureSelectionGrad, learningRate));
-        _thresholds = Engine.TensorSubtract(_thresholds,
+        Engine.TensorSubtractInPlace(_thresholds,
             Engine.TensorMultiplyScalar(_thresholdsGrad, learningRate));
-        _leafValues = Engine.TensorSubtract(_leafValues,
+        Engine.TensorSubtractInPlace(_leafValues,
             Engine.TensorMultiplyScalar(_leafValuesGrad, learningRate));
 
         // Register trainable parameters for tape-based autodiff

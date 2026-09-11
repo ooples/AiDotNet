@@ -677,6 +677,16 @@ jobs:
             Write-Host "::error::duplicate shard name(s) in .github/test-shards.yml: $($dupes -join ', ')"
             exit 1
           }
+          $slugDupes = @(
+            $all |
+              Group-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' } |
+              Where-Object Count -gt 1 |
+              ForEach-Object Name
+          )
+          if ($slugDupes.Count -gt 0) {
+            Write-Host "::error::shard name(s) collide after artifact-key normalization: $($slugDupes -join ', ')"
+            exit 1
+          }
           Write-Host "shard list: $($all.Count) shard(s)"
 
           $escalate = $true
@@ -2216,6 +2226,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
+          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2251,12 +2262,26 @@ jobs:
           } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
           Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
 
+          # The shards this run actually dispatched. Inventory mode (a master push, which has no
+          # baseline to diff against) previously had no expected set, so a shard whose runner died
+          # before uploading was simply absent: the counts were taken over whatever arrived and the
+          # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
+          # that selection deliberately skipped are not in this matrix, so anything expected and
+          # absent here died rather than being skipped. #2086.
+          $matrixJson = $env:EXPECTED_SHARD_MATRIX
+          $expectedShardNames = @(
+            & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
+          )
+          "inventory_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Write-Host "expected shards from the dispatched matrix: $($expectedShardNames.Count)"
+
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
             OutputDirectory = 'test-regression-analysis'
             CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
             ApprovedShardChangesPath = 'merged-shard-changes.json'
+            ExpectedShardNames = $expectedShardNames
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
@@ -2303,7 +2328,9 @@ jobs:
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
       - name: Upload final TRX ledger and comparison report
-        if: always()
+        # Missing/invalid selection output cannot prove which shards were dispatched. Do not
+        # publish a partial ledger that a later run could mistake for a complete baseline.
+        if: always() && steps.analyze.outputs.inventory_valid == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: test-outcome-ledger-${{ github.sha }}

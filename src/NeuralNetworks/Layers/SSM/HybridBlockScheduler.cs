@@ -373,10 +373,13 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
         {
             _blocks[i].UpdateParameters(learningRate);
 
-            _normGammas[i] = Engine.TensorAdd(_normGammas[i],
-                Engine.TensorMultiplyScalar(_normGammaGradients[i], negLR));
-            _normBetas[i] = Engine.TensorAdd(_normBetas[i],
-                Engine.TensorMultiplyScalar(_normBetaGradients[i], negLR));
+            var gammaUpdate = Engine.TensorMultiplyScalar(_normGammaGradients[i], negLR);
+            Engine.TensorAddInPlace(_normGammas[i], gammaUpdate);
+            Engine.InvalidatePersistentTensor(_normGammas[i]);
+
+            var betaUpdate = Engine.TensorMultiplyScalar(_normBetaGradients[i], negLR);
+            Engine.TensorAddInPlace(_normBetas[i], betaUpdate);
+            Engine.InvalidatePersistentTensor(_normBetas[i]);
         }
     }
 
