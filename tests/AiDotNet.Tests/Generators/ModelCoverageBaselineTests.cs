@@ -17,15 +17,17 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage, measured on the branch that fixed the instrument
-    /// (#2091 Phase 1) at 1466 of 1816, then raised to 1482
-    /// once ResolveTestBaseClass stopped routing models into families they cannot satisfy. Independently corroborated at 1443 by a whole-word type
-    /// reference count over the hand-written AND generated test corpus - the generated half being
-    /// what the original ~36% measurement missed, since those classes exist only at compile time.
+    /// Models with model-family test coverage: the recorded measurement is 1485 of 1816 (81.8%)
+    /// from the AiDotNetTests compilation's TestCoverage.g.cs. Provenance: commit
+    /// e9d417a583444fc52c33fcb1c495cf1404d73443, dated 2026-09-09, records the measured change
+    /// from 1482 to 1485 after ResolveTestBaseClass guarded the TimeSeries fixture's I/O contract
+    /// (#2091). The earlier instrument-fix measurement was 1466, followed by 1482 after the
+    /// diffusion routing guard. These are generator-attribution counts, not the separate
+    /// whole-word reference-count estimate over hand-written and generated tests.
     ///
-    /// RAISING this number is the normal direction and needs no ceremony. LOWERING it means models
-    /// that were covered no longer are: establish why before editing this constant, because the
-    /// point of the gate is that the number cannot quietly fall.
+    /// Record the measured report and its source whenever changing this baseline. LOWERING it
+    /// means models that were covered no longer are: establish why before editing this constant,
+    /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
     private const int BaselineTestedCount = 1485;
 
