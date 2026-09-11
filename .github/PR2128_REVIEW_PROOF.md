@@ -33,6 +33,8 @@ new constructor assignment. Its unread model `_learningRate` field was removed.
 checks pass on both sources. The deleted XLSTM/Hawk/Griffin rules were unreachable;
 their removal does not substitute a different live fixture. This is source-generator
 syntax/selection evidence, not semantic/runtime validation of synthetic models.
+The final generator runner also passes all 13 on `net8.0` and `net471`, with no
+skips (39 final passing executions across the three target frameworks).
 
 `CI_SHARD_INVENTORY.md` now records the actual cancelled run: one resolver job and
 **zero executed shards**, not the obsolete June pass list. The PowerShell example
