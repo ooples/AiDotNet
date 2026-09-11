@@ -86,3 +86,30 @@ fix uses that flag only for the specific open-generic enum boxing exception.
 The runtime correction is commit `84b6752f7ad02187de5f8e917721dd95f94b5460`. This is
 construction/configuration and report evidence; it does not claim every training
 feature, every option, full GPU parity, or completion of the other migration PRs.
+
+## Full test-project integration
+
+The actual `tests/AiDotNet.Tests/AiDotNetTests.csproj` Release/`net10.0` build
+completed in 6m59s with **zero errors and 6,819 repository warnings**. After applying
+the repository's output-only serial/Workstation-GC runner hardening, the combined
+review filter passed **419 tests, zero failed, zero skipped**, in eleven seconds:
+
+```powershell
+dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:1 -p:UseSharedCompilation=false -p:BuildInParallel=false -p:GeneratePackageOnBuild=false
+& ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json
+$env:AIDOTNET_FORCE_CPU = '1'
+dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~SequenceModelOptionsContractTests|FullyQualifiedName~SharedOptionsDocumentationContractTests|FullyQualifiedName~GeneratedSequenceFixtureContractTests|FullyQualifiedName~OptionsSurfaceRatchetTests|FullyQualifiedName~RWKV7LanguageModelTests.Model_Constructor_' --logger 'trx;LogFileName=pr2128-full-test-assembly-review.trx' --results-directory artifacts/options-runtime
+```
+
+The 419 executions comprise 341 source-linked scalar-option cases, two shared
+documentation/naming cases, 13 generator cases and 63 runtime/report cases. Six
+additional emitted-XML documentation cases live in the standalone options runner
+and passed there on all three frameworks; they are not counted again as main
+test-assembly executions.
+
+Loaded binary SHA-256:
+
+- `AiDotNetTests.dll`: `EEC45FF7468B418BF26B952AB67D43C00AA6C07D7E53106C40A5646B134974CB`
+- `AiDotNet.dll`: `5FFC1C04DE1D4BD5B58E4065F873667FEBA969C192C7084022DBAB52DC6285E4`
+
+This is the combined review filter on the full assembly, not an all-shards run.
