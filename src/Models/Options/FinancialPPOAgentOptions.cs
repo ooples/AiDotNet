@@ -14,10 +14,15 @@ namespace AiDotNet.Models.Options;
 public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinancialPPOAgentOptions() { }
+    public FinancialPPOAgentOptions()
+    {
+        // Schulman et al. 2017, section 6.1: "a fully-connected MLP with two hidden layers of 64 units, and
+        // tanh nonlinearities". The agent applies tanh; this is the paper's width.
+        HiddenLayers = new[] { 64, 64 };
+    }
 
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinancialPPOAgentOptions(FinancialPPOAgentOptions<T> other) : this()
+    public FinancialPPOAgentOptions(FinancialPPOAgentOptions<T> other) : base(other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
         NumEpochs = other.NumEpochs;
