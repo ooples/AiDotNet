@@ -75,4 +75,18 @@ public class BlipOptions : VisionLanguageModelOptions
         Require(NumHeads, nameof(NumHeads));
         Require(MlpDim, nameof(MlpDim));
     }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        var defaults = new BlipOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(NumEncoderLayers, defaults.NumEncoderLayers, nameof(NumEncoderLayers));
+        RequireNativeDefaultForOnnx(NumDecoderLayers, defaults.NumDecoderLayers, nameof(NumDecoderLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(MlpDim, defaults.MlpDim, nameof(MlpDim));
+    }
 }

@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using Microsoft.ML.OnnxRuntime;
@@ -100,6 +101,11 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// The ONNX inference session for the text decoder (for caption generation).
     /// </summary>
     private readonly InferenceSession? _textDecoder;
+
+    private readonly string _visionOutputName = string.Empty;
+    private readonly string _textOutputName = string.Empty;
+    private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.Vector
+        | OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
 
     /// <summary>
     /// Path to the vision encoder ONNX model file (for ONNX mode).
@@ -296,7 +302,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
                1.0)
     {
         _options = options ?? new BlipOptions();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
 
         // Validate ONNX model paths
@@ -320,13 +326,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _hiddenDim = 768;
-        _numLayers = 12;
-        _numHeads = 12;
-        _mlpDim = 3072;
-        _patchSize = 16;
-        _vocabularySize = 30522; // BERT vocabulary size
-        _numDecoderLayers = 12;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _mlpDim = _options.MlpDim;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _numDecoderLayers = _options.NumDecoderLayers;
+
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? textEncoder = null;
@@ -338,12 +347,27 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             textEncoder = new InferenceSession(textEncoderPath);
             textDecoder = new InferenceSession(textDecoderPath);
 
+            var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionEncoder);
+            var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textEncoder);
+            // The existing caption path does not execute this decoder. Expose its actual
+            // signature without pretending that native decoder options configure it.
+            var decoderGraph = new OnnxGraphSignature(OnnxModelRole.TextDecoder, textDecoder);
+            visionGraph.RequireInputSet("pixel_values");
+            visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            textGraph.RequireInputSet("input_ids", "attention_mask");
+            textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            string visionOutput = visionGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, textGraph, decoderGraph);
+
             _visionEncoder = visionEncoder;
             _textEncoder = textEncoder;
             _textDecoder = textDecoder;
-
-            Guard.NotNull(tokenizer);
-            _tokenizer = tokenizer;
+            _visionOutputName = visionOutput;
+            _textOutputName = textOutput;
+            OnnxConfiguration = configuration;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
@@ -352,16 +376,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         }
         catch
         {
-            try
-            {
-                visionEncoder?.Dispose();
-                textEncoder?.Dispose();
-                textDecoder?.Dispose();
-            }
-            catch
-            {
-                // Swallow disposal exceptions
-            }
+            // Attempt every release while preserving the original construction error.
+            try { textDecoder?.Dispose(); } catch { }
+            try { textEncoder?.Dispose(); } catch { }
+            try { visionEncoder?.Dispose(); } catch { }
 
             throw;
         }
@@ -1263,6 +1281,13 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             ? encoded.AttentionMask.ToArray()
             : Enumerable.Repeat(1, inputIds.Count).ToArray();
 
+        if (inputIds.Count == 0 || inputIds.Count > _maxSequenceLength || attentionMask.Length != inputIds.Count)
+            throw new InvalidOperationException("ONNX tokenizer must return matching nonempty token and mask sequences within the configured context.");
+        var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        var graph = configuration.Graphs[OnnxModelRole.TextEncoder];
+        graph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, inputIds.Count);
+        graph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, attentionMask.Length);
+
         var inputTensor = new OnnxTensors.DenseTensor<long>(new[] { 1, inputIds.Count });
         var maskTensor = new OnnxTensors.DenseTensor<long>(new[] { 1, attentionMask.Length });
 
@@ -1278,10 +1303,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             NamedOnnxValue.CreateFromTensor("attention_mask", maskTensor)
         };
 
-        using var results = _textEncoder.Run(inputs);
+        using var results = _textEncoder.Run(inputs, new[] { _textOutputName });
         var output = results.First().AsTensor<float>();
 
-        return ExtractEmbeddingFromOnnxTensor(output);
+        return ExtractEmbeddingFromOnnxTensor(output, OnnxModelRole.TextEncoder);
     }
 
     /// <summary>
@@ -1294,9 +1319,15 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             throw new InvalidOperationException("Vision encoder not initialized.");
         }
 
+        if (image.Rank != 3 && image.Rank != 4)
+            throw new ArgumentException("ONNX image must have shape [3,H,W] or [1,3,H,W].", nameof(image));
+        if (image.Rank == 4 && image.Shape[0] != 1)
+            throw new ArgumentException("ONNX image encoder requires a single image, not a batch.", nameof(image));
         int channels = image.Shape.Length == 4 ? image.Shape[1] : image.Shape[0];
         int height = image.Shape.Length == 4 ? image.Shape[2] : image.Shape[1];
         int width = image.Shape.Length == 4 ? image.Shape[3] : image.Shape[2];
+        if (channels != 3 || height != _imageSize || width != _imageSize)
+            throw new ArgumentException($"ONNX image must contain 3 channels of {_imageSize}x{_imageSize} pixels.", nameof(image));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(new[] { 1, channels, height, width });
 
@@ -1317,10 +1348,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             NamedOnnxValue.CreateFromTensor("pixel_values", inputTensor)
         };
 
-        using var results = _visionEncoder.Run(inputs);
+        using var results = _visionEncoder.Run(inputs, new[] { _visionOutputName });
         var output = results.First().AsTensor<float>();
 
-        return ExtractEmbeddingFromOnnxTensor(output);
+        return ExtractEmbeddingFromOnnxTensor(output, OnnxModelRole.ImageEncoder);
     }
 
     /// <summary>
@@ -1355,28 +1386,9 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Extracts embedding from ONNX tensor.
     /// </summary>
-    private Vector<T> ExtractEmbeddingFromOnnxTensor(OnnxTensors.Tensor<float> output)
+    private Vector<T> ExtractEmbeddingFromOnnxTensor(OnnxTensors.Tensor<float> output, OnnxModelRole role)
     {
-        int rank = output.Dimensions.Length;
-        int hiddenSize = rank > 0 ? output.Dimensions[rank - 1] : (int)output.Length;
-        int vectorSize = Math.Min(_embeddingDimension, hiddenSize);
-
-        var data = new T[vectorSize];
-
-        for (int i = 0; i < vectorSize; i++)
-        {
-            float value = rank switch
-            {
-                1 => output.GetValue(i),
-                2 => output[0, i],
-                3 => output[0, 0, i],
-                _ => output.GetValue(i)
-            };
-
-            data[i] = NumOps.FromDouble(value);
-        }
-
-        return VectorHelper.Normalize(new Vector<T>(data));
+        return VectorHelper.Normalize(OnnxEmbeddingContract.Read<T>(output, _embeddingDimension, EmbeddingLayouts, role));
     }
 
     #endregion
@@ -1527,6 +1539,21 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <returns>A ModelMetaData object containing information about the network.</returns>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+            return new ModelMetadata<T>
+            {
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    [nameof(OnnxConfiguration)] = configuration,
+                    ["EmbeddingDimension"] = _embeddingDimension,
+                    ["MaxSequenceLength"] = _maxSequenceLength,
+                    ["ImageSize"] = _imageSize,
+                    ["UseNativeMode"] = false
+                }
+            };
+        }
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
