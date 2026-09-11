@@ -98,6 +98,12 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     private readonly Random _random = RandomHelper.CreateSecureRandom();
     private bool _disposed;
 
+    /// <summary>
+    /// Default clip length (frames) when neither the caller nor the architecture declares one — the
+    /// 16-frame clips of the VideoMAE paper.
+    /// </summary>
+    private const int DefaultNumFrames = 16;
+
     #endregion
 
     #region Properties
@@ -158,7 +164,9 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function (default: CrossEntropyLoss).</param>
     /// <param name="numClasses">The number of action classes for classification.</param>
-    /// <param name="numFrames">The number of video frames to process.</param>
+    /// <param name="numFrames">The number of video frames per clip. When the architecture declares a
+    /// frame count (<see cref="NeuralNetworkArchitecture{T}.InputFrames"/> &gt; 0) that count is used; passing a
+    /// different non-default value throws, since the two would describe different clips.</param>
     /// <param name="numFeatures">The embedding dimension.</param>
     /// <param name="maskRatio">The masking ratio for pretraining (default: 0.9).</param>
     /// <remarks>
@@ -172,7 +180,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int numClasses = 400,
-        int numFrames = 16,
+        int numFrames = DefaultNumFrames,
         int numFeatures = 768,
         double maskRatio = 0.9,
         VideoMAEOptions? options = null)
@@ -185,7 +193,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses;
-        _numFrames = numFrames;
+        _numFrames = ResolveNumFrames(architecture, numFrames);
         _numFeatures = numFeatures;
         _patchSize = 16;
         _tubeletSize = 2;
@@ -203,7 +211,9 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to the ONNX model file.</param>
     /// <param name="numClasses">The number of action classes for classification.</param>
-    /// <param name="numFrames">The number of video frames to process.</param>
+    /// <param name="numFrames">The number of video frames per clip. When the architecture declares a
+    /// frame count (<see cref="NeuralNetworkArchitecture{T}.InputFrames"/> &gt; 0) that count is used; passing a
+    /// different non-default value throws, since the two would describe different clips.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor loads a pre-trained VideoMAE model from ONNX format.
@@ -214,7 +224,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses = 400,
-        int numFrames = 16,
+        int numFrames = DefaultNumFrames,
         VideoMAEOptions? options = null)
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
@@ -230,7 +240,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses;
-        _numFrames = numFrames;
+        _numFrames = ResolveNumFrames(architecture, numFrames);
         _numFeatures = 768;
         _patchSize = 16;
         _tubeletSize = 2;
@@ -243,6 +253,37 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Resolves the clip length from the architecture and the <c>numFrames</c> constructor argument.
+    /// </summary>
+    /// <remarks>
+    /// The architecture is the model's declared input contract (<c>GetInputShape()</c> is
+    /// <c>[InputFrames, C, H, W]</c> for a temporal-video architecture), so a frame count it declares
+    /// wins — the same rule BSVD applies to <c>Architecture.InputFrames</c>. Previously the constructors
+    /// ignored it and always used <c>numFrames</c> (default 16), so an architecture declaring 8-frame
+    /// clips produced a model reporting and masking for 16. An explicit <c>numFrames</c> that disagrees
+    /// with the declared count is rejected rather than silently overridden. The parameter's default
+    /// value cannot be told apart from an explicit 16, so it defers to the architecture.
+    /// </remarks>
+    private static int ResolveNumFrames(NeuralNetworkArchitecture<T> architecture, int numFrames)
+    {
+        int declared = architecture.InputFrames;
+        if (declared <= 0)
+        {
+            return numFrames;
+        }
+
+        if (numFrames != declared && numFrames != DefaultNumFrames)
+        {
+            throw new ArgumentException(
+                $"numFrames ({numFrames}) conflicts with the architecture's declared InputFrames ({declared}). " +
+                "Pass the same value, or omit numFrames to use the architecture's frame count.",
+                nameof(numFrames));
+        }
+
+        return declared;
     }
 
     #endregion
@@ -314,8 +355,9 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             video = AddBatchDimension5D(video);
         }
 
-        // Create tube mask
-        var mask = CreateTubeMask(video.Shape[0]);
+        // Create the tube mask on this clip's own patch grid (one spatial mask per clip, shared by
+        // every tubelet).
+        var mask = CreateTubeMask(video.Shape[0], video.Shape[3] / _patchSize, video.Shape[4] / _patchSize);
 
         // Encode visible patches
         var visibleFeatures = EncodeVisiblePatches(video, mask);
@@ -483,8 +525,8 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         // classification logits and saturating the softmax so the output stops
         // responding to input changes.
         var features = patchEmbedded;
-        int encoderLayerCount = Math.Min(13, Layers.Count);
-        for (int i = 1; i < encoderLayerCount; i++)
+        int encoderLayerCount = Math.Min(VideoMAELayerLayout.EncoderEndIndex, Layers.Count);
+        for (int i = VideoMAELayerLayout.FirstEncoderBlockIndex; i < encoderLayerCount; i++)
         {
             features = Layers[i].Forward(features);
         }
@@ -581,8 +623,9 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ClassificationForward(Tensor<T> features)
     {
-        // Classification head layers are at indices 13 and 14
-        if (_useNativeMode && Layers.Count > 15)
+        // Classification head: feature-reduce conv, (global pool), classifier Dense — see
+        // VideoMAELayerLayout for the indices.
+        if (_useNativeMode && Layers.Count > VideoMAELayerLayout.ClassifierIndex)
         {
             // features: [B, C, 1, 1] pooled per-video embedding from EncodeVideo.
             // Apply the 1x1 feature-reduce conv (Layers[13], Conv+ReLU on the
@@ -594,11 +637,11 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             // inputs nor train (constant output, zero gradient). Layers[15] emits
             // logits (identity activation); ClassifyAction softmaxes for inference
             // and training uses CrossEntropyWithLogitsLoss.
-            var reduced = Layers[13].Forward(features);
+            var reduced = Layers[VideoMAELayerLayout.FeatureReduceIndex].Forward(features);
             int batch = reduced.Shape[0];
             int channels = reduced.Shape[1];
             var flat = Engine.Reshape(reduced, new[] { batch, channels });
-            return Layers[15].Forward(flat);
+            return Layers[VideoMAELayerLayout.ClassifierIndex].Forward(flat);
         }
 
         // In ONNX mode, this is handled by RunOnnxInference
@@ -630,19 +673,35 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
-    private bool[,,] CreateTubeMask(int batchSize)
+    /// <summary>
+    /// Creates a tube mask on the model's configured patch grid.
+    /// </summary>
+    internal bool[,,] CreateTubeMask(int batchSize)
+        => CreateTubeMask(batchSize, _height / _patchSize, _width / _patchSize);
+
+    /// <summary>
+    /// Creates a tube mask: one random spatial mask per clip, shared by every tubelet of that clip.
+    /// </summary>
+    /// <remarks>
+    /// Tube masking (Tong et al. 2022, Sec. 3.3; <c>TubeMaskingGenerator</c> in the reference code) masks
+    /// <c>int(maskRatio * patchesPerFrame)</c> spatial positions and extends each through time, so the
+    /// masked fraction of the whole clip equals <c>maskRatio</c> regardless of its length. The mask is
+    /// indexed <c>[clip, patchRow, patchCol]</c> and applied to every tubelet, so the masked count must be
+    /// computed from the SPATIAL patch count. It used to be computed from
+    /// <c>numTubelets * patchesPerFrame</c> while sampling from only <c>patchesPerFrame</c> indices, so
+    /// for any clip with two or more tubelets <c>Take(numMasked)</c> took every index and the encoder saw
+    /// nothing at all.
+    /// </remarks>
+    internal bool[,,] CreateTubeMask(int batchSize, int patchesH, int patchesW)
     {
-        int numTubelets = _numFrames / _tubeletSize;
-        int patchesH = _height / _patchSize;
-        int patchesW = _width / _patchSize;
-        int totalPatches = numTubelets * patchesH * patchesW;
-        int numMasked = (int)(totalPatches * _maskRatio);
+        int spatialPatches = patchesH * patchesW;
+        int numMasked = (int)(spatialPatches * _maskRatio);
 
         var mask = new bool[batchSize, patchesH, patchesW];
 
         for (int b = 0; b < batchSize; b++)
         {
-            var indices = Enumerable.Range(0, patchesH * patchesW).OrderBy(_ => _random.Next()).Take(numMasked).ToHashSet();
+            var indices = Enumerable.Range(0, spatialPatches).OrderBy(_ => _random.Next()).Take(numMasked).ToHashSet();
 
             for (int h = 0; h < patchesH; h++)
             {
@@ -701,8 +760,8 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         // classification logits and saturating the softmax so the output stops
         // responding to input changes.
         var features = patchEmbedded;
-        int encoderLayerCount = Math.Min(13, Layers.Count);
-        for (int i = 1; i < encoderLayerCount; i++)
+        int encoderLayerCount = Math.Min(VideoMAELayerLayout.EncoderEndIndex, Layers.Count);
+        for (int i = VideoMAELayerLayout.FirstEncoderBlockIndex; i < encoderLayerCount; i++)
         {
             features = Layers[i].Forward(features);
         }
@@ -710,90 +769,132 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         return features;
     }
 
-    private Tensor<T> DecodeForReconstruction(Tensor<T> features)
+    /// <summary>
+    /// Runs the reconstruction decoder blocks and the reconstruction head over encoder features.
+    /// </summary>
+    /// <param name="features">Encoder features [B * numTubelets, numFeatures, patchesH, patchesW].</param>
+    /// <returns>Per-patch pixel predictions [B * numTubelets, channels * tubeletSize * P * P, patchesH, patchesW].</returns>
+    /// <remarks>
+    /// The decoder slice is addressed through <see cref="VideoMAELayerLayout"/>. It used to start at a
+    /// hard-coded index 15 — the classifier's <c>DenseLayer</c> — so pretraining pushed the encoder maps
+    /// through the class head, ran three of the four decoder blocks, used the fourth as the "head", and
+    /// never reached the real reconstruction head (whose output is the only one sized to a tubelet patch).
+    /// </remarks>
+    internal Tensor<T> DecodeForReconstruction(Tensor<T> features)
     {
-        // Decoder blocks start at index 15 (after classification head)
         var decoded = features;
-        int decoderStartIdx = 15;
 
-        if (_useNativeMode && Layers.Count > decoderStartIdx + 4)
+        if (_useNativeMode && Layers.Count > VideoMAELayerLayout.ReconstructionHeadIndex)
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = VideoMAELayerLayout.FirstDecoderBlockIndex; i < VideoMAELayerLayout.ReconstructionHeadIndex; i++)
             {
-                decoded = Layers[decoderStartIdx + i].Forward(decoded);
+                decoded = Layers[i].Forward(decoded);
                 decoded = ApplyGELU(decoded);
             }
 
-            // Reconstruction head
-            if (Layers.Count > decoderStartIdx + 4)
-            {
-                decoded = Layers[decoderStartIdx + 4].Forward(decoded);
-            }
+            decoded = Layers[VideoMAELayerLayout.ReconstructionHeadIndex].Forward(decoded);
         }
 
         return decoded;
     }
 
-    private T ComputeReconstructionLoss(Tensor<T> reconstructed, Tensor<T> original, bool[,,] mask)
+    /// <summary>
+    /// Mean squared error between the predicted and the true pixels of the MASKED tubelet patches.
+    /// </summary>
+    /// <param name="reconstructed">Reconstruction-head output
+    /// [B * numTubelets, channels * tubeletSize * P * P, patchesH, patchesW].</param>
+    /// <param name="original">The clip [B, T, C, H, W].</param>
+    /// <param name="mask">Tube mask [B, patchesH, patchesW] (true = masked), shared by all tubelets.</param>
+    /// <remarks>
+    /// <para>
+    /// VideoMAE (Tong et al. 2022, Sec. 3.3) reconstructs each masked tubelet patch — the
+    /// <c>tubeletSize x P x P</c> pixels of every channel at that position — and averages the squared
+    /// error over masked patches only. Prediction channel <c>((ts * C + c) * P + y) * P + x</c> at patch
+    /// <c>(ph, pw)</c> of tubelet <c>t</c> is compared with pixel
+    /// <c>original[b, t * tubeletSize + ts, c, ph * P + y, pw * P + x]</c>; the <c>(ts, c)</c> order matches
+    /// how <see cref="PatchEmbed"/> folds a tubelet into the embedding conv's channels.
+    /// </para>
+    /// <para>
+    /// The previous loss treated the head's leading axis (<c>B * numTubelets</c>) as the clip batch and
+    /// compared channel <c>c</c> at patch <c>(h, w)</c> with the frame-average of pixel <c>(h, w)</c> of
+    /// channel <c>c % C</c> — not the patch's pixels at all — and read past the end of the clip as soon
+    /// as a clip had two or more tubelets (IndexOutOfRange from <see cref="PretrainMAE"/>).
+    /// </para>
+    /// <para>
+    /// The target is raw pixels. The reference implementation's optional per-patch target normalisation
+    /// (<c>normlize_target</c>) is not applied.
+    /// </para>
+    /// </remarks>
+    internal T ComputeReconstructionLoss(Tensor<T> reconstructed, Tensor<T> original, bool[,,] mask)
     {
+        if (original.Rank != 5)
+        {
+            throw new ArgumentException("The original clip must be [B, T, C, H, W].", nameof(original));
+        }
+
+        int batchSize = original.Shape[0];
+        int numFrames = original.Shape[1];
+        int channels = original.Shape[2];
+        int numTubelets = numFrames / _tubeletSize;
+        int patch = _patchSize;
+        int patchDim = channels * _tubeletSize * patch * patch;
+        int patchesH = mask.GetLength(1);
+        int patchesW = mask.GetLength(2);
+
+        if (reconstructed.Rank != 4
+            || reconstructed.Shape[0] != batchSize * numTubelets
+            || reconstructed.Shape[1] != patchDim
+            || reconstructed.Shape[2] != patchesH
+            || reconstructed.Shape[3] != patchesW)
+        {
+            throw new InvalidOperationException(
+                $"Reconstruction shape [{string.Join(", ", reconstructed.Shape.ToArray())}] does not match the " +
+                $"expected per-patch prediction [{batchSize * numTubelets}, {patchDim}, {patchesH}, {patchesW}] " +
+                "for this clip and mask.");
+        }
+
+        if (mask.GetLength(0) != batchSize
+            || patchesH * patch > original.Shape[3]
+            || patchesW * patch > original.Shape[4])
+        {
+            throw new ArgumentException("The mask does not match the clip's batch size and patch grid.", nameof(mask));
+        }
+
         T loss = NumOps.Zero;
         int count = 0;
 
-        int batchSize = reconstructed.Shape[0];
-        int channels = reconstructed.Shape[1];
-        int height = reconstructed.Shape[2];
-        int width = reconstructed.Shape[3];
-
-        // Handle both 4D [B,C,H,W] and 5D [B,T,C,H,W] original tensors
-        bool is5D = original.Rank == 5;
-        int origChannels = is5D ? original.Shape[2] : original.Shape[1];
-        int origHeight = is5D ? original.Shape[3] : original.Shape[2];
-        int origWidth = is5D ? original.Shape[4] : original.Shape[3];
-        int numFrames = is5D ? original.Shape[1] : 1;
-
         for (int b = 0; b < batchSize; b++)
         {
-            for (int h = 0; h < height; h++)
+            for (int ph = 0; ph < patchesH; ph++)
             {
-                for (int w = 0; w < width; w++)
+                for (int pw = 0; pw < patchesW; pw++)
                 {
-                    int maskB = b % mask.GetLength(0);
-                    int maskH = h % mask.GetLength(1);
-                    int maskW = w % mask.GetLength(2);
-
-                    if (mask[maskB, maskH, maskW])
+                    if (!mask[b, ph, pw])
                     {
-                        for (int c = 0; c < channels; c++)
+                        continue;
+                    }
+
+                    for (int t = 0; t < numTubelets; t++)
+                    {
+                        int row = b * numTubelets + t;
+                        for (int ts = 0; ts < _tubeletSize; ts++)
                         {
-                            // Map reconstructed position to original position
-                            int origH = h % origHeight;
-                            int origW = w % origWidth;
-                            int origC = c % origChannels;
-
-                            // Get original value - average over all frames if 5D
-                            T origVal;
-                            if (is5D)
+                            int frame = t * _tubeletSize + ts;
+                            for (int c = 0; c < channels; c++)
                             {
-                                // Average over all frames for proper temporal reconstruction loss
-                                T sum = NumOps.Zero;
-                                for (int t = 0; t < numFrames; t++)
+                                for (int y = 0; y < patch; y++)
                                 {
-                                    int idx = b * numFrames * origChannels * origHeight * origWidth +
-                                              t * origChannels * origHeight * origWidth +
-                                              origC * origHeight * origWidth +
-                                              origH * origWidth + origW;
-                                    sum = NumOps.Add(sum, original.Data.Span[idx]);
+                                    for (int x = 0; x < patch; x++)
+                                    {
+                                        int channel = (((ts * channels) + c) * patch + y) * patch + x;
+                                        T diff = NumOps.Subtract(
+                                            reconstructed[row, channel, ph, pw],
+                                            original[b, frame, c, ph * patch + y, pw * patch + x]);
+                                        loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+                                        count++;
+                                    }
                                 }
-                                origVal = NumOps.Divide(sum, NumOps.FromDouble(numFrames));
                             }
-                            else
-                            {
-                                origVal = original[b, origC, origH, origW];
-                            }
-
-                            T diff = NumOps.Subtract(reconstructed[b, c, h, w], origVal);
-                            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-                            count++;
                         }
                     }
                 }
