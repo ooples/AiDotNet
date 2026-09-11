@@ -15377,6 +15377,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double> options)");
             sb.AppendLine($"        => new {typeName}<double>(options);");
         }
+        if (family == TestFamily.ObjectDetection && model.HasOptionsOnlyConstructor)
+        {
+            // Positive object fixtures use actual model heads with an explicit bounded profile;
+            // the existing random/default fixture remains responsible for empty-safe invariants.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<double> CreatePositiveObjectDetector(");
+            sb.AppendLine("        AiDotNet.Models.Options.ObjectDetectionOptions<double> options)");
+            sb.AppendLine($"        => new {typeName}<double>(options);");
+        }
         if (model.HasVectorOnlyConstructor)
         {
             string featureWidthConstructor = constructorExpr
