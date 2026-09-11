@@ -1,12 +1,16 @@
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
@@ -21,57 +25,29 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
 /// <remarks>
 /// <para>
-/// Matching Networks use attention mechanisms over the support set to classify
-/// query examples. It computes a weighted sum of support labels where weights are
-/// determined by an attention function that measures similarity between examples.
+/// Matching Networks (Vinyals et al. 2016) classify a query <c>x</c> by attention over the labelled support set:
+/// <c>P(y | x, S) = sum_i a(x, x_i) y_i</c> with <c>a(x, x_i) = softmax_i c(f(x), g(x_i))</c>, where <c>c</c> is
+/// the cosine similarity and <c>y_i</c> the one-hot support labels (eq. 1 and section 2.1.1). Training maximises
+/// <c>log P(y | x, S)</c> of the query labels over episodes (eq. 2).
 /// </para>
-/// <para><b>For Beginners:</b> Matching Networks learn to pay attention to similar examples:
-///
-/// **How it works:**
-/// 1. Encode all examples (support and query) with a shared encoder
-/// 2. For each query, compute attention weights with all support examples
-/// 3. Use cosine similarity or learned attention for weights
-/// 4. Predict weighted sum of support labels (soft nearest neighbor)
-///
-/// **Key insight:** The network learns how to compare examples during encoding,
-/// making the similarity measure task-aware.
+/// <para>
+/// <b>Full context embeddings</b> (section 2.1.2 and appendix A) make both embeddings depend on the support set.
+/// <c>g(x_i, S) = h_fwd_i + h_bwd_i + g'(x_i)</c> runs a bidirectional LSTM over the support set (A.2); and
+/// <c>f(x, S) = attLSTM(f'(x), g(S), K)</c> runs <c>K</c> steps of an LSTM that reads <c>g(S)</c> by content-based
+/// attention, <c>h_k = LSTM(f'(x), [h_(k-1), r_(k-1)], c_(k-1)) + f'(x)</c> with
+/// <c>r_(k-1) = sum_i softmax(h_(k-1)' g(x_i)) g(x_i)</c> (A.1). Here <c>f'</c> and <c>g'</c> are the one embedding
+/// network the options hold.
 /// </para>
-/// <para><b>Algorithm - Matching Networks:</b>
-/// <code>
-/// # Shared encoder that learns to produce comparable embeddings
-/// encoder = NeuralNetwork()  # Maps x -> embedding(x)
-/// attention_function = cosine_similarity or learned_attention
-///
-/// # Episode training
-/// for each episode:
-///     # Sample N-way K-shot task
-///     support_set = {examples_from_N_classes, K_examples_each}
-///     query_set = {examples_from_same_N_classes}
-///
-///     # Encode all examples
-///     support_embeddings = encoder(support_set)
-///     query_embeddings = encoder(query_set)
-///
-///     # For each query:
-///     for each query q:
-///         # Compute attention with all support examples
-///         scores = [attention(embedding(q), embedding(s)) for s in support]
-///         weights = softmax(scores)
-///         prediction = sum(weight_i * label_i for support examples)
-///
-///     # Train with cross-entropy loss
-/// </code>
+/// <para>
+/// <b>Exact gradients.</b> Support and query examples go through the embedding network together and the whole
+/// episode - context embeddings, attention and class probabilities - is rebuilt from those embeddings on the
+/// tape, so the embedding network, the context LSTMs and a learned kernel all receive the exact gradient of the
+/// episode loss. This replaced a forward-difference estimate over at most 100 evenly spaced parameters, scaled up
+/// as if it were an unbiased estimate of the rest.
 /// </para>
-/// <para><b>Key Insights:</b>
-///
-/// 1. **Task-Aware Embeddings**: The encoder learns to produce embeddings that
-///    are meaningful for the specific classification task at hand.
-///
-/// 2. **Differentiable Attention**: The attention mechanism is fully differentiable,
-///    allowing end-to-end training of the encoder.
-///
-/// 3. **No Adaptation Needed**: At test time, simply encode new examples and
-///    apply the same attention mechanism - no gradient updates required.
+/// <para><b>For Beginners:</b> Matching Networks label a new example by comparing it with every labelled example
+/// of the task and letting the most similar ones vote. Training shapes the feature space so that the vote is
+/// right.
 /// </para>
 /// <para>
 /// Reference: Vinyals, O., Blundell, C., Lillicrap, T., Kavukcuoglu, K., &amp; Wierstra, D. (2016).
@@ -92,11 +68,32 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _matchingOptions;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _matchingOptions;
+
+    /// <summary>
+    /// The learned bilinear kernel <c>W</c>, <c>[width, width]</c> row-major, for
+    /// <see cref="MatchingNetworksAttentionFunction.Learned"/>; empty otherwise and until the first episode shows the
+    /// embedding width. It starts at the identity, where the kernel is the paper's cosine.
+    /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _kernelWeights = new Vector<T>(0);
+
+    /// <summary>
+    /// The forward then the backward LSTM of the support-set context embedding <c>g(x_i, S)</c> (appendix A.2);
+    /// empty while full context embeddings are off.
+    /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _supportContextWeights = new Vector<T>(0);
+
+    /// <summary>
+    /// The attention LSTM of the query context embedding <c>f(x, S)</c> (appendix A.1); empty unless
+    /// <see cref="MatchingNetworksOptions{T,TInput,TOutput}.UseFullContextEmbedding"/> is on.
+    /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _queryContextWeights = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the MatchingNetworksAlgorithm class.
@@ -105,23 +102,15 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
     /// <exception cref="ArgumentNullException">Thrown when options or required components are null.</exception>
     /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates a Matching Network ready for few-shot learning.
-    ///
-    /// <b>What Matching Networks need:</b>
-    /// - <b>encoder:</b> Neural network that embeds examples into comparable space
-    /// - <b>attentionFunction:</b> How to measure similarity (cosine, learned)
-    /// - <b>useFullContext:</b> Whether to use all examples when encoding each example
-    ///
-    /// <b>What makes it different from ProtoNets:</b>
-    /// - ProtoNets: Uses fixed distance (Euclidean) to class prototypes (mean)
-    /// - Matching Nets: Uses learnable attention to individual support examples
-    /// - No explicit class representatives - each example votes
+    /// <para><b>For Beginners:</b> This creates a Matching Network ready for few-shot learning. The only required
+    /// piece is the embedding network; the default loss is cross-entropy, which on the attention probabilities is
+    /// the paper's <c>-log P(y | x, S)</c>.
     /// </para>
     /// </remarks>
     public MatchingNetworksAlgorithm(MatchingNetworksOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            options.LossFunction ?? new CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
@@ -129,7 +118,6 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
     {
         _matchingOptions = options;
 
-        // Validate configuration
         if (!_matchingOptions.IsValid())
         {
             throw new ArgumentException("Matching Networks configuration is invalid. Check all parameters.", nameof(options));
@@ -143,24 +131,12 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MatchingNetworks;
 
     /// <summary>
-    /// Performs one meta-training step using Matching Networks' episodic training.
+    /// Performs one meta-training step: for each episode, the attention loss of its query examples, differentiated
+    /// exactly into the embedding network and every learned part of the matching function.
     /// </summary>
     /// <param name="taskBatch">A batch of tasks to meta-train on.</param>
-    /// <returns>The average meta-loss across all tasks in the batch.</returns>
+    /// <returns>The average query loss across the batch.</returns>
     /// <exception cref="ArgumentException">Thrown when the task batch is null or empty.</exception>
-    /// <remarks>
-    /// <para>
-    /// Matching Networks training computes attention-based predictions:
-    /// </para>
-    /// <para>
-    /// <b>For each task in the batch:</b>
-    /// 1. Encode all support and query examples
-    /// 2. For each query, compute attention weights with all support examples
-    /// 3. Predict weighted sum of support labels
-    /// 4. Compute cross-entropy loss
-    /// 5. Update encoder with averaged gradients
-    /// </para>
-    /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         if (taskBatch == null || taskBatch.BatchSize == 0)
@@ -168,81 +144,60 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
-        T totalLoss = NumOps.Zero;
-        Vector<T>? accumulatedGradients = null;
+        EnsureMatchingShapes(taskBatch.Tasks);
 
+        var body = ParamModel.GetParameters();
+        Vector<T>? bodyGradient = null, kernelGradient = null, supportGradient = null, queryGradient = null;
+        T totalLoss = NumOps.Zero;
         foreach (var task in taskBatch.Tasks)
         {
-            // Compute episode loss and gradients
-            var (episodeLoss, episodeGradients) = TrainEpisode(task);
-            totalLoss = NumOps.Add(totalLoss, episodeLoss);
-
-            // Accumulate gradients
-            if (accumulatedGradients == null)
-            {
-                accumulatedGradients = episodeGradients;
-            }
-            else
-            {
-                for (int i = 0; i < accumulatedGradients.Length; i++)
-                {
-                    accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], episodeGradients[i]);
-                }
-            }
+            var (loss, taskBody, kernel, support, query) = EpisodeGradient(task);
+            totalLoss = NumOps.Add(totalLoss, loss);
+            bodyGradient = Accumulate(bodyGradient, taskBody);
+            kernelGradient = Accumulate(kernelGradient, kernel);
+            supportGradient = Accumulate(supportGradient, support);
+            queryGradient = Accumulate(queryGradient, query);
         }
 
-        if (accumulatedGradients != null)
+        T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
+        bodyGradient = Scale(bodyGradient ?? new Vector<T>(body.Length), batchSize);
+        kernelGradient = Scale(kernelGradient ?? new Vector<T>(_kernelWeights.Length), batchSize);
+        supportGradient = Scale(supportGradient ?? new Vector<T>(_supportContextWeights.Length), batchSize);
+        queryGradient = Scale(queryGradient ?? new Vector<T>(_queryContextWeights.Length), batchSize);
+
+        if (_matchingOptions.GradientClipThreshold.HasValue && _matchingOptions.GradientClipThreshold.Value > 0)
         {
-            // Average gradients
-            T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-            for (int i = 0; i < accumulatedGradients.Length; i++)
-            {
-                accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], batchSizeT);
-            }
-
-            // Apply gradient clipping if configured
-            if (_matchingOptions.GradientClipThreshold.HasValue && _matchingOptions.GradientClipThreshold.Value > 0)
-            {
-                accumulatedGradients = ClipGradients(accumulatedGradients, _matchingOptions.GradientClipThreshold.Value);
-            }
-
-            // Add L2 regularization if configured
-            if (_matchingOptions.L2Regularization > 0.0)
-            {
-                var paramsVec = ParamModel.GetParameters();
-                for (int i = 0; i < accumulatedGradients.Length && i < paramsVec.Length; i++)
-                {
-                    T regGrad = NumOps.Multiply(paramsVec[i], NumOps.FromDouble(2 * _matchingOptions.L2Regularization));
-                    accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], regGrad);
-                }
-            }
-
-            // Update encoder parameters
-            var currentParams = ParamModel.GetParameters();
-            var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _matchingOptions.OuterLearningRate);
-            ParamModel.SetParameters(updatedParams);
+            double threshold = _matchingOptions.GradientClipThreshold.Value;
+            bodyGradient = ClipGradients(bodyGradient, threshold);
+            if (kernelGradient.Length > 0) kernelGradient = ClipGradients(kernelGradient, threshold);
+            if (supportGradient.Length > 0) supportGradient = ClipGradients(supportGradient, threshold);
+            if (queryGradient.Length > 0) queryGradient = ClipGradients(queryGradient, threshold);
         }
 
-        // Return average loss
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(taskBatch.BatchSize));
+        if (_matchingOptions.L2Regularization > 0.0)
+        {
+            T decay = NumOps.FromDouble(2 * _matchingOptions.L2Regularization);
+            for (int i = 0; i < bodyGradient.Length; i++)
+            {
+                bodyGradient[i] = NumOps.Add(bodyGradient[i], NumOps.Multiply(body[i], decay));
+            }
+        }
+
+        double beta = _matchingOptions.OuterLearningRate;
+        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
+        if (_kernelWeights.Length > 0) _kernelWeights = ApplyGradients(_kernelWeights, kernelGradient, beta);
+        if (_supportContextWeights.Length > 0) _supportContextWeights = ApplyGradients(_supportContextWeights, supportGradient, beta);
+        if (_queryContextWeights.Length > 0) _queryContextWeights = ApplyGradients(_queryContextWeights, queryGradient, beta);
+
+        return NumOps.Divide(totalLoss, batchSize);
     }
 
     /// <summary>
-    /// Adapts to a new task by caching support embeddings.
+    /// Adapts to a new task by embedding its support set.
     /// </summary>
     /// <param name="task">The new task containing support set examples.</param>
-    /// <returns>A MatchingNetworksModel that classifies using attention over support examples.</returns>
+    /// <returns>A MatchingNetworksModel that classifies by attention over the support examples.</returns>
     /// <exception cref="ArgumentNullException">Thrown when task is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// Matching Networks adaptation is very fast - just encode support examples and cache them.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After meta-training, when you have a new task with labeled
-    /// examples, call this method. The returned model can classify new examples by
-    /// comparing them to all support examples using learned attention.
-    /// </para>
-    /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -250,332 +205,427 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
             throw new ArgumentNullException(nameof(task));
         }
 
-        // Return adapted model with cached support embeddings
+        EnsureMatchingShapes(new[] { task });
         return new MatchingNetworksModel<T, TInput, TOutput>(
-            MetaModel,
-            task.SupportInput,
-            task.SupportOutput,
-            _matchingOptions,
-            NumOps);
+            MetaModel, task.SupportInput, task.SupportOutput, _matchingOptions, NumOps,
+            CloneVector(_kernelWeights), CloneVector(_supportContextWeights), CloneVector(_queryContextWeights));
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The adapted model returns class probabilities, so this is the configured loss of their logarithm against the
+    /// class indices - with the default cross-entropy, the paper's <c>-log P(y | x, S)</c>. A Vector output carries
+    /// one predicted class per example instead, and its loss is the classification error rate.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
+    #region Episode
+
     /// <summary>
-    /// Trains the encoder on a single episode.
+    /// One episode's query loss and its exact gradient with respect to the embedding network, the learned kernel and
+    /// both context embeddings.
     /// </summary>
-    private (T loss, Vector<T> gradients) TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
+    private (T Loss, Vector<T> Body, Vector<T> Kernel, Vector<T> SupportContext, Vector<T> QueryContext) EpisodeGradient(
+        IMetaLearningTask<T, TInput, TOutput> task)
     {
-        // Step 1: Encode support set
-        var supportEmbeddings = EncodeExamples(task.SupportInput);
+        var episode = PrototypeEpisode<T>.Build(ReadLabels(task.SupportOutput), ReadLabels(task.QueryOutput));
+        var stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
+        var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
+        var metric = CreateMetric();
 
-        // Step 2: Encode query set
-        var queryEmbeddings = EncodeExamples(task.QueryInput);
+        // The embedding network's gradient: the episode rebuilt from the embeddings on the tape, scored against the
+        // query labels. The metric's weights are constants here.
+        var composed = new EmbeddingClassificationLoss<T>(
+            embeddings => EpisodeLogits(embeddings, episode, metric), LossFunction, episode.QueryTarget);
+        var bodyGradient = ComputeGradients(MetaModel, stackedInput, stackedTarget, composed);
 
-        // Step 3: Compute predictions using attention
-        var predictions = ComputePredictions(queryEmbeddings, supportEmbeddings, task.SupportOutput);
+        // The matching function's gradient: the same logits from fixed embeddings, against its own weights.
+        Tensor<T> embeddings;
+        using (new NoGradScope<T>())
+        {
+            embeddings = ClassifierOutputs<T>.AsRows(MetaModel.Predict(stackedInput));
+        }
 
-        // Step 4: Compute loss
-        T episodeLoss = ComputeCrossEntropyLoss(predictions, task.QueryOutput);
+        var kernelGradient = new Vector<T>(_kernelWeights.Length);
+        var supportGradient = new Vector<T>(_supportContextWeights.Length);
+        var queryGradient = new Vector<T>(_queryContextWeights.Length);
+        T loss;
+        if (metric.Leaves.Count == 0)
+        {
+            using var noGrad = new NoGradScope<T>();
+            loss = LossFunction.ComputeTapeLoss(EpisodeLogits(embeddings, episode, metric), episode.QueryTarget)[0];
+        }
+        else
+        {
+            using var tape = new GradientTape<T>();
+            var episodeLoss = LossFunction.ComputeTapeLoss(EpisodeLogits(embeddings, episode, metric), episode.QueryTarget);
+            loss = episodeLoss[0];
+            var gradients = tape.ComputeGradients(episodeLoss, metric.Leaves.ToList());
+            metric.CopyGradients(gradients, kernelGradient, supportGradient, queryGradient);
+        }
 
-        // Step 5: Compute gradients through the attention mechanism using finite differences
-        // This ensures gradients reflect the attention-based predictions, not a separate forward pass
-        var gradients = ComputeAttentionGradients(task, episodeLoss);
-
-        return (episodeLoss, gradients);
+        return (loss, bodyGradient, kernelGradient, supportGradient, queryGradient);
     }
 
-    /// <summary>
-    /// Computes gradients with respect to the attention-based loss using finite differences.
-    /// This ensures the gradients properly account for the attention mechanism.
-    /// </summary>
-    private Vector<T> ComputeAttentionGradients(IMetaLearningTask<T, TInput, TOutput> task, T currentLoss)
+    /// <summary>Class logits of an episode's query rows from the stacked support-then-query embeddings.</summary>
+    private static Tensor<T> EpisodeLogits(Tensor<T> embeddings, PrototypeEpisode<T> episode, MatchingMetric<T> metric)
     {
-        var parameters = ParamModel.GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
-        double epsilon = 1e-5;
-        double currentLossVal = NumOps.ToDouble(currentLoss);
-
-        // Sample parameters for efficiency (scale for unbiased estimation)
-        int sampleCount = Math.Min(parameters.Length, 100);
-        double scaleFactor = (double)parameters.Length / sampleCount;
-
-        for (int s = 0; s < sampleCount; s++)
-        {
-            int i = (int)(s * parameters.Length / (double)sampleCount);
-
-            // Perturb parameter
-            T original = parameters[i];
-            parameters[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-            ParamModel.SetParameters(parameters);
-
-            // Recompute loss through the attention mechanism
-            var supportEmbeddings = EncodeExamples(task.SupportInput);
-            var queryEmbeddings = EncodeExamples(task.QueryInput);
-            var predictions = ComputePredictions(queryEmbeddings, supportEmbeddings, task.SupportOutput);
-            T perturbedLoss = ComputeCrossEntropyLoss(predictions, task.QueryOutput);
-
-            // Compute scaled gradient
-            double grad = (NumOps.ToDouble(perturbedLoss) - currentLossVal) / epsilon;
-            gradients[i] = NumOps.FromDouble(grad * scaleFactor);
-
-            // Restore parameter
-            parameters[i] = original;
-        }
-
-        // Restore original parameters
-        ParamModel.SetParameters(parameters);
-
-        return gradients;
+        var engine = AiDotNetEngine.Current;
+        var support = engine.TensorMatMul(episode.SupportSelector, embeddings);
+        var query = engine.TensorMatMul(episode.QuerySelector, embeddings);
+        return metric.Logits(support, query, episode.Membership);
     }
 
-    /// <summary>
-    /// Encodes input examples to feature space.
-    /// </summary>
-    private Matrix<T> EncodeExamples(TInput inputs)
+    private MatchingMetric<T> CreateMetric()
+        => new MatchingMetric<T>(_matchingOptions.AttentionFunction, _matchingOptions.Temperature,
+            _matchingOptions.ProcessingSteps, _kernelWeights, _supportContextWeights, _queryContextWeights,
+            EmbeddingWidth());
+
+    /// <summary>The embedding width the learned weights were sized for; zero before any are.</summary>
+    private int EmbeddingWidth()
     {
-        // Get predictions from the model (which acts as the encoder)
-        var encoded = MetaModel.Predict(inputs);
-
-        // Convert to matrix format
-        return ConvertToMatrix(encoded);
-    }
-
-    /// <summary>
-    /// Converts output to matrix format.
-    /// </summary>
-    private Matrix<T> ConvertToMatrix(TOutput output)
-    {
-        if (output is Matrix<T> matrix)
-        {
-            return matrix;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            return TensorToMatrix(tensor);
-        }
-
-        if (output is Vector<T> vector)
-        {
-            var result = new Matrix<T>(1, vector.Length);
-            for (int j = 0; j < vector.Length; j++)
-            {
-                result[0, j] = vector[j];
-            }
-            return result;
-        }
-
-        throw new NotSupportedException($"Output type {typeof(TOutput).Name} cannot be converted to Matrix<T>.");
-    }
-
-    /// <summary>
-    /// Converts tensor to matrix.
-    /// </summary>
-    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
-    {
-        if (tensor.Shape.Length == 1)
-        {
-            var result = new Matrix<T>(1, tensor.Shape[0]);
-            for (int j = 0; j < tensor.Shape[0]; j++)
-            {
-                result[0, j] = tensor[new int[] { j }];
-            }
-            return result;
-        }
-        else if (tensor.Shape.Length >= 2)
-        {
-            int rows = tensor.Shape[0];
-            int cols = tensor.Shape[1];
-            var result = new Matrix<T>(rows, cols);
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    result[i, j] = tensor[new int[] { i, j }];
-                }
-            }
-            return result;
-        }
-
-        return new Matrix<T>(1, 1);
-    }
-
-    /// <summary>
-    /// Computes predictions using attention mechanism.
-    /// </summary>
-    private Matrix<T> ComputePredictions(Matrix<T> queryEmbeddings, Matrix<T> supportEmbeddings, TOutput supportLabels)
-    {
-        int numQueries = queryEmbeddings.Rows;
-        int numSupport = supportEmbeddings.Rows;
-        int numClasses = _matchingOptions.NumClasses;
-
-        var predictions = new Matrix<T>(numQueries, numClasses);
-
-        // Get support label matrix (one-hot encoded)
-        var supportLabelMatrix = ConvertLabelsToOneHot(supportLabels, numSupport);
-
-        for (int q = 0; q < numQueries; q++)
-        {
-            var queryEmbedding = GetRow(queryEmbeddings, q);
-
-            // Compute attention weights with all support examples
-            var attentionWeights = ComputeAttentionWeights(queryEmbedding, supportEmbeddings);
-
-            // Weighted sum of support labels
-            for (int c = 0; c < numClasses; c++)
-            {
-                T classScore = NumOps.Zero;
-                for (int s = 0; s < numSupport; s++)
-                {
-                    T labelValue = supportLabelMatrix[s, c];
-                    T weight = attentionWeights[s];
-                    classScore = NumOps.Add(classScore, NumOps.Multiply(labelValue, weight));
-                }
-                predictions[q, c] = classScore;
-            }
-        }
-
-        return predictions;
-    }
-
-    /// <summary>
-    /// Computes attention weights between query and all support examples.
-    /// </summary>
-    private Vector<T> ComputeAttentionWeights(Vector<T> queryEmbedding, Matrix<T> supportEmbeddings)
-    {
-        int numSupport = supportEmbeddings.Rows;
-        var weights = new Vector<T>(numSupport);
-
-        for (int s = 0; s < numSupport; s++)
-        {
-            var supportEmbedding = GetRow(supportEmbeddings, s);
-
-            T similarity = _matchingOptions.AttentionFunction switch
-            {
-                MatchingNetworksAttentionFunction.Cosine => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
-                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => NumOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
-                _ => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
-            };
-
-            // Apply temperature scaling
-            if (Math.Abs(_matchingOptions.Temperature - 1.0) >= 1e-10)
-            {
-                similarity = NumOps.Divide(similarity, NumOps.FromDouble(_matchingOptions.Temperature));
-            }
-
-            weights[s] = similarity;
-        }
-
-        // Apply softmax to get normalized attention weights
-        return ApplySoftmax(weights);
-    }
-
-
-    /// <summary>
-    /// Computes negative Euclidean distance (higher = more similar).
-    /// </summary>
-    /// <summary>
-    /// Applies softmax to a vector.
-    /// </summary>
-    private Vector<T> ApplySoftmax(Vector<T> values) => Softmax(values);
-
-    /// <summary>
-    /// Computes cross-entropy loss.
-    /// </summary>
-    private T ComputeCrossEntropyLoss(Matrix<T> predictions, TOutput trueLabels)
-    {
-        T totalLoss = NumOps.Zero;
-        int numExamples = predictions.Rows;
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            int trueClass = GetClassLabel(trueLabels, i);
-            if (trueClass >= 0 && trueClass < predictions.Columns)
-            {
-                T predictedProb = predictions[i, trueClass];
-                predictedProb = NumOps.Add(predictedProb, NumOps.FromDouble(1e-8));
-                T logProb = NumOps.Log(predictedProb);
-                totalLoss = NumOps.Subtract(totalLoss, logProb);
-            }
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(numExamples));
-    }
-
-    /// <summary>
-    /// Converts labels to one-hot encoded matrix.
-    /// </summary>
-    private Matrix<T> ConvertLabelsToOneHot(TOutput labels, int numExamples)
-    {
-        int numClasses = _matchingOptions.NumClasses;
-        var matrix = new Matrix<T>(numExamples, numClasses);
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            int classLabel = GetClassLabel(labels, i);
-            if (classLabel >= 0 && classLabel < numClasses)
-            {
-                matrix[i, classLabel] = NumOps.One;
-            }
-        }
-
-        return matrix;
-    }
-
-    /// <summary>
-    /// Gets a row from a matrix as a vector.
-    /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
-    {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
-    }
-
-    /// <summary>
-    /// Gets class label from output at specified index.
-    /// </summary>
-    private int GetClassLabel(TOutput output, int index)
-    {
-        if (output is Vector<T> vector)
-        {
-            if (index < vector.Length)
-                return (int)NumOps.ToDouble(vector[index]);
-            return 0;
-        }
-
-        if (output is Matrix<T> matrix)
-        {
-            if (matrix.Columns == 1)
-                return (int)NumOps.ToDouble(matrix[index % matrix.Rows, 0]);
-
-            // One-hot: find argmax
-            int maxIdx = 0;
-            T maxVal = matrix[index % matrix.Rows, 0];
-            for (int c = 1; c < matrix.Columns; c++)
-            {
-                if (NumOps.GreaterThan(matrix[index % matrix.Rows, c], maxVal))
-                {
-                    maxVal = matrix[index % matrix.Rows, c];
-                    maxIdx = c;
-                }
-            }
-            return maxIdx;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length >= 1 && index < tensor.Shape[0])
-            {
-                return (int)NumOps.ToDouble(tensor[new int[] { index }]);
-            }
-        }
-
+        if (_kernelWeights.Length > 0) return (int)Math.Round(Math.Sqrt(_kernelWeights.Length));
+        if (_supportContextWeights.Length > 0) return MatchingMetric<T>.WidthOfSupportContext(_supportContextWeights.Length);
         return 0;
+    }
+
+    /// <summary>
+    /// Sizes the learned parts of the matching function to the embedding width: the kernel at the identity, where it
+    /// is the paper's cosine, and the context LSTMs at PyTorch's default LSTM initialisation.
+    /// </summary>
+    private void EnsureMatchingShapes(IEnumerable<IMetaLearningTask<T, TInput, TOutput>> tasks)
+    {
+        bool learnedKernel = _matchingOptions.AttentionFunction == MatchingNetworksAttentionFunction.Learned;
+        bool supportContext = _matchingOptions.UseBidirectionalEncoding || _matchingOptions.UseFullContextEmbedding;
+        bool queryContext = _matchingOptions.UseFullContextEmbedding;
+        bool needed = (learnedKernel && _kernelWeights.Length == 0)
+            || (supportContext && _supportContextWeights.Length == 0)
+            || (queryContext && _queryContextWeights.Length == 0);
+        var first = tasks.FirstOrDefault();
+        if (!needed || first is null) return;
+
+        int width;
+        using (new NoGradScope<T>())
+        {
+            width = ClassifierOutputs<T>.AsRows(MetaModel.Predict(first.SupportInput)).Shape[1];
+        }
+
+        if (learnedKernel && _kernelWeights.Length == 0)
+        {
+            _kernelWeights = new Vector<T>(width * width);
+            for (int i = 0; i < width; i++) _kernelWeights[i * width + i] = NumOps.One;
+        }
+
+        if (supportContext && _supportContextWeights.Length == 0)
+        {
+            int count = 2 * TapeLstmCell<T>.ParameterCount(width, width, 1);
+            _supportContextWeights = new Vector<T>(count);
+            TapeLstmCell<T>.InitializeUniform(_supportContextWeights, 0, count, width, RandomGenerator);
+        }
+
+        if (queryContext && _queryContextWeights.Length == 0)
+        {
+            int count = TapeLstmCell<T>.ParameterCount(width, width, 2);
+            _queryContextWeights = new Vector<T>(count);
+            TapeLstmCell<T>.InitializeUniform(_queryContextWeights, 0, count, width, RandomGenerator);
+        }
+    }
+
+    private int[] ReadLabels(TOutput labels)
+    {
+        var tensor = ClassifierOutputs<T>.Labels(labels, _matchingOptions.NumClasses);
+        var indices = new int[tensor.Length];
+        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
+        return indices;
+    }
+
+    #endregion
+
+    #region Test hooks
+
+    /// <summary>One episode's query loss and exact gradient from the current state, for gradient checks.</summary>
+    internal (T Loss, Vector<T> Body, Vector<T> Kernel, Vector<T> SupportContext, Vector<T> QueryContext) EpisodeGradientForTesting(
+        IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        EnsureMatchingShapes(new[] { task });
+        return EpisodeGradient(task);
+    }
+
+    /// <summary>One episode's query loss from the current state.</summary>
+    internal T EpisodeLossForTesting(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        EnsureMatchingShapes(new[] { task });
+        var episode = PrototypeEpisode<T>.Build(ReadLabels(task.SupportOutput), ReadLabels(task.QueryOutput));
+        using var noGrad = new NoGradScope<T>();
+        var embeddings = ClassifierOutputs<T>.AsRows(
+            MetaModel.Predict(ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput)));
+        return LossFunction.ComputeTapeLoss(EpisodeLogits(embeddings, episode, CreateMetric()), episode.QueryTarget)[0];
+    }
+
+    /// <summary>Gets or sets a copy of the learned bilinear kernel (for tests).</summary>
+    internal Vector<T> KernelWeightsForTesting { get => CloneVector(_kernelWeights); set => _kernelWeights = CloneVector(value); }
+
+    /// <summary>Gets or sets a copy of the support context LSTMs' weights (for tests).</summary>
+    internal Vector<T> SupportContextWeightsForTesting
+    {
+        get => CloneVector(_supportContextWeights);
+        set => _supportContextWeights = CloneVector(value);
+    }
+
+    /// <summary>Gets or sets a copy of the query attention LSTM's weights (for tests).</summary>
+    internal Vector<T> QueryContextWeightsForTesting
+    {
+        get => CloneVector(_queryContextWeights);
+        set => _queryContextWeights = CloneVector(value);
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
+    {
+        if (sum is null) return CloneVector(values);
+        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
+        return sum;
+    }
+
+    private static Vector<T> Scale(Vector<T> values, T divisor)
+    {
+        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
+        return values;
+    }
+
+    private static Vector<T> CloneVector(Vector<T> source)
+    {
+        var clone = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
+        return clone;
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// The matching function of Matching Networks in engine tensor ops: context embeddings, the similarity kernel and the
+/// attention class probabilities, differentiable by a live tape.
+/// </summary>
+internal sealed class MatchingMetric<T>
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    private readonly MatchingNetworksAttentionFunction _kernelKind;
+    private readonly double _temperature;
+    private readonly int _processingSteps;
+    private readonly Tensor<T>? _kernel;
+    private readonly TapeLstmCell<T>? _forward;
+    private readonly TapeLstmCell<T>? _backward;
+    private readonly TapeLstmCell<T>? _attention;
+    private readonly List<Tensor<T>> _leaves = new List<Tensor<T>>();
+
+    /// <summary>Unpacks the learned parts; an empty vector leaves that part out.</summary>
+    internal MatchingMetric(
+        MatchingNetworksAttentionFunction kernelKind, double temperature, int processingSteps,
+        Vector<T> kernel, Vector<T> supportContext, Vector<T> queryContext, int width)
+    {
+        _kernelKind = kernelKind;
+        _temperature = temperature;
+        _processingSteps = processingSteps;
+        if (kernel.Length > 0)
+        {
+            _kernel = Tensor<T>.FromVector(kernel);
+            _leaves.Add(_kernel);
+        }
+
+        if (supportContext.Length > 0)
+        {
+            _forward = new TapeLstmCell<T>(supportContext, 0, width, width, 1);
+            _backward = new TapeLstmCell<T>(supportContext, TapeLstmCell<T>.ParameterCount(width, width, 1), width, width, 1);
+            _leaves.AddRange(_forward.Leaves);
+            _leaves.AddRange(_backward.Leaves);
+        }
+
+        if (queryContext.Length > 0)
+        {
+            _attention = new TapeLstmCell<T>(queryContext, 0, width, width, 2);
+            _leaves.AddRange(_attention.Leaves);
+        }
+    }
+
+    /// <summary>Every learned tensor, in the order <see cref="CopyGradients"/> reads them.</summary>
+    internal IReadOnlyList<Tensor<T>> Leaves => _leaves;
+
+    /// <summary>The embedding width a support context vector of this length was sized for.</summary>
+    internal static int WidthOfSupportContext(int length)
+    {
+        for (int width = 1; ; width++)
+        {
+            int count = 2 * TapeLstmCell<T>.ParameterCount(width, width, 1);
+            if (count == length) return width;
+            if (count > length) throw new ArgumentException($"{length} weights are not a support context LSTM pair.");
+        }
+    }
+
+    /// <summary>
+    /// The support embeddings the query attends over: <c>g(x_i, S)</c> of appendix A.2 when the context LSTMs are
+    /// present, otherwise the embeddings as they are.
+    /// </summary>
+    internal Tensor<T> EmbedSupport(Tensor<T> support)
+    {
+        if (_forward is null || _backward is null) return support;
+        var engine = AiDotNetEngine.Current;
+        int rows = support.Shape[0], width = support.Shape[1];
+
+        Tensor<T> Run(TapeLstmCell<T> cell, bool reverse)
+        {
+            var output = new Tensor<T>(new[] { 1, width });
+            var state = new Tensor<T>(new[] { 1, width });
+            Tensor<T>? outputs = null;
+            for (int step = 0; step < rows; step++)
+            {
+                int i = reverse ? rows - 1 - step : step;
+                var x = engine.TensorMatMul(Selector(1, rows, 0, i), support);
+                (output, state) = cell.Step(x, new[] { output }, state);
+                var placed = engine.TensorMatMul(Selector(rows, 1, i, 0), output);
+                outputs = outputs is null ? placed : engine.TensorAdd(outputs, placed);
+            }
+
+            return outputs ?? new Tensor<T>(new[] { rows, width });
+        }
+
+        // g(x_i, S) = h_fwd_i + h_bwd_i + g'(x_i): the backward recursion starts from i = |S|.
+        return engine.TensorAdd(engine.TensorAdd(Run(_forward, reverse: false), Run(_backward, reverse: true)), support);
+    }
+
+    /// <summary>
+    /// The query embeddings: <c>f(x, S) = attLSTM(f'(x), g(S), K)</c> of appendix A.1 when the attention LSTM is
+    /// present, otherwise the embeddings as they are.
+    /// </summary>
+    internal Tensor<T> EmbedQueries(Tensor<T> queries, Tensor<T> support)
+    {
+        if (_attention is null) return queries;
+        var engine = AiDotNetEngine.Current;
+        int rows = queries.Shape[0], width = queries.Shape[1];
+        var hidden = new Tensor<T>(new[] { rows, width });
+        var cell = new Tensor<T>(new[] { rows, width });
+        for (int k = 0; k < _processingSteps; k++)
+        {
+            // r_(k-1) = sum_i softmax(h_(k-1)' g(x_i)) g(x_i); h_k = LSTM(f'(x), [h_(k-1), r_(k-1)], c_(k-1)) + f'(x).
+            var read = engine.TensorMatMul(SoftmaxRows(engine.TensorMatMul(hidden, engine.TensorTranspose(support))), support);
+            var (output, nextCell) = _attention.Step(queries, new[] { hidden, read }, cell);
+            hidden = engine.TensorAdd(output, queries);
+            cell = nextCell;
+        }
+
+        return hidden;
+    }
+
+    /// <summary>The kernel <c>c(f(x), g(x_i))</c> over temperature, <c>[queries, support]</c>.</summary>
+    internal Tensor<T> Similarities(Tensor<T> queries, Tensor<T> support)
+    {
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> scores;
+        switch (_kernelKind)
+        {
+            case MatchingNetworksAttentionFunction.DotProduct:
+                scores = engine.TensorMatMul(queries, engine.TensorTranspose(support));
+                break;
+            case MatchingNetworksAttentionFunction.Euclidean:
+            {
+                var queryNorm = engine.ReduceSum(engine.TensorMultiply(queries, queries), new[] { 1 }, keepDims: true);
+                var supportNorm = engine.ReduceSum(engine.TensorMultiply(support, support), new[] { 1 }, keepDims: true);
+                var cross = engine.TensorMatMul(queries, engine.TensorTranspose(support));
+                var squared = engine.TensorAdd(
+                    engine.TensorAdd(queryNorm, engine.TensorTranspose(supportNorm)),
+                    engine.TensorMultiplyScalar(cross, Ops.FromDouble(-2.0)));
+                var distance = engine.TensorSqrt(
+                    engine.TensorAddScalar(engine.TensorClampMin(squared, Ops.Zero), Ops.FromDouble(1e-12)));
+                scores = engine.TensorNegate(distance);
+                break;
+            }
+            case MatchingNetworksAttentionFunction.Learned:
+            {
+                var q = PrototypeMetric<T>.Normalized(queries, normalize: true);
+                var s = PrototypeMetric<T>.Normalized(support, normalize: true);
+                int width = queries.Shape[1];
+                var w = _kernel is null ? null : engine.Reshape(_kernel, new[] { width, width });
+                var projected = w is null ? q : engine.TensorMatMul(q, w);
+                scores = engine.TensorMatMul(projected, engine.TensorTranspose(s));
+                break;
+            }
+            default:
+            {
+                // The paper's kernel: cosine similarity (section 2.1.1).
+                var q = PrototypeMetric<T>.Normalized(queries, normalize: true);
+                var s = PrototypeMetric<T>.Normalized(support, normalize: true);
+                scores = engine.TensorMatMul(q, engine.TensorTranspose(s));
+                break;
+            }
+        }
+
+        return Math.Abs(_temperature - 1.0) < 1e-12
+            ? scores
+            : engine.TensorMultiplyScalar(scores, Ops.FromDouble(1.0 / _temperature));
+    }
+
+    /// <summary>
+    /// Logits whose softmax is <c>P(y | x, S) = sum_i a(x, x_i) y_i</c>, <c>[queries, classes]</c>: the log of each
+    /// class's attention mass. The softmax over classes renormalises nothing, since the masses already sum to one,
+    /// so cross-entropy on these logits is exactly <c>-log P(y | x, S)</c>.
+    /// </summary>
+    /// <param name="similarities">The kernel values, <c>[queries, support]</c>.</param>
+    /// <param name="membership"><c>[classes, support]</c>: 1 where a support example has the class.</param>
+    internal static Tensor<T> ClassLogits(Tensor<T> similarities, Tensor<T> membership)
+    {
+        var engine = AiDotNetEngine.Current;
+        var max = engine.ReduceMax(similarities, new[] { 1 }, keepDims: true, out _);
+        var weights = engine.TensorExp(engine.TensorAdd(similarities, engine.TensorNegate(engine.StopGradient(max))));
+        var mass = engine.TensorMatMul(weights, engine.TensorTranspose(membership));
+        return engine.TensorLog(engine.TensorClampMin(mass, Ops.FromDouble(1e-30)));
+    }
+
+    /// <summary>The whole matching function: context embeddings, kernel and class logits.</summary>
+    internal Tensor<T> Logits(Tensor<T> support, Tensor<T> queries, Tensor<T> membership)
+    {
+        var g = EmbedSupport(support);
+        var f = EmbedQueries(queries, g);
+        return ClassLogits(Similarities(f, g), membership);
+    }
+
+    /// <summary>Row-wise softmax from ops a tape records.</summary>
+    internal static Tensor<T> SoftmaxRows(Tensor<T> scores)
+    {
+        var engine = AiDotNetEngine.Current;
+        var max = engine.ReduceMax(scores, new[] { 1 }, keepDims: true, out _);
+        var exp = engine.TensorExp(engine.TensorAdd(scores, engine.TensorNegate(engine.StopGradient(max))));
+        return engine.TensorDivide(exp, engine.ReduceSum(exp, new[] { 1 }, keepDims: true));
+    }
+
+    /// <summary>Scatters a tape's gradients back into the three flat weight vectors.</summary>
+    internal void CopyGradients(Dictionary<Tensor<T>, Tensor<T>> gradients, Vector<T> kernel, Vector<T> supportContext,
+        Vector<T> queryContext)
+    {
+        if (_kernel is not null && gradients.TryGetValue(_kernel, out var kernelGradient))
+        {
+            for (int i = 0; i < kernel.Length; i++) kernel[i] = kernelGradient[i];
+        }
+
+        if (_forward is not null && _backward is not null)
+        {
+            _forward.CopyGradients(gradients, supportContext, 0);
+            _backward.CopyGradients(gradients, supportContext, TapeLstmCell<T>.ParameterCount(_forward.Input, _forward.Hidden, 1));
+        }
+
+        _attention?.CopyGradients(gradients, queryContext, 0);
+    }
+
+    /// <summary>A <c>[rows, columns]</c> tensor with a single one at <c>(row, column)</c>.</summary>
+    private static Tensor<T> Selector(int rows, int columns, int row, int column)
+    {
+        var selector = new Tensor<T>(new[] { rows, columns });
+        selector[row * columns + column] = Ops.One;
+        return selector;
     }
 }
 
@@ -587,82 +637,131 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
 /// <typeparam name="TOutput">The output data type.</typeparam>
 /// <remarks>
 /// <para>
-/// This model encapsulates the Matching Networks inference mechanism with pre-computed
-/// support embeddings. It is returned by <see cref="MatchingNetworksAlgorithm{T, TInput, TOutput}.Adapt"/>
-/// and provides fast classification using attention over support examples.
+/// The adapted state of Matching Networks for one task: its own copy of the embedding network, the support set's
+/// (context) embeddings and labels, and the learned matching function. <see cref="Predict"/> returns
+/// <c>P(y | x, S)</c> per example, <c>[rows, NumClasses]</c>, for Tensor and Matrix outputs - a class with no
+/// support example gets probability zero, exactly as eq. 1 gives it - and the most probable class of each example
+/// for a Vector output.
 /// </para>
 /// </remarks>
 public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _encoder;
-    private readonly Matrix<T> _supportEmbeddings;
-    private readonly Matrix<T> _supportLabelsOneHot;
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _options;
     private readonly INumericOperations<T> _numOps;
+    private readonly MatchingMetric<T> _metric;
+    private readonly Tensor<T> _support;
+    private readonly Tensor<T> _membership;
+    private readonly Tensor<T> _classColumns;
+    private readonly int[] _classSlots;
 
     /// <summary>
-    /// Initializes a new instance of the MatchingNetworksModel.
+    /// Initializes a new instance of the MatchingNetworksModel with an untrained matching function.
     /// </summary>
+    /// <remarks>
+    /// A learned kernel starts at the identity, which is the cosine kernel. Full context embeddings have no untrained
+    /// value to start from, so this constructor refuses them: adapt through
+    /// <see cref="MatchingNetworksAlgorithm{T, TInput, TOutput}.Adapt"/> instead.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The options ask for full context embeddings.</exception>
     public MatchingNetworksModel(
         IFullModel<T, TInput, TOutput> encoder,
         TInput supportInputs,
         TOutput supportLabels,
         MatchingNetworksOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
+        : this(encoder, supportInputs, supportLabels, options, numOps,
+            new Vector<T>(0), new Vector<T>(0), new Vector<T>(0))
+    {
+    }
+
+    /// <summary>Initializes the model with the matching function Matching Networks learned.</summary>
+    internal MatchingNetworksModel(
+        IFullModel<T, TInput, TOutput> encoder,
+        TInput supportInputs,
+        TOutput supportLabels,
+        MatchingNetworksOptions<T, TInput, TOutput> options,
+        INumericOperations<T> numOps,
+        Vector<T> kernel,
+        Vector<T> supportContext,
+        Vector<T> queryContext)
     {
         Guard.NotNull(encoder);
-        _encoder = encoder;
         Guard.NotNull(options);
-        _options = options;
         Guard.NotNull(numOps);
+        _encoder = encoder.DeepCopy();
+        _options = options;
         _numOps = numOps;
 
-        // Pre-compute support embeddings
-        var encodedOutput = _encoder.Predict(supportInputs);
-        _supportEmbeddings = ConvertToMatrix(encodedOutput);
+        bool wantsSupportContext = options.UseBidirectionalEncoding || options.UseFullContextEmbedding;
+        if ((wantsSupportContext && supportContext.Length == 0) || (options.UseFullContextEmbedding && queryContext.Length == 0))
+        {
+            throw new ArgumentException(
+                "Full context embeddings are learned during meta-training; build this model through "
+                + "MatchingNetworksAlgorithm.Adapt rather than directly.", nameof(options));
+        }
 
-        // Pre-compute one-hot labels
-        _supportLabelsOneHot = ConvertLabelsToOneHot(supportLabels, _supportEmbeddings.Rows);
+        var labels = ClassifierOutputs<T>.Labels(supportLabels, options.NumClasses);
+        var supportLabelIndices = new int[labels.Length];
+        for (int i = 0; i < supportLabelIndices.Length; i++) supportLabelIndices[i] = (int)Math.Round(numOps.ToDouble(labels[i]));
+        if (supportLabelIndices.Length == 0)
+            throw new ArgumentException("The support set is empty, so there is nothing to match against.", nameof(supportLabels));
+
+        var episode = PrototypeEpisode<T>.Build(supportLabelIndices, Array.Empty<int>());
+        _membership = episode.Membership;
+        _classSlots = episode.ClassSlots;
+        _classColumns = new Tensor<T>(new[] { _classSlots.Length, options.NumClasses });
+        for (int c = 0; c < _classSlots.Length; c++) _classColumns[c * options.NumClasses + _classSlots[c]] = numOps.One;
+
+        using var noGrad = new NoGradScope<T>();
+        var rows = ClassifierOutputs<T>.AsRows(_encoder.Predict(supportInputs));
+        int width = rows.Shape[1];
+        if (options.AttentionFunction == MatchingNetworksAttentionFunction.Learned && kernel.Length == 0)
+        {
+            kernel = new Vector<T>(width * width);
+            for (int i = 0; i < width; i++) kernel[i * width + i] = numOps.One;
+        }
+
+        _metric = new MatchingMetric<T>(options.AttentionFunction, options.Temperature, options.ProcessingSteps,
+            kernel, supportContext, queryContext, width);
+        _support = _metric.EmbedSupport(rows);
     }
 
     /// <summary>Gets the model metadata.</summary>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
-    /// Makes predictions using attention over support examples.
+    /// Classifies by attention over the support examples.
     /// </summary>
+    /// <param name="input">The examples to classify.</param>
+    /// <returns>Class probabilities per example, or the predicted class per example for a Vector output.</returns>
     public TOutput Predict(TInput input)
     {
-        // Encode query
-        var encodedOutput = _encoder.Predict(input);
-        var queryEmbeddings = ConvertToMatrix(encodedOutput);
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var queries = _metric.EmbedQueries(ClassifierOutputs<T>.AsRows(_encoder.Predict(input)), _support);
+        var probabilities = MatchingMetric<T>.SoftmaxRows(
+            MatchingMetric<T>.ClassLogits(_metric.Similarities(queries, _support), _membership));
 
-        int numQueries = queryEmbeddings.Rows;
-        int numClasses = _options.NumClasses;
-
-        var predictions = new Matrix<T>(numQueries, numClasses);
-
-        for (int q = 0; q < numQueries; q++)
+        if (typeof(TOutput) == typeof(Vector<T>))
         {
-            var queryEmbedding = GetRow(queryEmbeddings, q);
-            var attentionWeights = ComputeAttentionWeights(queryEmbedding);
-
-            // Weighted sum of support labels
-            for (int c = 0; c < numClasses; c++)
+            int rows = probabilities.Shape[0], classes = probabilities.Shape[1];
+            var predicted = new Vector<T>(rows);
+            for (int r = 0; r < rows; r++)
             {
-                T classScore = _numOps.Zero;
-                for (int s = 0; s < _supportEmbeddings.Rows; s++)
+                int best = 0;
+                for (int c = 1; c < classes; c++)
                 {
-                    T labelValue = _supportLabelsOneHot[s, c];
-                    T weight = attentionWeights[s];
-                    classScore = _numOps.Add(classScore, _numOps.Multiply(labelValue, weight));
+                    if (_numOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
                 }
-                predictions[q, c] = classScore;
+
+                predicted[r] = _numOps.FromDouble(_classSlots[best]);
             }
+
+            return (TOutput)(object)predicted;
         }
 
-        return ConvertToOutput(predictions);
+        return ClassifierOutputs<T>.ToOutput<TOutput>(engine.TensorMatMul(probabilities, _classColumns));
     }
 
     /// <summary>
@@ -682,7 +781,7 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
     }
 
     /// <summary>
-    /// Gets encoder parameters.
+    /// Gets the parameters of the model's copy of the embedding network.
     /// </summary>
     public Vector<T> GetParameters() => InterfaceGuard.Parameterizable(_encoder).GetParameters();
 
@@ -690,180 +789,4 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
     /// Gets model metadata.
     /// </summary>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
-
-    private Vector<T> ComputeAttentionWeights(Vector<T> queryEmbedding)
-    {
-        int numSupport = _supportEmbeddings.Rows;
-        var weights = new Vector<T>(numSupport);
-
-        for (int s = 0; s < numSupport; s++)
-        {
-            var supportEmbedding = GetRow(_supportEmbeddings, s);
-
-            // Respect the AttentionFunction option (consistent with algorithm's ComputeAttentionWeights)
-            T similarity = _options.AttentionFunction switch
-            {
-                MatchingNetworksAttentionFunction.Cosine => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
-                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => _numOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
-                _ => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
-            };
-
-            if (Math.Abs(_options.Temperature - 1.0) >= 1e-10)
-            {
-                similarity = _numOps.Divide(similarity, _numOps.FromDouble(_options.Temperature));
-            }
-
-            weights[s] = similarity;
-        }
-
-        return ApplySoftmax(weights);
-    }
-
-
-    private Vector<T> ApplySoftmax(Vector<T> values)
-    {
-        var result = new Vector<T>(values.Length);
-
-        T maxVal = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (_numOps.ToDouble(values[i]) > _numOps.ToDouble(maxVal))
-            {
-                maxVal = values[i];
-            }
-        }
-
-        T sumExp = _numOps.Zero;
-        var expValues = new T[values.Length];
-        for (int i = 0; i < values.Length; i++)
-        {
-            T shifted = _numOps.Subtract(values[i], maxVal);
-            expValues[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            sumExp = _numOps.Add(sumExp, expValues[i]);
-        }
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            result[i] = _numOps.Divide(expValues[i], sumExp);
-        }
-
-        return result;
-    }
-
-    private Matrix<T> ConvertToMatrix(TOutput output)
-    {
-        if (output is Matrix<T> matrix)
-            return matrix;
-
-        if (output is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length >= 2)
-            {
-                int rows = tensor.Shape[0];
-                int cols = tensor.Shape[1];
-                var result = new Matrix<T>(rows, cols);
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        result[i, j] = tensor[new int[] { i, j }];
-                    }
-                }
-                return result;
-            }
-            else if (tensor.Shape.Length == 1)
-            {
-                var result = new Matrix<T>(1, tensor.Shape[0]);
-                for (int j = 0; j < tensor.Shape[0]; j++)
-                {
-                    result[0, j] = tensor[new int[] { j }];
-                }
-                return result;
-            }
-        }
-
-        if (output is Vector<T> vector)
-        {
-            var result = new Matrix<T>(1, vector.Length);
-            for (int j = 0; j < vector.Length; j++)
-            {
-                result[0, j] = vector[j];
-            }
-            return result;
-        }
-
-        return new Matrix<T>(1, 1);
-    }
-
-    private Matrix<T> ConvertLabelsToOneHot(TOutput labels, int numExamples)
-    {
-        int numClasses = _options.NumClasses;
-        var matrix = new Matrix<T>(numExamples, numClasses);
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            int classLabel = GetClassLabel(labels, i);
-            if (classLabel >= 0 && classLabel < numClasses)
-            {
-                matrix[i, classLabel] = _numOps.One;
-            }
-        }
-
-        return matrix;
-    }
-
-    private int GetClassLabel(TOutput output, int index)
-    {
-        if (output is Vector<T> vector && index < vector.Length)
-            return (int)_numOps.ToDouble(vector[index]);
-
-        if (output is Tensor<T> tensor && tensor.Shape.Length >= 1 && index < tensor.Shape[0])
-            return (int)_numOps.ToDouble(tensor[new int[] { index }]);
-
-        return 0;
-    }
-
-    private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
-    {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
-    }
-
-    private TOutput ConvertToOutput(Matrix<T> predictions)
-    {
-        if (typeof(TOutput) == typeof(Matrix<T>))
-        {
-            return (TOutput)(object)predictions;
-        }
-
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            var tensor = new Tensor<T>(new int[] { predictions.Rows, predictions.Columns });
-            for (int i = 0; i < predictions.Rows; i++)
-            {
-                for (int j = 0; j < predictions.Columns; j++)
-                {
-                    tensor[new int[] { i, j }] = predictions[i, j];
-                }
-            }
-            return (TOutput)(object)tensor;
-        }
-
-        if (typeof(TOutput) == typeof(Vector<T>) && predictions.Rows == 1)
-        {
-            var vector = new Vector<T>(predictions.Columns);
-            for (int j = 0; j < predictions.Columns; j++)
-            {
-                vector[j] = predictions[0, j];
-            }
-            return (TOutput)(object)vector;
-        }
-
-        throw new NotSupportedException($"Output type {typeof(TOutput).Name} is not supported.");
-    }
 }
