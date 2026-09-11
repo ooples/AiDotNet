@@ -43,12 +43,24 @@ Its real temporary Git repositories demonstrate both paths:
 | Deleted test file | Retain the deleted file's routing evidence; successful process exit |
 | Invalid map or CI-selection control change | Require full validation |
 
-Eleven cases execute the production artifact-emission branch. Missing, expired,
+Twelve cases execute the production artifact-emission branch. Missing, expired,
 wrong-SHA, wrong-slug, or wrong-case imported evidence declines partial reuse;
 complete evidence permits it. Rerunning every shard needs no imported artifacts,
 and whole-result reuse retains its separate existing contract. Internal policy
 and invalid-input fixture modes use enums; string conversion occurs at the
 JSON/workflow boundary.
+
+## Empty-import follow-up
+
+Two stricter negative controls reproduced unnecessary import metadata when every
+PR shard was scheduled to rerun: one with no candidate artifacts and one with
+otherwise valid but unused artifacts. The shared output writer now clears the
+import run ID and SHA whenever the import list is empty. The rerun list and
+validation/quality decisions stay unchanged; the existing workflow's non-empty
+run-ID condition therefore cannot start an empty import's artifact download.
+Partial reuse with real imports and whole-result reuse retain their existing
+contracts. All five commands above and all 12 emission cases passed after this
+follow-up, including the real-Git PR and post-merge paths.
 
 These finite fixtures prove the reviewed wiring and decision rules. They do not
 claim an arbitrary repository edit can never require the full matrix, or that

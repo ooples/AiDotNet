@@ -71,6 +71,9 @@ foreach ($invalid in [Enum]::GetValues[InvalidArtifactCase]()) {
 [void] $cases.Add([pscustomobject]@{ Name = 'all-shards-rerun'; Artifacts = @()
     Expectation = [DeltaEmissionExpectation]::PartialWithoutImports
     Delta = @('Integration D', 'Integration E-G', 'Unit - 10 RL') })
+[void] $cases.Add([pscustomobject]@{ Name = 'all-shards-rerun-with-unused-artifacts'; Artifacts = $valid
+    Expectation = [DeltaEmissionExpectation]::PartialWithoutImports
+    Delta = @('Integration D', 'Integration E-G', 'Unit - 10 RL') })
 [void] $cases.Add([pscustomobject]@{ Name = 'full-reuse-preserved'; Artifacts = @()
     Expectation = [DeltaEmissionExpectation]::WholeResultReuse; Delta = @('Unrelated') })
 
@@ -136,11 +139,13 @@ try {
         }
         else {
             $expectedImport = if ($case.Expectation -eq [DeltaEmissionExpectation]::PartialWithoutImports) { '[]' } else { '["Integration E-G","Unit - 10 RL"]' }
+            $expectedImportRunId = if ($case.Expectation -eq [DeltaEmissionExpectation]::PartialWithoutImports) { '' } else { '123' }
+            $expectedImportSha = if ($case.Expectation -eq [DeltaEmissionExpectation]::PartialWithoutImports) { '' } else { $sha }
             $expectedRerun = if ($case.Expectation -eq [DeltaEmissionExpectation]::PartialWithoutImports) {
                 '["Integration D","Integration E-G","Unit - 10 RL"]'
             } else { '["Integration D"]' }
-            if ($values.delta_mode -cne 'Partial' -or $values.import_run_id -cne '123' -or
-                $values.import_sha -cne $sha -or $values.import_shards -cne $expectedImport -or
+            if ($values.delta_mode -cne 'Partial' -or $values.import_run_id -cne $expectedImportRunId -or
+                $values.import_sha -cne $expectedImportSha -or $values.import_shards -cne $expectedImport -or
                 $values.partial_shards -cne $expectedRerun -or
                 $values.execute_validation -cne 'true' -or $values.execute_quality -cne 'true') {
                 [void] $failures.Add("$($case.Name): valid partial reuse was not preserved")

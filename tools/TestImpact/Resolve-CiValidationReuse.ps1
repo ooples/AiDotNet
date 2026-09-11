@@ -363,6 +363,13 @@ function Write-ReuseDecision {
         [string[]] $ImportShards = @()
     )
 
+    # Empty imports must not authorize the workflow's coverage-artifact download. Keep this
+    # output invariant here so partial reruns and whole-result reuse cannot emit stale metadata.
+    if ($ImportShards.Count -eq 0) {
+        $ImportRunId = 0
+        $ImportSha = ''
+    }
+
     $reuse = $DecisionScope -ne [CiValidationReuseScope]::None
     $reuseQuality = $DecisionScope -eq [CiValidationReuseScope]::Complete
     $lines = @(
