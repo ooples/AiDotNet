@@ -65,3 +65,24 @@ The core `src/AiDotNet.csproj` Release/`net10.0` build completed with **zero err
 and 2,775 existing warnings in 4m48s. This is not a full test-project/compatibility
 build or evidence that all CI shards pass. Actual sequence-model behavior and
 the final hosted/review readiness disposition need their own completed results.
+
+## Actual model and report behavior
+
+The subsequent [actual-model runner](../tests/AiDotNet.OptionsRuntimeContractTests/README.md)
+passed **63/63**, zero skipped, including a separate primary-reviewer replay.
+All 17 migrated models were constructed twice for each independent width/depth
+comparison. Assertions inspect real embedding tensors, physical blocks (including
+contained hybrid/RWKV7 stacks), and materialized parameter lengths, not only options
+returned by the model. For example, Mamba width 16 to 32 changes parameters from
+**3,728 to 10,624**; RWKV7 depth one to two changes **8,544 to 16,032**. Controls
+with unchanged real topology but edited options correctly fail the behavioral guard.
+
+The report measures **1,005 models and 977 gaps across 297 model types**. Restoring
+old discovery/report behavior fails four new guards; restoring the direct reflection
+read fails the open-generic enum control. A blanket metadata-flag replacement fails
+both constant-kind controls because it loses decimal/DateTime defaults. The accepted
+fix uses that flag only for the specific open-generic enum boxing exception.
+
+The runtime correction is commit `84b6752f7ad02187de5f8e917721dd95f94b5460`. This is
+construction/configuration and report evidence; it does not claim every training
+feature, every option, full GPU parity, or completion of the other migration PRs.
