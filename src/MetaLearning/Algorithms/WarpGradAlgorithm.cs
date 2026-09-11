@@ -335,32 +335,34 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// The warp layers make each gradient step count more, so even with few examples,
     /// the model can adapt effectively.
     /// </para>
+    /// <para>
+    /// Adaptation runs on a private clone of the meta-model. It used to step the shared meta-model itself and
+    /// return a wrapper around it, so adapting to a task overwrote the meta-learned initialisation.
+    /// </para>
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        // Start from meta-learned initialization
-        var adaptedParams = new Vector<T>(ParamModel.GetParameters().Length);
-        var initParams = ParamModel.GetParameters();
-        for (int i = 0; i < initParams.Length; i++)
-        {
-            adaptedParams[i] = initParams[i];
-        }
+        if (task is null)
+            throw new ArgumentNullException(nameof(task));
 
-        ParamModel.SetParameters(adaptedParams);
+        // Start from meta-learned initialization, on a copy the task owns
+        var taskModel = CloneModel();
+        var taskParameters = InterfaceGuard.Parameterizable(taskModel);
+        var adaptedParams = taskParameters.GetParameters();
 
         // Inner loop: adapt with warped gradients
         for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
         {
-            var rawGradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            var rawGradients = ComputeGradients(taskModel, task.SupportInput, task.SupportOutput);
             var warpedGradients = ApplyWarpLayers(rawGradients);
             warpedGradients = ClipGradients(warpedGradients);
 
             adaptedParams = ApplyGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate);
-            ParamModel.SetParameters(adaptedParams);
+            taskParameters.SetParameters(adaptedParams);
         }
 
         // Return adapted model wrapped for inference
-        return new WarpGradModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return new WarpGradModel<T, TInput, TOutput>(taskModel, adaptedParams);
     }
 
     /// <summary>
