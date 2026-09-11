@@ -552,7 +552,12 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     {
         // Use Engine operations for gradient update
         var scaledGradients = Engine.TensorMultiplyScalar(_angleGradients, learningRate);
-        _rotationAngles = Engine.TensorSubtract(_rotationAngles, scaledGradients);
+        Engine.TensorSubtractInPlace(_rotationAngles, scaledGradients);
+
+        // Reconstruct from identity. Applying the complete new angle set to the already-rotated
+        // circuit would compound every previous angle, so even a zero-learning-rate update would
+        // change the layer's behavior.
+        ResetQuantumCircuit();
 
         // Ensure angles stay within [0, 2π] and apply rotations
         for (int i = 0; i < _numQubits; i++)
@@ -564,6 +569,9 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             // Apply updated rotation
             ApplyRotation(i, _rotationAngles[i]);
         }
+
+        SynchronizeCircuitTensors();
+        Engine.InvalidatePersistentTensor(_rotationAngles);
 
         // Reset angle gradients for the next iteration
         _angleGradients = new Tensor<T>([_numQubits]);
@@ -657,7 +665,13 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             ApplyRotation(i, _rotationAngles[i]);
         }
 
-        // Update circuit tensors to match the rotated _quantumCircuit
+        SynchronizeCircuitTensors();
+    }
+
+    /// <summary>Keeps the real-valued CPU/GPU parameter views aligned with the complex circuit.</summary>
+    private void SynchronizeCircuitTensors()
+    {
+        int dimension = 1 << _numQubits;
         for (int i = 0; i < dimension; i++)
         {
             for (int j = 0; j < dimension; j++)
@@ -666,6 +680,9 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
                 _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
             }
         }
+
+        Engine.InvalidatePersistentTensor(_circuitReal);
+        Engine.InvalidatePersistentTensor(_circuitImag);
     }
 
     /// <summary>

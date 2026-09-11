@@ -806,35 +806,35 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         // Update all weights using Engine operations
         var scaledGrad = Engine.TensorMultiplyScalar(_messageWeights1Gradient, learningRate);
-        _messageWeights1 = Engine.TensorSubtract(_messageWeights1, scaledGrad);
+        Engine.TensorSubtractInPlace(_messageWeights1, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_messageWeights2Gradient, learningRate);
-        _messageWeights2 = Engine.TensorSubtract(_messageWeights2, scaledGrad);
+        Engine.TensorSubtractInPlace(_messageWeights2, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_updateWeightsGradient, learningRate);
-        _updateWeights = Engine.TensorSubtract(_updateWeights, scaledGrad);
+        Engine.TensorSubtractInPlace(_updateWeights, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_updateMessageWeightsGradient, learningRate);
-        _updateMessageWeights = Engine.TensorSubtract(_updateMessageWeights, scaledGrad);
+        Engine.TensorSubtractInPlace(_updateMessageWeights, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_resetWeightsGradient, learningRate);
-        _resetWeights = Engine.TensorSubtract(_resetWeights, scaledGrad);
+        Engine.TensorSubtractInPlace(_resetWeights, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_resetMessageWeightsGradient, learningRate);
-        _resetMessageWeights = Engine.TensorSubtract(_resetMessageWeights, scaledGrad);
+        Engine.TensorSubtractInPlace(_resetMessageWeights, scaledGrad);
 
         // Update biases
         scaledGrad = Engine.TensorMultiplyScalar(_messageBias1Gradient, learningRate);
-        _messageBias1 = Engine.TensorSubtract(_messageBias1, scaledGrad);
+        Engine.TensorSubtractInPlace(_messageBias1, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_messageBias2Gradient, learningRate);
-        _messageBias2 = Engine.TensorSubtract(_messageBias2, scaledGrad);
+        Engine.TensorSubtractInPlace(_messageBias2, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_updateBiasGradient, learningRate);
-        _updateBias = Engine.TensorSubtract(_updateBias, scaledGrad);
+        Engine.TensorSubtractInPlace(_updateBias, scaledGrad);
 
         scaledGrad = Engine.TensorMultiplyScalar(_resetBiasGradient, learningRate);
-        _resetBias = Engine.TensorSubtract(_resetBias, scaledGrad);
+        Engine.TensorSubtractInPlace(_resetBias, scaledGrad);
     }
 
     /// <summary>

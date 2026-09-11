@@ -1676,11 +1676,11 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
 
         // Update weights
         var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
-        _weights = Engine.TensorSubtract(_weights, scaledWeightGrad);
+        Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
 
         // Update biases
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
 
         // Update diffusion times if gradients are available
         if (_diffusionTimesGradient != null)
