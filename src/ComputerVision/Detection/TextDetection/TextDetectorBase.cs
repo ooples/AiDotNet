@@ -272,12 +272,37 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
 
     private Tensor<T> PreprocessCore(Tensor<T> image)
     {
+        var (height, width) = GetValidatedInputSize();
         // Keep the original asymmetric pixel mapping, but execute through the selected engine so
         // prediction/training share inference's pixel domain without forcing GPU data onto the CPU
         // or cutting the gradient path to an upstream image-producing model.
         var resized = CvTensorOps<T>.ResizeBilinearAsymmetric(
-            image, Options.InputSize[0], Options.InputSize[1]);
+            image, height, width);
         return Engine.TensorMultiplyScalar(resized, NumOps.FromDouble(1.0 / 255.0));
+    }
+
+    private (int Height, int Width) GetValidatedInputSize()
+    {
+        // InputSize is publicly mutable: validate at each consuming boundary and return the
+        // validated values rather than reading the caller-owned array again after validation.
+        var inputSize = Options.InputSize;
+        if (inputSize is null || inputSize.Length != 2)
+        {
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
+        }
+
+        int height = inputSize[0];
+        int width = inputSize[1];
+        if (height <= 0 || width <= 0)
+        {
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
+        }
+
+        return (height, width);
     }
 
     /// <summary>
@@ -542,7 +567,8 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
             return;
         }
 
-        Predict(new Tensor<T>(new[] { 1, InputChannels, Options.InputSize[0], Options.InputSize[1] }));
+        var (height, width) = GetValidatedInputSize();
+        Predict(new Tensor<T>(new[] { 1, InputChannels, height, width }));
     }
 
     /// <inheritdoc />

@@ -6,21 +6,72 @@ The baseline is PR head `ebf7a1c9891af791e8715fb4bc5c74c1b270c34a` (base `1c8647
 
 ## Reproduction
 
-Run from the follow-up worktree using PowerShell and the installed .NET 10 SDK. This focused project uses the repository's real `ModuleInitializer.cs`, licensing test support, `GlobalUsings.cs`, and `xunit.runner.json`; no numerical tolerance is relaxed. CPU selection is test-only. Runtime preprocessing still uses the selected tensor engine, with no CPU-only production switch.
+Run from the follow-up worktree using PowerShell and the installed .NET 10 SDK. Enter the path to your own clean baseline worktree when prompted; the guard rejects a missing path, a different commit, or uncommitted files before starting a build. These commands reproduce the recorded 175-case inventory, excluding the later text-input cases documented separately below. This focused project uses the repository's real `ModuleInitializer.cs`, licensing test support, `GlobalUsings.cs`, and `xunit.runner.json`; no numerical tolerance is relaxed. CPU selection is test-only. Runtime preprocessing still uses the selected tensor engine, with no CPU-only production switch.
 
 ```powershell
+$baselineRoot = Read-Host 'Path to the clean PR #2154 baseline worktree'
+if ([string]::IsNullOrWhiteSpace($baselineRoot)) {
+    throw 'A baseline worktree path is required.'
+}
+$baselineRoot = (Resolve-Path -LiteralPath $baselineRoot -ErrorAction Stop).ProviderPath
+$expectedBaselineHead = 'ebf7a1c9891af791e8715fb4bc5c74c1b270c34a'
+$baselineHead = git -C $baselineRoot rev-parse --verify HEAD
+if ($LASTEXITCODE -ne 0 -or $baselineHead -ne $expectedBaselineHead) {
+    throw "The baseline must be checked out at exactly $expectedBaselineHead."
+}
+$baselineChanges = @(git -C $baselineRoot status --porcelain)
+if ($LASTEXITCODE -ne 0 -or $baselineChanges.Count -ne 0) {
+    throw 'The baseline worktree must have no tracked or untracked changes.'
+}
+$baselineSourceRoot = Join-Path $baselineRoot 'src'
+$baselineProject = Join-Path $baselineSourceRoot 'AiDotNet.csproj'
+if (-not (Test-Path -LiteralPath $baselineProject -PathType Leaf)) {
+    throw 'The baseline worktree does not contain src/AiDotNet.csproj.'
+}
 $env:AIDOTNET_FORCE_CPU='1'
-dotnet build C:/Users/cheat/source/repos/AiDotNet-wt/pr2154-baseline-proof-20260911/src/AiDotNet.csproj -c Release -f net10.0 -p:GeneratePackageOnBuild=false
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:ReviewedSourceRoot=C:/Users/cheat/source/repos/AiDotNet-wt/pr2154-baseline-proof-20260911/src -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~Pyramid_RejectsOverflowingStrideWithoutEnteringLegacyShiftLoop' --logger 'trx;LogFileName=pr2154-boundary-full-baseline.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-baseline.log;verbosity=normal'
+dotnet build $baselineProject -c Release -f net10.0 -p:GeneratePackageOnBuild=false
+if ($LASTEXITCODE -ne 0) { throw 'The baseline build failed; do not test a stale DLL.' }
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release "-p:ReviewedSourceRoot=$baselineSourceRoot" -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~Pyramid_RejectsOverflowingStrideWithoutEnteringLegacyShiftLoop&FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_' --logger 'trx;LogFileName=pr2154-boundary-full-baseline.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-baseline.log;verbosity=normal'
 
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:GeneratePackageOnBuild=false --logger 'trx;LogFileName=pr2154-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-after.log;verbosity=normal'
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_' --logger 'trx;LogFileName=pr2154-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-after.log;verbosity=normal'
 ```
 
-The baseline source lives in a separate, clean, detached worktree at the exact head above. `ReviewedSourceRoot` changes only the real library/generator project references; both runs compile the same final test sources. Do not run the commands concurrently: the focused project's output directory is intentionally shared. The baseline excludes only two stride values above `2^30`: the legacy signed left-shift loop does not terminate for them. These tests are not skipped in source or CI and execute in the unfiltered follow-up run.
+The baseline source lives in a separate, clean, detached worktree at the exact head above. `ReviewedSourceRoot` changes only the real library/generator project references; both runs compile the same final test sources. Do not run the commands concurrently: the focused project's output directory is intentionally shared. Within the recorded 175-case inventory, the baseline excludes only two stride values above `2^30`: the legacy signed left-shift loop does not terminate for them. These tests are not skipped in source or CI and execute in the unfiltered follow-up run.
 
-## Extended boundary evidence (current 175-case inventory)
+## Text-input follow-up evidence (current 208-case inventory)
 
-The current suite includes the primary reviewer's independent non-integer `3x5 -> 2x2` pixel/gradient oracle and 42 separate input/stride boundary cases. The exact commands are above.
+Comments **3991259128** and **3991259119** add one shared text-detector input validator and portable reproduction inputs. The text-detector fix is at the shared base, not in concrete detectors or generated leaf tests. Both consuming paths validate a snapshot of the publicly mutable `InputSize` array before indexing, resizing, or allocating a deferred input. The already-resolved serialization path does not consume the option and still returns without another forward pass.
+
+The 33 added cases cover prediction, preprocessing and initial serialization with null external bindings, empty/short/long arrays, zero/negative dimensions, valid `1x1`/`2x3` inputs, normalization and input nonmutation, repeated serialization, and in-place dimension mutation after a real prediction. The **before** library is the unchanged review head `f74c1a6d5c80b197f22ec2d2c4f76895c5ff5762`; both runs compile the same final test sources. To reproduce this newer baseline, use that exact commit as `$expectedBaselineHead` in the guard above and omit the historical `--filter` arguments. That head already contains the stride-overflow fix, so no case needs exclusion.
+
+| Run | Passed | Failed | Skipped | TRX under `artifacts/pr2154-review` |
+| --- | ---: | ---: | ---: | --- |
+| Unchanged `f74c1a6d5c` DLL, 33 new cases | 7 | 26 | 0 | `pr2154-text-boundary-before.trx` |
+| Unchanged `f74c1a6d5c` DLL, unfiltered suite | 182 | 26 | 0 | `pr2154-text-boundary-full-before.trx` |
+| Shared validator, unfiltered suite | 208 | 0 | 0 | `pr2154-text-boundary-full-after.trx` |
+| Fresh-process no-build repeat | 208 | 0 | 0 | `pr2154-text-boundary-full-after-repeat.trx` |
+
+All original 175 controls passed before and after. Before the fix, null/short arrays produced `NullReferenceException`/`IndexOutOfRangeException`, negative dimensions reached an `OverflowException`, and long arrays were accepted. These are 26 failing cases for one missing shared validation boundary, not 26 distinct defects. The new guard consistently reports `ArgumentException` with `ParamName == "InputSize"` before forwarding. The selected-engine resize/multiply path and strict pixel/gradient controls are unchanged; these CPU runs are not physical-GPU proof.
+
+The final core build completed with **0 errors, 2,842 warnings**, in 4m29s. The unfiltered before/after runs took five seconds each; the fresh-process repeat took four seconds. The loaded focused-project DLL hashes were captured before subsequent builds could replace them:
+
+| Artifact | Before SHA-256 | After SHA-256 |
+| --- | --- | --- |
+| `AiDotNet.dll` | `52D186AFC8B5484E5A131D39CC060C2E27833F11A7A0FFB1E51BFD08353F2C7F` | `B254FAD5B62ABC52973F4634AD50B30343EF4A64E34A83F4B454280008556FD3` |
+| `AiDotNetTests.dll` | `F45C6701F6837599D9BE1A69346FA4F65E6B049826CAF68B2F04B5AD7D5132A7` | `9E36E347EC2C93DC22640B8B142FEDC31B0DC0B7EEAA2FC36918A551A8D0DD02` |
+
+`AiDotNet.Tensors.dll` remained `EB681AE60F23B03CF08E0BF3AB70A372673927ACD87A428C74536D424846D5E7`. The documented PowerShell block parsed without errors; its guard accepted the actual clean `ebf7a1c989` baseline and rejected empty input, a missing path, and the wrong-head review worktree. No build was launched by those guard-only checks.
+
+The actual unfiltered follow-up commands, after building the current core, are:
+
+```powershell
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --logger 'trx;LogFileName=pr2154-text-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly'
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release --no-build --no-restore --logger 'trx;LogFileName=pr2154-text-boundary-full-after-repeat.trx' --results-directory artifacts/pr2154-review --verbosity quiet
+```
+
+## Extended boundary evidence (recorded 175-case inventory)
+
+This recorded suite includes the primary reviewer's independent non-integer `3x5 -> 2x2` pixel/gradient oracle and 42 separate input/stride boundary cases. The exact commands are above.
 
 | Run | Passed | Failed | Skipped | Not selected | TRX under `artifacts/pr2154-review` |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -31,7 +82,7 @@ The current suite includes the primary reviewer's independent non-integer `3x5 -
 
 The baseline's 50 failures comprise the earlier 17, the independent resize oracle, and 32 boundary-contract cases. Some invalid-stride cases previously rejected the value only inside `Log2` with a singular `stride` parameter error; the new boundary consistently rejects the caller's `strides` configuration before assignment. These counts are cases, not distinct defects. Eight new valid/fast-path controls already passed on the baseline; all 123 baseline-passing controls remain green. The two unselected baseline cases are `int.MaxValue` and `2^30 + 1`, whose legacy loop cannot terminate; their unfiltered after results are passing, not claimed before executions.
 
-The current source build reported **0 errors, 2,775 warnings**, 3m43s. Test durations were eight seconds before, five seconds after, and four seconds for the repeat. The test sources and numerical tolerances were identical across the baseline and follow-up compilations. The new guard preserves the already-resolved serialization return, and valid stride boundaries include both `1` and the largest positive signed-int power of two (`2^30`).
+That source build reported **0 errors, 2,775 warnings**, 3m43s. Test durations were eight seconds before, five seconds after, and four seconds for the repeat. The test sources and numerical tolerances were identical across the baseline and follow-up compilations. The new guard preserves the already-resolved serialization return, and valid stride boundaries include both `1` and the largest positive signed-int power of two (`2^30`).
 
 | Artifact | Baseline SHA-256 | Follow-up SHA-256 |
 | --- | --- | --- |
@@ -101,6 +152,8 @@ IDs below are GitHub review-comment database IDs; the corresponding full thread 
 | 3990067177 | Text prediction uses the same asymmetric resize and normalization as detection. The implementation uses tensor-engine operations and retains the input gradient. Exact pixel, input-nonmutation and gradient tests are included. |
 | 3990067093 | All three CV base copy-preparation paths replay batch one without modifying the source shape; text and OCR runtime probes cover the shared behavior. |
 | 3990067103 | A shared object-detector base guard validates exactly two positive input dimensions before deferred probing or preprocessing. Tests cover null external binding, empty/short/long arrays, nonpositive dimensions, valid 1x1/2x3 inputs and the already-resolved fast path. |
+| 3991259128 | The shared text-detector base now applies the same exact-two-positive-dimensions contract to prediction/preprocessing and deferred serialization. The 33 new cases reproduce 26 failures on `f74c1a6d5c` and pass with the private validator; all 175 earlier controls remain green. |
+| 3991259119 | Reproduction prompts for the caller's baseline root and validates its exact recorded commit, clean Git state and real project path before building. Both commands use that resolved input rather than an author-specific path. Guard-only positive and negative controls are recorded above. |
 | 3990067121 | Shared FPN assignment validates nonempty, positive power-of-two, contiguous doubling strides before taking logarithms. The integer logarithm shifts its value down, so it cannot wrap a left-shift count indefinitely. Tests cover invalid assignment/pooling inputs and valid/invalid signed-int boundaries. |
 | 3990067140 | Do not internalize `RPN<T>`: it was already public at merge base `1c8647e293ff9f5180a071a8e42f16dc90849102`, so that recommendation would break an existing public type. Its explicit parameter members already delegate to the shared internal `DelegatingCvParameterModule`; the forwarding does not duplicate the implementation. |
 | 3990067157 | Both YOLO head decoders hoist `scaleX`/`scaleY` once per level, using the existing feature dimensions and preserving the arithmetic. Source inspection and real library compilation verify this cleanup; no dedicated decode-speed benchmark is claimed. |
