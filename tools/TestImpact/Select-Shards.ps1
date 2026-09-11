@@ -905,8 +905,11 @@ function Get-CSharpTestShape {
         if ($match.Groups['name'].Value -cin @('where', 'new', 'class', 'struct', 'unmanaged', 'notnull')) { continue }
         $body = Get-BodyRange ($match.Index + $match.Length)
         $header = if ($null -ne $body) { $code.Substring($match.Index + $match.Length, $body[0] - $match.Index - $match.Length) } else { '' }
-        $lineStart = $code.LastIndexOf("`n", [Math]::Max(0, $match.Index - 1)) + 1
-        $modifiers = $code.Substring($lineStart, $match.Index - $lineStart)
+        # Modifiers run back to the end of the previous declaration or attribute list, not to the
+        # line start: 'public abstract' written on the line above 'class' is still one declaration,
+        # and reading only the keyword's line missed the abstract-base and file-local hazards.
+        $boundary = if ($match.Index -gt 0) { $code.LastIndexOfAny([char[]] ';{}]', $match.Index - 1) } else { -1 }
+        $modifiers = $code.Substring($boundary + 1, $match.Index - $boundary - 1)
 
         # The base list follows the name, after any type parameters and primary constructor, and
         # before any constraint clause. Interfaces are recognised by the I-prefix convention; any
@@ -1598,6 +1601,17 @@ file class Private { }
     $shape = Get-CSharpTestShape -Text "namespace N { public class X { "
     Assert-True ([bool] $shape.ParseError) 'unbalanced braces were not reported'
 
+    # Modifiers on the line ABOVE the keyword belong to the same declaration.
+    $shape = Get-CSharpTestShape -Text "namespace N;`n[Serializable]`npublic`n    abstract`nclass Base { [Fact] public void A() { } }`nfile`nclass Hidden { }"
+    Assert-True (@($shape.Types | Where-Object { $_.Name -eq 'Base' -and $_.IsAbstract }).Count -eq 1) `
+        'an abstract modifier on the line above the class keyword was missed'
+    Assert-True ([bool] $shape.Hazard) 'a multi-line abstract base escaped the abstract-base hazard'
+    Assert-True (@($shape.Types | Where-Object { $_.Name -eq 'Hidden' -and $_.FileLocal }).Count -eq 1) `
+        'a file modifier on the line above the class keyword was missed'
+    $shape = Get-CSharpTestShape -Text "namespace N;`npublic abstract int Unrelated;`npublic class Concrete { }"
+    Assert-True (@($shape.Types | Where-Object { $_.Name -eq 'Concrete' -and -not $_.IsAbstract }).Count -eq 1) `
+        'a modifier from the PREVIOUS declaration leaked onto the next type'
+
     # ---- Routing with injected file reads and reference search. -----------------------------------
     $manifest = @(
         [pscustomobject]@{ name = 'Alpha'; project = 'tests/P/P.csproj'; filter = 'FullyQualifiedName~P.Alpha' },
@@ -1811,8 +1825,9 @@ function Exit-Escalated {
     param([Parameter(Mandatory)] [string] $Reason, [string] $Message)
 
     if ($Message) { Write-Host "::warning::$Message" }
+    # Same shape as a successful selection, routes included: consumers read it under StrictMode.
     $result = [pscustomobject]@{
-        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); shards = @()
+        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); routes = @(); shards = @()
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -1917,3 +1932,9 @@ catch {
     Exit-Escalated -Reason 'selection-failed' `
         -Message "shard selection failed, so the full matrix will run: $($_.Exception.Message)"
 }
+
+# Explicit, because falling off the end leaves the script's exit code as whatever the LAST native
+# command returned. Test-source routing runs git grep, which exits 1 when nothing matches - for
+# example the type names of a test file this pull request deletes - and callers read a nonzero exit
+# as a selector failure and run the full matrix, discarding a valid selection.
+exit 0

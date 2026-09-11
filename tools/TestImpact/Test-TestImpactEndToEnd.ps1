@@ -427,6 +427,55 @@ try {
         Assert-True ([bool] (Get-Content non-merge-selection.json -Raw | ConvertFrom-Json).escalate) `
             'a checkout that is not a merge commit was trusted as a pull-request merge'
 
+        # A pull request that DELETES a test file: no file at HEAD names its types, so the reference
+        # search's git grep exits 1. The selector must still exit 0 - callers read a nonzero exit as
+        # a selector failure and throw away the (valid) selection for the full matrix.
+        # Its own small repository, because the file must exist in the MAP's commit for its deletion
+        # to be a map-coordinate change at all.
+        $deletionRepo = Join-Path $fixture 'deletion-repo'
+        New-Item -ItemType Directory -Path (Join-Path $deletionRepo 'tests/Proj/UnitTests/Alpha') -Force | Out-Null
+        Push-Location $deletionRepo
+        try {
+            Invoke-Git init --quiet
+            Invoke-Git config user.email 'ci-impact-fixture@example.invalid'
+            Invoke-Git config user.name 'CI impact fixture'
+            Invoke-Git config commit.gpgSign false
+            Invoke-Git config core.hooksPath $disabledHooks
+            @('namespace Proj.UnitTests.Alpha;', 'public class DoomedTests', '{', '    [Fact]',
+              '    public void Works() { }', '}') |
+                Set-Content -LiteralPath tests/Proj/UnitTests/Alpha/DoomedTests.cs -Encoding utf8
+            Invoke-Git add .
+            Invoke-Git commit --quiet -m map-commit
+            $deletionBase = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+            Invoke-Git rm --quiet tests/Proj/UnitTests/Alpha/DoomedTests.cs
+            Invoke-Git commit --quiet -m delete-a-test-file
+            $deletingHeadSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+            Invoke-Git checkout --quiet --detach $deletionBase
+            Invoke-Git commit --quiet --allow-empty -m base-moves-on
+            Invoke-Git merge --quiet --no-ff --no-edit $deletingHeadSha
+            [ordered]@{
+                schemaVersion = 1; sha = $deletionBase; knownShards = @('Alpha', 'Beta'); alwaysRun = @('Always')
+                files = [ordered]@{ 'src/Placeholder.cs' = @([ordered]@{ s = 1; r = @(1, 1) }) }
+            } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath deletion-map.json -Encoding utf8
+            $global:LASTEXITCODE = 99
+            & $selector -MapFile deletion-map.json -PullRequestHeadSha $deletingHeadSha `
+                -ShardManifestFile ../shard-manifest.json -ExpectedShards $shardNames `
+                -OutFile deleted-test-selection.json 6>$null
+            $deletedExit = $LASTEXITCODE
+            $deletedTest = Get-Content deleted-test-selection.json -Raw | ConvertFrom-Json
+        }
+        finally { Pop-Location }
+        Assert-True (-not [bool] $deletedTest.escalate -and $deletedTest.shards -contains 'Alpha') `
+            "deleting a test file was not routed to its shard: $(@($deletedTest.reasons) -join '; ')"
+        Assert-True ($deletedExit -eq 0) `
+            "a valid selection exited $deletedExit, which the workflow reads as a selector failure"
+
+        # Every result shape - escalations included - carries routes; consumers read it under StrictMode.
+        & $selector -MapFile absent-map.json -ExpectedShards $shardNames -OutFile escalated-selection.json 6>$null
+        $escalated = Get-Content escalated-selection.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $escalated.escalate -and $null -ne $escalated.PSObject.Properties['routes']) `
+            'an escalated selection result has no routes property'
+
         $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1
         $badCertificate | ConvertTo-Json -Depth 5 | Set-Content bad-certification.json -Encoding utf8
