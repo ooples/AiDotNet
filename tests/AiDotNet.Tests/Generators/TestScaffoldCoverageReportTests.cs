@@ -96,9 +96,9 @@ namespace Probe
 
         // The test compilation contains two models but no actual test classes. Measurability
         // alone must not let WidgetTest vouch for itself or its TEST suffix vouch for that model.
-        Assert.Contains("TotalModels = 2", report);
-        Assert.Contains("TestedCount = 0", report);
-        Assert.Contains("UntestedCount = 2", report);
+        Assert.Contains("TotalModels = 2;", report);
+        Assert.Contains("TestedCount = 0;", report);
+        Assert.Contains("UntestedCount = 2;", report);
 
         var reportSyntax = CSharpSyntaxTree.ParseText(report).GetRoot();
         var testedNames = Assert.Single(
