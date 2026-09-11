@@ -37,7 +37,8 @@ public abstract class ConstructorInitializationTestBase
 
         var input = new Tensor<double>([4], new Vector<double>(new[] { 0.1, 0.2, 0.3, 0.4 }));
         var first = model.Predict(input);
-        Assert.Equal(new[] { 4 }, first.Shape);
+        Assert.Equal(1, first.Shape.Length);
+        Assert.Equal(4, first.Shape[0]);
         Assert.All(first.ToArray(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
         Assert.Same(layer, Assert.Single(model.Layers));
 
