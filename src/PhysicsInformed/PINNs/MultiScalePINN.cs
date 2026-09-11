@@ -249,10 +249,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Forward pass through all scale networks.
+        /// Forward pass through all scale networks: the sum of the active scales' outputs.
         /// </summary>
-        /// <param name="input">Input coordinates [batch, inputDim].</param>
-        /// <returns>Combined output from all scales [batch, outputDim].</returns>
+        /// <param name="input">Input coordinates, one point [inputDim] or a batch [batch, inputDim].</param>
+        /// <returns>Combined output from all active scales, [outputDim] or [batch, outputDim].</returns>
+        /// <remarks>
+        /// Prediction and training both evaluate this. Training used to walk Layers - every scale
+        /// network's layers back to back - as one chain, feeding one scale's output into the next
+        /// scale's input; and this sum was built with scalar copies the gradient tape cannot see
+        /// through. It is now an engine sum over the scale networks' own layers.
+        /// </remarks>
         public Tensor<T> Forward(Tensor<T> input)
         {
             if (input == null)
@@ -260,34 +266,58 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 throw new ArgumentNullException(nameof(input));
             }
 
-            if (input.Rank != 2)
+            bool singlePoint = input.Rank == 1;
+            var rows = singlePoint ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
+            if (rows.Rank != 2)
             {
-                throw new ArgumentException("Input must be 2D [batch, inputDim].", nameof(input));
+                throw new ArgumentException("Input must be [inputDim] or [batch, inputDim].", nameof(input));
             }
 
-            int batchSize = input.Shape[0];
+            int batchSize = rows.Shape[0];
             int outputDim = _multiScalePDE.OutputDimension;
+            Tensor<T>? combined = null;
 
-            var combinedOutput = new Tensor<T>(new int[] { batchSize, outputDim });
-
-            // Sum contributions from all active scales
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
-                var scaleOutput = _scaleNetworks[scale].Predict(input);
-
-                // Add scale contribution to combined output
-                for (int b = 0; b < batchSize; b++)
+                var scaleOutput = RunLayers(_scaleNetworks[scale], rows);
+                int width = scaleOutput.Shape[scaleOutput.Shape.Length - 1];
+                if (width > outputDim)
                 {
-                    int scaleOutputDim = _multiScalePDE.GetScaleOutputDimension(scale);
-                    for (int d = 0; d < Math.Min(scaleOutputDim, outputDim); d++)
-                    {
-                        combinedOutput[b, d] = NumOps.Add(combinedOutput[b, d], scaleOutput[b, d]);
-                    }
+                    scaleOutput = Engine.TensorSlice(scaleOutput, new[] { 0, 0 }, new[] { batchSize, outputDim });
                 }
+                else if (width < outputDim)
+                {
+                    var padding = new Tensor<T>(new[] { batchSize, outputDim - width });
+                    scaleOutput = Engine.TensorConcatenate(new[] { scaleOutput, padding }, axis: 1);
+                }
+
+                combined = combined is null ? scaleOutput : Engine.TensorAdd(combined, scaleOutput);
             }
 
-            return combinedOutput;
+            if (combined is null)
+            {
+                throw new InvalidOperationException("No scale network is active.");
+            }
+
+            return singlePoint ? Engine.Reshape(combined, new[] { outputDim }) : combined;
         }
+
+        private static Tensor<T> RunLayers(NeuralNetworkBase<T> network, Tensor<T> input)
+        {
+            var current = input;
+            foreach (var layer in network.Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The sum Forward evaluates. The default walked Layers as one chain across the scales.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
         /// <inheritdoc/>
         public override Tensor<T> ForwardWithMemory(Tensor<T> input)
