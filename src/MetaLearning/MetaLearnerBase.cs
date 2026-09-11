@@ -1540,8 +1540,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <remarks>
     /// It used to be a bare <c>MemberwiseClone</c>: a copy shared the original's meta-model and every piece of
     /// learned state, so meta-training the copy silently trained the original too. The copy now owns a
-    /// duplicate of everything mutable (<see cref="AiDotNet.Models.CloneEngine.CopyFittedFields"/>), and its
-    /// declared state registers against the copy rather than the original.
+    /// duplicate of everything mutable (<see cref="AiDotNet.Models.CloneEngine.CopyFittedFields"/>) - its random
+    /// generator included, at the same stream position - and its declared state registers against the copy rather
+    /// than the original.
     /// </remarks>
     public override IFullModel<T, TInput, TOutput> DeepCopy()
     {

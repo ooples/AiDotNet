@@ -530,9 +530,13 @@ public static class CloneEngine
     /// </para>
     /// <para>
     /// Sub-models go through their clone contract, tensors, matrices and vectors through their own
-    /// <c>Clone()</c>, and collections through the same deep-container policy as configuration. Options and
-    /// objects that carry no learned state - a <see cref="Random"/>, a lock, a delegate, a stateless
-    /// collaborator with no clone - stay as the constructor built them. <c>[Scratch]</c> fields are skipped.
+    /// <c>Clone()</c>, and collections through the same deep-container policy as configuration. A
+    /// <see cref="Random"/> is copied
+    /// with its exact stream position (<c>ModelStateRegistry.CopyRandom</c>, the state the registry writes read back into a new generator): the state registry serializes a
+    /// generator's state, so a copy that shared the original's generator drifted from it the moment either one
+    /// drew a number, and a copy that kept a fresh one serialized differently from the start. Options and objects
+    /// that carry no learned state - a lock, a delegate, a stateless collaborator with no clone - stay as the
+    /// constructor built them. <c>[Scratch]</c> fields are skipped.
     /// This is what the shallow <c>MemberwiseClone</c> overrides removed in #2150 should have been.
     /// </para>
     /// </remarks>
@@ -595,7 +599,13 @@ public static class CloneEngine
     {
         copy = value;
         if (value is null || value is string) return true;
-        if (value is ModelOptions || value is Random || value is Delegate) return false;
+        if (value is Random random)
+        {
+            copy = ModelStateRegistry<double>.CopyRandom(random);
+            return true;
+        }
+
+        if (value is ModelOptions || value is Delegate) return false;
 
         var type = value.GetType();
         if (type.IsValueType) return true;
