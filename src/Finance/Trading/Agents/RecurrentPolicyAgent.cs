@@ -31,7 +31,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// </para>
 /// </summary>
 /// <typeparam name="T">Element type (float/double).</typeparam>
-public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
+public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDisposable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -62,6 +62,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
     private readonly List<T[]> _actions = new();
     private readonly List<double> _rewards = new();
     private bool _episodeDone;
+    private bool _disposed;
 
     public RecurrentPolicyAgent(
         int stateDim, int actionDim, int hidden = 32, double explorationSigma = 0.2,
@@ -242,5 +243,21 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
         _actions.Clear();
         _rewards.Clear();
         _episodeDone = false;
+    }
+
+    /// <summary>
+    /// Releases the LSTM cell this agent owns (its pool-rented weights and registered engine state).
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the RL agent bases: owned layers are released through the once-only guard, so a repeated
+    /// call -- or the cell being released by another path -- is harmless. The head weights
+    /// <c>_meanW</c>/<c>_meanB</c> are ordinary tensors with nothing to release.
+    /// </remarks>
+    /// <exception cref="AggregateException">The cell threw from <c>Dispose</c>.</exception>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        DisposeOnceGuard.DisposeAll(new object?[] { _cell }, nameof(RecurrentPolicyAgent<T>));
     }
 }
