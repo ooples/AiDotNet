@@ -44,6 +44,9 @@ Tensors assemblies. It rejects invalid comparisons and restores the arena variab
 in all cases. These helper controls did not execute model tests. Arena-off success
 is explicitly not a root-cause diagnosis.
 
+Reproduce these documentation-only boundary controls with
+`pwsh -NoProfile -File .github/scripts/Test-ArenaComparisonExample.ps1`.
+
 ## Adversarial and compatibility checks
 
 An independent review checked the generator cleanup, Finch field removal, new
