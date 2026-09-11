@@ -1,5 +1,6 @@
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
+using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -10,6 +11,7 @@ namespace AiDotNet.Tests.UnitTests.ComputerVision;
 public sealed class CvInputBoundaryReviewTests
 {
     public enum DetectorEntryPoint { Serialization, Preprocessing }
+    public enum TextDetectorEntryPoint { Prediction, Serialization, Preprocessing }
     public enum PyramidEntryPoint { Assignment, Pooling }
 
     public static TheoryData<int[], DetectorEntryPoint> InvalidInputSizes
@@ -90,6 +92,128 @@ public sealed class CvInputBoundaryReviewTests
         Assert.NotEmpty(model.Serialize());
         Assert.Equal(1, model.ForwardCalls);
         Assert.Equal(new[] { 2, 3, 2, 3 }, model.LastInputShape);
+    }
+
+    public static TheoryData<int[], TextDetectorEntryPoint> InvalidTextInputSizes
+    {
+        get
+        {
+            var cases = new TheoryData<int[], TextDetectorEntryPoint>();
+            foreach (int[] shape in new[]
+            {
+                Array.Empty<int>(), new[] { 2 }, new[] { 2, 3, 4 },
+                new[] { 0, 3 }, new[] { 2, 0 }, new[] { -1, 3 }, new[] { 2, -1 }
+            })
+            {
+                cases.Add(shape, TextDetectorEntryPoint.Prediction);
+                cases.Add(shape, TextDetectorEntryPoint.Serialization);
+                cases.Add(shape, TextDetectorEntryPoint.Preprocessing);
+            }
+            return cases;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidTextInputSizes))]
+    public void TextDetector_RejectsMutatedConfiguredDimensionsBeforeForward(
+        int[] shape, TextDetectorEntryPoint entryPoint)
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { 2, 3 } };
+        using var model = new TextDetectorProbe(options);
+        options.InputSize = shape;
+
+        var error = Assert.Throws<ArgumentException>(() => InvokeTextDetector(model, entryPoint));
+
+        Assert.Equal(nameof(options.InputSize), error.ParamName);
+        Assert.Equal(0, model.ForwardCalls);
+    }
+
+    [Theory]
+    [InlineData(TextDetectorEntryPoint.Prediction)]
+    [InlineData(TextDetectorEntryPoint.Serialization)]
+    [InlineData(TextDetectorEntryPoint.Preprocessing)]
+    public void TextDetector_RejectsNullConfigurationFromExternalBinding(TextDetectorEntryPoint entryPoint)
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { 2, 3 } };
+        using var model = new TextDetectorProbe(options);
+        var property = typeof(TextDetectionOptions<double>).GetProperty(nameof(options.InputSize))
+            ?? throw new InvalidOperationException("The public input-size property is missing.");
+        property.SetValue(options, null);
+
+        var error = Assert.Throws<ArgumentException>(() => InvokeTextDetector(model, entryPoint));
+
+        Assert.Equal(nameof(options.InputSize), error.ParamName);
+        Assert.Equal(0, model.ForwardCalls);
+    }
+
+    [Theory]
+    [InlineData(1, 1, TextDetectorEntryPoint.Prediction)]
+    [InlineData(2, 3, TextDetectorEntryPoint.Prediction)]
+    [InlineData(1, 1, TextDetectorEntryPoint.Preprocessing)]
+    [InlineData(2, 3, TextDetectorEntryPoint.Preprocessing)]
+    public void TextDetector_ValidDimensionsPreserveResizeAndNormalization(
+        int height, int width, TextDetectorEntryPoint entryPoint)
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { height, width } };
+        using var model = new TextDetectorProbe(options);
+        var input = new Tensor<double>(new[] { 1, 3, 3, 5 });
+        for (int i = 0; i < input.Length; i++) input[i] = 255.0;
+
+        var result = entryPoint switch
+        {
+            TextDetectorEntryPoint.Prediction => model.Predict(input),
+            TextDetectorEntryPoint.Preprocessing => model.Prepare(input),
+            _ => throw new ArgumentOutOfRangeException(nameof(entryPoint))
+        };
+
+        Assert.Equal(new[] { 1, 3, height, width }, result.Shape);
+        Assert.Equal(entryPoint == TextDetectorEntryPoint.Prediction ? 1 : 0, model.ForwardCalls);
+        for (int i = 0; i < result.Length; i++) Assert.Equal(1.0, result[i], 12);
+        for (int i = 0; i < input.Length; i++) Assert.Equal(255.0, input[i]);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 3)]
+    public void TextDetector_ValidDeferredSerializationUsesConfiguredDimensionsOnce(int height, int width)
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { height, width } };
+        using var model = new TextDetectorProbe(options);
+
+        Assert.NotEmpty(model.Serialize());
+        Assert.Equal(new[] { 1, 3, height, width }, model.LastInputShape);
+        Assert.NotEmpty(model.Serialize());
+        Assert.Equal(1, model.ForwardCalls);
+    }
+
+    [Fact]
+    public void TextDetector_ResolvedSerializationDoesNotReadUnusedConfiguredDimensions()
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { 2, 3 } };
+        using var model = new TextDetectorProbe(options);
+        model.Predict(new Tensor<double>(new[] { 2, 3, 2, 3 }));
+        options.InputSize = Array.Empty<int>();
+
+        Assert.NotEmpty(model.Serialize());
+        Assert.Equal(1, model.ForwardCalls);
+        Assert.Equal(new[] { 2, 3, 2, 3 }, model.LastInputShape);
+    }
+
+    [Theory]
+    [InlineData(TextDetectorEntryPoint.Prediction)]
+    [InlineData(TextDetectorEntryPoint.Preprocessing)]
+    public void TextDetector_RejectsInPlaceDimensionMutationAfterAValidPrediction(
+        TextDetectorEntryPoint entryPoint)
+    {
+        var options = new TextDetectionOptions<double> { InputSize = new[] { 2, 3 } };
+        using var model = new TextDetectorProbe(options);
+        model.Predict(new Tensor<double>(new[] { 1, 3, 2, 3 }));
+        options.InputSize[1] = 0;
+
+        var error = Assert.Throws<ArgumentException>(() => InvokeTextDetector(model, entryPoint));
+
+        Assert.Equal(nameof(options.InputSize), error.ParamName);
+        Assert.Equal(1, model.ForwardCalls);
     }
 
     public static TheoryData<int[], PyramidEntryPoint> InvalidStrides
@@ -188,6 +312,24 @@ public sealed class CvInputBoundaryReviewTests
         }
     }
 
+    private static void InvokeTextDetector(TextDetectorProbe model, TextDetectorEntryPoint entryPoint)
+    {
+        switch (entryPoint)
+        {
+            case TextDetectorEntryPoint.Prediction:
+                model.Predict(new Tensor<double>(new[] { 1, 3, 2, 3 }));
+                break;
+            case TextDetectorEntryPoint.Serialization:
+                model.Serialize();
+                break;
+            case TextDetectorEntryPoint.Preprocessing:
+                model.Prepare(new Tensor<double>(new[] { 1, 3, 2, 3 }));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(entryPoint));
+        }
+    }
+
     private static Tensor<double> Boxes(params double[] sides)
     {
         var boxes = new Tensor<double>(new[] { sides.Length, 4 });
@@ -218,6 +360,31 @@ public sealed class CvInputBoundaryReviewTests
         protected override List<Detection<double>> PostProcess(List<Tensor<double>> outputs,
             int imageWidth, int imageHeight, double confidenceThreshold, double nmsThreshold) =>
             throw new NotSupportedException();
+        public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public override void SaveWeights(string path) => throw new NotSupportedException();
+    }
+
+    private sealed class TextDetectorProbe : TextDetectorBase<double>
+    {
+        public TextDetectorProbe(TextDetectionOptions<double> options) : base(options) { }
+        public override string Name => nameof(TextDetectorProbe);
+        public int ForwardCalls { get; private set; }
+        public int[] LastInputShape { get; private set; } = Array.Empty<int>();
+        public Tensor<double> Prepare(Tensor<double> image) => Preprocess(image);
+        protected override List<Tensor<double>> Forward(Tensor<double> input)
+        {
+            ForwardCalls++;
+            LastInputShape = input.Shape.ToArray();
+            return new() { input };
+        }
+        protected override long GetHeadParameterCount() => 0;
+        public override TextDetectionResult<double> Detect(Tensor<double> image) =>
+            throw new NotSupportedException();
+        public override TextDetectionResult<double> Detect(Tensor<double> image, double confidenceThreshold) =>
+            throw new NotSupportedException();
+        protected override List<TextRegion<double>> PostProcess(List<Tensor<double>> outputs,
+            int imageWidth, int imageHeight, double confidenceThreshold) => throw new NotSupportedException();
         public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
         public override void SaveWeights(string path) => throw new NotSupportedException();
