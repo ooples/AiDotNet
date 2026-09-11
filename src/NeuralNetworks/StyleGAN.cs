@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Models.Options;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -81,26 +83,13 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    // MappingNetwork optimizer state
-    // Adam moment estimates, not weights. [Buffer] keeps them persistent and out of the trainable
-    // surface: registering optimizer state as a parameter both inflates ParameterCount and hands
-    // the optimizer its own moments to step on. Deleting StyleGAN's hand-written layer hook is what
-    // exposed these -- AIDN084 skips a type that declares ANY surface, so the hook had been masking
-    // them.
-    [Buffer]
-    private Vector<T> _mappingMomentum;
-    [Buffer]
-    private Vector<T> _mappingSecondMoment;
-
-    [Buffer]
-    private Vector<T> _synthesisMomentum;
-    [Buffer]
-    private Vector<T> _synthesisSecondMoment;
-
-    [Buffer]
-    private Vector<T> _discMomentum;
-    [Buffer]
-    private Vector<T> _discSecondMoment;
+    // One Adam per network, with the hyperparameters StyleGAN reuses from Progressive GAN (Karras et al.
+    // 2018, appendix A.1). The mapping network's runs at a learning
+    // rate two orders of magnitude lower. These replace three hand-written Adam loops whose moment
+    // vectors were stepped with gradients no backward had produced.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _mappingOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _synthesisOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
 
     private readonly double _initialLearningRate;
 
@@ -142,7 +131,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// Result: Easier to control individual aspects
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> MappingNetwork { get; private set; }
+    public NeuralNetworkBase<T> MappingNetwork { get; private set; }
 
     /// <summary>
     /// Gets the synthesis network that generates images from styles.
@@ -162,12 +151,12 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// 5. Repeats until final resolution
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> SynthesisNetwork { get; private set; }
+    public NeuralNetworkBase<T> SynthesisNetwork { get; private set; }
 
     /// <summary>
     /// Gets the discriminator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     /// <summary>
     /// Enables style mixing during training.
@@ -195,18 +184,27 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <summary>
     /// Probability of style mixing during training.
     /// </summary>
-    private T _styleMixingProbability;
+    private readonly double _styleMixingProbability;
 
     private ILossFunction<T> _lossFunction;
+
+    // Stored under the constructor's own parameter names so the clone plan replays the constructor
+    // with them. Without these it fell back to the model's outer Architecture for every sub-network.
+    private readonly NeuralNetworkArchitecture<T> _mappingNetworkArchitecture;
+    private readonly NeuralNetworkArchitecture<T> _synthesisNetworkArchitecture;
+    private readonly NeuralNetworkArchitecture<T> _discriminatorArchitecture;
 
     /// <summary>
     /// Creates the combined StyleGAN architecture with correct dimension handling.
     /// </summary>
     private static NeuralNetworkArchitecture<T> CreateStyleGANArchitecture(
         int latentSize,
+        NeuralNetworkArchitecture<T> synthesisNetworkArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType)
     {
+        // Predict returns what the synthesis network generates, so that is the declared output. It was
+        // the discriminator's output size -- a real/fake score, not an image.
         if (inputType == InputType.ThreeDimensional)
         {
             return new NeuralNetworkArchitecture<T>(
@@ -217,7 +215,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
                 inputHeight: discriminatorArchitecture.InputHeight,
                 inputWidth: discriminatorArchitecture.InputWidth,
                 inputDepth: discriminatorArchitecture.InputDepth,
-                outputSize: discriminatorArchitecture.OutputSize,
+                outputSize: synthesisNetworkArchitecture.OutputSize,
                 layers: null);
         }
 
@@ -226,7 +224,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
             taskType: NeuralNetworkTaskType.Generative,
             complexity: NetworkComplexity.VeryDeep,
             inputSize: latentSize,
-            outputSize: discriminatorArchitecture.OutputSize);
+            outputSize: synthesisNetworkArchitecture.OutputSize);
     }
 
     /// <summary>
@@ -254,7 +252,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         bool enableStyleMixing = true,
         double styleMixingProbability = 0.9,
         StyleGANOptions? options = null)
-        : base(CreateStyleGANArchitecture(latentSize, discriminatorArchitecture, inputType),
+        : base(CreateStyleGANArchitecture(latentSize, synthesisNetworkArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _options = options ?? new StyleGANOptions();
@@ -299,24 +297,33 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
         _enableStyleMixing = enableStyleMixing;
-        _styleMixingProbability = NumOps.FromDouble(styleMixingProbability);
+        _styleMixingProbability = styleMixingProbability;
         _initialLearningRate = initialLearningRate;
 
-        // Initialize MappingNetwork optimizer state
-        _mappingMomentum = Vector<T>.Empty();
-        _mappingSecondMoment = Vector<T>.Empty();
+        if (_options.R1Gamma < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), _options.R1Gamma, "R1Gamma must be non-negative.");
+        }
 
-        // Initialize SynthesisNetwork optimizer state
-        _synthesisMomentum = Vector<T>.Empty();
-        _synthesisSecondMoment = Vector<T>.Empty();
+        if (_options.MappingLearningRateMultiplier <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), _options.MappingLearningRateMultiplier,
+                "MappingLearningRateMultiplier must be positive.");
+        }
 
-        // Initialize Discriminator optimizer state
-        _discMomentum = Vector<T>.Empty();
-        _discSecondMoment = Vector<T>.Empty();
+        _mappingNetworkArchitecture = mappingNetworkArchitecture;
+        _synthesisNetworkArchitecture = synthesisNetworkArchitecture;
+        _discriminatorArchitecture = discriminatorArchitecture;
+        MappingNetwork = CreateSubNetworkForInputType(mappingNetworkArchitecture, inputType);
+        SynthesisNetwork = CreateSubNetworkForInputType(synthesisNetworkArchitecture, inputType);
+        Discriminator = CreateSubNetworkForInputType(discriminatorArchitecture, inputType);
 
-        MappingNetwork = new ConvolutionalNeuralNetwork<T>(mappingNetworkArchitecture);
-        SynthesisNetwork = new ConvolutionalNeuralNetwork<T>(synthesisNetworkArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
+        _mappingOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(MappingNetwork,
+            CreatePaperAdamOptions(initialLearningRate * _options.MappingLearningRateMultiplier));
+        _synthesisOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(SynthesisNetwork,
+            CreatePaperAdamOptions(initialLearningRate));
+        _discriminatorOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator,
+            CreatePaperAdamOptions(initialLearningRate));
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
@@ -354,72 +361,115 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         int batchSize = realImages.Shape[0];
 
-        // ----- Generate Images with Style -----
-
-        // Map Z to W
-        var styles = MappingNetwork.Predict(latentCodes);
-
-        // Apply style mixing if enabled
-        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < NumOps.ToDouble(_styleMixingProbability))
+        // ONE generator forward -- mapping, optional style mixing, synthesis -- recorded on the
+        // generator's tape and shared by both steps (#1390). The previous step computed every loss as a
+        // detached scalar and then ran three hand-written Adam updates on GetParameterGradients():
+        // gradients no backward had produced, because the Backward calls were commented out when manual
+        // backprop was removed. No network trained (#2155).
+        using var generatorTape = new GradientTape<T>();
+        var styles = MapToStyles(latentCodes);
+        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability)
         {
-            var latentCodes2 = GenerateRandomLatentCodes(batchSize);
-            var styles2 = MappingNetwork.Predict(latentCodes2);
-            styles = MixStyles(styles, styles2);
+            styles = MixStyles(styles, MapToStyles(GenerateRandomLatentCodes(batchSize)));
         }
 
-        // Generate images using styles
-        var fakeImages = SynthesisNetwork.Predict(styles);
+        var fakeTracked = SynthesisNetwork.ForwardForTraining(ReshapeForCNN(styles, SynthesisNetwork.Architecture));
+        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
+        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
 
-        // ----- Train Discriminator -----
+        // ----- Discriminator: non-saturating logistic loss plus R1 (Karras et al. 2019) -----
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
+        {
+            var realScores = Discriminator.ForwardForTraining(realImages);
+            var fakeScores = Discriminator.ForwardForTraining(fakeImages);
+            var discriminatorObjective = Engine.TensorAdd(
+                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+            if (_options.R1Gamma > 0)
+            {
+                discriminatorObjective = Engine.TensorAdd(discriminatorObjective, R1Penalty(realImages));
+            }
 
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
+                _discriminatorOptimizer);
+        }
 
-        // Train on real images
-        var realPredictions = Discriminator.Predict(realImages);
-        T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
-        var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        UpdateDiscriminatorParameters();
-
-        // Train on fake images
-        var fakePredictions = Discriminator.Predict(fakeImages);
-        T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
-        var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        UpdateDiscriminatorParameters();
-
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-
-        // ----- Train Generator (Mapping + Synthesis) -----
-
-        MappingNetwork.SetTrainingMode(true);
-        SynthesisNetwork.SetTrainingMode(true);
-        // Keep Discriminator in training mode - required for backpropagation
-        // We just don't call UpdateDiscriminatorParameters() during generator training
-
-        // Generate new images
-        var newLatentCodes = GenerateRandomLatentCodes(batchSize);
-        var newStyles = MappingNetwork.Predict(newLatentCodes);
-        var newFakeImages = SynthesisNetwork.Predict(newStyles);
-
-        // Get discriminator predictions
-        var genPredictions = Discriminator.Predict(newFakeImages);
-        var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T generatorLoss = CalculateBinaryLoss(genPredictions, allRealLabels, batchSize);
-
-        // Backpropagate through discriminator to get input gradients
-        var genGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-
-        // Backprop through synthesis network
-
-        // Backprop through mapping network
-        /* MappingNetwork.Backward(styleGradients) removed — tape-based */ ;
-
-        // Update both generator networks
-        UpdateSynthesisNetworkParameters();
-        UpdateMappingNetworkParameters();
+        // ----- Generator: the synthesis and mapping networks, trained by one loss at their own rates -----
+        var generatorScores = Discriminator.ForwardFrozenOnTape(fakeTracked);
+        var generatorObjective = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
+        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
+        {
+            ((NeuralNetworkBase<T>)SynthesisNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_synthesisOptimizer),
+            ((NeuralNetworkBase<T>)MappingNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_mappingOptimizer),
+        });
 
         return (discriminatorLoss, generatorLoss);
     }
+
+    /// <summary>
+    /// Maps latent codes Z to style codes W on the active tape, flattened to [batch, features].
+    /// </summary>
+    /// <remarks>
+    /// Goes through the same <see cref="ReshapeForCNN"/> that <see cref="Generate"/> uses, so training
+    /// and inference run one forward path.
+    /// </remarks>
+    private Tensor<T> MapToStyles(Tensor<T> latentCodes)
+    {
+        var styles = MappingNetwork.ForwardForTraining(ReshapeForCNN(latentCodes, MappingNetwork.Architecture));
+        if (styles.Shape.Length > 2)
+        {
+            int batchSize = styles.Shape[0];
+            styles = Engine.Reshape(styles, new[] { batchSize, styles.Length / batchSize });
+        }
+
+        return styles;
+    }
+
+    /// <summary>
+    /// The R1 regulariser, (gamma / 2) * E[ ||grad_x D(x)||^2 ] over real images (Mescheder et al. 2018),
+    /// which Karras et al. 2019 pair with the non-saturating loss (gamma = 10).
+    /// </summary>
+    /// <remarks>
+    /// The inner tape takes the discriminator's gradient with respect to its input with
+    /// <c>createGraph: true</c>, so the outer discriminator tape can differentiate the penalty back
+    /// into the discriminator's weights -- the same construction WGAN-GP's gradient penalty uses.
+    /// </remarks>
+    private Tensor<T> R1Penalty(Tensor<T> realImages)
+    {
+        int batchSize = realImages.Shape[0];
+        var realInput = new Tensor<T>(realImages.Shape.ToArray());
+        realImages.AsSpan().CopyTo(realInput.AsWritableSpan());
+
+        Tensor<T> inputGradients;
+        using (var innerTape = new GradientTape<T>())
+        {
+            var scores = Discriminator.ForwardForTraining(realInput);
+            var summed = Engine.ReduceSum(scores, Enumerable.Range(0, scores.Shape.Length).ToArray(), keepDims: false);
+            var gradients = innerTape.ComputeGradients(summed, new[] { realInput }, createGraph: true);
+            inputGradients = gradients.TryGetValue(realInput, out var gradient)
+                ? gradient
+                : new Tensor<T>(realInput.Shape.ToArray());
+        }
+
+        var flattened = Engine.Reshape(inputGradients, new[] { batchSize, inputGradients.Length / batchSize });
+        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(flattened, flattened), new[] { 1 }, keepDims: false);
+        var meanSquaredNorm = Engine.ReduceMean(squaredNorm, new[] { 0 }, keepDims: false);
+        return Engine.TensorMultiplyScalar(meanSquaredNorm, NumOps.FromDouble(_options.R1Gamma / 2.0));
+    }
+
+    /// <summary>
+    /// Adam with beta1 = 0, beta2 = 0.99 and epsilon = 1e-8: the Progressive GAN settings (Karras et al. 2018,
+    /// appendix A.1), which StyleGAN states it reuses (Karras et al. 2019, appendix C).
+    /// </summary>
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreatePaperAdamOptions(double learningRate)
+        => new()
+        {
+            InitialLearningRate = learningRate,
+            Beta1 = 0.0,
+            Beta2 = 0.99,
+            Epsilon = 1e-8,
+        };
 
     /// <summary>
     /// Mixes two sets of styles at a random layer.
@@ -459,17 +509,23 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         int maxMixingLayer = Math.Max(2, styleSize / 2);
         int mixingLayer = random.Next(1, maxMixingLayer);
 
-        var mixedStyles = new Tensor<T>(styles1._shape);
-
+        // Blend with masks rather than copying elements: training passes tape-tracked styles through
+        // here, and an element copy into a fresh tensor severed the gradient back to the mapping network.
+        var coarseMask = new Tensor<T>(styles1.Shape.ToArray());
+        var fineMask = new Tensor<T>(styles1.Shape.ToArray());
         for (int b = 0; b < styles1.Shape[0]; b++)
         {
             for (int i = 0; i < styleSize; i++)
             {
-                // Use styles1 for coarse features, styles2 for fine features
-                mixedStyles[b, i] = i < mixingLayer ? styles1[b, i] : styles2[b, i];
+                bool coarse = i < mixingLayer;
+                coarseMask[b, i] = coarse ? NumOps.One : NumOps.Zero;
+                fineMask[b, i] = coarse ? NumOps.Zero : NumOps.One;
             }
         }
 
+        var mixedStyles = Engine.TensorAdd(
+            Engine.TensorMultiply(styles1, coarseMask),
+            Engine.TensorMultiply(styles2, fineMask));
         return mixedStyles;
     }
 
@@ -510,7 +566,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         // Already 3D [C, H, W] - add batch dimension
         if (input.Shape.Length == 3)
         {
-            return input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
 
         // Calculate expected input size from architecture
@@ -518,35 +574,27 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         int expectedHeight = architecture.InputHeight;
         int expectedWidth = architecture.InputWidth;
         int expectedElements = expectedDepth * expectedHeight * expectedWidth;
+        if (expectedElements <= 0)
+        {
+            return input;
+        }
 
         // Get batch size and input elements
         int batchSize = input.Shape.Length == 1 ? 1 : input.Shape[0];
         int inputElements = input.Shape.Length == 1 ? input.Shape[0] : input.Shape[1];
+        var rows = input.Shape.Length == 1 ? Engine.Reshape(input, new[] { 1, inputElements }) : input;
 
-        // If sizes match, simple reshape
-        if (inputElements == expectedElements)
+        // Every step is an Engine op because training passes tape-tracked tensors through here; the
+        // element-by-element copy this replaces severed the gradient between the two networks. Tiling
+        // then trimming along the feature axis reproduces the old cycle through the input elements.
+        if (inputElements != expectedElements)
         {
-            return input.Reshape([batchSize, expectedDepth, expectedHeight, expectedWidth]);
+            int repeats = (expectedElements + inputElements - 1) / inputElements;
+            var tiled = repeats > 1 ? Engine.TensorTile(rows, new[] { 1, repeats }) : rows;
+            rows = Engine.TensorSlice(tiled, new[] { 0, 0 }, new[] { batchSize, expectedElements });
         }
 
-        // Create output tensor with expected dimensions
-        var output = TensorAllocator.Rent<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
-
-        // Tile/repeat input to fill expected dimensions
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < expectedElements; i++)
-            {
-                // Cycle through input elements to fill output
-                int inputIdx = i % inputElements;
-                T value = input.Shape.Length == 1
-                    ? input[inputIdx]
-                    : input[b, inputIdx];
-                output.SetFlat(b * expectedElements + i, value);
-            }
-        }
-
-        return output;
+        return Engine.Reshape(rows, new[] { batchSize, expectedDepth, expectedHeight, expectedWidth });
     }
 
     /// <summary>
@@ -607,241 +655,32 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         return Tensor<T>.FromVector(noiseVector, [batchSize, _latentSize]);
     }
 
-    private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T prediction = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // Clamp prediction to [epsilon, 1-epsilon] to avoid log(0) NaN/Inf
-            if (NumOps.LessThan(prediction, epsilon))
-            {
-                prediction = epsilon;
-            }
-            else if (NumOps.GreaterThan(prediction, oneMinusEpsilon))
-            {
-                prediction = oneMinusEpsilon;
-            }
-
-            T logP = NumOps.Log(prediction);
-            T logOneMinusP = NumOps.Log(NumOps.Subtract(NumOps.One, prediction));
-
-            T loss = NumOps.Negate(NumOps.Add(
-                NumOps.Multiply(target, logP),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP)
-            ));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        var gradients = new Tensor<T>(predictions._shape);
-        T epsilon = NumOps.FromDouble(1e-10);
-        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T p = predictions[i, 0];
-            T t = targets[i, 0];
-
-            // Clamp p to [epsilon, 1-epsilon] to avoid division by zero
-            if (NumOps.LessThan(p, epsilon))
-            {
-                p = epsilon;
-            }
-            else if (NumOps.GreaterThan(p, oneMinusEpsilon))
-            {
-                p = oneMinusEpsilon;
-            }
-
-            // BCE gradient w.r.t. probability: dL/dp = (p - t) / (p * (1 - p))
-            T oneMinusP = NumOps.Subtract(NumOps.One, p);
-            T pTimesOneMinusP = NumOps.Multiply(p, oneMinusP);
-            T gradient = NumOps.Divide(
-                NumOps.Subtract(p, t),
-                NumOps.Add(pTimesOneMinusP, epsilon)
-            );
-
-            gradients[i, 0] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
-        }
-
-        return gradients;
-    }
-
-    private Tensor<T> CreateLabelTensor(int batchSize, T value)
-    {
-        var tensor = new Tensor<T>(new int[] { batchSize, 1 });
-        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
-        Engine.TensorFill(tensor, value);
-        return tensor;
-    }
-
-    /// <summary>
-    /// Updates MappingNetwork parameters using vectorized Adam optimizer.
-    /// Uses Engine operations for SIMD/GPU acceleration.
-    /// </summary>
-    private void UpdateMappingNetworkParameters()
-    {
-        var parameters = MappingNetwork.GetParameters();
-        var gradients = MappingNetwork.GetParameterGradients();
-
-        // Initialize mapping network optimizer state if needed
-        if (_mappingMomentum.Length != parameters.Length)
-        {
-            _mappingMomentum = new Vector<T>(parameters.Length);
-            _mappingMomentum.Fill(NumOps.Zero);
-        }
-
-        if (_mappingSecondMoment.Length != parameters.Length)
-        {
-            _mappingSecondMoment = new Vector<T>(parameters.Length);
-            _mappingSecondMoment.Fill(NumOps.Zero);
-        }
-
-        // Adam optimizer parameters (beta1=0 for StyleGAN)
-        var beta1 = NumOps.FromDouble(0.0);
-        var beta2 = NumOps.FromDouble(0.99);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_mappingMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _mappingMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_mappingSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _mappingSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(_mappingSecondMoment);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var adaptiveGradient = (Vector<T>)Engine.Divide(_mappingMomentum, sqrtVPlusEps);
-        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        MappingNetwork.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates SynthesisNetwork parameters using vectorized Adam optimizer.
-    /// Uses Engine operations for SIMD/GPU acceleration.
-    /// </summary>
-    private void UpdateSynthesisNetworkParameters()
-    {
-        var parameters = SynthesisNetwork.GetParameters();
-        var gradients = SynthesisNetwork.GetParameterGradients();
-
-        // Initialize synthesis network optimizer state if needed
-        if (_synthesisMomentum.Length != parameters.Length)
-        {
-            _synthesisMomentum = new Vector<T>(parameters.Length);
-            _synthesisMomentum.Fill(NumOps.Zero);
-        }
-
-        if (_synthesisSecondMoment.Length != parameters.Length)
-        {
-            _synthesisSecondMoment = new Vector<T>(parameters.Length);
-            _synthesisSecondMoment.Fill(NumOps.Zero);
-        }
-
-        // Adam optimizer parameters (beta1=0 for StyleGAN)
-        var beta1 = NumOps.FromDouble(0.0);
-        var beta2 = NumOps.FromDouble(0.99);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_synthesisMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _synthesisMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_synthesisSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _synthesisSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(_synthesisSecondMoment);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var adaptiveGradient = (Vector<T>)Engine.Divide(_synthesisMomentum, sqrtVPlusEps);
-        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        SynthesisNetwork.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates Discriminator parameters using vectorized Adam optimizer.
-    /// Uses Engine operations for SIMD/GPU acceleration.
-    /// </summary>
-    private void UpdateDiscriminatorParameters()
-    {
-        var parameters = Discriminator.GetParameters();
-        var gradients = Discriminator.GetParameterGradients();
-
-        // Initialize discriminator optimizer state if needed
-        if (_discMomentum.Length != parameters.Length)
-        {
-            _discMomentum = new Vector<T>(parameters.Length);
-            _discMomentum.Fill(NumOps.Zero);
-        }
-
-        if (_discSecondMoment.Length != parameters.Length)
-        {
-            _discSecondMoment = new Vector<T>(parameters.Length);
-            _discSecondMoment.Fill(NumOps.Zero);
-        }
-
-        // Adam optimizer parameters (beta1=0 for StyleGAN)
-        var beta1 = NumOps.FromDouble(0.0);
-        var beta2 = NumOps.FromDouble(0.99);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(_discSecondMoment);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var adaptiveGradient = (Vector<T>)Engine.Divide(_discMomentum, sqrtVPlusEps);
-        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        Discriminator.UpdateParameters(updatedParameters);
-    }
-
     protected override void InitializeLayers() { }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The model's own Layers list is empty: its layers live in the mapping, synthesis and discriminator
+    /// networks. Each is read on what feeds it in <see cref="Generate"/>, and the discriminator on the image.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var result = new Dictionary<string, Tensor<T>>();
+        MappingNetwork.SetTrainingMode(false);
+        SynthesisNetwork.SetTrainingMode(false);
+
+        var latent = ReshapeForCNN(input, MappingNetwork.Architecture);
+        foreach (var kv in MappingNetwork.GetNamedLayerActivations(latent))
+            result["Mapping/" + kv.Key] = kv.Value;
+
+        var styles = ReshapeForCNN(MappingNetwork.Predict(latent), SynthesisNetwork.Architecture);
+        foreach (var kv in SynthesisNetwork.GetNamedLayerActivations(styles))
+            result["Synthesis/" + kv.Key] = kv.Value;
+
+        var image = SynthesisNetwork.Predict(styles);
+        foreach (var kv in Discriminator.GetNamedLayerActivations(ReshapeForCNN(image, Discriminator.Architecture)))
+            result["Discriminator/" + kv.Key] = kv.Value;
+        return result;
+    }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -854,7 +693,9 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainStep(expectedOutput, input);
+        TrainStep(
+            WithBatchAxis(expectedOutput, Discriminator.Architecture.InputType),
+            WithBatchAxis(input, MappingNetwork.Architecture.InputType));
     }
 
     public override ModelMetadata<T> GetModelMetadata()

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -371,23 +372,20 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
             // Generate fake images
             Tensor<T> fakeImages = GenerateImages(noise);
 
-            // Train critic with tape-based autodiff
-            var realLabels = new Tensor<T>([realImages.Shape[0], 1]);
-            realLabels.Fill(NumOps.One);
-            var fakeLabels = new Tensor<T>([fakeImages.Shape[0], 1]);
-            fakeLabels.Fill(NumOps.Zero);
-            Critic.Train(realImages, realLabels);
-            Critic.Train(fakeImages, fakeLabels);
-
-            // Compute Wasserstein loss for monitoring: E[D(real)] - E[D(fake)]
-            var realPred = Critic.Predict(realImages);
-            var fakePred = Critic.Predict(fakeImages);
-            T realScore = realPred.ToVector().Sum();
-            T fakeScore = fakePred.ToVector().Sum();
-            T criticLoss = NumOps.Subtract(realScore, fakeScore);
-
-            // We want to maximize this, so we negate for gradient descent
-            criticLoss = NumOps.Negate(criticLoss);
+            // Algorithm 1, lines 2-8: the critic ascends E[f(x)] - E[f(g(z))], so it descends
+            // mean f(fake) - mean f(real). It used to be trained by Critic.Train(real, 1) and
+            // Critic.Train(fake, 0) with the critic network's configured loss -- a regression towards
+            // 0/1 labels, which is not the Wasserstein estimate at all.
+            T criticLoss;
+            using (var criticTape = new GradientTape<T>())
+            {
+                var realScores = Critic.ForwardForTraining(realImages);
+                var fakeScores = Critic.ForwardForTraining(fakeImages);
+                var criticObjective = Engine.TensorSubtract(
+                    Engine.ReduceMean(fakeScores, Enumerable.Range(0, fakeScores.Shape.Length).ToArray(), keepDims: false),
+                    Engine.ReduceMean(realScores, Enumerable.Range(0, realScores.Shape.Length).ToArray(), keepDims: false));
+                criticLoss = StepOnTape(criticTape, criticObjective, Critic, _criticOptimizer);
+            }
 
             totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
 
@@ -403,12 +401,14 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
         {
-            var criticScore = Critic.Predict(genOutput);
+            // On the tape, with the critic frozen. Critic.Predict opened a NoGradScope, which detached
+            // the critic's forward and left the generator with exactly zero gradient.
+            var criticScore = Critic.ForwardFrozenOnTape(genOutput);
             // WGAN generator loss = -mean(critic(fake))
             var negScore = Engine.TensorNegate(criticScore);
             var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
             return Engine.ReduceMean(negScore, allAxes, keepDims: false);
-        });
+        }, _generatorOptimizer);
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
@@ -443,13 +443,12 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     private void ClipCriticWeights()
     {
-        var parameters = Critic.GetParameters();
-        var clipMin = NumOps.FromDouble(-_weightClipValue);
-        var clipMax = NumOps.FromDouble(_weightClipValue);
-
-        // Vectorized weight clipping using Engine.Clamp
-        var clippedParameters = Engine.Clamp(parameters, clipMin, clipMax);
-        Critic.UpdateParameters(clippedParameters);
+        // In place: the flat GetParameters -> UpdateParameters round trip replaced every weight tensor
+        // (a layer's SetWeights assigns the incoming tensor), which reset the critic's RMSProp state on
+        // every step. See NeuralNetworkBase.ClampTrainableParametersInPlace.
+        Critic.ClampTrainableParametersInPlace(
+            NumOps.FromDouble(-_weightClipValue),
+            NumOps.FromDouble(_weightClipValue));
     }
 
     /// <summary>

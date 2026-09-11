@@ -13052,6 +13052,271 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Runs this network's forward on the caller's active gradient tape with the network frozen:
+    /// in evaluation mode, and stepped by nobody unless the caller hands its parameters to
+    /// <see cref="StepOnTape"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is how one network scores another's output during adversarial training: a GAN
+    /// discriminator judging generated samples, a critic scoring them, an auxiliary network reading
+    /// latent codes back. <see cref="Predict"/> cannot do it, because inference opens a
+    /// <see cref="NoGradScope{T}"/>. The score comes back detached and the generator's adversarial
+    /// gradient is exactly zero. Several GANs trained that way and reported a falling loss while the
+    /// generator never learned from its discriminator (#2155).
+    /// </para>
+    /// <para>
+    /// Evaluation mode fixes batch-normalization statistics and disables dropout for the scoring
+    /// pass, holding the scorer at its current iterate while the other network's gradient is taken
+    /// (Goodfellow et al. 2014, section 3). The previous training mode is restored afterwards.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The tensor to score; usually another network's tape-tracked output.</param>
+    /// <returns>This network's output, recorded on the active tape.</returns>
+    internal Tensor<T> ForwardFrozenOnTape(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            return ForwardForTraining(input);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Clamps every trainable parameter into [<paramref name="min"/>, <paramref name="max"/>] in place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is WGAN's Lipschitz weight clipping (Arjovsky et al. 2017, Algorithm 1, line 7). It used to
+    /// round-trip through <see cref="UpdateParameters"/>, and a layer's <c>SetWeights</c> assigns the
+    /// incoming tensor rather than copying into it. So every clip replaced the critic's weight tensors
+    /// with new objects. That orphaned the optimizer's per-tensor state, which is keyed by tensor
+    /// identity, so RMSProp restarted every step. It also pulled the live weights out from under
+    /// anything else holding them.
+    /// </para>
+    /// <para>
+    /// The tensors clamped are exactly the ones the tape optimizer steps. Layer weight caches, such as a
+    /// packed or transposed copy, are invalidated afterwards, as after any optimizer step.
+    /// </para>
+    /// </remarks>
+    internal void ClampTrainableParametersInPlace(T min, T max)
+    {
+        // Element by element through each weight's own storage. Engine.TensorCopy(Engine.TensorClamp(p), p)
+        // wrote an arena temporary back into the weight, and inside a TensorArena that corrupted the next
+        // backward ("Tensor shapes must match. Got [64, 1] and [1, 64]" in WGAN's critic step). The weights are
+        // leaves and the clip happens off the tape, so nothing needs this write recorded.
+        foreach (var parameter in CollectModelTrainableTensors())
+        {
+            var values = parameter.AsWritableSpan();
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (NumOps.LessThan(values[i], min)) values[i] = min;
+                else if (NumOps.GreaterThan(values[i], max)) values[i] = max;
+            }
+        }
+
+        MarkTrainMutationStarted();
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
+
+    /// <summary>
+    /// Adds a leading batch axis of 1 to a single unbatched sample of the given layout, and returns any
+    /// other tensor unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Composite models whose training step reads <c>Shape[0]</c> as the batch size receive single
+    /// samples through <c>Train</c>, and a 4-wide sample read that way is a batch of four. The rank
+    /// that counts as unbatched comes from the sub-network's declared layout, not from guessing.
+    /// </remarks>
+    internal static Tensor<T> WithBatchAxis(Tensor<T> tensor, AiDotNet.Enums.InputType unbatchedLayout)
+    {
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+
+        int unbatchedRank = unbatchedLayout switch
+        {
+            AiDotNet.Enums.InputType.TwoDimensional => 2,
+            AiDotNet.Enums.InputType.ThreeDimensional => 3,
+            _ => 1,
+        };
+        if (tensor.Rank != unbatchedRank) return tensor;
+
+        var batched = new int[tensor.Rank + 1];
+        batched[0] = 1;
+        for (int i = 0; i < tensor.Rank; i++) batched[i + 1] = tensor.Shape[i];
+        return tensor.Reshape(batched);
+    }
+
+    /// <summary>
+    /// Whether this network's final layer squashes its outputs into probabilities: a sigmoid or
+    /// softmax activation.
+    /// </summary>
+    /// <remarks>
+    /// Read from the layer, never from the values. A check that calls a batch "probabilities" when its
+    /// outputs happen to fall inside [0, 1] reads the same network two different ways from one step
+    /// to the next. Anything other than a sigmoid or softmax head is treated as logits.
+    /// </remarks>
+    internal bool FinalLayerEmitsProbabilities()
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0
+            || layers[layers.Count - 1] is not Layers.LayerBase<T> finalLayer)
+        {
+            return false;
+        }
+
+        object? activation = (object?)finalLayer.VectorActivation ?? finalLayer.ScalarActivation;
+        return activation is AiDotNet.ActivationFunctions.SigmoidActivation<T>
+            or AiDotNet.ActivationFunctions.SoftmaxActivation<T>;
+    }
+
+    /// <summary>
+    /// The mean binary cross-entropy of this network's scores against an all-real or all-fake target,
+    /// recorded on the active tape: -log P(real) or -log P(fake) per output, averaged over every output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Logits use the exact identities -log sigmoid(z) = softplus(-z) and -log(1 - sigmoid(z)) =
+    /// softplus(z), which never form a probability that could round to 0 or 1. Probabilities are
+    /// clamped away from 0 and 1 before their logarithm is taken.
+    /// </para>
+    /// <para>
+    /// Averaging over every output is the PatchGAN average when the network emits a map of scores.
+    /// </para>
+    /// </remarks>
+    /// <param name="scores">This network's output for the batch being judged.</param>
+    /// <param name="targetIsReal">True for the "real" target, false for "fake".</param>
+    internal Tensor<T> BinaryCrossEntropyOnTape(Tensor<T> scores, bool targetIsReal)
+    {
+        if (scores is null) throw new ArgumentNullException(nameof(scores));
+
+        Tensor<T> perOutput;
+        if (FinalLayerEmitsProbabilities())
+        {
+            T floor = NumOps.FromDouble(1e-7);
+            var probability = Engine.TensorClamp(scores, floor, NumOps.Subtract(NumOps.One, floor));
+            Tensor<T> likelihood = probability;
+            if (!targetIsReal)
+            {
+                var ones = new Tensor<T>(probability.Shape.ToArray());
+                Engine.TensorFill(ones, NumOps.One);
+                likelihood = Engine.TensorSubtract(ones, probability);
+            }
+
+            perOutput = Engine.TensorNegate(Engine.TensorLog(likelihood));
+        }
+        else
+        {
+            perOutput = Engine.Softplus(targetIsReal ? Engine.TensorNegate(scores) : scores);
+        }
+
+        return Engine.ReduceMean(perOutput, Enumerable.Range(0, perOutput.Shape.Length).ToArray(), keepDims: false);
+    }
+
+    /// <summary>
+    /// Backpropagates one loss recorded on <paramref name="tape"/> into one or more networks and
+    /// steps each with its own optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An adversarial step records several networks on one tape and trains only some of them: the
+    /// generator step runs the generator and a frozen discriminator but steps only the generator.
+    /// Only the listed members' parameters are differentiated, so anything else on the tape stays
+    /// fixed.
+    /// </para>
+    /// <para>
+    /// A loss that trains more than one network can't call
+    /// <see cref="BackwardAndStepOnPrecomputedLoss"/> once per network. Examples are CycleGAN's two
+    /// generators under one cycle-consistency objective, and StyleGAN's mapping and synthesis
+    /// networks under one adversarial loss. A non-persistent tape is consumed by its first gradient
+    /// computation, so the gradient for the union of the members' parameters is taken in one pass.
+    /// Each member then publishes and steps exactly its own share with its own optimizer, since
+    /// members may train at different rates: StyleGAN's mapping network learns 100 times slower.
+    /// </para>
+    /// </remarks>
+    /// <param name="tape">The open tape on which every member's forward was recorded.</param>
+    /// <param name="lossTensor">The scalar loss recorded on <paramref name="tape"/>.</param>
+    /// <param name="members">The networks to train, each with its optimizer; a null optimizer uses
+    /// that network's default.</param>
+    /// <returns>The scalar loss value, also stored as each member's <see cref="LastLoss"/>.</returns>
+    internal static T StepOnTape(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        NeuralNetworkBase<T> network,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        => StepOnTape(tape, lossTensor, new[] { (network, optimizer) });
+
+    /// <inheritdoc cref="StepOnTape(GradientTape{T}, Tensor{T}, NeuralNetworkBase{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
+    internal static T StepOnTape(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members)
+    {
+        if (tape is null) throw new ArgumentNullException(nameof(tape));
+        if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
+        if (members is null) throw new ArgumentNullException(nameof(members));
+        if (members.Count == 0)
+            throw new ArgumentException("At least one network must be trained by the step.", nameof(members));
+
+        var sentinels = new List<TrainSentinel>(members.Count);
+        try
+        {
+            var memberParameters = new IReadOnlyList<Tensor<T>>[members.Count];
+            var union = new List<Tensor<T>>();
+            var seenNetworks = new HashSet<NeuralNetworkBase<T>>();
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network
+                    ?? throw new ArgumentException($"Member {i} has no network.", nameof(members));
+                if (!seenNetworks.Add(network))
+                {
+                    throw new ArgumentException(
+                        $"{network.GetType().Name} is listed twice; each network is stepped once per loss.",
+                        nameof(members));
+                }
+
+                sentinels.Add(network.AcquireTrainSentinel());
+                memberParameters[i] = network.CollectModelTrainableTensors();
+                union.AddRange(memberParameters[i]);
+            }
+
+            var gradients = tape.ComputeGradients(lossTensor, union, false);
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network;
+                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+
+                // The gradient dictionary holds every member's tensors; publishing looks up only this
+                // network's own, so each member's gradient surface reports exactly its share.
+                network.PublishParameterGradients(gradients);
+                network.LastLoss = lossValue;
+
+                var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                    memberParameters[i], gradients, lossValue);
+                network.MarkTrainMutationStarted();
+                optimizer.Step(context);
+                network.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+                StepSchedulerIfSupported(optimizer);
+            }
+
+            return lossValue;
+        }
+        finally
+        {
+            for (int i = sentinels.Count - 1; i >= 0; i--)
+                sentinels[i].Dispose();
+        }
+    }
+
+    /// <summary>
     /// Gets or lazily creates the default optimizer for tape-based training.
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
