@@ -36,21 +36,7 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
     protected ModelHyperparameterOptions(ModelHyperparameterOptions other) : base(other)
     {
-        MaxGradNorm = other.MaxGradNorm;
     }
-
-    /// <summary>
-    /// Gets or sets the maximum global gradient norm, above which gradients are rescaled
-    /// during training. Zero or negative disables clipping.
-    /// </summary>
-    /// <value>Defaults to 1.0, a library safeguard rather than a model-specific paper value.
-    /// Zero or a negative value disables clipping.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> During training the model adjusts itself based on how wrong
-    /// it was. Occasionally that correction is enormous and destabilises everything learned so
-    /// far. Gradient clipping caps the size of a single correction. 1.0 is the usual choice.</para>
-    /// </remarks>
-    public double MaxGradNorm { get; set; } = 1.0;
 
     /// <summary>
     /// The constructor parameter name reported when validation fails.

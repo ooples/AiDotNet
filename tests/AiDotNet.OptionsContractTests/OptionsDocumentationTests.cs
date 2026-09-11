@@ -25,22 +25,22 @@ public class OptionsDocumentationTests
     }
 
     [Fact]
-    public void MaxGradNorm_ValueDocumentsDefaultAndDisablePolicy()
+    public void SharedFamilyDocumentation_DoesNotAdvertiseAnUnusedGradientAlias()
     {
-        var member = DocumentationMember("P:" + typeof(ModelHyperparameterOptions).FullName + "." + nameof(ModelHyperparameterOptions.MaxGradNorm));
-        var value = member.Element("value") ?? throw new InvalidOperationException("Missing property value documentation.");
-        Assert.Contains("1.0", value.Value);
-        Assert.Contains("library safeguard", value.Value);
-        Assert.Contains("Zero or a negative value disables clipping", value.Value);
+        var removedMemberName = "P:" + typeof(ModelHyperparameterOptions).FullName + ".MaxGradNorm";
+        Assert.DoesNotContain(Documentation().Descendants("member"),
+            member => (string?)member.Attribute("name") == removedMemberName);
     }
 
     private static XElement DocumentationMember(string memberName)
+        => Assert.Single(Documentation().Descendants("member"), member => (string?)member.Attribute("name") == memberName);
+
+    private static XDocument Documentation()
     {
         // .NET Framework shadow-copies assemblies, but not their adjacent XML docs.
         // The application base remains the actual test output directory on every TFM.
         var assemblyName = typeof(OptionsDocumentationTests).Assembly.GetName().Name
             ?? throw new InvalidOperationException("The test assembly has no name.");
-        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, assemblyName + ".xml"));
-        return Assert.Single(document.Descendants("member"), member => (string?)member.Attribute("name") == memberName);
+        return XDocument.Load(Path.Combine(AppContext.BaseDirectory, assemblyName + ".xml"));
     }
 }
