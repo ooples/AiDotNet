@@ -20,6 +20,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 /// <typeparam name="T">The numeric type the detector is expressed in.</typeparam>
 public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
+    where T : struct
 {
     /// <summary>
     /// The model under test as a text detector. Family resolution guarantees the cast.

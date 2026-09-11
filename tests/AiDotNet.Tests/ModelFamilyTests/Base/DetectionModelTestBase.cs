@@ -30,6 +30,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 /// <typeparam name="T">The numeric type the model is expressed in.</typeparam>
 public abstract class DetectionModelTestBase<T>
+    where T : struct
 {
     /// <summary>Numeric operations for <typeparamref name="T"/>.</summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -79,7 +80,7 @@ public abstract class DetectionModelTestBase<T>
     /// </summary>
     protected Tensor<T> CreateTargetLike(Tensor<T> output, Random rng)
     {
-        var target = new Tensor<T>(output.Shape);
+        var target = new Tensor<T>(output._shape);
         for (int i = 0; i < target.Length; i++)
         {
             target[i] = ToT(rng.NextDouble());
@@ -87,6 +88,20 @@ public abstract class DetectionModelTestBase<T>
 
         return target;
     }
+
+
+    /// <summary>
+    /// Runs one forward pass so lazy layers resolve their shapes.
+    /// </summary>
+    /// <remarks>
+    /// The convolutions behind the <c>Conv2D</c> adapter infer their input depth on first
+    /// <c>Forward</c> and report NO trainable parameters until they have. Reading
+    /// <c>GetParameters()</c> on a freshly constructed model therefore sees the backbone only, and
+    /// the count grows the moment anything runs a forward - which would make a before/after
+    /// parameter comparison compare two different lengths.
+    /// </remarks>
+    protected void WarmUp(IFullModel<T, Tensor<T>, Tensor<T>> model, Random rng)
+        => model.Predict(CreateRandomImage(rng));
 
     private static Vector<T> ParametersOf(IFullModel<T, Tensor<T>, Tensor<T>> model)
         => ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).GetParameters();
@@ -160,7 +175,9 @@ public abstract class DetectionModelTestBase<T>
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        WarmUp(model, rng);
 
         Assert.True(ParametersOf(model).Length > 0, "Model reports no trainable parameters.");
     }
@@ -201,7 +218,9 @@ public abstract class DetectionModelTestBase<T>
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        WarmUp(model, rng);
 
         var before = ParametersOf(model);
         Assert.True(before.Length > 0, "Model reports no trainable parameters.");

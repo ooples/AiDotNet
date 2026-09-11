@@ -36,6 +36,12 @@ internal static class TensorModelTrainer<T>
     private static readonly ConditionalWeakTable<object, IReadOnlyList<ITrainableLayer<T>>> LayerCache = new();
 
     /// <summary>
+    /// Models whose lazy layers have already resolved their shapes, so the warm-up forward is
+    /// paid once per model rather than on every training step.
+    /// </summary>
+    private static readonly ConditionalWeakTable<object, object> Warmed = new();
+
+    /// <summary>
     /// Depth bound for the field walk. The deepest real chain is
     /// model -> backbone -> stage -> block -> shim -> layer, so this is generous.
     /// </summary>
@@ -65,8 +71,13 @@ internal static class TensorModelTrainer<T>
         // Resolve lazy layer shapes BEFORE collecting. The convolution layers behind the Conv2D
         // shim infer their input depth on first Forward and report no trainable parameters until
         // they have: collecting first would return an empty set and the step would silently do
-        // nothing. No tape is active here, so this costs one forward and records nothing.
-        forward(input);
+        // nothing. No tape is active here, so this records nothing -- and it is paid once per
+        // model, not once per step.
+        if (!Warmed.TryGetValue(model, out _))
+        {
+            forward(input);
+            Warmed.Add(model, model);
+        }
 
         var layers = GetTrainableLayers(model);
         if (layers.Count == 0)

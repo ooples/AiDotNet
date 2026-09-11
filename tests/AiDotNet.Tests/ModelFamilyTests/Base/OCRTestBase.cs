@@ -20,6 +20,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 /// <typeparam name="T">The numeric type the recognizer is expressed in.</typeparam>
 public abstract class OCRTestBase<T> : DetectionModelTestBase<T>
+    where T : struct
 {
     /// <summary>
     /// OCR crops are wide and short - a line of text, not a square. The recognition height is

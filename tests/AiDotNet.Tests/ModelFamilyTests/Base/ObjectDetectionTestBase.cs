@@ -22,6 +22,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 /// <typeparam name="T">The numeric type the detector is expressed in.</typeparam>
 public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
+    where T : struct
 {
     /// <summary>
     /// The model under test as a detector. Family resolution guarantees the cast: only types
@@ -300,13 +301,13 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
 
     private Tensor<T> ExtractImage(Tensor<T> batch, int index)
     {
-        var shape = (int[])batch.Shape.Clone();
+        var shape = (int[])batch._shape.Clone();
         shape[0] = 1;
 
         int stride = 1;
-        for (int d = 1; d < batch.Shape.Length; d++)
+        for (int d = 1; d < shape.Length; d++)
         {
-            stride *= batch.Shape[d];
+            stride *= shape[d];
         }
 
         var image = new Tensor<T>(shape);
