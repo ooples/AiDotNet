@@ -639,21 +639,28 @@ public partial class BarkModel<T> : TtsModelBase<T>
 
 
     /// <summary>
-    /// Recreates the injected codec dependency for cloning while leaving Bark parameter transfer to
-    /// the framework's single generated layer manifest.
+    /// The codec this model was constructed with, as the clone plan's source for the constructor's
+    /// <c>codec</c> argument.
     /// </summary>
-    protected IAudioCodec<T> CreateCodecForNewInstance()
-    {
-        if (_codec.Codec is IFullModel<T, Tensor<T>, Tensor<T>> model
-            && model.Clone() is IAudioCodec<T> clonedCodec)
-        {
-            return clonedCodec;
-        }
-
-        // Stateless/custom codecs do not expose a clone contract. Sharing that external service is
-        // safe; all Bark-owned trainable state still lives in the generated layer graph.
-        return _codec.Codec;
-    }
+    /// <remarks>
+    /// <para>
+    /// The injected codec is stored only inside <see cref="_codec"/>, whose type is the wrapping
+    /// layer, so nothing on the model could supply the constructor's <c>codec</c> parameter. The
+    /// generated plan therefore passed its default, null, and every clone was rebuilt around a fresh
+    /// default EnCodec: a model built with its own codec was cloned with a different, untrained one,
+    /// and the clone reported that codec's parameters on top of the original's (29,026 against
+    /// 28,337 for the tiny test configuration). A hand-written <c>CreateCodecForNewInstance</c> meant
+    /// to prevent this was never called by anything.
+    /// </para>
+    /// <para>
+    /// Exposing the codec here lets the plan find it by name, and <c>CloneEngine</c> already applies
+    /// the policy that method described: a codec with a clone contract is cloned, a stateless one is
+    /// shared. The member is an alias of <see cref="_codec"/>, which remains the only owner of the
+    /// codec's parameters, so nothing is counted or restored twice.
+    /// </para>
+    /// </remarks>
+    [ParameterAlias(nameof(_codec))]
+    private IAudioCodec<T> Codec => _codec.Codec;
 
     private void TrainStage(
         TrainingStage stage,
