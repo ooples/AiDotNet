@@ -237,7 +237,29 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         return innerMetadata;
     }
 
+    #endregion
 
+    #region Disposal
+
+    /// <summary>
+    /// Disposes the wrapped algorithm agent, which owns every network this wrapper trains.
+    /// </summary>
+    /// <remarks>
+    /// The wrapper builds no networks of its own; it delegates to the DQN/PPO/A2C/SAC agent it
+    /// constructed, so releasing that agent is what releases the networks. Repeated calls are
+    /// harmless because the inner agent's networks are released through a once-only guard.
+    /// </remarks>
+    public override void Dispose()
+    {
+        try
+        {
+            _innerAgent.Dispose();
+        }
+        finally
+        {
+            base.Dispose();
+        }
+    }
 
     #endregion
 }

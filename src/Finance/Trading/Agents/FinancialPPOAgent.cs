@@ -137,6 +137,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = actor;
         _critic = critic;
+        Networks.Add(_actor);
+        Networks.Add(_critic);
         _trajectory = new Trajectory<T>();
         _nextStates = new List<Vector<T>>();
         _random = options.Seed.HasValue
