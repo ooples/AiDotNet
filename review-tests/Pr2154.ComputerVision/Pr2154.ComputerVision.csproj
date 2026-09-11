@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net471;net8.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <AssemblyName>AiDotNetTests</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -33,6 +34,7 @@
     <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/NeckTopDownPathwayTests.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/TrOCRIncrementalDecodingTests.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/ObjectDetectionMetricsTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/ObjectDetectionRangeCacheReviewTests.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/TextDetectionMetricsTests.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/TextRecognitionMetricsTests.cs" />
   </ItemGroup>

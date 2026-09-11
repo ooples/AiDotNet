@@ -166,7 +166,7 @@ public sealed class CvInputBoundaryReviewTests
             _ => throw new ArgumentOutOfRangeException(nameof(entryPoint))
         };
 
-        Assert.Equal(new[] { 1, 3, height, width }, result.Shape);
+        Assert.Equal(new[] { 1, 3, height, width }, result.Shape.ToArray());
         Assert.Equal(entryPoint == TextDetectorEntryPoint.Prediction ? 1 : 0, model.ForwardCalls);
         for (int i = 0; i < result.Length; i++) Assert.Equal(1.0, result[i], 12);
         for (int i = 0; i < input.Length; i++) Assert.Equal(255.0, input[i]);

@@ -66,6 +66,10 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// </summary>
     private const int RecallSampleCount = 101;
 
+    // Bound per-threshold claims and AP points even for very densely sampled ranges. COCO's
+    // ten thresholds fit in one batch; larger ranges reuse class preparation across batches.
+    private const int ThresholdBatchSize = 32;
+
     /// <summary>
     /// The numeric operations provider for type <typeparamref name="T"/>.
     /// </summary>
@@ -103,7 +107,7 @@ public class ObjectDetectionMetrics<T> where T : struct
             return double.NaN;
         }
 
-        return InterpolatedAveragePrecision(curve.Precision, curve.Recall);
+        return InterpolatedAveragePrecision(curve.Precision, curve.Recall, curve.Precision.Length);
     }
 
     /// <summary>
@@ -123,25 +127,7 @@ public class ObjectDetectionMetrics<T> where T : struct
     {
         ValidateAligned(predictions, groundTruth);
 
-        // Only classes that actually occur in the ground truth are scored. A class the detector
-        // hallucinates but that never appears has no defined recall, so averaging it in would be
-        // meaningless; its false positives still suppress the precision of the classes it competes with.
-        var classes = new SortedSet<int>();
-        foreach (var image in groundTruth)
-        {
-            if (image is null)
-            {
-                continue;
-            }
-
-            foreach (var detection in image)
-            {
-                if (detection is not null)
-                {
-                    classes.Add(detection.ClassId);
-                }
-            }
-        }
+        var classes = GetGroundTruthClasses(groundTruth);
 
         if (classes.Count == 0)
         {
@@ -167,14 +153,22 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// Computes COCO mAP@[.50:.95]: <see cref="MeanAveragePrecision"/> averaged over a range of
     /// IoU thresholds. This is the primary COCO detection metric.
     /// </summary>
+    /// <remarks>
+    /// Ground-truth lists and stable confidence rankings are prepared once per class. Each batch
+    /// of at most 32 thresholds has independent greedy matches and shares a lazily computed IoU
+    /// row for the current prediction. Thus COCO's ten thresholds compute each needed IoU once;
+    /// ranges spanning several batches may compute it once per batch. No all-pairs IoU matrix or
+    /// range-sized collection of matching states is allocated. AP retains only true-positive
+    /// points, bounding per-batch state by the number of ground-truth boxes, not false positives.
+    /// </remarks>
     /// <param name="predictions">Predicted detections, one list per image.</param>
     /// <param name="groundTruth">Ground-truth detections, one list per image.</param>
     /// <param name="minIoU">First IoU threshold. COCO uses 0.50.</param>
     /// <param name="maxIoU">Last IoU threshold, inclusive. COCO uses 0.95.</param>
     /// <param name="step">Spacing between thresholds. COCO uses 0.05, giving ten thresholds.</param>
     /// <returns>mAP averaged across the thresholds, in [0, 1].</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="step"/> is not positive, or the
-    /// range is empty or outside [0, 1].</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="step"/> is not finite and positive,
+    /// the range is non-finite, empty or outside [0, 1], or its threshold count exceeds <see cref="int.MaxValue"/>.</exception>
     public double MeanAveragePrecisionRange(
         IReadOnlyList<IReadOnlyList<Detection<T>>> predictions,
         IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth,
@@ -182,12 +176,12 @@ public class ObjectDetectionMetrics<T> where T : struct
         double maxIoU = 0.95,
         double step = 0.05)
     {
-        if (step <= 0.0)
+        if (double.IsNaN(step) || double.IsInfinity(step) || step <= 0.0)
         {
-            throw new ArgumentOutOfRangeException(nameof(step), step, "IoU step must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(step), step, "IoU step must be finite and positive.");
         }
 
-        if (minIoU < 0.0 || maxIoU > 1.0 || minIoU > maxIoU)
+        if (!IsUnitInterval(minIoU) || !IsUnitInterval(maxIoU) || minIoU > maxIoU)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(minIoU), $"IoU range [{minIoU}, {maxIoU}] must be non-empty and within [0, 1].");
@@ -195,16 +189,64 @@ public class ObjectDetectionMetrics<T> where T : struct
 
         // Derive the count first rather than accumulating threshold += step, so floating-point
         // drift cannot silently drop or duplicate the final threshold.
-        int thresholdCount = (int)Math.Floor(((maxIoU - minIoU) / step) + 1e-9) + 1;
+        double lastThresholdIndex = Math.Floor(((maxIoU - minIoU) / step) + 1e-9);
+        if (lastThresholdIndex >= int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(step), step,
+                "IoU step produces more thresholds than an Int32 count can represent.");
+        }
+
+        int thresholdCount = (int)lastThresholdIndex + 1;
+        ValidateAligned(predictions, groundTruth);
+        var preparedClasses = GetGroundTruthClasses(groundTruth)
+            .Select(classIndex => PrepareClass(predictions, groundTruth, classIndex)).ToArray();
+        int counted = preparedClasses.Count(prepared => prepared.GroundTruthCount > 0);
+        if (counted == 0)
+        {
+            return 0.0;
+        }
 
         double sum = 0.0;
-        for (int i = 0; i < thresholdCount; i++)
+        int firstThreshold = 0;
+        while (firstThreshold < thresholdCount)
         {
-            sum += MeanAveragePrecision(predictions, groundTruth, minIoU + (i * step));
+            int batchCount = Math.Min(ThresholdBatchSize, thresholdCount - firstThreshold);
+            var thresholds = new double[batchCount];
+            var classSums = new double[batchCount];
+            for (int i = 0; i < batchCount; i++)
+            {
+                thresholds[i] = minIoU + ((firstThreshold + i) * step);
+            }
+
+            foreach (var prepared in preparedClasses)
+            {
+                if (prepared.GroundTruthCount == 0)
+                {
+                    continue;
+                }
+
+                var scores = ComputeAveragePrecisionBatch(prepared, thresholds);
+                for (int i = 0; i < batchCount; i++)
+                {
+                    classSums[i] += scores[i];
+                }
+            }
+
+            // Preserve the original order of both sums: sorted classes within each threshold,
+            // then increasing thresholds. Reordering these averages changes floating-point bits.
+            for (int i = 0; i < batchCount; i++)
+            {
+                sum += classSums[i] / counted;
+            }
+
+            firstThreshold += batchCount;
         }
 
         return sum / thresholdCount;
     }
+
+    // Both comparisons are false for NaN; infinities also fall outside this finite interval.
+    private static bool IsUnitInterval(double value) => value >= 0.0 && value <= 1.0;
 
     /// <summary>
     /// Computes the raw (uninterpolated) precision-recall curve for one class, in descending
@@ -234,11 +276,60 @@ public class ObjectDetectionMetrics<T> where T : struct
     {
         ValidateAligned(predictions, groundTruth);
 
-        // Ground truth for this class, kept per image alongside a claimed flag so each real box
-        // can satisfy at most one prediction.
+        var prepared = PrepareClass(predictions, groundTruth, classIndex);
+        groundTruthCount = prepared.GroundTruthCount;
+        var claimed = new bool[groundTruthCount];
+        var precision = new double[prepared.RankOrder.Length];
+        var recall = new double[precision.Length];
+        int truePositives = 0;
+
+        for (int rank = 0; rank < prepared.RankOrder.Length; rank++)
+        {
+            var (imageIndex, box) = prepared.Predictions[prepared.RankOrder[rank]];
+            var candidates = prepared.TruthByImage[imageIndex];
+            int offset = prepared.TruthOffsets[imageIndex];
+
+            double bestIoU = 0.0;
+            int bestCandidate = -1;
+            for (int c = 0; c < candidates.Count; c++)
+            {
+                if (claimed[offset + c])
+                {
+                    continue;
+                }
+
+                double iou = box.IoU(candidates[c]);
+                if (iou > bestIoU)
+                {
+                    bestIoU = iou;
+                    bestCandidate = c;
+                }
+            }
+
+            if (bestCandidate >= 0 && bestIoU >= iouThreshold)
+            {
+                claimed[offset + bestCandidate] = true;
+                truePositives++;
+            }
+
+            precision[rank] = truePositives / (double)(rank + 1);
+            recall[rank] = groundTruthCount > 0 ? truePositives / (double)groundTruthCount : 0.0;
+        }
+
+        return (precision, recall);
+    }
+
+    private PreparedClass PrepareClass(
+        IReadOnlyList<IReadOnlyList<Detection<T>>> predictions,
+        IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth,
+        int classIndex)
+    {
+        // Keep original per-image candidate order, including equal-IoU tie precedence. Geometry
+        // is deliberately not read here: an already-claimed candidate must remain unused.
         var truthByImage = new List<BoundingBox<T>>[groundTruth.Count];
-        var claimed = new bool[groundTruth.Count][];
-        groundTruthCount = 0;
+        var truthOffsets = new int[groundTruth.Count];
+        int groundTruthCount = 0;
+        int maxTruthPerImage = 0;
         for (int i = 0; i < groundTruth.Count; i++)
         {
             var kept = new List<BoundingBox<T>>();
@@ -255,8 +346,9 @@ public class ObjectDetectionMetrics<T> where T : struct
             }
 
             truthByImage[i] = kept;
-            claimed[i] = new bool[kept.Count];
+            truthOffsets[i] = groundTruthCount;
             groundTruthCount += kept.Count;
+            maxTruthPerImage = Math.Max(maxTruthPerImage, kept.Count);
         }
 
         // Every prediction of this class across all images, ranked by confidence. OrderByDescending
@@ -284,44 +376,129 @@ public class ObjectDetectionMetrics<T> where T : struct
 
         var order = Enumerable.Range(0, ranked.Count).OrderByDescending(i => scores[i]).ToArray();
 
-        var precision = new double[order.Length];
-        var recall = new double[order.Length];
-        int truePositives = 0;
+        return new PreparedClass(truthByImage, truthOffsets, ranked, order, groundTruthCount, maxTruthPerImage);
+    }
 
-        for (int rank = 0; rank < order.Length; rank++)
+    private static double[] ComputeAveragePrecisionBatch(PreparedClass prepared, double[] thresholds)
+    {
+        int maxPoints = Math.Min(prepared.RankOrder.Length, prepared.GroundTruthCount);
+        var scores = new double[thresholds.Length];
+        if (maxPoints == 0)
         {
-            var (imageIndex, box) = ranked[order[rank]];
-            var candidates = truthByImage[imageIndex];
-            var candidateClaimed = claimed[imageIndex];
-
-            double bestIoU = 0.0;
-            int bestCandidate = -1;
-            for (int c = 0; c < candidates.Count; c++)
-            {
-                if (candidateClaimed[c])
-                {
-                    continue;
-                }
-
-                double iou = box.IoU(candidates[c]);
-                if (iou > bestIoU)
-                {
-                    bestIoU = iou;
-                    bestCandidate = c;
-                }
-            }
-
-            if (bestCandidate >= 0 && bestIoU >= iouThreshold)
-            {
-                candidateClaimed[bestCandidate] = true;
-                truePositives++;
-            }
-
-            precision[rank] = truePositives / (double)(rank + 1);
-            recall[rank] = groundTruthCount > 0 ? truePositives / (double)groundTruthCount : 0.0;
+            return scores;
         }
 
-        return (precision, recall);
+        var claimed = new bool[thresholds.Length][];
+        var precision = new double[thresholds.Length][];
+        var recall = new double[thresholds.Length][];
+        var truePositives = new int[thresholds.Length];
+        for (int threshold = 0; threshold < thresholds.Length; threshold++)
+        {
+            claimed[threshold] = new bool[prepared.GroundTruthCount];
+            precision[threshold] = new double[maxPoints];
+            recall[threshold] = new double[maxPoints];
+        }
+
+        // One lazily populated IoU row, not a predictions-by-ground-truth matrix. Rank stamps
+        // distinguish uncomputed entries from every possible IoU value, including zero and NaN.
+        var iouRow = new double[prepared.MaxTruthPerImage];
+        var rowRanks = new int[prepared.MaxTruthPerImage];
+        for (int rank = 0; rank < prepared.RankOrder.Length; rank++)
+        {
+            var (imageIndex, box) = prepared.Predictions[prepared.RankOrder[rank]];
+            var candidates = prepared.TruthByImage[imageIndex];
+            int offset = prepared.TruthOffsets[imageIndex];
+            for (int threshold = 0; threshold < thresholds.Length; threshold++)
+            {
+                var candidateClaimed = claimed[threshold];
+                double bestIoU = 0.0;
+                int bestCandidate = -1;
+                for (int c = 0; c < candidates.Count; c++)
+                {
+                    if (candidateClaimed[offset + c])
+                    {
+                        continue;
+                    }
+
+                    if (rowRanks[c] != rank + 1)
+                    {
+                        iouRow[c] = box.IoU(candidates[c]);
+                        rowRanks[c] = rank + 1;
+                    }
+
+                    double iou = iouRow[c];
+                    if (iou > bestIoU)
+                    {
+                        bestIoU = iou;
+                        bestCandidate = c;
+                    }
+                }
+
+                if (bestCandidate >= 0 && bestIoU >= thresholds[threshold])
+                {
+                    candidateClaimed[offset + bestCandidate] = true;
+                    int point = truePositives[threshold]++;
+                    precision[threshold][point] = truePositives[threshold] / (double)(rank + 1);
+                    recall[threshold][point] = truePositives[threshold] / (double)prepared.GroundTruthCount;
+                }
+            }
+        }
+
+        // A false positive cannot improve precision at unchanged recall; its preceding true
+        // positive dominates it. Initial false positives are zero, and no true positives means
+        // AP zero. Keeping only TP points therefore preserves the exact 101-sample envelope.
+        for (int threshold = 0; threshold < thresholds.Length; threshold++)
+        {
+            scores[threshold] = InterpolatedAveragePrecision(
+                precision[threshold], recall[threshold], truePositives[threshold]);
+        }
+
+        return scores;
+    }
+
+    private static SortedSet<int> GetGroundTruthClasses(IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth)
+    {
+        // Classes absent from ground truth have undefined recall and are not averaged in.
+        var classes = new SortedSet<int>();
+        foreach (var image in groundTruth)
+        {
+            if (image is null)
+            {
+                continue;
+            }
+
+            foreach (var detection in image)
+            {
+                if (detection is not null)
+                {
+                    classes.Add(detection.ClassId);
+                }
+            }
+        }
+
+        return classes;
+    }
+
+    private sealed class PreparedClass
+    {
+        public List<BoundingBox<T>>[] TruthByImage { get; }
+        public int[] TruthOffsets { get; }
+        public List<(int ImageIndex, BoundingBox<T> Box)> Predictions { get; }
+        public int[] RankOrder { get; }
+        public int GroundTruthCount { get; }
+        public int MaxTruthPerImage { get; }
+
+        public PreparedClass(List<BoundingBox<T>>[] truthByImage, int[] truthOffsets,
+            List<(int ImageIndex, BoundingBox<T> Box)> predictions, int[] rankOrder,
+            int groundTruthCount, int maxTruthPerImage)
+        {
+            TruthByImage = truthByImage;
+            TruthOffsets = truthOffsets;
+            Predictions = predictions;
+            RankOrder = rankOrder;
+            GroundTruthCount = groundTruthCount;
+            MaxTruthPerImage = maxTruthPerImage;
+        }
     }
 
     /// <summary>
@@ -329,17 +506,17 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// evenly spaced recall levels, take the highest precision attained at that recall or beyond,
     /// then average those 101 values.
     /// </summary>
-    private static double InterpolatedAveragePrecision(double[] precision, double[] recall)
+    private static double InterpolatedAveragePrecision(double[] precision, double[] recall, int pointCount)
     {
-        if (precision.Length == 0)
+        if (pointCount == 0)
         {
             return 0.0;
         }
 
         // Sweep right-to-left so envelope[i] is the best precision achievable at recall >= recall[i].
-        var envelope = new double[precision.Length];
+        var envelope = new double[pointCount];
         double running = 0.0;
-        for (int i = precision.Length - 1; i >= 0; i--)
+        for (int i = pointCount - 1; i >= 0; i--)
         {
             running = Math.Max(running, precision[i]);
             envelope[i] = running;
@@ -352,12 +529,12 @@ public class ObjectDetectionMetrics<T> where T : struct
             double target = s / (double)(RecallSampleCount - 1);
 
             // recall is non-decreasing along the ranking, so the cursor only ever moves forward.
-            while (cursor < recall.Length && recall[cursor] < target)
+            while (cursor < pointCount && recall[cursor] < target)
             {
                 cursor++;
             }
 
-            if (cursor >= recall.Length)
+            if (cursor >= pointCount)
             {
                 break; // No prediction reaches this recall; the remaining samples contribute 0.
             }

@@ -1,5 +1,7 @@
 # PR #2154 bounded review validation
 
+The current AP-cache follow-up and 271-case inventory are documented in [AP_CACHE_PROOF.md](AP_CACHE_PROOF.md). The historical commands below explicitly retain their original net10.0 fixture scopes; the focused project now also supports net8.0 and net471.
+
 This project compiles the real AiDotNet library and generator and source-links the changed regression tests, the relevant existing numerical/metrics tests, and all four edited detection/OCR model-family bases. It does not stub production contracts or replace generated family fixtures.
 
 The baseline is PR head `ebf7a1c9891af791e8715fb4bc5c74c1b270c34a` (base `1c8647e293ff9f5180a071a8e42f16dc90849102`). The reviewed changes are a local follow-up, not a claim that the whole PR is merge-ready. The corrected exhaustive inventory contained **36 threads, 34 unresolved**; thread pagination and every per-thread comments connection reported `hasNextPage: false`. The earlier 33/31 inventory was incomplete, not evidence that three threads had been resolved.
@@ -31,18 +33,18 @@ if (-not (Test-Path -LiteralPath $baselineProject -PathType Leaf)) {
 $env:AIDOTNET_FORCE_CPU='1'
 dotnet build $baselineProject -c Release -f net10.0 -p:GeneratePackageOnBuild=false
 if ($LASTEXITCODE -ne 0) { throw 'The baseline build failed; do not test a stale DLL.' }
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release "-p:ReviewedSourceRoot=$baselineSourceRoot" -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~Pyramid_RejectsOverflowingStrideWithoutEnteringLegacyShiftLoop&FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_' --logger 'trx;LogFileName=pr2154-boundary-full-baseline.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-baseline.log;verbosity=normal'
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -f net10.0 "-p:ReviewedSourceRoot=$baselineSourceRoot" -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~Pyramid_RejectsOverflowingStrideWithoutEnteringLegacyShiftLoop&FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_&FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests' --logger 'trx;LogFileName=pr2154-boundary-full-baseline.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-baseline.log;verbosity=normal'
 
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_' --logger 'trx;LogFileName=pr2154-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-after.log;verbosity=normal'
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -f net10.0 -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~CvInputBoundaryReviewTests.TextDetector_&FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests' --logger 'trx;LogFileName=pr2154-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly' '-flp:logfile=pr2154-boundary-full-after.log;verbosity=normal'
 ```
 
 The baseline source lives in a separate, clean, detached worktree at the exact head above. `ReviewedSourceRoot` changes only the real library/generator project references; both runs compile the same final test sources. Do not run the commands concurrently: the focused project's output directory is intentionally shared. Within the recorded 175-case inventory, the baseline excludes only two stride values above `2^30`: the legacy signed left-shift loop does not terminate for them. These tests are not skipped in source or CI and execute in the unfiltered follow-up run.
 
-## Text-input follow-up evidence (current 208-case inventory)
+## Text-input follow-up evidence (historical 208-case inventory)
 
 Comments **3991259128** and **3991259119** add one shared text-detector input validator and portable reproduction inputs. The text-detector fix is at the shared base, not in concrete detectors or generated leaf tests. Both consuming paths validate a snapshot of the publicly mutable `InputSize` array before indexing, resizing, or allocating a deferred input. The already-resolved serialization path does not consume the option and still returns without another forward pass.
 
-The 33 added cases cover prediction, preprocessing and initial serialization with null external bindings, empty/short/long arrays, zero/negative dimensions, valid `1x1`/`2x3` inputs, normalization and input nonmutation, repeated serialization, and in-place dimension mutation after a real prediction. The **before** library is the unchanged review head `f74c1a6d5c80b197f22ec2d2c4f76895c5ff5762`; both runs compile the same final test sources. To reproduce this newer baseline, use that exact commit as `$expectedBaselineHead` in the guard above and omit the historical `--filter` arguments. That head already contains the stride-overflow fix, so no case needs exclusion.
+The 33 added cases cover prediction, preprocessing and initial serialization with null external bindings, empty/short/long arrays, zero/negative dimensions, valid `1x1`/`2x3` inputs, normalization and input nonmutation, repeated serialization, and in-place dimension mutation after a real prediction. The **before** library is the unchanged review head `f74c1a6d5c80b197f22ec2d2c4f76895c5ff5762`; both runs compile the same final test sources. To reproduce this newer baseline, use that exact commit as `$expectedBaselineHead` in the guard above and replace the historical filters with `--filter 'FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests'`. That head already contains the stride-overflow fix, so no case in this historical 208-case inventory needs exclusion; the filter only removes the subsequently added AP-cache fixture.
 
 | Run | Passed | Failed | Skipped | TRX under `artifacts/pr2154-review` |
 | --- | ---: | ---: | ---: | --- |
@@ -66,8 +68,8 @@ The final core build completed with **0 errors, 2,842 warnings**, in 4m29s. The 
 The actual unfiltered follow-up commands, after building the current core, are:
 
 ```powershell
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --logger 'trx;LogFileName=pr2154-text-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly'
-dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release --no-build --no-restore --logger 'trx;LogFileName=pr2154-text-boundary-full-after-repeat.trx' --results-directory artifacts/pr2154-review --verbosity quiet
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -f net10.0 -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false --filter 'FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests' --logger 'trx;LogFileName=pr2154-text-boundary-full-after.trx' --results-directory artifacts/pr2154-review --verbosity quiet '-clp:ErrorsOnly'
+dotnet test review-tests/Pr2154.ComputerVision/Pr2154.ComputerVision.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName!~ObjectDetectionRangeCacheReviewTests' --logger 'trx;LogFileName=pr2154-text-boundary-full-after-repeat.trx' --results-directory artifacts/pr2154-review --verbosity quiet
 ```
 
 ## Extended boundary evidence (recorded 175-case inventory)
