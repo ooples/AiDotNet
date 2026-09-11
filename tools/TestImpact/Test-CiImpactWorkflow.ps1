@@ -107,6 +107,55 @@ function Get-ContinuedShellCommand {
     return @($commands)
 }
 
+function Test-MapSelectorPullRequestScope {
+    param([string] $Step)
+
+    # Parse individual PowerShell invocations rather than searching the whole step:
+    # the classifier's argument, a comment, or a different variable proves nothing
+    # about the map-backed command that actually emits the selected shard matrix.
+    $lines = [regex]::Split($Step, '\r?\n')
+    $mapCommands = [System.Collections.Generic.List[System.Management.Automation.Language.CommandAst]]::new()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^\s*&\s+\./tools/TestImpact/Select-Shards\.ps1\b') { continue }
+        $parts = [System.Collections.Generic.List[string]]::new()
+        do {
+            $line = $lines[$i]
+            [void] $parts.Add($line)
+            $continued = $line.TrimEnd().EndsWith('`', [StringComparison]::Ordinal)
+            if ($continued) { $i++ }
+        } while ($continued -and $i -lt $lines.Count)
+        $tokens = $null; $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+            ($parts -join "`n"), [ref] $tokens, [ref] $parseErrors)
+        if ($parseErrors.Count -gt 0) { return $false }
+        foreach ($command in $ast.FindAll({ param($node)
+            $node -is [System.Management.Automation.Language.CommandAst]
+        }, $true)) {
+            if ($command.GetCommandName() -cne './tools/TestImpact/Select-Shards.ps1') { continue }
+            if (@($command.CommandElements | Where-Object {
+                $_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -ceq 'MapFile'
+            }).Count -gt 0) { [void] $mapCommands.Add($command) }
+        }
+    }
+    if ($mapCommands.Count -ne 1) { return $false }
+    $elements = $mapCommands[0].CommandElements
+    $arguments = @{}
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $element = $elements[$i]
+        if ($element -isnot [System.Management.Automation.Language.CommandParameterAst] -or
+            $element.ParameterName -cnotin @('MapFile', 'PullRequestHeadSha')) { continue }
+        if ($arguments.ContainsKey($element.ParameterName)) { return $false }
+        $value = $element.Argument
+        if ($null -eq $value -and $i + 1 -lt $elements.Count) { $value = $elements[$i + 1] }
+        $arguments[$element.ParameterName] = $value
+    }
+    return $arguments.ContainsKey('MapFile') -and $arguments.ContainsKey('PullRequestHeadSha') -and
+        $arguments.MapFile -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $arguments.MapFile.Value -ceq 'map/shard-map.json' -and
+        $arguments.PullRequestHeadSha -is [System.Management.Automation.Language.VariableExpressionAst] -and
+        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'env:PR_HEAD_SHA'
+}
+
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
 $selectorText = Get-Content -LiteralPath $Selector -Raw
@@ -261,6 +310,8 @@ Assert-Contract ($selectStep.Contains('PR_HEAD_SHA: ${{ github.event.pull_reques
 # request: on #2100 it attributed 16 merged CI-control files to a 4-file change, escalating 116 shards.
 Assert-Contract (-not $selectStep.Contains('pull_request.base.sha') -and -not $selectStep.Contains('-BaseSha')) `
     'pull-request selection reads the stale event base.sha instead of the merge commit''s first parent'
+Assert-Contract (Test-MapSelectorPullRequestScope -Step $selectStep) `
+    'the map-backed selector does not scope its change to the pull request head'
 Assert-Contract ($selectorText.Contains('function Resolve-PullRequestBase') -and
         $selectorText.Contains('$parents.Count -ne 3') -and
         $selectorText.Contains('$parents[2].Equals($PullRequestHeadSha')) `

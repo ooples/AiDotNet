@@ -346,6 +346,26 @@ function Get-ChangedRanges {
     return ConvertTo-ChangedRanges -DiffLines $diff -ChangedFiles $changedFiles
 }
 
+function New-DirectoryOwnerIndex {
+    param([Parameter(Mandatory)] $Map)
+
+    $index = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.SortedSet[string]]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    foreach ($property in $Map.files.PSObject.Properties) {
+        $segments = @($property.Name.Replace('\', '/').Split('/'))
+        for ($depth = $segments.Count - 1; $depth -ge 2; $depth--) {
+            $directory = ($segments[0..($depth - 1)] -join '/') + '/'
+            if (-not $index.ContainsKey($directory)) {
+                $index[$directory] = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+            }
+            foreach ($occurrence in @($property.Value)) {
+                [void] $index[$directory].Add([string] $Map.knownShards[[int] $occurrence.s])
+            }
+        }
+    }
+    return ,$index
+}
+
 function Get-DirectoryOwners {
     <#
         The shards that execute any mapped file in the nearest directory of Path that has one, never
@@ -353,20 +373,17 @@ function Get-DirectoryOwners {
         coverage of its own, but the code beside it does; climbing to 'src/' itself would stop
         meaning anything, so an orphan with no mapped neighbour below that depth still escalates.
     #>
-    param([Parameter(Mandatory)] $Map, [Parameter(Mandatory)] [string] $Path)
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.Dictionary[string, System.Collections.Generic.SortedSet[string]]] $Index,
+        [Parameter(Mandatory)] [string] $Path
+    )
 
     $segments = @(([string] $Path).Replace('\', '/').Split('/'))
     for ($depth = $segments.Count - 1; $depth -ge 2; $depth--) {
         $directory = ($segments[0..($depth - 1)] -join '/') + '/'
-        $owners = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
-        foreach ($property in $Map.files.PSObject.Properties) {
-            if (-not $property.Name.StartsWith($directory, [StringComparison]::OrdinalIgnoreCase)) { continue }
-            foreach ($occurrence in @($property.Value)) {
-                [void] $owners.Add([string] $Map.knownShards[[int] $occurrence.s])
-            }
-        }
-        if ($owners.Count -gt 0) {
-            return [pscustomobject]@{ Directory = $directory.TrimEnd('/'); Shards = @($owners) }
+        if ($Index.ContainsKey($directory) -and $Index[$directory].Count -gt 0) {
+            return [pscustomobject]@{ Directory = $directory.TrimEnd('/'); Shards = @($Index[$directory]) }
         }
     }
     return $null
@@ -404,6 +421,9 @@ function Select-ImpactedShards {
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
     $routes = [System.Collections.Generic.List[string]]::new()
+    # Per invocation and lazy: mapped changes pay no indexing cost, and selecting a
+    # different map in the same process cannot reuse another map's directory owners.
+    $directoryOwnerIndex = $null
     $escalate = $false
     $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
@@ -544,7 +564,8 @@ function Select-ImpactedShards {
             $directoryOwners = $null
             if ($path.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase) -and
                 -not $path.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase)) {
-                $directoryOwners = Get-DirectoryOwners -Map $Map -Path $path
+                if ($null -eq $directoryOwnerIndex) { $directoryOwnerIndex = New-DirectoryOwnerIndex -Map $Map }
+                $directoryOwners = Get-DirectoryOwners -Index $directoryOwnerIndex -Path $path
             }
             if ($null -eq $directoryOwners) {
                 $escalate = $true
@@ -1440,6 +1461,39 @@ if ($SelfTest) {
     Assert-True $r.Escalate 'an unmapped non-C# file inside a mapped directory was routed instead of escalating'
     $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Agents/Finance.csproj' = @(1, 4) }
     Assert-True $r.Escalate 'an unmapped project file was routed instead of escalating'
+
+    # Count full-map accesses rather than using a timing threshold. Three unmapped paths
+    # need three direct file lookups and one shared directory projection, independent of depth.
+    $countedMap = [pscustomobject]@{
+        knownShards = $deepMap.knownShards; alwaysRun = @()
+        BackingFiles = $deepMap.files; FileReads = 0
+    }
+    $countedMap | Add-Member -MemberType ScriptProperty -Name files -Value {
+        $this.FileReads++
+        return $this.BackingFiles
+    }
+    $r = Select-ImpactedShards -Map $countedMap -Changed @{
+        'src/Finance/Agents/NewOne.cs' = @(1, 4)
+        'src/Finance/Agents/NewTwo.cs' = @(1, 4)
+        'src/Finance/Brand/New/Deep.cs' = @(1, 4)
+    }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -ceq 'Alpha,Beta,Gamma') `
+        'a shared directory projection changed the selected owners'
+    Assert-True ($countedMap.FileReads -eq 4) `
+        "directory ownership repeatedly enumerated the map ($($countedMap.FileReads) accesses instead of 4)"
+    $countedMap.FileReads = 0
+    $r = Select-ImpactedShards -Map $countedMap -Changed @{ 'src/Finance/Agents/Dqn.cs' = @(1, 2) }
+    Assert-True ($countedMap.FileReads -eq 1) `
+        'a directly mapped change unnecessarily built the directory projection'
+
+    $otherMap = $deepMap | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $otherMap.knownShards = @('OtherAlpha', 'OtherBeta', 'OtherGamma')
+    $r = Select-ImpactedShards -Map $otherMap -Changed @{ 'src/Finance/Agents/NewAgent.cs' = @(1, 4) }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -ceq 'OtherAlpha,OtherBeta') `
+        'directory ownership leaked between maps selected in the same process'
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Agents/NewAgent.cs' = @(1, 4) }
+    Assert-True ((@($r.Shards) -join ',') -ceq 'Alpha,Beta') `
+        'returning to the original map retained another map''s directory owners'
 
     # ---- Test sources, routed through precomputed manifest routes. --------------------------------
     $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/FooTests.cs' = @(1, 30) } -TestRoutes @{

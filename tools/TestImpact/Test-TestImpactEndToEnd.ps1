@@ -8,6 +8,9 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+& (Join-Path $PSScriptRoot 'Test-CiImpactWorkflowReview.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Workflow review negative controls failed.' }
+
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
 $coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
 $missMeasurer = Join-Path $PSScriptRoot 'Measure-SelectionMiss.ps1'
