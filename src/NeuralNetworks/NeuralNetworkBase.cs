@@ -2874,6 +2874,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Monotonically increasing version counter, incremented when layers are added/removed.
     /// Used by TapeTrainingStep caching to detect structural changes.
     /// </summary>
+    /// <remarks>
+    /// Per-instance cache bookkeeping, not model state: it keys this instance's own plan and layout caches. A
+    /// copy-on-write clone bumps it while adopting the graph, so persisting it made a copy serialize differently from
+    /// its original.
+    /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _layerStructureVersion;
 
     /// <summary>
@@ -15822,7 +15828,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 CopyGeneratedLayerAliasesTo(largeBase);
                 CompleteDeclaredStateRestore(largeBase, largeDeclaredStateEnvelope);
                 largeBase.InvalidateParameterCountCache();
-                largeBase.SetTrainingMode(false);
+                // The original's mode, as on every other clone path (see TryDeepCopyCopyOnWrite).
+                largeBase.SetTrainingMode(IsTrainingMode);
                 // The per-layer parameter copy above skips non-trainable stochastic layers
                 // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
                 // explicitly — see CopyLayerRandomSeedsTo.
@@ -16444,7 +16451,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         CompleteDeclaredStateRestore(copyBase, copyOnWriteDeclaredStateEnvelope);
         copyBase.InvalidateParameterCountCache();
         copyBase.OnParametersRestored();
-        copyBase.SetTrainingMode(false);
+        // A copy is in the mode its original is in, as the serialize roundtrip path restores it and as PyTorch's
+        // copy.deepcopy keeps module.training. Forcing inference mode here made the copy serialize differently from
+        // the original depending only on which clone path ran.
+        copyBase.SetTrainingMode(IsTrainingMode);
 
         // Opt-in clone diagnostics compare the complete generated/base state manifest after every
         // adoption step. This deliberately lives behind the same environment switch as rejection
