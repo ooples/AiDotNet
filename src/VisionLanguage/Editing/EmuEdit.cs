@@ -216,15 +216,18 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
     /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
-        ArgumentNullException.ThrowIfNull(image);
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
         return EncodeToLatent(image);
     }
 
     /// <summary>Edits <paramref name="image"/> according to <paramref name="instruction"/>.</summary>
     public Tensor<T> EditImage(Tensor<T> image, string instruction)
     {
-        ArgumentNullException.ThrowIfNull(image);
-        ArgumentNullException.ThrowIfNull(instruction);
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        if (instruction is null)
+            throw new ArgumentNullException(nameof(instruction));
 
         var sourceLatent = EncodeToLatent(image);
         _ = ApplyEditHead(sourceLatent);

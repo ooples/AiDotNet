@@ -224,7 +224,8 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
-        ArgumentNullException.ThrowIfNull(image);
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
         return EncodeToLatent(image);
     }
 
@@ -236,8 +237,10 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     /// </remarks>
     public Tensor<T> EditImage(Tensor<T> image, string instruction)
     {
-        ArgumentNullException.ThrowIfNull(image);
-        ArgumentNullException.ThrowIfNull(instruction);
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        if (instruction is null)
+            throw new ArgumentNullException(nameof(instruction));
 
         var sourceLatent = EncodeToLatent(image);
         var guidance = ApplyEditHead(sourceLatent);
