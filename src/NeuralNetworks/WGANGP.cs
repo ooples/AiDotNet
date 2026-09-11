@@ -208,12 +208,8 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     /// <param name="options">Optional WGAN-GP options.</param>
     public WGANGP(
         NeuralNetworkArchitecture<T> architecture,
-        double gradientPenaltyCoefficient = 10.0,
-        int criticIterations = 5,
         WGANGPOptions? options = null)
-        : this(architecture, CreateDefaultCriticArchitecture(architecture), architecture.InputType,
-               gradientPenaltyCoefficient: gradientPenaltyCoefficient,
-               criticIterations: criticIterations, options: options)
+        : this(architecture, CreateDefaultCriticArchitecture(architecture), architecture.InputType, options: options)
     {
     }
 
@@ -248,16 +244,15 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
         InputType inputType,
+        WGANGPOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? criticOptimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double gradientPenaltyCoefficient = 10.0,
-        int criticIterations = 5,
-        WGANGPOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(CreateWGANGPArchitecture(generatorArchitecture, criticArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _options = options ?? new WGANGPOptions();
+        _options.Validate();
         Options = _options;
 
         // Input validation
@@ -275,17 +270,17 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
                 $"WGAN-GP critic output size must be 1 (an unrestricted Wasserstein score), but was {criticArchitecture.OutputSize}.",
                 nameof(criticArchitecture));
         }
-        if (gradientPenaltyCoefficient <= 0)
+        if (_options.GradientPenaltyCoefficient <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(gradientPenaltyCoefficient), gradientPenaltyCoefficient, "Gradient penalty coefficient must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.GradientPenaltyCoefficient), _options.GradientPenaltyCoefficient, "Gradient penalty coefficient must be positive.");
         }
-        if (criticIterations <= 0)
+        if (_options.CriticIterations <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(criticIterations), criticIterations, "Critic iterations must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.CriticIterations), _options.CriticIterations, "Critic iterations must be positive.");
         }
 
-        _gradientPenaltyCoefficient = gradientPenaltyCoefficient;
-        _criticIterations = criticIterations;
+        _gradientPenaltyCoefficient = _options.GradientPenaltyCoefficient;
+        _criticIterations = _options.CriticIterations;
 
         Generator = CreateNetworkForArchitecture(generatorArchitecture);
         Critic = CreateNetworkForArchitecture(EnsureDefaultCriticLayers(criticArchitecture));

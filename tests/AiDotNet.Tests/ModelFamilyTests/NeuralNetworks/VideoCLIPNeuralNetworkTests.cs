@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -91,21 +92,24 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase<float>
         // measures actual embedding alignment.
         var model = new VideoCLIPNeuralNetwork<float>(
             architecture,
-            imageSize: 32,              // Paper: 224 (ViT-B/16 input resolution)
-            channels: 3,                // Paper: 3 RGB channels
-            patchSize: 16,              // Paper: 16 (ViT-B/16 patch size)
-            vocabularySize: 49408,      // Paper: 49408 BPE tokens (CLIP tokenizer)
-            maxSequenceLength: 77,      // Paper: 77 (CLIP text encoder max length)
-            embeddingDimension: 64,     // Paper: 512 (joint embedding space)
-            visionHiddenDim: 128,       // Paper: 768 (ViT-B hidden dim)
-            textHiddenDim: 64,          // Paper: 512 (CLIP text encoder hidden dim)
-            numFrameEncoderLayers: 2,   // Paper: 12 (ViT-B depth)
-            numTemporalLayers: 2,       // Paper: 4 (temporal transformer depth)
-            numTextLayers: 2,           // Paper: 12 (CLIP text encoder depth)
-            numHeads: 4,                // Paper: 12 (ViT-B attention heads)
-            numFrames: 4,               // Paper: 8 (sampled frames per video)
-            frameRate: 1.0,             // Paper: 1 FPS sampling
-            temporalAggregation: TemporalAggregationType.TemporalTransformer,
+            options: new VideoCLIPOptions
+            {
+                ImageSize = 32,              // Paper: 224 (ViT-B/16 input resolution)
+                Channels = 3,                // Paper: 3 RGB channels
+                PatchSize = 16,              // Paper: 16 (ViT-B/16 patch size)
+                VocabSize = 49408,           // Paper: 49408 BPE tokens (CLIP tokenizer)
+                MaxSequenceLength = 77,      // Paper: 77 (CLIP text encoder max length)
+                EmbeddingDimension = 64,     // Paper: 512 (joint embedding space)
+                VisionHiddenDim = 128,       // Paper: 768 (ViT-B hidden dim)
+                TextHiddenDim = 64,          // Paper: 512 (CLIP text encoder hidden dim)
+                NumFrameEncoderLayers = 2,   // Paper: 12 (ViT-B depth)
+                NumTemporalLayers = 2,       // Paper: 4 (temporal transformer depth)
+                NumTextLayers = 2,           // Paper: 12 (CLIP text encoder depth)
+                NumHeads = 4,                // Paper: 12 (ViT-B attention heads)
+                NumFrames = 4,               // Paper: 8 (sampled frames per video)
+                FrameRate = 1.0,             // Paper: 1 FPS sampling
+                TemporalAggregation = TemporalAggregationType.TemporalTransformer,
+            },
             optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions),
             lossFunction: new CosineSimilarityLoss<float>());
 

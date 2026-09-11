@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -18,9 +19,5 @@ public class ProgressiveGANTests : GANModelTestBase<float>
     protected override int[] OutputShape => [1, 8, 8];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new ProgressiveGAN<float>(
-            latentSize: 16,
-            imageChannels: 1,
-            maxResolutionLevel: 1,
-            baseFeatureMaps: 8);
+        => new ProgressiveGAN<float>(latentSize: 16, imageChannels: 1, options: new ProgressiveGANOptions { MaxResolutionLevel = 1, GeneratorChannels = 8 });
 }

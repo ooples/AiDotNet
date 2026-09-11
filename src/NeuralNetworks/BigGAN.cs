@@ -105,13 +105,11 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
         int imageChannels,
         int imageHeight,
         int imageWidth,
-        int generatorChannels = 96,
-        int discriminatorChannels = 96,
-        ILossFunction<T>? lossFunction = null,
-        BigGANOptions? options = null)
+        BigGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(
-            CreateBigGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorChannels),
-            CreateBigGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorChannels),
+            CreateBigGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, (options?.GeneratorChannels ?? 96)),
+            CreateBigGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, (options?.DiscriminatorChannels ?? 96)),
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
@@ -120,6 +118,8 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
             defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(0.0001, 0.0, 0.999),
             defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0004, 0.0, 0.999))
     {
+        _options = options ?? new BigGANOptions();
+        _options.Validate();
         if (latentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");
         if (numClasses <= 0)
@@ -127,7 +127,6 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
         if (classEmbeddingDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(classEmbeddingDim), classEmbeddingDim, "Class embedding dimension must be positive.");
 
-        _options = options ?? new BigGANOptions();
         Options = _options;
         _latentSize = latentSize;
         _numClasses = numClasses;
@@ -135,8 +134,8 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
         _imageChannels = imageChannels;
         _imageHeight = imageHeight;
         _imageWidth = imageWidth;
-        _generatorChannels = generatorChannels;
-        _discriminatorChannels = discriminatorChannels;
+        _generatorChannels = _options.GeneratorChannels;
+        _discriminatorChannels = _options.DiscriminatorChannels;
         TruncationThreshold = 1.0;
         UseTruncation = false;
         UseSpectralNormalization = true;
@@ -166,23 +165,12 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
     public BigGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
-        int latentSize = 120,
-        int numClasses = 1000,
-        int classEmbeddingDim = 128,
-        int imageChannels = 3,
-        int imageHeight = 128,
-        int imageWidth = 128,
-        int generatorChannels = 96,
-        int discriminatorChannels = 96,
-        InputType inputType = InputType.TwoDimensional,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0001,
-        BigGANOptions? options = null)
-        : this(latentSize, numClasses, classEmbeddingDim,
-               imageChannels > 0 ? imageChannels : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
-               imageHeight > 0 ? imageHeight : (discriminatorArchitecture.InputHeight > 0 ? discriminatorArchitecture.InputHeight : 128),
-               imageWidth > 0 ? imageWidth : (discriminatorArchitecture.InputWidth > 0 ? discriminatorArchitecture.InputWidth : 128),
-               generatorChannels, discriminatorChannels, lossFunction, options)
+        BigGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
+        : this((options?.LatentSize ?? 120), (options?.NumClasses ?? 1000), (options?.ClassEmbeddingDim ?? 128),
+               (options?.ImageChannels ?? 3) > 0 ? (options?.ImageChannels ?? 3) : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
+               (options?.ImageHeight ?? 128) > 0 ? (options?.ImageHeight ?? 128) : (discriminatorArchitecture.InputHeight > 0 ? discriminatorArchitecture.InputHeight : 128),
+               (options?.ImageWidth ?? 128) > 0 ? (options?.ImageWidth ?? 128) : (discriminatorArchitecture.InputWidth > 0 ? discriminatorArchitecture.InputWidth : 128), lossFunction: lossFunction, options: options)
     {
     }
 

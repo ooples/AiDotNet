@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -161,10 +162,7 @@ public class Blip2NeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new Blip2NeuralNetwork<float>(
-                architecture,
-                imageSize: 224,
-                patchSize: 15)); // 224 not divisible by 15
+            new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 224, PatchSize = 15 })); // 224 not divisible by 15
 
         Assert.Contains("divisible", exception.Message);
     }
@@ -176,10 +174,11 @@ public class Blip2NeuralNetworkTests
         var architecture = CreateBasicArchitecture();
 
         // Act
-        var network = new Blip2NeuralNetwork<float>(
-            architecture,
-            numQueryTokens: 32,
-            languageModelBackbone: LanguageModelBackbone.OPT);
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options
+        {
+            LanguageModelBackbone = LanguageModelBackbone.OPT,
+            NumQueryTokens = 32,
+        });
 
         // Assert
         Assert.Equal(32, network.NumQueryTokens);
@@ -207,10 +206,7 @@ public class Blip2NeuralNetworkTests
         var architecture = CreateBasicArchitecture();
 
         // Act
-        var network = new Blip2NeuralNetwork<float>(
-            architecture,
-            imageSize: 384,
-            patchSize: 16); // 384 is divisible by 16
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 384, PatchSize = 16 }); // 384 is divisible by 16
 
         // Assert
         Assert.NotNull(network);
@@ -223,9 +219,7 @@ public class Blip2NeuralNetworkTests
         var architecture = CreateBasicArchitecture();
 
         // Act
-        var network = new Blip2NeuralNetwork<float>(
-            architecture,
-            numQueryTokens: 64);
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { NumQueryTokens = 64 });
 
         // Assert
         Assert.Equal(64, network.NumQueryTokens);
@@ -284,20 +278,7 @@ public class Blip2NeuralNetworkTests
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(
-            architecture,
-            imageSize: 28,
-            patchSize: 14,
-            vocabularySize: 64,
-            embeddingDimension: 16,
-            qformerHiddenDim: 32,
-            visionHiddenDim: 32,
-            lmHiddenDim: 32,
-            numQformerLayers: 1,
-            numQueryTokens: 32,
-            numHeads: 2,
-            numLmDecoderLayers: 1,
-            languageModelBackbone: LanguageModelBackbone.FlanT5);
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { LanguageModelBackbone = LanguageModelBackbone.FlanT5, ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumQueryTokens = 32, NumHeads = 2, NumLmDecoderLayers = 1 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -313,18 +294,7 @@ public class Blip2NeuralNetworkTests
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(
-            architecture,
-            imageSize: 28,
-            patchSize: 14,
-            vocabularySize: 64,
-            embeddingDimension: 16,
-            qformerHiddenDim: 48,
-            visionHiddenDim: 32,
-            lmHiddenDim: 32,
-            numQformerLayers: 2,
-            numHeads: 2,
-            numLmDecoderLayers: 1);
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 48, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 2, NumHeads = 2, NumLmDecoderLayers = 1 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -367,18 +337,7 @@ public class Blip2NeuralNetworkTests
     private static Blip2NeuralNetwork<float> CreateSmallBlip2Network(
         NeuralNetworkArchitecture<float> architecture)
     {
-        return new Blip2NeuralNetwork<float>(
-            architecture,
-            imageSize: 28,
-            patchSize: 14,
-            vocabularySize: 64,
-            embeddingDimension: 16,
-            qformerHiddenDim: 32,
-            visionHiddenDim: 32,
-            lmHiddenDim: 32,
-            numQformerLayers: 1,
-            numHeads: 2,
-            numLmDecoderLayers: 1);
+        return new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumHeads = 2, NumLmDecoderLayers = 1 });
     }
 
     #endregion

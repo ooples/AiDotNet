@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -58,13 +59,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
                 inputSize: Vocab,
                 outputSize: Vocab);
 
-            return new MambaLanguageModel<double>(
-                architecture,
-                vocabSize: Vocab,
-                modelDimension: 16,
-                numLayers: 1,
-                stateDimension: 4,
-                maxSeqLength: MaxSeq);
+            return new MambaLanguageModel<double>(architecture, new MambaOptions { VocabSize = Vocab, ModelDimension = 16, NumLayers = 1, StateDimension = 4, MaxSequenceLength = MaxSeq });
         }
 
         [Fact(Timeout = 120000)]
@@ -101,9 +96,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
                     NeuralNetworkTaskType.TextGeneration,
                     inputSize: Vocab,
                     outputSize: Vocab);
-                var model = new MambaLanguageModel<double>(
-                    architecture, vocabSize: Vocab, modelDimension: 16, numLayers: 2,
-                    stateDimension: 4, maxSeqLength: MaxSeq);
+                var model = new MambaLanguageModel<double>(architecture, new MambaOptions { VocabSize = Vocab, ModelDimension = 16, NumLayers = 2, StateDimension = 4, MaxSequenceLength = MaxSeq });
 
                 var prompt = new[] { 3, 1, 4, 1 };
                 var generated = new[] { 5, 9, 2 };

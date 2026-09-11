@@ -132,25 +132,21 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
     public FastText(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 10000,
-            int bucketSize = 2000000,
-            int embeddingDimension = 100,
-            int maxTokens = 512,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            FastTextOptions? options = null)
-            : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>(), maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        FastTextOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>(), options?.MaxGradNorm ?? 1.0)
         {
-            _options = options ?? new FastTextOptions();
+        _options = options ?? new FastTextOptions();
+        _options.Validate();
             Options = _options;
             _tokenizer = tokenizer;
-            _vocabSize = vocabSize;
-            _bucketSize = bucketSize;
-            _embeddingDimension = embeddingDimension;
-            _maxTokens = maxTokens;
+            _vocabSize = _options.VocabSize;
+            _bucketSize = _options.BucketSize;
+            _embeddingDimension = _options.EmbeddingDimension;
+            _maxTokens = _options.MaxSequenceLength;
             // FastText's head is a vocab-wide SoftmaxActivation; its training objective is
             // the multinomial cross-entropy over classes (Joulin et al. 2016 "Bag of Tricks"
             // minimizes softmax NLL). The previous BinaryCrossEntropyLoss treats each of the

@@ -187,15 +187,15 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
+        Pix2PixOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double l1Lambda = 100.0,
-        Pix2PixOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(CreatePix2PixArchitecture(generatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _options = options ?? new Pix2PixOptions();
+        _options.Validate();
         Options = _options;
         if (generatorArchitecture is null)
         {
@@ -205,12 +205,12 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         {
             throw new ArgumentNullException(nameof(discriminatorArchitecture), "Discriminator architecture cannot be null.");
         }
-        if (l1Lambda < 0)
+        if (_options.L1Lambda < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(_options.L1Lambda), _options.L1Lambda, "L1 lambda must be non-negative.");
         }
 
-        _l1Lambda = NumOps.FromDouble(l1Lambda);
+        _l1Lambda = NumOps.FromDouble(_options.L1Lambda);
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);

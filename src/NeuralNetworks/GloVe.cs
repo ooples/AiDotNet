@@ -213,23 +213,20 @@ namespace AiDotNet.NeuralNetworks
         /// decide how many words it should know and how detailed its "dictionary" should be.
         /// </remarks>
         public GloVe(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 10000,
-            int embeddingDimension = 100,
-            int maxTokens = 512,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            GloVeOptions? options = null)
-            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        GloVeOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.MaxGradNorm ?? 1.0)
         {
-            _options = options ?? new GloVeOptions();
+        _options = options ?? new GloVeOptions();
+        _options.Validate();
             Options = _options;
             _tokenizer = tokenizer;
-            _vocabSize = vocabSize;
-            _embeddingDimension = embeddingDimension;
-            _maxTokens = maxTokens;
+            _vocabSize = _options.VocabSize;
+            _embeddingDimension = _options.EmbeddingDimension;
+            _maxTokens = _options.MaxSequenceLength;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             // Paper-faithful default: Pennington et al. 2014, Section 4.4
             // ("Model Analysis: Vector Length and Context Size") — "we use

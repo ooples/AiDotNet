@@ -65,23 +65,20 @@ public partial class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public GriffinLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 256000,
-        int modelDimension = 2048,
-        int numLayers = 24,
-        int maxSeqLength = 2048,
-        ILossFunction<T>? lossFunction = null,
         GriffinOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GriffinOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
         _recurrenceDimension = _options.RecurrenceDimension;
-        _numLayers = numLayers;
-        _maxSeqLength = maxSeqLength;
+        _numLayers = _options.NumLayers;
+        _maxSeqLength = _options.MaxSequenceLength;
         if (_recurrenceDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "RecurrenceDimension must be positive.");
         _optimizer = optimizer ?? CreateDefaultOptimizer();
