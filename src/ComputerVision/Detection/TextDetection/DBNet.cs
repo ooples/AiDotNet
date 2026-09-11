@@ -151,7 +151,7 @@ public partial class DBNet<T> : TextDetectorBase<T>
         threshMap = ApplySigmoid(threshMap);
 
         // Apply differentiable binarization: DB = 1 / (1 + exp(-k * (P - T)))
-        var binaryMap = ApplyDifferentiableBinarization(probMap, threshMap);
+        var binaryMap = ApplyDifferentiableBinarization(probMap, threshMap, _k);
 
         return new List<Tensor<T>> { probMap, threshMap, binaryMap };
     }
@@ -246,10 +246,15 @@ public partial class DBNet<T> : TextDetectorBase<T>
         return regions;
     }
 
-    private Tensor<T> ApplyDifferentiableBinarization(Tensor<T> prob, Tensor<T> thresh)
+    internal static Tensor<T> ApplyDifferentiableBinarization(Tensor<T> prob, Tensor<T> thresh, double k)
+    {
         // DB (Liao et al. 2020): B = 1 / (1 + exp(-k (P - T))). Engine ops, so the binarization step -
         // the whole point of DBNet - passes gradient to both the probability and threshold heads.
-        => Engine.Sigmoid(Engine.TensorMultiplyScalar(Engine.TensorSubtract(prob, thresh), NumOps.FromDouble(_k)));
+        var engine = AiDotNetEngine.Current;
+        var scaled = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(prob, thresh), MathHelper.GetNumericOperations<T>().FromDouble(k));
+        return engine.Sigmoid(scaled);
+    }
 
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()

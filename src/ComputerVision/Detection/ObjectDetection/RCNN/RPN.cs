@@ -291,7 +291,7 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
         _regHead.ReadParameters(reader);
     }
 
-    private Tensor<T> ReshapeRPNOutput(Tensor<T> x, int batch, int height, int width, int outputDim)
+    internal static Tensor<T> ReshapeRPNOutput(Tensor<T> x, int batch, int height, int width, int outputDim)
     {
         int channelDim = x.Shape[1];
 

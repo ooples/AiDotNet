@@ -423,50 +423,55 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
         => AiDotNetEngine.Current.Reshape(
             roiFeatures, new[] { roiFeatures.Shape[0], roiFeatures.Shape[1] * roiFeatures.Shape[2] * roiFeatures.Shape[3] });
 
-    private Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
+    /// <summary>
+    /// Applies one stage's box deltas to its input boxes, giving the next stage's boxes.
+    /// </summary>
+    /// <param name="boxes">Input boxes <c>[N, 4]</c> as (x1, y1, x2, y2) in network-input coordinates.</param>
+    /// <param name="deltas">The stage's regression output <c>[N, 4 * numClasses]</c>; the first
+    /// foreground class's (dx, dy, dw, dh) are applied.</param>
+    /// <param name="imageWidth">Right clip bound.</param>
+    /// <param name="imageHeight">Bottom clip bound.</param>
+    /// <returns>The refined boxes <c>[N, 4]</c>, still in network-input coordinates.</returns>
+    /// <remarks>
+    /// Engine ops over whole columns rather than a per-box scalar loop. The refined boxes only tell
+    /// the next stage's RoIAlign WHERE to sample, and RoIAlign treats box coordinates as data, so no
+    /// gradient flows back through them - the same "detached proposals" rule as Cai and Vasconcelos
+    /// (2018) and detectron2's cascade head. The deltas themselves still reach the loss through the
+    /// stage outputs <see cref="Forward"/> returns.
+    /// </remarks>
+    internal static Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
     {
-        int numBoxes = boxes.Shape[0];
-        int numClasses = deltas.Shape[1] / 4;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        Tensor<T> Column(Tensor<T> source, int index) => engine.TensorNarrow(source, 1, index, 1);
+        var half = ops.FromDouble(0.5);
+        var unbounded = ops.FromDouble(double.MinValue);
 
-        var refinedBoxes = new Tensor<T>(new[] { numBoxes, 4 });
+        var px1 = Column(boxes, 0);
+        var py1 = Column(boxes, 1);
+        var pw = engine.TensorSubtract(Column(boxes, 2), px1);
+        var ph = engine.TensorSubtract(Column(boxes, 3), py1);
+        var pcx = engine.TensorAdd(px1, engine.TensorMultiplyScalar(pw, half));
+        var pcy = engine.TensorAdd(py1, engine.TensorMultiplyScalar(ph, half));
 
-        for (int i = 0; i < numBoxes; i++)
-        {
-            double px1 = NumOps.ToDouble(boxes[i, 0]);
-            double py1 = NumOps.ToDouble(boxes[i, 1]);
-            double px2 = NumOps.ToDouble(boxes[i, 2]);
-            double py2 = NumOps.ToDouble(boxes[i, 3]);
+        // Deltas of the first foreground class (columns 4..7; class 0 is background). The scale
+        // deltas are capped at 4 before exponentiating, as in the per-box version this replaces.
+        const int deltaOffset = 4;
+        var predCx = engine.TensorAdd(pcx, engine.TensorMultiply(Column(deltas, deltaOffset), pw));
+        var predCy = engine.TensorAdd(pcy, engine.TensorMultiply(Column(deltas, deltaOffset + 1), ph));
+        var cap = ops.FromDouble(4.0);
+        var predW = engine.TensorMultiply(pw, engine.TensorExp(engine.TensorClamp(Column(deltas, deltaOffset + 2), unbounded, cap)));
+        var predH = engine.TensorMultiply(ph, engine.TensorExp(engine.TensorClamp(Column(deltas, deltaOffset + 3), unbounded, cap)));
+        var halfW = engine.TensorMultiplyScalar(predW, half);
+        var halfH = engine.TensorMultiplyScalar(predH, half);
 
-            double pw = px2 - px1;
-            double ph = py2 - py1;
-            double pcx = px1 + pw / 2;
-            double pcy = py1 + ph / 2;
+        // Clip each edge on its own side only: x1/y1 at zero, x2/y2 at the image extent.
+        var x1 = engine.TensorClampMin(engine.TensorSubtract(predCx, halfW), ops.Zero);
+        var y1 = engine.TensorClampMin(engine.TensorSubtract(predCy, halfH), ops.Zero);
+        var x2 = engine.TensorClamp(engine.TensorAdd(predCx, halfW), unbounded, ops.FromDouble(imageWidth));
+        var y2 = engine.TensorClamp(engine.TensorAdd(predCy, halfH), unbounded, ops.FromDouble(imageHeight));
 
-            // Use class-agnostic refinement (average across all classes)
-            // or use the most likely class - here we use first non-background class
-            int deltaOffset = 4; // Skip background class
-            double dx = NumOps.ToDouble(deltas[i, deltaOffset]);
-            double dy = NumOps.ToDouble(deltas[i, deltaOffset + 1]);
-            double dw = NumOps.ToDouble(deltas[i, deltaOffset + 2]);
-            double dh = NumOps.ToDouble(deltas[i, deltaOffset + 3]);
-
-            double predCx = pcx + dx * pw;
-            double predCy = pcy + dy * ph;
-            double predW = pw * Math.Exp(Math.Min(dw, 4.0));
-            double predH = ph * Math.Exp(Math.Min(dh, 4.0));
-
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
-
-            refinedBoxes[i, 0] = NumOps.FromDouble(x1);
-            refinedBoxes[i, 1] = NumOps.FromDouble(y1);
-            refinedBoxes[i, 2] = NumOps.FromDouble(x2);
-            refinedBoxes[i, 3] = NumOps.FromDouble(y2);
-        }
-
-        return refinedBoxes;
+        return engine.TensorConcatenate(new[] { x1, y1, x2, y2 }, 1);
     }
 }
 

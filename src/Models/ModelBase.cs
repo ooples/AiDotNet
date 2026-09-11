@@ -311,7 +311,17 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// without another per-model override.
     /// </remarks>
     public virtual IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
-        => _parameterRegistry.GetParameterStateChunks();
+    {
+        // Components are registered lazily, on first access through Components. Every other
+        // parameter surface - GetParameters, SetParameters, ParameterCount, ParameterLayout - goes
+        // through it; this one went straight to the registry, so a caller that enumerated chunks
+        // BEFORE anything else had touched the parameters saw an empty registry and got no chunks
+        // at all, while GetParameters on the same model kept working. A tape-based trainer or a
+        // chunk-based optimizer enumerates chunks first. Not an iterator on purpose: registration
+        // must happen at the call, not whenever the sequence is first enumerated.
+        _ = Components;
+        return _parameterRegistry.GetParameterStateChunks();
+    }
 
     /// <inheritdoc/>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()

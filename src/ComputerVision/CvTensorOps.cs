@@ -145,12 +145,47 @@ internal static class CvTensorOps<T>
     /// change the maximum.
     /// </remarks>
     public static Tensor<T> MaxPoolSame(Tensor<T> x, int kernelSize)
+        => MaxPoolPadded(x, kernelSize, 1, kernelSize / 2);
+
+    /// <summary>
+    /// Max pooling with a square window, a stride and symmetric padding, where padded positions are
+    /// ignored rather than treated as zero - PyTorch's <c>nn.MaxPool2d(kernel, stride, padding)</c>
+    /// in floor mode.
+    /// </summary>
+    /// <remarks>
+    /// Out-of-bounds positions are filled by clamping their index to the nearest edge. While
+    /// <paramref name="padding"/> is smaller than <paramref name="kernelSize"/> (which PyTorch itself
+    /// requires), every window reaches at least one in-bounds cell on the side it overhangs, and the
+    /// clamped cell IS that edge cell - a duplicate candidate that cannot change the maximum.
+    /// </remarks>
+    public static Tensor<T> MaxPoolPadded(Tensor<T> x, int kernelSize, int stride, int padding)
     {
-        int pad = kernelSize / 2;
+        if (padding < 0 || padding >= kernelSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(padding), padding,
+                $"Padding must lie in [0, kernelSize) = [0, {kernelSize}).");
+        }
+
         int h = x.Shape[2];
         int w = x.Shape[3];
-        var padded = Select(Select(x, ClampedRange(-pad, h + pad, h), 2), ClampedRange(-pad, w + pad, w), 3);
-        return Engine.MaxPool2DWithIndices(padded, new[] { kernelSize, kernelSize }, new[] { 1, 1 }, out _);
+        int outH = (h + 2 * padding - kernelSize) / stride + 1;
+        int outW = (w + 2 * padding - kernelSize) / stride + 1;
+
+        // Only the cells some window reads: from -padding to the last window's far edge.
+        int endH = (outH - 1) * stride - padding + kernelSize;
+        int endW = (outW - 1) * stride - padding + kernelSize;
+        var padded = x;
+        if (padding > 0 || endH != h)
+        {
+            padded = Select(padded, ClampedRange(-padding, endH, h), 2);
+        }
+
+        if (padding > 0 || endW != w)
+        {
+            padded = Select(padded, ClampedRange(-padding, endW, w), 3);
+        }
+
+        return Engine.MaxPool2DWithIndices(padded, new[] { kernelSize, kernelSize }, new[] { stride, stride }, out _);
     }
 
     /// <summary>
