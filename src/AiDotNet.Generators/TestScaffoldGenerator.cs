@@ -8889,8 +8889,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // silently ignoring a configured option is worse than refusing it -- and an earlier
                 // draft of this fixture set NumResStacks = 1 and failed all 33 tests on it.
                 //
-                // MelChannels is applied and would shrink further, but it is the 80 in this model's
-                // declared [1,80,8] -> [1,1,2048] contract, so moving it changes the output axes
+                // MelChannels is applied and would shrink further, but it is the 80 in this fixture's
+                // declared [1,80,1] -> [1,1,256] contract, so moving it changes the output axes
                 // rather than only the cost. Width alone is the safe lever; the multi-scale
                 // generator and paper defaults are otherwise unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -11058,6 +11058,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(" +
                     "new AiDotNet.Tensors.LinearAlgebra.Vector<double>(3))";
             }
+            else if (model.ClassName == "MemFlow" && model.TypeParameterCount == 1)
+            {
+                // Apply the explicit fixture before the parameterless fallback: MemFlow exposes both
+                // constructors, and its production default builds 256x256 frames at 64 features over
+                // 8 layers. The bounded fixture must not be shadowed by that convenient default.
+                //
+                // InputDepth stays 6: the two frames are stacked channel-wise and the lazy feature
+                // conv is sized from InputDepth, so 3 would build a single-frame extractor and
+                // PredictCore's Shape[1]/2 split would halve the wrong axis. Only the scale changes --
+                // the memory-augmented flow pipeline is unchanged, and paper defaults stay intact.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
+                    "numFeatures: 8, numLayers: 2)";
+            }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
             // below. Production behavior is unchanged; only generated fixtures use the bounded constructors.
@@ -11248,29 +11264,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
                     "numFeatures: 8, correlationLevels: 2, correlationRadius: 2, numIterations: 2)";
-            }
-            else if (model.ClassName == "MemFlow" && model.TypeParameterCount == 1)
-            {
-                // Same rung and the same scale as RAFT above. MemFlow's parameterless ctor builds a
-                // 256x256 pair at 64 features over 8 layers, and its many-iteration training probes
-                // overrun the gate at that size.
-                //
-                // Rungs 1 and 2 are already applied and were not enough: it is in Fp32TestClassNames,
-                // and its iteration-cap entry records that the cap block "emits MoreDataTolerance as
-                // well, so a model whose family emits ANY of those five members must take a different
-                // rung". That different rung is this one, and the HeavyTimeout note names MemFlow in
-                // the group whose CI-smoke fixture "could rescue several, but that per-model work is
-                // deferred".
-                //
-                // InputDepth stays 6: the two frames are stacked channel-wise and the lazy feature
-                // conv is sized from InputDepth, so 3 would build a single-frame extractor and
-                // PredictCore's Shape[1]/2 split would halve the wrong axis. Only the scale changes --
-                // the memory-augmented flow pipeline is unchanged, and paper defaults stay intact.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
-                    "numFeatures: 8, numLayers: 2)";
             }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
