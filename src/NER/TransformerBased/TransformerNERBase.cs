@@ -116,6 +116,9 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
 
     #region Properties
 
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the options for this transformer NER model.
     /// </summary>
