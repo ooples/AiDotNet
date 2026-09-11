@@ -501,11 +501,15 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// <summary>
     /// Predicts by running the forward pass and returning raw network outputs concatenated.
     /// </summary>
+    /// <remarks>
+    /// Each output is flattened per image to <c>[batch, -1]</c> and the results are concatenated, so
+    /// the prediction carries every head: all YOLO pyramid levels, both DETR's class logits and its
+    /// boxes. It used to return <c>outputs[0]</c> alone despite this summary, so a detector trained
+    /// against <see cref="Predict"/> never trained any head but the first. A single-output model is
+    /// unchanged.
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
-    {
-        var outputs = Forward(input);
-        return outputs.Count > 0 ? outputs[0] : new Tensor<T>(new[] { 1, 0 });
-    }
+        => CvTensorOps<T>.ConcatenateOutputs(Forward(input));
 
     /// <summary>
     /// Gets the step size used by <see cref="Train"/>.

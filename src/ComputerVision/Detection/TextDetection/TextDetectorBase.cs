@@ -447,13 +447,12 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// This used to return <c>Preprocess(input)</c> -- the resized, normalised INPUT IMAGE -- so
     /// the model reported its own input back as a prediction. Nothing downstream could tell,
     /// because the returned tensor has a plausible shape. It now runs the network, matching
-    /// <c>ObjectDetectorBase.Predict</c>.
+    /// <c>ObjectDetectorBase.Predict</c>: every output map is flattened per image and concatenated,
+    /// so a model with a probability map and a threshold map (DBNet) or a score and a geometry map
+    /// (EAST) exposes both, and training against the prediction reaches both heads.
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
-    {
-        var outputs = Forward(input);
-        return outputs.Count > 0 ? outputs[0] : new Tensor<T>(new[] { 1, 0 });
-    }
+        => CvTensorOps<T>.ConcatenateOutputs(Forward(input));
 
     /// <inheritdoc />
     /// <summary>

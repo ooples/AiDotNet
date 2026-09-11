@@ -427,12 +427,20 @@ public sealed class SerializedObjectParameterSource<T> :
 /// lists are given and, within each list, in index order.
 /// </summary>
 /// <remarks>
+/// <para>
 /// For models that hold weights as bare <c>List&lt;Tensor&lt;T&gt;&gt;</c> rather than layers -- a
 /// feature-pyramid neck keeps a lateral weight and bias per level, and an output pair per level.
 /// The tensors are written THROUGH, never replaced, so a restore reaches the same instances the
 /// forward pass reads.
+/// </para>
+/// <para>
+/// The lists are also exposed as LIVE chunks, one per tensor. Without that the registry could only
+/// hand an optimizer a flat copy of these weights, and a tape-based training step - which keys
+/// gradients by tensor reference - had nothing it could update in place, so every neck weight stayed
+/// at its initial value.
+/// </para>
 /// </remarks>
-public sealed class TensorListParameterSource<T> : IParameterSource<T>
+public sealed class TensorListParameterSource<T> : IParameterSource<T>, IParameterChunkSource<T>
 {
     private readonly Func<IReadOnlyList<Tensor<T>>>[] _lists;
 
@@ -491,6 +499,22 @@ public sealed class TensorListParameterSource<T> : IParameterSource<T>
         foreach (var t in Tensors())
         {
             for (int i = 0; i < t.Length; i++) t[i] = parameters[idx++];
+        }
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+    {
+        for (int list = 0; list < _lists.Length; list++)
+        {
+            var items = _lists[list]();
+            if (items is null) continue;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var tensor = items[i];
+                if (tensor is null || tensor.Length == 0) continue;
+                yield return new ParameterChunk<T>($"{list}.{i}", ParameterSlotRole.Trainable, tensor);
+            }
         }
     }
 }

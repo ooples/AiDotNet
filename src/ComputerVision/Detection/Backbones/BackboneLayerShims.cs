@@ -15,7 +15,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// written against the pre-lazy parallel-Conv2D contract. Post-#1209 it is a 30-line
 /// adapter, not a parallel implementation.
 /// </summary>
-internal class Conv2D<T> : IParameterSource<T>
+internal class Conv2D<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     private readonly ConvolutionalLayer<T> _layer;
     private readonly int _inChannels;
@@ -107,6 +107,22 @@ internal class Conv2D<T> : IParameterSource<T>
         _layer.SetParameters(parameters);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+    }
+
 
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
@@ -147,7 +163,7 @@ internal class Conv2D<T> : IParameterSource<T>
 }
 
 /// <summary>Thin adapter around <see cref="DenseLayer{T}"/> for legacy detection-head call sites.</summary>
-internal class Dense<T> : IParameterSource<T>
+internal class Dense<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     private readonly DenseLayer<T> _layer;
     private readonly int _inDim;
@@ -164,6 +180,38 @@ internal class Dense<T> : IParameterSource<T>
         _inDim = inDim;
         _outDim = outDim;
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Applies this linear layer independently to every position of a sequence: input
+    /// <c>[..., inDim]</c>, output <c>[..., outDim]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The detection and OCR blocks used to do this one position at a time - copy a row into a fresh
+    /// <c>[1, inDim]</c> tensor, run Forward, copy the result back - which is both slow and invisible to
+    /// the autodiff tape. Folding the leading axes into one batch dimension gives the same per-row result
+    /// (a linear map treats rows independently) through engine reshapes the tape records.
+    /// </remarks>
+    public Tensor<T> ForwardTokens(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank <= 2)
+        {
+            return Forward(input);
+        }
+
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int rows = 1;
+        var outShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+        {
+            rows *= input.Shape[d];
+            outShape[d] = input.Shape[d];
+        }
+
+        outShape[rank - 1] = _outDim;
+        var flat = engine.Reshape(input, new[] { rows, input.Shape[rank - 1] });
+        return engine.Reshape(Forward(flat), outShape);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -220,6 +268,22 @@ internal class Dense<T> : IParameterSource<T>
         _layer.SetParameters(parameters);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+    }
+
 
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
@@ -264,7 +328,7 @@ internal class Dense<T> : IParameterSource<T>
 }
 
 /// <summary>Thin adapter around <see cref="MultiHeadAttentionLayer{T}"/>.</summary>
-internal class MultiHeadSelfAttention<T> : IParameterSource<T>
+internal class MultiHeadSelfAttention<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
     private readonly int _dim;
@@ -315,6 +379,22 @@ internal class MultiHeadSelfAttention<T> : IParameterSource<T>
         }
 
         _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
     }
 
 

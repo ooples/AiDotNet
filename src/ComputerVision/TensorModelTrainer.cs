@@ -1,9 +1,7 @@
-using System.Collections;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using AiDotNet.Tensors;
-using AiDotNet.Tensors.Engines;
-using AiDotNet.Training;
+using AiDotNet.Models;
+using AiDotNet.Models.Parameters;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.ComputerVision;
 
@@ -14,84 +12,103 @@ namespace AiDotNet.ComputerVision;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Those models hold their layers as discrete private fields (often behind the <c>Conv2D</c> /
-/// <c>Dense</c> adapters in <c>BackboneLayerShims</c>) instead of an enumerable layer collection,
-/// so there is no <c>Layers</c> property to hand to <see cref="TapeTrainingStep{T}"/>. This helper
-/// recovers that list by walking the object graph for <see cref="ITrainableLayer{T}"/> instances,
-/// which is what makes the existing tape trainer usable here instead of a second hand-written
-/// training loop.
+/// The weights a step updates come from the model's parameter registry: every LIVE chunk with the
+/// <see cref="ParameterSlotRole.Trainable"/> role, i.e. the exact tensor instances the forward pass
+/// reads. That makes the registry the single source of truth for training, <c>GetParameters()</c>,
+/// serialization and cloning. A weight the registry cannot see is therefore not silently skipped by
+/// one surface and handled by another; it is missing from all of them, which is what the family
+/// conformance audit checks for.
 /// </para>
 /// <para>
-/// The walk is cached per model instance: the field graph is fixed once a model is constructed,
-/// and repeating a reflection walk on every training step would dominate the step cost.
+/// A chunk that is only a COPY of a weight (not writable in place) is excluded: the autodiff tape
+/// keys gradients by tensor reference, so updating a copy would change nothing the model uses.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type the model is expressed in.</typeparam>
 internal static class TensorModelTrainer<T>
 {
     /// <summary>
-    /// Per-model-instance cache of the collected layers. A weak table so caching a model here
-    /// never keeps it alive.
-    /// </summary>
-    private static readonly ConditionalWeakTable<object, IReadOnlyList<ITrainableLayer<T>>> LayerCache = new();
-
-    /// <summary>
-    /// Models whose lazy layers have already resolved their shapes, so the warm-up forward is
-    /// paid once per model rather than on every training step.
+    /// Models whose lazy layers have already resolved their shapes, so the warm-up forward is paid
+    /// once per model rather than on every training step.
     /// </summary>
     private static readonly ConditionalWeakTable<object, object> Warmed = new();
 
     /// <summary>
-    /// Depth bound for the field walk. The deepest real chain is
-    /// model -> backbone -> stage -> block -> shim -> layer, so this is generous.
-    /// </summary>
-    private const int MaxWalkDepth = 12;
-
-    /// <summary>
     /// Runs one tape-based training step: forward under a gradient tape, mean-squared-error loss,
-    /// then a stochastic-gradient update of every trainable tensor the walk found.
+    /// then a stochastic-gradient update of every live trainable tensor.
     /// </summary>
-    /// <param name="model">The model being trained; the root of the field walk.</param>
+    /// <param name="model">The model being trained.</param>
     /// <param name="input">The training input.</param>
     /// <param name="target">The desired output, shaped like the model prediction.</param>
     /// <param name="learningRate">Step size for the parameter update.</param>
     /// <param name="forward">
-    /// The model's differentiable forward pass. It must be built from engine operations so the
-    /// tape records it - a forward that drops to scalar loops severs the chain and the parameters
-    /// upstream of the break receive no gradient.
+    /// The model's differentiable forward pass. It must be built from engine operations so the tape
+    /// records it - a forward that drops to scalar loops severs the chain and the parameters upstream
+    /// of the break receive no gradient.
     /// </param>
     /// <returns>The loss value for this step.</returns>
     public static T Step(
-        object model,
+        ModelBase<T, Tensor<T>, Tensor<T>> model,
         Tensor<T> input,
         Tensor<T> target,
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward)
     {
-        // Resolve lazy layer shapes BEFORE collecting. The convolution layers behind the Conv2D
-        // shim infer their input depth on first Forward and report no trainable parameters until
-        // they have: collecting first would return an empty set and the step would silently do
-        // nothing. No tape is active here, so this records nothing -- and it is paid once per
-        // model, not once per step.
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Resolve lazy layer shapes BEFORE reading the registry. The convolutions behind the Conv2D
+        // adapter infer their input depth on first Forward and own no parameters until then, so the
+        // registry would report none and the step would silently do nothing. No tape is active here,
+        // so this records nothing.
         if (!Warmed.TryGetValue(model, out _))
         {
             forward(input);
             Warmed.Add(model, model);
         }
 
-        var layers = GetTrainableLayers(model);
-        if (layers.Count == 0)
+        var parameters = LiveTrainableTensors(model);
+        if (parameters.Length == 0)
         {
-            return MathHelper.GetNumericOperations<T>().Zero;
+            return numOps.Zero;
         }
 
-        return TapeTrainingStep<T>.Step(
-            layers,
-            input,
-            target,
-            learningRate,
-            forward,
-            MeanSquaredError);
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> loss;
+        Dictionary<Tensor<T>, Tensor<T>> gradients;
+        using (var tape = new GradientTape<T>())
+        {
+            var predicted = forward(input);
+            loss = MeanSquaredError(predicted, target);
+            gradients = tape.ComputeGradients(loss, parameters);
+        }
+
+        foreach (var parameter in parameters)
+        {
+            if (gradients.TryGetValue(parameter, out var gradient))
+            {
+                engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradient, learningRate));
+            }
+        }
+
+        return loss.Length > 0 ? loss[0] : numOps.Zero;
+    }
+
+    /// <summary>
+    /// The distinct live tensors the registry marks trainable, in registry order.
+    /// </summary>
+    public static Tensor<T>[] LiveTrainableTensors(ModelBase<T, Tensor<T>, Tensor<T>> model)
+    {
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer.Instance);
+        var result = new List<Tensor<T>>();
+        foreach (var chunk in model.GetParameterStateChunks())
+        {
+            if (chunk.Role == ParameterSlotRole.Trainable && chunk.IsWritableInPlace && seen.Add(chunk.Tensor))
+            {
+                result.Add(chunk.Tensor);
+            }
+        }
+
+        return result.ToArray();
     }
 
     /// <summary>
@@ -109,118 +126,12 @@ internal static class TensorModelTrainer<T>
             numOps.FromDouble(1.0 / Math.Max(1, squared.Length)));
     }
 
-    /// <summary>
-    /// Returns the trainable layers reachable from the model, collecting them on first use.
-    /// </summary>
-    public static IReadOnlyList<ITrainableLayer<T>> GetTrainableLayers(object model)
-        => LayerCache.GetValue(model, static root => Collect(root));
-
-    private static IReadOnlyList<ITrainableLayer<T>> Collect(object root)
+    private sealed class TensorReferenceComparer : IEqualityComparer<Tensor<T>>
     {
-        var found = new List<ITrainableLayer<T>>();
-        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        Walk(root, found, seen, 0);
-        return found;
-    }
+        public static readonly TensorReferenceComparer Instance = new();
 
-    private static void Walk(object? node, List<ITrainableLayer<T>> found, HashSet<object> seen, int depth)
-    {
-        if (node is null || depth > MaxWalkDepth || !seen.Add(node))
-        {
-            return;
-        }
+        public bool Equals(Tensor<T>? x, Tensor<T>? y) => ReferenceEquals(x, y);
 
-        if (node is ITrainableLayer<T> trainable)
-        {
-            found.Add(trainable);
-
-            // Do not descend into a layer. Composite layers own their sub-layers' parameters
-            // through their own GetTrainableParameters, so walking in would add the same tensors
-            // twice, and TapeTrainingStep would then apply the update to them twice.
-            return;
-        }
-
-        // Collections of layers (a detection head is usually List<Conv2D<T>>).
-        if (node is IEnumerable sequence and not string)
-        {
-            foreach (var element in sequence)
-            {
-                if (element is not null && !IsLeaf(element.GetType()))
-                {
-                    Walk(element, found, seen, depth + 1);
-                }
-            }
-
-            return;
-        }
-
-        foreach (var field in EnumerateFields(node.GetType()))
-        {
-            if (IsLeaf(field.FieldType))
-            {
-                continue;
-            }
-
-            object? value;
-            try
-            {
-                value = field.GetValue(node);
-            }
-            catch (TargetInvocationException)
-            {
-                continue; // A property-backed field that throws before initialization.
-            }
-
-            Walk(value, found, seen, depth + 1);
-        }
-    }
-
-    private static IEnumerable<FieldInfo> EnumerateFields(Type type)
-    {
-        for (Type? current = type; current is not null && IsWalkable(current); current = current.BaseType)
-        {
-            foreach (var field in current.GetFields(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
-            {
-                yield return field;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Types whose fields are worth walking: our own, excluding the tensor library, whose types
-    /// are storage rather than model structure and whose internals are large.
-    /// </summary>
-    private static bool IsWalkable(Type type)
-    {
-        string? ns = type.Namespace;
-        return ns is not null
-            && ns.StartsWith("AiDotNet", StringComparison.Ordinal)
-            && !ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Types the walk must not descend into: primitives, strings, and the tensor and vector
-    /// storage types that would otherwise be enumerated element by element.
-    /// </summary>
-    private static bool IsLeaf(Type type)
-        => type.IsPrimitive
-        || type.IsEnum
-        || type == typeof(string)
-        || type == typeof(decimal)
-        || type == typeof(DateTime)
-        || type == typeof(TimeSpan)
-        || typeof(Delegate).IsAssignableFrom(type)
-        || (type.Namespace is not null
-            && type.Namespace.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)
-            && !typeof(ITrainableLayer<T>).IsAssignableFrom(type));
-
-    private sealed class ReferenceEqualityComparer : IEqualityComparer<object>
-    {
-        public static readonly ReferenceEqualityComparer Instance = new();
-
-        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
-
-        public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
+        public int GetHashCode(Tensor<T> obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }
