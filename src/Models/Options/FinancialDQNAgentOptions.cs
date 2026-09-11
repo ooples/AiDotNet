@@ -17,7 +17,7 @@ public class FinancialDQNAgentOptions<T> : TradingAgentOptions<T>
     public FinancialDQNAgentOptions() { }
 
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinancialDQNAgentOptions(FinancialDQNAgentOptions<T> other) : this()
+    public FinancialDQNAgentOptions(FinancialDQNAgentOptions<T> other) : base(other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
         UseDoubleDQN = other.UseDoubleDQN;

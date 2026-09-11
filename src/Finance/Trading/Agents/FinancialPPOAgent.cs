@@ -121,8 +121,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
-        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1);
+        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, options.HiddenLayers);
+        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1, options.HiddenLayers);
 
         var actor = new NeuralNetwork<T>(
             actorArchitecture,
@@ -149,10 +149,13 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private static void EnsurePpoDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
-        int expectedOutputSize)
+        int expectedOutputSize,
+        IReadOnlyList<int> hiddenLayerSizes)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null || hiddenLayerSizes.Count == 0)
+            throw new ArgumentException("PPO needs at least one hidden layer width.", nameof(hiddenLayerSizes));
 
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
@@ -162,8 +165,16 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
+            // Schulman et al. 2017 use tanh hidden layers; the widths are the options' HiddenLayers, which
+            // FinancialPPOAgentOptions defaults to the paper's two layers of 64. They were hard-coded here, so
+            // the declared option was ignored.
+            foreach (int width in hiddenLayerSizes)
+            {
+                if (width < 1)
+                    throw new ArgumentException($"Hidden layer width {width} must be at least 1.", nameof(hiddenLayerSizes));
+                architecture.Layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>()));
+            }
+
             architecture.Layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
     }

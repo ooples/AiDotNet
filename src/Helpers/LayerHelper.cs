@@ -541,6 +541,50 @@ public static partial class LayerHelper<T>
 
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, outputSize);
 
+        var widths = new int[hiddenLayerCount];
+        for (int i = 0; i < widths.Length; i++) widths[i] = hiddenLayerSize;
+        foreach (var layer in CreateDefaultLayers(architecture, widths, outputSize)) yield return layer;
+    }
+
+    /// <summary>
+    /// Creates a feed-forward network whose hidden layers have the given widths, in order.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerSizes">The width of each hidden layer, input side first.</param>
+    /// <param name="outputSize">Number of output neurons; the architecture's output size when not positive.</param>
+    /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    /// <remarks>
+    /// The uniform count-and-width overload delegates here. A per-layer list is what models that declare
+    /// their hidden layers as sizes need: TradingAgentOptions.HiddenLayers is { 256, 128, 64 }, which one
+    /// count and one width cannot express, so the trading agents ignored it.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int> hiddenLayerSizes,
+        int outputSize = -1)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null) throw new ArgumentNullException(nameof(hiddenLayerSizes));
+
+        // Use architecture's output size if not explicitly provided
+        if (outputSize <= 0)
+        {
+            outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : 1;
+        }
+
+        if (hiddenLayerSizes.Count == 0)
+            throw new ArgumentException("At least one hidden layer width is required.", nameof(hiddenLayerSizes));
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
+        {
+            if (hiddenLayerSizes[i] < 1)
+                throw new ArgumentException(
+                    $"Hidden layer {i} has width {hiddenLayerSizes[i]}; every width must be at least 1.",
+                    nameof(hiddenLayerSizes));
+        }
+
+        if (outputSize < 1)
+            throw new ArgumentException("Output size must be at least 1.", nameof(outputSize));
+
         int inputSize = architecture.CalculatedInputSize;
 
         // Build the layer chain, then chain-resolve shapes from the
@@ -549,13 +593,10 @@ public static partial class LayerHelper<T>
         // until first Forward; chain-resolving here lets callers
         // observe ParameterCount > 0 immediately and matches the
         // pre-lazy contract this helper used to deliver.
-        var layers = new List<ILayer<T>>(hiddenLayerCount + 1)
+        var layers = new List<ILayer<T>>(hiddenLayerSizes.Count + 1);
+        foreach (int width in hiddenLayerSizes)
         {
-            new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>)
-        };
-        for (int i = 0; i < hiddenLayerCount - 1; i++)
-        {
-            layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            layers.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
         }
         // Output activation MUST match the task — the previous unconditional
         // Softmax silently broke every regression / single-output model that

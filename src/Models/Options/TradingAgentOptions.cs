@@ -44,6 +44,52 @@ public class TradingAgentOptions<T> : ModelOptions
         MaxPositionSize = numOps.FromDouble(1.0);
     }
 
+    /// <summary>
+    /// Creates a copy of <paramref name="other"/>, every setting included.
+    /// </summary>
+    /// <remarks>
+    /// The derived options' copy constructors chain here. They used to copy only their own fields -- DQN's
+    /// and PPO's not even StateSize -- and SAC's hand-written copy of this class missed its temperature and
+    /// target settings. The hidden layer widths are copied, not shared, so editing a copy never edits the
+    /// original.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public TradingAgentOptions(TradingAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        Seed = other.Seed;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        WarmupSteps = other.WarmupSteps;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+        EpsilonDecay = other.EpsilonDecay;
+        StateSize = other.StateSize;
+        ActionSize = other.ActionSize;
+        ContinuousActions = other.ContinuousActions;
+        HiddenLayers = other.HiddenLayers is null ? new int[0] : (int[])other.HiddenLayers.Clone();
+        InitialCapital = other.InitialCapital;
+        TransactionCost = other.TransactionCost;
+        MaxPositionSize = other.MaxPositionSize;
+        RiskFreeRate = other.RiskFreeRate;
+        AllowShortSelling = other.AllowShortSelling;
+        UseRiskAdjustedReward = other.UseRiskAdjustedReward;
+        VariancePenalty = other.VariancePenalty;
+        RewardScale = other.RewardScale;
+        PPOClipRange = other.PPOClipRange;
+        EntropyCoefficient = other.EntropyCoefficient;
+        ValueCoefficient = other.ValueCoefficient;
+        GAELambda = other.GAELambda;
+        SACAlpha = other.SACAlpha;
+        AutoTuneAlpha = other.AutoTuneAlpha;
+        Tau = other.Tau;
+    }
+
     #region RL Parameters
 
     /// <summary>
