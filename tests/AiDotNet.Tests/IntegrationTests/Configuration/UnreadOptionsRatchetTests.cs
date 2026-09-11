@@ -83,23 +83,27 @@ public class UnreadOptionsRatchetTests
     /// in or deleted.
     /// </para>
     /// <para>
-    /// 35 -> 517 when the maxGradNorm cluster re-parented <c>FinancialNeuralNetworkOptions</c>
-    /// onto <see cref="ModelHyperparameterOptions"/>, bringing that whole hierarchy —
-    /// <c>RiskModelOptions</c> and the tabular and synthetic-data options beneath it — into this
-    /// scan for the first time. The arithmetic is the check that this is visibility and not
-    /// breakage: declared getters went 748 -> 1236, so 488 properties became visible and the
-    /// count rose by 482. A rise cannot exceed what became visible, and it did not.
+    /// This briefly read 517, and that number was an artefact of this test, not a fact about the
+    /// codebase. Re-parenting <c>FinancialNeuralNetworkOptions</c> brought the tabular and
+    /// synthetic-data options into scope, and because those classes are GENERIC the raw-token
+    /// comparison then in use could not match a single read of them — see the remarks on
+    /// <c>ScanCalledGetters</c>. They were reported wholly unconsumed while their models read them
+    /// constantly: <c>CTGANGenerator</c> reads <c>EmbeddingDimension</c> nine times.
     /// </para>
     /// <para>
-    /// That 482 of 488 newly-visible properties are read by nobody is the finding, not an
-    /// artefact. <c>MedGANOptions</c> and <c>TabPFNOptions</c> declare 19 unread each;
-    /// <c>FTTransformerOptions</c>, <c>SAINTOptions</c>, <c>TabDPTOptions</c>,
-    /// <c>TabNetOptions</c> and <c>TabROptions</c> 17 each — embedding dimensions, dropout rates,
-    /// feed-forward widths, batch sizes: the entire published configuration of those models,
-    /// declared and never consulted. This is issue #2090's central defect at its true scale, and
-    /// it was hidden until the hierarchy came into scope.
+    /// 112 of 1236 declared getters is the measured figure once call sites resolve properly, and
+    /// it agrees with the source property by property — <c>CTGANOptions</c> now reports exactly
+    /// one unread member, <c>Epochs</c>, which is the one a grep of <c>CTGANGenerator</c> also
+    /// finds zero reads of.
     /// </para>
-    private const int UnreadBaseline = 517;
+    /// <para>
+    /// Worth recording about how the wrong number survived as long as it did: a conservation check
+    /// confirmed the rise (482) could not exceed the newly-visible getters (488), and it did not.
+    /// That check passes whether the properties are genuinely unread or systematically mis-scanned
+    /// — it bounds magnitude, never correctness. Reading one model and comparing it against the
+    /// claim is what exposed it.
+    /// </para>
+    private const int UnreadBaseline = 112;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry
@@ -134,9 +138,19 @@ public class UnreadOptionsRatchetTests
             .Where(t => t.IsClass && !t.IsAbstract && IsOptionsType(t))
             .ToList();
 
-        // Every property getter declared by an options type, keyed by metadata token so an IL
-        // call site can be matched back to it without resolving generic context.
-        var getters = new Dictionary<int, PropertyInfo>();
+        // Keyed by (declaring type definition, property name) rather than by metadata token.
+        //
+        // The token version was silently blind to every GENERIC options class. A call to a member
+        // of a constructed generic type -- `_options.EmbeddingDimension` where `_options` is
+        // `CTGANOptions<T>` -- emits a MemberRef token, never the MethodDef token of the generic
+        // definition's getter, so the two integers could not match however many times the model
+        // read the property. CTGANGenerator reads EmbeddingDimension nine times and the ratchet
+        // called it unread. Since the tabular and synthetic-data options classes are all generic,
+        // they appeared ~100% unread, which is how this test once reported 517.
+        //
+        // Resolving each call site to its declaring type DEFINITION and comparing on names is
+        // immune to that: MethodDef, MemberRef and MethodSpec all normalise to the same key.
+        var getters = new Dictionary<(string Type, string Name), PropertyInfo>();
         foreach (var type in optionsTypes)
         {
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
@@ -147,11 +161,24 @@ public class UnreadOptionsRatchetTests
                 var getter = property.GetGetMethod();
                 if (getter == null) continue;
 
-                getters[getter.MetadataToken] = property;
+                var declaring = property.DeclaringType;
+                if (declaring == null) continue;
+                if (declaring.IsGenericType) declaring = declaring.GetGenericTypeDefinition();
+
+                getters[(declaring.FullName ?? declaring.Name, property.Name)] = property;
             }
         }
 
-        var called = ScanCalledMethodTokens(assembly);
+        var called = ScanCalledGetters(assembly, out int unresolvedTokens, out int totalTokens);
+
+        // The defect this test just recovered from was silent blindness, so a scan that cannot
+        // resolve a meaningful share of its call sites must fail rather than under-report. A few
+        // failures are expected and harmless (tokens from types that fail to load).
+        Assert.True(
+            totalTokens > 0 && unresolvedTokens < totalTokens / 10,
+            $"{unresolvedTokens} of {totalTokens} call tokens could not be resolved. Above a tenth "
+                + "the scan is guessing, and an unread property would go unreported the way every "
+                + "generic options class did before the token comparison was replaced.");
 
         var unread = getters
             .Where(pair => !called.Contains(pair.Key))
@@ -196,16 +223,28 @@ public class UnreadOptionsRatchetTests
     /// <returns>The set of called method tokens.</returns>
     /// <remarks>
     /// <para>
-    /// Tokens are compared directly rather than resolved. Resolving a token from a generic method
-    /// body needs the declaring type's generic arguments and throws without them, which would make
-    /// the scan silently skip exactly the generic models this codebase is made of. A raw token
-    /// comparison is both cheaper and immune to that.
+    /// This once compared raw tokens, on the reasoning that resolving them needs the declaring
+    /// type's generic arguments and throws without them. That was exactly backwards: a raw
+    /// comparison is not immune to generics, it is BLIND to them. A call to a member of a
+    /// constructed generic type emits a MemberRef token, which never equals the MethodDef token of
+    /// the generic definition's getter, so every generic options class read as wholly unconsumed.
+    /// </para>
+    /// <para>
+    /// Each token is now resolved with the declaring method's generic context supplied, then
+    /// normalised to its generic type DEFINITION and recorded by (type, name) — the key MethodDef,
+    /// MemberRef and MethodSpec all agree on. Tokens that still fail to resolve are COUNTED and
+    /// reported to the caller, because the failure mode being repaired here was a scan that
+    /// quietly answered "no" when it meant "I could not tell".
     /// </para>
     /// </remarks>
-    private static HashSet<int> ScanCalledMethodTokens(Assembly assembly)
+    private static HashSet<(string Type, string Name)> ScanCalledGetters(
+        Assembly assembly, out int unresolved, out int total)
     {
         var (single, multi) = BuildOpCodeTables();
-        var called = new HashSet<int>();
+        var called = new HashSet<(string Type, string Name)>();
+        var seen = new HashSet<(int Module, int Token)>();
+        unresolved = 0;
+        total = 0;
 
         foreach (var type in assembly.GetTypes())
         {
@@ -250,7 +289,65 @@ public class UnreadOptionsRatchetTests
 
                 if (il == null) continue;
 
-                Walk(il, single, multi, called);
+                // Resolution needs the generic context of the method the IL belongs to, which is
+                // the argument the old raw-token comparison was written to avoid needing.
+                Type[]? typeArgs = null;
+                Type[]? methodArgs = null;
+                try
+                {
+                    typeArgs = method.DeclaringType?.IsGenericType == true
+                        ? method.DeclaringType.GetGenericArguments()
+                        : null;
+                    methodArgs = method.IsGenericMethodDefinition ? method.GetGenericArguments() : null;
+                }
+                catch
+                {
+                    // leave both null; resolution will simply fail and be counted
+                }
+
+                var tokens = new HashSet<int>();
+                Walk(il, single, multi, tokens);
+
+                foreach (int token in tokens)
+                {
+                    // Successes are deduplicated: the same token recurs at thousands of call sites
+                    // and resolves to the same member every time. FAILURES deliberately are not --
+                    // the same token can fail under one method's generic context and resolve under
+                    // another's, and skipping the retry would reproduce exactly the silent "no"
+                    // this scan is being repaired for.
+                    var key = (method.Module.MetadataToken, token);
+                    if (seen.Contains(key)) continue;
+
+                    total++;
+                    MethodBase? target = null;
+                    try
+                    {
+                        target = method.Module.ResolveMethod(token, typeArgs, methodArgs);
+                    }
+                    catch
+                    {
+                        target = null;
+                    }
+
+                    if (target?.DeclaringType == null)
+                    {
+                        unresolved++;
+                        continue;
+                    }
+
+                    seen.Add(key);
+
+                    var declaring = target.DeclaringType;
+                    if (declaring.IsGenericType) declaring = declaring.GetGenericTypeDefinition();
+
+                    // Property getters are named get_X; store the property name so the key matches
+                    // the one built from PropertyInfo on the other side.
+                    string name = target.Name.StartsWith("get_", StringComparison.Ordinal)
+                        ? target.Name.Substring(4)
+                        : target.Name;
+
+                    called.Add((declaring.FullName ?? declaring.Name, name));
+                }
             }
         }
 
