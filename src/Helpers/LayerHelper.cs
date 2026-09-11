@@ -5736,6 +5736,12 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
+    /// Number of feature-encoder stages in the Wav2Vec2 language-identification stack (seven in the
+    /// paper). Wav2Vec2LanguageIdentifier partitions the factory's output by it.
+    /// </summary>
+    public const int Wav2Vec2FeatureEncoderStages = 7;
+
+    /// <summary>
     /// Creates default Wav2Vec2 layers for spoken language identification.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -5745,6 +5751,9 @@ public static partial class LayerHelper<T>
     /// <param name="intermediateSize">Feed-forward intermediate size (default: 3072).</param>
     /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
     /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <param name="featureEncoderDim">Width of each feature-encoder stage (default: 512).</param>
+    /// <param name="featureProjectionDropout">Dropout after the feature projection; defaults to
+    /// <paramref name="dropoutRate"/> when not given.</param>
     /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
     /// <remarks>
     /// <para>
@@ -5761,29 +5770,28 @@ public static partial class LayerHelper<T>
         int numAttentionHeads = 12,
         int intermediateSize = 3072,
         int numLanguages = 20,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int featureEncoderDim = 512,
+        double? featureProjectionDropout = null)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
 
-        // Feature encoder: 7 temporal convolution layers
-        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
-        int[] channels = [512, 512, 512, 512, 512, 512, 512];
-
-        int inputDim = 1; // Raw waveform
-        for (int i = 0; i < kernelSizes.Length; i++)
+        // Feature encoder. The paper's stages are 1-D convolutions over the raw waveform (kernels
+        // 10,3,3,3,3,2,2; strides 5,2,2,2,2,2,2; 512 channels). These are Dense stand-ins of the same
+        // width, which do not yet model the kernels or the strides.
+        for (int i = 0; i < Wav2Vec2FeatureEncoderStages; i++)
         {
-            int outputDim = channels[i];
-            yield return new DenseLayer<T>(outputDim, geluActivation);
+            yield return new DenseLayer<T>(featureEncoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
-            inputDim = outputDim;
         }
 
-        // Feature projection
+        // Feature projection. Its dropout falls back to the hidden rate when none is given.
+        double projectionDropout = featureProjectionDropout ?? dropoutRate;
         yield return new DenseLayer<T>(hiddenSize, geluActivation);
-        if (dropoutRate > 0)
+        if (projectionDropout > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DropoutLayer<T>(projectionDropout);
         }
 
         // Transformer encoder layers
