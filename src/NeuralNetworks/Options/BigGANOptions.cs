@@ -32,7 +32,6 @@ public class BigGANOptions : GanOptions
         ImageChannels = 3;
         ImageHeight = 128;
         ImageWidth = 128;
-        InputType = InputType.TwoDimensional;
         InitialLearningRate = 0.0001;
     }
 
@@ -57,10 +56,6 @@ public class BigGANOptions : GanOptions
     /// </summary>
     public int ImageWidth { get; set; }
 
-    /// <summary>
-    /// Gets or sets the input type.
-    /// </summary>
-    public InputType InputType { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

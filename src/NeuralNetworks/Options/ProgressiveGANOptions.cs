@@ -28,7 +28,6 @@ public class ProgressiveGANOptions : GanOptions
         GeneratorChannels = 512;
         LatentSize = 512;
         ImageChannels = 3;
-        InputType = InputType.TwoDimensional;
         InitialLearningRate = 0.001; // DefaultLearningRate
         LearningRateDecay = 0.9999; // DefaultLearningRateDecay
     }
@@ -39,10 +38,6 @@ public class ProgressiveGANOptions : GanOptions
     /// </summary>
     public int MaxResolutionLevel { get; set; }
 
-    /// <summary>
-    /// Gets or sets the input type.
-    /// </summary>
-    public InputType InputType { get; set; }
 
     /// <summary>
     /// Gets or sets the learning rate decay.

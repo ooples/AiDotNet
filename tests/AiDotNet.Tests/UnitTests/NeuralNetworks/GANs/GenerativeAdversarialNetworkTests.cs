@@ -850,7 +850,6 @@ public class GenerativeAdversarialNetworkTests
                 ImageChannels = 3,
                 ImageHeight = 32,
                 ImageWidth = 32,
-                InputType = InputType.OneDimensional,
             });
 
         // Assert
@@ -865,7 +864,7 @@ public class GenerativeAdversarialNetworkTests
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
-        var biggan = new BigGAN<double>(genArch, discArch, new BigGANOptions { LatentSize = 128, NumClasses = 100, ClassEmbeddingDim = 128, ImageChannels = 3, ImageHeight = 32, ImageWidth = 32, InputType = InputType.OneDimensional });
+        var biggan = new BigGAN<double>(genArch, discArch, new BigGANOptions { LatentSize = 128, NumClasses = 100, ClassEmbeddingDim = 128, ImageChannels = 3, ImageHeight = 32, ImageWidth = 32 });
 
         // Act
         var metadata = biggan.GetModelMetadata();
@@ -889,7 +888,7 @@ public class GenerativeAdversarialNetworkTests
         var proggan = new ProgressiveGAN<double>(
             generatorArchitecture: genArch,
             discriminatorArchitecture: discArch,
-            options: new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3, InputType = InputType.ThreeDimensional });
+            options: new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3 });
 
         // Assert
         Assert.NotNull(proggan);
@@ -903,7 +902,7 @@ public class GenerativeAdversarialNetworkTests
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
-        var proggan = new ProgressiveGAN<double>(genArch, discArch, new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3, InputType = InputType.ThreeDimensional });
+        var proggan = new ProgressiveGAN<double>(genArch, discArch, new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3 });
 
         // Act
         var metadata = proggan.GetModelMetadata();
