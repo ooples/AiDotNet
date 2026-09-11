@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -51,6 +52,12 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2007.10247",
     Year = 2020,
     Authors = "Yanhong Zeng, Jianlong Fu, Hongyang Chao")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 8,
+                DecayRate = 0.1, Milestones = [150000, 300000, 450000],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Zeng et al. 2020, Sec. 4: a batch size of 8 with the learning rate starting "
+                        + "at 1e-4 and decaying by a factor of 0.1 every 150k iterations. The optimizer "
+                        + "is left unspecified because the paper names none.")]
 public partial class STTN<T> : VideoInpaintingBase<T>
 {
     private readonly STTNOptions _options;
@@ -92,11 +99,12 @@ public partial class STTN<T> : VideoInpaintingBase<T>
     {
         _options = options ?? new STTNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsTemporalPropagation = true;
         InitializeLayers();
     }

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -58,6 +59,10 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2501.03699",
     Year = 2025,
     Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-5, ReferenceBatchSize = 32,
+                Source = "Zhang et al. 2025, Sec. 4: trained for 20K steps at a learning rate of 1e-5 "
+                        + "and a batch size of 32. The optimizer is left unspecified because the paper "
+                        + "names none -- the Adam in its text is the author Adam Letts in a reference.")]
 public partial class MoG<T> : FrameInterpolationBase<T>
 {
     #region Fields

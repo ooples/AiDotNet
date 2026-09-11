@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2022,
     Authors = "Minderer et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, ReferenceBatchSize = 256,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Minderer et al. 2022, Sec. 3: the Adam optimizer with beta1 0.9 and beta2 "
+                        + "0.999 under cosine learning rate decay, fine-tuned at a batch size of 256 for "
+                        + "at most 140,000 steps. No learning rate is declared because the paper sets it "
+                        + "per model size -- 2e-3, 2e-4 and 2e-5 across its variants. The 0.3 that "
+                        + "appears alongside is the focal loss alpha, not a rate.")]
 public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly OWLViTOptions _options;
@@ -101,7 +111,8 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     {
         _options = options ?? new OWLViTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

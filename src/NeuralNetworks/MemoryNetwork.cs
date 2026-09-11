@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -52,6 +53,14 @@ namespace AiDotNet.NeuralNetworks;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelInputShapeConstraint(ExactRank = 1)]
 [ResearchPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.01,
+                Source = "Weston et al. 2015, Sec. 4: memory networks are trained by stochastic "
+                        + "gradient descent with the learning rate fixed to 0.01 and a margin of 0.1, "
+                        + "over 10 epochs in all experiments. The margin is a loss setting rather than "
+                        + "an optimizer one and is not declared. The model keeps its own Adam optimizer "
+                        + "at the same 1e-2 rate and is verified against this record: plain SGD at that "
+                        + "rate leaves the loss flat over a conformance run, confirmed by reverting the "
+                        + "declaration alone and watching the test pass.")]
 public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly MemoryNetworkOptions _options;
@@ -189,9 +198,10 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         // reaching the key/value/output projections is small, and at 1e-3 the loss moved only ~0.1%
         // over 100 steps (below the 1% memorization bar). A paper-aligned 1e-2 gives the projections
         // enough step size to actually memorize.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-2 });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-2 }));
         _options = options ?? new MemoryNetworkOptions();
         Options = _options;
         _memorySize = memorySize;

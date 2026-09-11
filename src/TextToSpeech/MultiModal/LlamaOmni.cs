@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,6 +44,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Fang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-5, WarmupFraction = 0.03,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Fang et al. 2025, Sec. 4: a cosine learning rate scheduler with the first 3 "
+                        + "percent of steps for warmup and a peak learning rate of 2e-5. The optimizer "
+                        + "is left unspecified because the paper names none -- the Adam in its text is "
+                        + "the author Adam Polyak in a reference.")]
 public partial class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly LlamaOmniOptions _options;
@@ -83,7 +92,8 @@ public partial class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     {
         _options = options ?? new LlamaOmniOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

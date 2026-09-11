@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,13 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for End-to-End Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, WarmupSteps = 10000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Gulati et al. 2020, Sec. 3: the Adam optimizer with beta1 0.9 and beta2 0.98 "
+                        + "under the transformer learning rate schedule, with 10k warm-up steps and a "
+                        + "peak learning rate of 0.05 over the square root of the model dimension. That "
+                        + "peak is exactly the Noam form, whose rate this library derives from the model "
+                        + "dimension, so the schedule is declared rather than a fixed rate.")]
 public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly StreamingConformerOptions _options; public override ModelOptions GetOptions() => _options;
@@ -49,8 +58,10 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
 
-    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, StreamingConformerOptions? options = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, StreamingConformerOptions? options = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
+    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
 
     /// <summary>
     /// Transcribes audio using chunk-based Conformer with limited lookahead.
@@ -92,7 +103,10 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new StreamingConformerStreamingSession(this, language ?? _options.Language);
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerTransducerLayers(encoderDim: _options.EncoderDim, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: 4, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
+    private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerTransducerLayers(encoderDim: _options.EncoderDim, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: 4, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     /// <inheritdoc />

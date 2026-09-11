@@ -1,4 +1,6 @@
 #pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -46,6 +48,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
+[PaperOptimizer(OptimizerKind.RmsProp, ReferenceBatchSize = 32,
+                Source = "Mnih et al. 2013, Sec. 5: the RMSProp algorithm with minibatches of size 32. "
+                        + "This paper states no learning rate; the widely quoted 0.00025 comes from the "
+                        + "later Nature version, not from here.")]
 public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly DeepQNetworkOptions _options;
@@ -258,15 +264,16 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // they are external input to it, and a non-finite one would only surface as poisoned
         // parameters after the first update.
         _options.Validate();
-        _trainOptimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                InitialMomentum = _options.GradientMomentum,
-                Decay = _options.SquaredGradientMomentum,
-                Epsilon = _options.MinSquaredGradient,
-            });
+        _trainOptimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    InitialMomentum = _options.GradientMomentum,
+                    Decay = _options.SquaredGradientMomentum,
+                    Epsilon = _options.MinSquaredGradient,
+                }));
 
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)

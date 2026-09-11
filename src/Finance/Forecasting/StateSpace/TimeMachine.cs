@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -64,6 +65,10 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", "https://arxiv.org/abs/2403.09898")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Ahamed and Cheng 2024, Sec. 4: the model is optimized using the ADAM "
+                        + "algorithm with an L2 loss. The paper states no learning rate, batch size or "
+                        + "schedule, so none is declared.")]
 public partial class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -234,7 +239,9 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         _options = options ?? new TimeMachineOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -272,7 +279,9 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         _options = options ?? new TimeMachineOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;

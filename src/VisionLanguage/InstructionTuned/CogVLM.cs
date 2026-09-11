@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -64,6 +66,23 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95,
+                Epsilon = 1e-8, WeightDecay = 0.05, ReferenceBatchSize = 8192,
+                WarmupSteps = 12000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Wang et al. 2023, hyperparameter table: stage 1 runs 120,000 steps with "
+                        + "12,000 warmup steps at a batch size of 8,192 and a learning rate of 1e-4, "
+                        + "under cosine decay with a weight decay of 0.05 and Adam betas (0.9, 0.95) and "
+                        + "eps 1e-8.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-5, Beta1 = 0.9, Beta2 = 0.95,
+                Epsilon = 1e-8, WeightDecay = 0.05, ReferenceBatchSize = 1024,
+                WarmupSteps = 1200, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Wang et al. 2023, hyperparameter table: stage 2 runs 60,000 steps with 1,200 "
+                        + "warmup steps at a batch size of 1,024 and a learning rate of 1e-5, otherwise "
+                        + "as stage 1.")]
 public partial class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLMOptions _options;
@@ -108,7 +127,9 @@ public partial class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         _options = options ?? new CogVLMOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

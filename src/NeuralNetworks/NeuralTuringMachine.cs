@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -47,6 +49,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
+[PaperOptimizer(OptimizerKind.RmsProp, Momentum = 0.9,
+                Source = "Graves et al. 2014, Sec. 4.6: for all experiments the RMSProp algorithm was "
+                        + "used with a momentum of 0.9. The paper gives its learning rates in a "
+                        + "per-experiment table rather than as one value, so none is declared.")]
 public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly NeuralTuringMachineOptions _options;

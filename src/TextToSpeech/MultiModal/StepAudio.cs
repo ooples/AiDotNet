@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,6 +43,19 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2025,
     Authors = "StepFun"
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-5, MinLearningRate = 2e-6,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Huang et al. 2025, Sec. 4: supervised fine-tuning trains a 3-billion "
+                        + "parameter model for one epoch at an initial learning rate of 2e-5, adjusted "
+                        + "by cosine decay with a lower bound of 2e-6. The optimizer is left unspecified "
+                        + "because the paper names none.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-6, MinLearningRate = 2e-7,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.Alignment,
+                Source = "Huang et al. 2025, Sec. 4: the PPO alignment stage uses a clip threshold of "
+                        + "0.2 and an initial learning rate of 1e-6 decaying by cosine to a minimum of "
+                        + "2e-7.")]
 public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly StepAudioOptions _options;
@@ -82,7 +97,8 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     {
         _options = options ?? new StepAudioOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

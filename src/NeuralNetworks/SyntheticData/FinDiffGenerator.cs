@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -73,6 +74,13 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2309.01472",
     Year = 2023,
     Authors = "Timur Sattarov, Marco Schreyer, Damian Borth")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, ReferenceBatchSize = 512,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Sattarov et al. 2023, Sec. 4: every model trains for a maximum of 3000 epochs "
+                        + "with a minibatch of 512 using Adam with beta1 0.9 and beta2 0.999, combined "
+                        + "with a cosine learning rate scheduler. No peak rate is stated, so none is "
+                        + "declared.")]
 public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly FinDiffOptions<T> _options;
@@ -146,11 +154,12 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         _options = options ?? new FinDiffOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

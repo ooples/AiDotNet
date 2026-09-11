@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction", "https://arxiv.org/abs/2110.15430", Year = 2023, Authors = "Chang et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Source = "Zhu et al. 2022, Sec. 3: models are trained with an Adam optimizer at a "
+                        + "learning rate of 2e-4, optimized by a CTC loss for 20k steps. The model keeps "
+                        + "its own optimizer and is verified against this record rather than built from "
+                        + "it: 2e-4 over 20k steps is a paper-scale recipe and leaves the loss flat over "
+                        + "the handful of steps a conformance run performs.")]
 public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RobustConformerOptions _options; public override ModelOptions GetOptions() => _options;
@@ -49,8 +57,9 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public RobustConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, RobustConformerOptions? options = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public RobustConformer(NeuralNetworkArchitecture<T> architecture, RobustConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public RobustConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, RobustConformerOptions? options = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
+    public RobustConformer(NeuralNetworkArchitecture<T> architecture, RobustConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
 
     /// <summary>
     /// Transcribes audio using adversarially-trained Conformer encoder with CTC.
@@ -92,7 +101,10 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("RobustConformer does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
+    private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     /// <inheritdoc />

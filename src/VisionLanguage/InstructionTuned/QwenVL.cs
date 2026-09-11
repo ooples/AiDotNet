@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -57,6 +59,12 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Bai et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.98,
+                Epsilon = 1e-6, ReferenceBatchSize = 30720,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Bai et al. 2023, Sec. 3: AdamW with beta1 0.9, beta2 0.98 and eps 1e-6, a "
+                        + "maximum learning rate of 2e-4 and a batch size of 30720 for image-text pairs, "
+                        + "the first pre-training stage lasting 50,000 steps.")]
 public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly QwenVLOptions _options;
@@ -106,7 +114,9 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

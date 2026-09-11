@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -52,6 +53,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", "https://arxiv.org/abs/1406.1078", Year = 2014, Authors = "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adadelta, Epsilon = 1e-6, Rho = 0.95,
+                Source = "Cho et al. 2014, Sec. 4: Adadelta and stochastic gradient descent train the "
+                        + "RNN Encoder-Decoder, with epsilon 1e-6 and rho 0.95 following Zeiler 2012.")]
 public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly GRUOptions _options;
@@ -123,13 +127,14 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // AdamOptimizer was built with a hardcoded LR, so a caller passing
         // learningRate=0.002 silently trained at 1e-3. Callers who supply
         // their own `optimizer` retain full control of LR scheduling.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                UseAMSGrad = true,
-                InitialLearningRate = learningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    UseAMSGrad = true,
+                    InitialLearningRate = learningRate
+                }));
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);

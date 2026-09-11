@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,11 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WarmupSteps = 32000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Wang et al. 2024, Sec. 4: the AdamW optimizer with a learning rate of 1e-4 "
+                        + "and 32K warmup steps, following the inverse square root learning schedule, "
+                        + "declared here as Noam.")]
 public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MaskGCTOptions _options;
@@ -81,7 +88,9 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new MaskGCTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

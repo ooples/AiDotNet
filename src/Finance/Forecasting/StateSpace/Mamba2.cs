@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +63,14 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
+[PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 0.1, MinLearningRate = 0,
+                MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Dao and Gu 2024, Table 9: all models use AdamW with a gradient clip value of "
+                        + "1.0, a weight decay of 0.1, no dropout, and a linear learning rate warmup "
+                        + "with cosine decay. No peak rate is declared because the table sets it per "
+                        + "model size, and the model keeps its own optimizer so the paper's curve is not "
+                        + "applied to a library default.")]
 public partial class Mamba2<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -145,7 +154,8 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = 1;
@@ -167,7 +177,8 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         _options = options;
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = numFeatures;
