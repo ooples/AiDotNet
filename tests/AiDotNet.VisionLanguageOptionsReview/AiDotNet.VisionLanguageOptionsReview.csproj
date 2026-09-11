@@ -30,6 +30,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/VisionLanguageNativeConstructionTests.cs" Link="VisionLanguageNativeConstructionTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/Gpt4VisionWidthContractTests.cs" Link="Gpt4VisionWidthContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/Gpt4VisionOptionsContractTests.cs" Link="Gpt4VisionOptionsContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/ClipOptionsContractTests.cs" Link="ClipOptionsContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/Layers/SSM/VisionMambaModelTests.cs" Link="VisionMambaModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchetTests.cs" Link="OptionsSurfaceRatchetTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceModelOptionsContractTests.cs" Link="SequenceModelOptionsContractTests.cs" />
