@@ -27,7 +27,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     ///
     /// The Key Idea - Decomposition:
     /// DeepONet represents an operator G as:
-    /// G(u)(y) = Σᵢ bᵢ(u) * tᵢ(y)
+    /// G(u)(y) = Σᵢ bᵢ(u) * tᵢ(y) + b₀
     ///
     /// Where:
     /// - u is the input function
@@ -49,7 +49,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     ///    - Role: Encodes spatial/temporal patterns
     ///
     /// 3. Combination:
-    ///    - Output: G(u)(y) = b · t = Σᵢ bᵢ * tᵢ(y)
+    ///    - Output: G(u)(y) = b · t + b₀ = Σᵢ bᵢ * tᵢ(y) + b₀
+    ///    - b₀ is a learned scalar bias (Lu et al. 2021, Eq. 2), which the paper reports lowers
+    ///      both training and test error
     ///    - Simple dot product of the two network outputs
     ///
     /// Analogy:
@@ -148,10 +150,21 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         private readonly NeuralNetworkBase<T> _branchNet;
         private readonly NeuralNetworkBase<T> _trunkNet;
-        private readonly int _p; // Dimension of the latent space (number of basis functions)
+        private readonly int _latentDimension; // Dimension of the latent space (number of basis functions)
+
+        // The constructor's own architectures, held so the clone plan can replay the constructor. Without
+        // them a clone rebuilt the trunk from the overall architecture (input width 6 where the trunk
+        // takes 2) and every clone rejected its input.
+        private readonly NeuralNetworkArchitecture<T> _branchArchitecture;
+        private readonly NeuralNetworkArchitecture<T> _trunkArchitecture;
         private readonly int _numSensors;
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
+
+        // The learned output bias b0 of Lu et al. 2021, Eq. 2: G(u)(y) ~ sum_k b_k t_k + b0.
+        // Zero-initialized, so an untrained model's output is exactly the branch-trunk product.
+        [TrainableParameter]
+        private Tensor<T> _outputBias;
 
         /// <summary>
         /// Initializes a new instance of DeepONet.
@@ -224,10 +237,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentOutOfRangeException(nameof(numSensors), "Number of sensors must be positive.");
             }
 
-            _p = latentDimension;
+            _latentDimension = latentDimension;
+            _branchArchitecture = branchArchitecture;
+            _trunkArchitecture = trunkArchitecture;
             _numSensors = numSensors;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
+            _outputBias = new Tensor<T>(new[] { 1 });
 
             // Create branch network
             var branchNetArchitecture = EnsureOutputSize(branchArchitecture, latentDimension, "Branch");
@@ -353,8 +369,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             var trunkOutput = _trunkNet.Predict(queryTensor);
 
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _p);
-            var trunkOutput2D = trunkOutput.Rank == 2 ? trunkOutput : trunkOutput.Reshape(1, _p);
+            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _latentDimension);
+            var trunkOutput2D = trunkOutput.Rank == 2 ? trunkOutput : trunkOutput.Reshape(1, _latentDimension);
             var product = Engine.TensorMultiply(branchOutput2D, trunkOutput2D);
             var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: true);
 
@@ -419,7 +435,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             var branchOutput = _branchNet.Predict(inputTensor);
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _p);
+            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _latentDimension);
 
             // Trunk network (batched queries)
             var queryTensor = new Tensor<T>(new int[] { numQueries, trunkInputSize });
@@ -604,10 +620,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                         var branchOutput2D = branchOutput.Rank == 2
                             ? branchOutput
-                            : Engine.Reshape(branchOutput, new[] { 1, _p });
+                            : Engine.Reshape(branchOutput, new[] { 1, _latentDimension });
                         var trunkOutput2D = trunkOutput.Rank == 2
                             ? trunkOutput
-                            : Engine.Reshape(trunkOutput, new[] { numQueries, _p });
+                            : Engine.Reshape(trunkOutput, new[] { numQueries, _latentDimension });
                         var branchOutputT = Engine.TensorTranspose(branchOutput2D);
                         var predictions = Engine.TensorMatMul(trunkOutput2D, branchOutputT);
 
@@ -712,6 +728,29 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <returns>Predicted output tensor.</returns>
         protected override Tensor<T> PredictCore(Tensor<T> input)
         {
+            bool wasTraining = IsTrainingMode;
+            SetTrainingMode(false);
+            try
+            {
+                return ForwardOperator(input);
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
+        }
+
+        /// <summary>
+        /// Evaluates G(u)(y) = sum_k b_k(u) t_k(y) + b0 for a batch of [sensors | query] rows.
+        /// </summary>
+        /// <remarks>
+        /// Prediction and training both evaluate this one function. Training used to walk Layers - the
+        /// branch layers followed by the trunk layers - as a single chain over the whole concatenated
+        /// input, which is not this operator. The split is an engine slice and the sub-networks' layers
+        /// run directly, so the gradient tape reaches both networks and the bias.
+        /// </remarks>
+        private Tensor<T> ForwardOperator(Tensor<T> input)
+        {
             if (input == null)
             {
                 throw new ArgumentNullException(nameof(input));
@@ -719,7 +758,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             if (input.Rank != 2)
             {
-                throw new ArgumentException("DeepONet expects a 2D input tensor.");
+                throw new ArgumentException("DeepONet expects a 2D input tensor.", nameof(input));
             }
 
             int trunkInputSize = _trunkNet.Architecture.CalculatedInputSize;
@@ -731,32 +770,39 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int expectedWidth = _numSensors + trunkInputSize;
             if (input.Shape[1] != expectedWidth)
             {
-                throw new ArgumentException($"Expected input width {expectedWidth} (sensors + query), got {input.Shape[1]}.");
+                throw new ArgumentException($"Expected input width {expectedWidth} (sensors + query), got {input.Shape[1]}.", nameof(input));
             }
 
-            var branchInput = new Tensor<T>(new int[] { input.Shape[0], _numSensors });
-            var trunkInput = new Tensor<T>(new int[] { input.Shape[0], trunkInputSize });
-            for (int i = 0; i < input.Shape[0]; i++)
+            int batch = input.Shape[0];
+            var branchInput = Engine.TensorSlice(input, new[] { 0, 0 }, new[] { batch, _numSensors });
+            var trunkInput = Engine.TensorSlice(input, new[] { 0, _numSensors }, new[] { batch, trunkInputSize });
+
+            var coefficients = RunLayers(_branchNet, branchInput);
+            var basis = RunLayers(_trunkNet, trunkInput);
+            if (coefficients.Rank != 2)
             {
-                for (int j = 0; j < _numSensors; j++)
-                {
-                    branchInput[i, j] = input[i, j];
-                }
-                for (int j = 0; j < trunkInputSize; j++)
-                {
-                    trunkInput[i, j] = input[i, _numSensors + j];
-                }
+                coefficients = Engine.Reshape(coefficients, new[] { batch, _latentDimension });
             }
 
-            var branchOutput = _branchNet.Predict(branchInput);
-            var trunkOutput = _trunkNet.Predict(trunkInput);
+            if (basis.Rank != 2)
+            {
+                basis = Engine.Reshape(basis, new[] { batch, _latentDimension });
+            }
 
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(input.Shape[0], _p);
-            var trunkOutput2D = trunkOutput.Rank == 2 ? trunkOutput : trunkOutput.Reshape(input.Shape[0], _p);
-            var product = Engine.TensorMultiply(branchOutput2D, trunkOutput2D);
-            var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: true);
+            var summed = Engine.ReduceSum(Engine.TensorMultiply(coefficients, basis), new[] { 1 }, keepDims: true);
+            var bias = Engine.TensorTile(Engine.Reshape(_outputBias, new[] { 1, 1 }), new[] { batch, 1 });
+            return Engine.TensorAdd(summed, bias);
+        }
 
-            return summed;
+        private static Tensor<T> RunLayers(NeuralNetworkBase<T> network, Tensor<T> input)
+        {
+            var current = input;
+            foreach (var layer in network.Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
         }
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
@@ -817,13 +863,21 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             SetTrainingMode(true);
             try
             {
-                TrainWithTape(input, expectedOutput, _optimizer);
+                // The [batch, 1] form validated above - this used to pass the original instead.
+                TrainWithTape(input, expectedOutputTensor, _optimizer);
             }
             finally
             {
                 SetTrainingMode(false);
             }
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The operator PredictCore evaluates. The default walked Layers as one chain.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input)
+            => ForwardOperator(input);
 
         /// <summary>
         /// Gets metadata about the DeepONet model.
@@ -835,7 +889,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 AdditionalInfo = new Dictionary<string, object>
                 {
-                    { "LatentDimension", _p },
+                    { "LatentDimension", _latentDimension },
                     { "NumSensors", _numSensors },
                     { "BranchModel", _branchNet.GetType().Name },
                     { "TrunkModel", _trunkNet.GetType().Name },
