@@ -42,17 +42,20 @@ public class OCRTextRecognitionTests
         // double-precision embedding table repeatedly on a 16 GiB CI runner.
         return new TrOCR<double>(
             architecture,
-            imageHeight: 32,
-            imageWidth: 128,
-            maxSequenceLength: 16,
-            encoderHiddenDim: 32,
-            decoderHiddenDim: 32,
-            numEncoderLayers: 1,
-            numDecoderLayers: 1,
-            numEncoderHeads: 4,
-            numDecoderHeads: 4,
-            patchSize: 16,
-            vocabSize: 128);
+            options: new AiDotNet.Document.Options.TrOCROptions
+            {
+                ImageHeight = 32,
+                ImageWidth = 128,
+                MaxSequenceLength = 16,
+                EncoderHiddenDim = 32,
+                DecoderHiddenDim = 32,
+                NumEncoderLayers = 1,
+                NumDecoderLayers = 1,
+                NumEncoderHeads = 4,
+                NumDecoderHeads = 4,
+                PatchSize = 16,
+                VocabSize = 128
+            });
     }
 
     #region CRNN Tests

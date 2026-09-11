@@ -146,17 +146,6 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         string encoderPath,
         string decoderPath,
         ITokenizer tokenizer,
-        int imageHeight = 384,
-        int imageWidth = 384,
-        int maxSequenceLength = 128,
-        int encoderHiddenDim = 768,
-        int decoderHiddenDim = 768,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 6,
-        int numEncoderHeads = 12,
-        int numDecoderHeads = 12,
-        int patchSize = 16,
-        int vocabSize = 50265,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TrOCROptions? options = null)
@@ -177,23 +166,23 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _encoderHiddenDim = encoderHiddenDim;
-        _decoderHiddenDim = decoderHiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numEncoderHeads = numEncoderHeads;
-        _numDecoderHeads = numDecoderHeads;
-        _patchSize = patchSize;
-        _vocabSize = vocabSize;
-        _maxSequenceLength = maxSequenceLength;
+        _encoderHiddenDim = _options.EncoderHiddenDim;
+        _decoderHiddenDim = _options.DecoderHiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numEncoderHeads = _options.NumEncoderHeads;
+        _numDecoderHeads = _options.NumDecoderHeads;
+        _patchSize = _options.PatchSize;
+        _vocabSize = _options.VocabSize;
+        _maxSequenceLength = _options.MaxSequenceLength;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate
             });
 
-        ImageSize = Math.Max(imageHeight, imageWidth);
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = Math.Max(_options.ImageHeight, _options.ImageWidth);
+        MaxSequenceLength = _options.MaxSequenceLength;
         SupportedCharacters = BuildSupportedCharacters();
 
         _onnxEncoderSession = new InferenceSession(encoderPath);
@@ -232,17 +221,6 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     public TrOCR(
         NeuralNetworkArchitecture<T> architecture,
         ITokenizer? tokenizer = null,
-        int imageHeight = 384,
-        int imageWidth = 384,
-        int maxSequenceLength = 128,
-        int encoderHiddenDim = 768,
-        int decoderHiddenDim = 768,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 6,
-        int numEncoderHeads = 12,
-        int numDecoderHeads = 12,
-        int patchSize = 16,
-        int vocabSize = 50265,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TrOCROptions? options = null)
@@ -252,23 +230,23 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         Options = _options;
 
         _useNativeMode = true;
-        _encoderHiddenDim = encoderHiddenDim;
-        _decoderHiddenDim = decoderHiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numEncoderHeads = numEncoderHeads;
-        _numDecoderHeads = numDecoderHeads;
-        _patchSize = patchSize;
-        _vocabSize = vocabSize;
-        _maxSequenceLength = maxSequenceLength;
+        _encoderHiddenDim = _options.EncoderHiddenDim;
+        _decoderHiddenDim = _options.DecoderHiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numEncoderHeads = _options.NumEncoderHeads;
+        _numDecoderHeads = _options.NumDecoderHeads;
+        _patchSize = _options.PatchSize;
+        _vocabSize = _options.VocabSize;
+        _maxSequenceLength = _options.MaxSequenceLength;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate
             });
 
-        ImageSize = Math.Max(imageHeight, imageWidth);
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = Math.Max(_options.ImageHeight, _options.ImageWidth);
+        MaxSequenceLength = _options.MaxSequenceLength;
         SupportedCharacters = BuildSupportedCharacters();
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
