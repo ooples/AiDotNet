@@ -1168,9 +1168,10 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
             // ComputeGradients inside BackwardAndStepOnPrecomputedLoss) while
             // letting the adversarial signal propagate through every BN /
             // Conv / activation back to fakeTapeTracked → Generator's weights.
-            var discScore = fakeTapeTracked;
-            foreach (var layer in Discriminator.Layers)
-                discScore = layer.Forward(discScore);
+            // The shared frozen forward (NeuralNetworkBase.ForwardFrozenOnTape) instead of a walk over
+            // Discriminator.Layers written out here: every GAN now scores through one path, which also
+            // honours a discriminator that overrides ForwardForTraining.
+            var discScore = Discriminator.ForwardFrozenOnTape(fakeTapeTracked);
 
             // Generator loss: non-saturating BCE-with-logits per Goodfellow
             // 2014 §3, matching the BCE-with-logits criterion that this base

@@ -1,7 +1,9 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines.Autodiff;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 
 using System.Linq;
@@ -96,12 +98,12 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     /// - Paper uses 100 as default
     /// </para>
     /// </remarks>
-    private T _l1Lambda;
+    private readonly double _l1Lambda;
 
     /// <summary>
     /// Gets the U-Net generator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the PatchGAN discriminator network.
@@ -123,9 +125,14 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     /// - Results in sharper, more realistic outputs
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     private readonly ILossFunction<T> _lossFunction;
+
+    // Stored under the constructor's own parameter names so the clone plan replays the constructor
+    // with them. Without these it fell back to the model's outer Architecture for every sub-network.
+    private readonly NeuralNetworkArchitecture<T> _generatorArchitecture;
+    private readonly NeuralNetworkArchitecture<T> _discriminatorArchitecture;
 
     /// <summary>
     /// Creates the combined Pix2Pix architecture with correct dimension handling.
@@ -210,16 +217,22 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
             throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
         }
 
-        _l1Lambda = NumOps.FromDouble(l1Lambda);
+        _l1Lambda = l1Lambda;
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
+        _generatorArchitecture = generatorArchitecture;
+        _discriminatorArchitecture = discriminatorArchitecture;
+        Generator = CreateSubNetworkForInputType(generatorArchitecture, inputType);
+        Discriminator = CreateSubNetworkForInputType(discriminatorArchitecture, inputType);
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         // Initialize optimizers (default to Adam if not provided)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
+        // Isola et al. 2017, section 3.3: Adam with learning rate 0.0002 and momentum parameters
+        // beta1 = 0.5, beta2 = 0.999 for both networks. Callers can pass their own optimizers.
+        _generatorOptimizer = generatorOptimizer
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreatePaperAdamOptions());
+        _discriminatorOptimizer = discriminatorOptimizer
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreatePaperAdamOptions());
 
         InitializeLayers();
     }
@@ -264,68 +277,44 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
-        int batchSize = inputImages.Shape[0];
+        // ONE generator forward, recorded on the generator's tape: the pattern the base GAN uses (#1390).
+        // The discriminator trains on a detached copy, so its step cannot reach the generator. The
+        // generator step then scores the tracked original through the frozen discriminator.
+        using var generatorTape = new GradientTape<T>();
+        var fakeTracked = Generator.ForwardForTraining(inputImages);
+        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
+        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
 
-        // ----- Train Discriminator -----
+        // ----- Discriminator: maximise L_cGAN(G, D) (Isola et al. 2017, eq. 1) -----
+        // "We divide the objective by 2 while optimizing D, which slows down the rate at which D learns
+        // relative to G" (section 3.3). The loss is averaged over every output, which is the PatchGAN
+        // average over patches when the discriminator emits a map.
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
+        {
+            var realScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, targetImages));
+            var fakeScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, fakeImages));
+            var discriminatorObjective = Engine.TensorMultiplyScalar(
+                Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false)),
+                NumOps.FromDouble(0.5));
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
+                _discriminatorOptimizer);
+        }
 
-        // Generate fake images (detached for discriminator training)
-        var fakeImages = Generator.Predict(inputImages);
-
-        // Concatenate input with real/fake images for discriminator
-        var realPairs = ConcatenateImages(inputImages, targetImages);
-        var fakePairs = ConcatenateImages(inputImages, fakeImages);
-
-        // Real labels
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train on real pairs
-        var realPredictions = Discriminator.Predict(realPairs);
-        T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
-        var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        /* Discriminator.Backward(realGradients) removed — tape-based */ ;
-
-        // Train on fake pairs
-        var fakePredictions = Discriminator.Predict(fakePairs);
-        T fakeLossD = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
-        var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        /* Discriminator.Backward(fakeGradients) removed — tape-based */ ;
-        UpdateDiscriminatorWithOptimizer();
-
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLossD), NumOps.FromDouble(2.0));
-
-        // ----- Train Generator -----
-
-        Generator.SetTrainingMode(true);
-        // Keep Discriminator in training mode - required for BackwardWithInputGradient
-        // We just don't call UpdateDiscriminatorWithOptimizer() during generator training
-
-        // Generate new fake images
-        var newFakeImages = Generator.Predict(inputImages);
-
-        // Adversarial loss: fool the discriminator
-        var newFakePairs = ConcatenateImages(inputImages, newFakeImages);
-        var genPredictions = Discriminator.Predict(newFakePairs);
-        var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T advLoss = CalculateBinaryLoss(genPredictions, allRealLabels, batchSize);
-
-        // L1 loss: match the target images
-        T l1Loss = CalculateL1Loss(newFakeImages, targetImages);
-
-        // Total generator loss
-        T l1Coeff = _l1Lambda;
-        T generatorLoss = NumOps.Add(advLoss, NumOps.Multiply(l1Coeff, l1Loss));
-
-        // Backpropagate adversarial gradients through discriminator to get input gradients
-        var advGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-
-        // Calculate L1 gradients
-        var l1Gradients = CalculateL1Gradients(newFakeImages, targetImages);
-
-        // Train generator with tape-based autodiff
-        Generator.Train(inputImages, targetImages);
-
-        Discriminator.SetTrainingMode(true);
+        // ----- Generator: L_cGAN + lambda * L_L1 (eq. 4) -----
+        // The adversarial term is the one the paper trains: maximise log D(x, G(x)) rather than minimise
+        // log(1 - D(x, G(x))). The L1 term is the mean absolute error to the target.
+        var generatorScores = Discriminator.ForwardFrozenOnTape(ConcatenateImages(inputImages, fakeTracked));
+        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
+        var l1Tensor = Engine.ReduceMean(
+            Engine.TensorAbs(Engine.TensorSubtract(fakeTracked, targetImages)),
+            Enumerable.Range(0, fakeTracked.Shape.Length).ToArray(),
+            keepDims: false);
+        var generatorObjective = Engine.TensorAdd(adversarialLoss, Engine.TensorMultiplyScalar(l1Tensor, NumOps.FromDouble(_l1Lambda)));
+        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
+        T l1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);
@@ -352,9 +341,14 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Concatenates two image tensors along the feature/channel dimension.
-    /// Handles both 3D/4D spatial and 2D flattened inputs.
+    /// Pairs each input image with the image being judged, along the channel axis for spatial tensors
+    /// and the feature axis otherwise: the conditional discriminator's input (Isola et al. 2017).
     /// </summary>
+    /// <remarks>
+    /// An Engine concatenation, not an element copy. The generator step passes its tape-tracked output
+    /// through here, and copying elements one by one into a fresh tensor severed the gradient from the
+    /// discriminator's input back to the generator.
+    /// </remarks>
     private Tensor<T> ConcatenateImages(Tensor<T> images1, Tensor<T> images2)
     {
         if (images1.Shape.Length < 1 || images2.Shape.Length < 1)
@@ -362,313 +356,37 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
             throw new ArgumentException("Both image tensors must have at least one dimension.");
         }
 
-        int batchSize1 = images1.Shape[0];
-        int batchSize2 = images2.Shape[0];
-
-        if (batchSize1 != batchSize2)
+        int batchSize = images1.Shape[0];
+        if (images2.Shape[0] != batchSize)
         {
             throw new ArgumentException(
-                $"Batch size mismatch: images1 has {batchSize1} samples, images2 has {batchSize2} samples.");
+                $"Batch size mismatch: images1 has {batchSize} samples, images2 has {images2.Shape[0]} samples.");
         }
 
-        int batchSize = batchSize1;
-
-        // Check if we have spatial (3D/4D) tensors for PatchGAN discriminator
-        // For 3D inputs, concatenate along channel dimension to preserve spatial structure
-        if (Architecture.InputType == InputType.ThreeDimensional &&
-            images1.Shape.Length >= 3 && images2.Shape.Length >= 3)
+        if (Architecture.InputType == InputType.ThreeDimensional)
         {
-            return ConcatenateSpatialImages(images1, images2);
+            // [B, C, H, W]: this model's declared layout, so the pair stacks along channels.
+            if (images1.Shape.Length == 4 && images2.Shape.Length == 4)
+                return Engine.TensorConcatenate(new[] { images1, images2 }, axis: 1);
+
+            // [B, H*W, C]: channels are the last axis.
+            if (images1.Shape.Length == 3 && images2.Shape.Length == 3)
+                return Engine.TensorConcatenate(new[] { images1, images2 }, axis: 2);
         }
 
-        // Fallback to flattened concatenation for non-spatial inputs
-        return ConcatenateFlattenedImages(images1, images2);
+        var flat1 = images1.Shape.Length == 2 ? images1 : Engine.Reshape(images1, new[] { batchSize, images1.Length / batchSize });
+        var flat2 = images2.Shape.Length == 2 ? images2 : Engine.Reshape(images2, new[] { batchSize, images2.Length / batchSize });
+        return Engine.TensorConcatenate(new[] { flat1, flat2 }, axis: 1);
     }
 
-    /// <summary>
-    /// Concatenates spatial image tensors along the channel dimension.
-    /// Input: [B,C1,H,W] + [B,C2,H,W] => Output: [B,C1+C2,H,W]
-    /// </summary>
-    /// <remarks>
-    /// NCHW, because that is the layout this model declares (ImageTranslationModelLayoutBase) and
-    /// the layout its ConvolutionalLayers consume. This method used to read a 4-D tensor as
-    /// [B, H, W, C], which stacked the discriminator's input/target pair along WIDTH instead of
-    /// channels - so the conditional discriminator never saw the input image channel-aligned with
-    /// the image it was judging, which is the whole of pix2pix's conditioning (Isola et al., 2017).
-    /// </remarks>
-    private Tensor<T> ConcatenateSpatialImages(Tensor<T> images1, Tensor<T> images2)
-    {
-        int batchSize = images1.Shape[0];
-
-        // Determine spatial dimensions based on shape
-        int height1, width1, channels1;
-        int height2, width2, channels2;
-
-        if (images1.Shape.Length == 4 && images2.Shape.Length == 4)
+    /// <summary>The optimizer settings of Isola et al. 2017, section 3.3.</summary>
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreatePaperAdamOptions()
+        => new()
         {
-            // 4D tensor: [B, C, H, W] - this model's declared layout.
-            channels1 = images1.Shape[1];
-            height1 = images1.Shape[2];
-            width1 = images1.Shape[3];
-
-            channels2 = images2.Shape[1];
-            height2 = images2.Shape[2];
-            width2 = images2.Shape[3];
-        }
-        else if (images1.Shape.Length == 3 && images2.Shape.Length == 3)
-        {
-            // 3D tensor: [B, H*W, C] - use architecture dimensions
-            height1 = Architecture.InputHeight;
-            width1 = Architecture.InputWidth;
-            channels1 = images1.Shape[2];
-
-            height2 = Architecture.InputHeight;
-            width2 = Architecture.InputWidth;
-            channels2 = images2.Shape[2];
-        }
-        else
-        {
-            // Fall back to flattened for mixed shapes
-            return ConcatenateFlattenedImages(images1, images2);
-        }
-
-        // Validate spatial dimensions match
-        if (height1 != height2 || width1 != width2)
-        {
-            throw new ArgumentException(
-                $"Spatial dimensions must match: images1 is [{height1},{width1}], " +
-                $"images2 is [{height2},{width2}].");
-        }
-
-        int height = height1;
-        int width = width1;
-        int totalChannels = channels1 + channels2;
-
-        // Create output tensor with concatenated channels
-        int[] outputShape = images1.Shape.Length == 4
-            ? new int[] { batchSize, totalChannels, height, width }
-            : new int[] { batchSize, height * width, totalChannels };
-        var result = TensorAllocator.Rent<T>(outputShape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            if (images1.Shape.Length == 4)
-            {
-                // images1 fills channels [0, C1); images2 fills [C1, C1 + C2).
-                for (int c = 0; c < channels1; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            result[b, c, h, w] = images1[b, c, h, w];
-                        }
-                    }
-                }
-                for (int c = 0; c < channels2; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            result[b, channels1 + c, h, w] = images2[b, c, h, w];
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // 3D case: [B, H*W, C]
-                int spatialSize = height * width;
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    // Copy channels from images1
-                    for (int c = 0; c < channels1; c++)
-                    {
-                        result[b, s, c] = images1[b, s, c];
-                    }
-                    // Copy channels from images2
-                    for (int c = 0; c < channels2; c++)
-                    {
-                        result[b, s, channels1 + c] = images2[b, s, c];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Concatenates flattened image tensors along the feature dimension.
-    /// </summary>
-    private Tensor<T> ConcatenateFlattenedImages(Tensor<T> images1, Tensor<T> images2)
-    {
-        int batchSize = images1.Shape[0];
-        int totalSize1 = images1.Length;
-        int totalSize2 = images2.Length;
-        int size1 = totalSize1 / batchSize;
-        int size2 = totalSize2 / batchSize;
-
-        var result = TensorAllocator.Rent<T>(new int[] { batchSize, size1 + size2 });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < size1; i++)
-            {
-                result.SetFlat(b * (size1 + size2) + i, images1.GetFlat(b * size1 + i));
-            }
-            for (int i = 0; i < size2; i++)
-            {
-                result.SetFlat(b * (size1 + size2) + size1 + i, images2.GetFlat(b * size2 + i));
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Calculates the L1 loss between predictions and targets.
-    /// </summary>
-    private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
-    {
-        T totalLoss = NumOps.Zero;
-        int count = predictions.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
-            T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
-            totalLoss = NumOps.Add(totalLoss, absDiff);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(count));
-    }
-
-    /// <summary>
-    /// Calculates the gradients for L1 loss.
-    /// </summary>
-    private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
-    {
-        var gradients = new Tensor<T>(predictions._shape);
-        int count = predictions.Length;
-        T scale = NumOps.Divide(_l1Lambda, NumOps.FromDouble(count));
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
-            // Sign of difference
-            T sign = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
-            gradients.SetFlat(i, NumOps.Multiply(scale, sign));
-        }
-
-        return gradients;
-    }
-
-    /// <summary>
-    /// Calculates the binary cross-entropy loss with logits (numerically stable).
-    /// </summary>
-    /// <remarks>
-    /// Uses the numerically stable formula: max(z,0) - z*t + log(1 + exp(-|z|))
-    /// where z is the logit (pre-sigmoid prediction) and t is the target.
-    /// This avoids numerical instability from computing log of values near 0 or 1.
-    /// </remarks>
-    private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        T totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T logit = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // BCE with logits: max(z,0) - z*t + log(1 + exp(-|z|))
-            T maxLogitZero = NumOps.GreaterThan(logit, NumOps.Zero) ? logit : NumOps.Zero;
-            T absLogit = NumOps.GreaterThanOrEquals(logit, NumOps.Zero) ? logit : NumOps.Negate(logit);
-            T expNegAbsLogit = NumOps.Exp(NumOps.Negate(absLogit));
-            T logOnePlusExp = NumOps.Log(NumOps.Add(NumOps.One, expNegAbsLogit));
-
-            T loss = NumOps.Add(
-                NumOps.Subtract(maxLogitZero, NumOps.Multiply(logit, target)),
-                logOnePlusExp);
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Calculates the gradients for binary cross-entropy loss with logits.
-    /// </summary>
-    /// <remarks>
-    /// The gradient of BCE with logits with respect to the logit z is:
-    /// dL/dz = sigmoid(z) - target = 1/(1+exp(-z)) - target
-    /// This is consistent with the logits-based loss formula.
-    /// </remarks>
-    private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        // === Vectorized BCE gradients using IEngine (Phase B: US-GPU-015) ===
-        // Gradient of BCE with logits: dL/dz = (sigmoid(z) - target) / batchSize
-        var sigmoid = Engine.Sigmoid(predictions);
-        var diff = Engine.TensorSubtract(sigmoid, targets);
-        return Engine.TensorDivideScalar(diff, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Creates a tensor filled with a single label value.
-    /// </summary>
-    private Tensor<T> CreateLabelTensor(int batchSize, T value)
-    {
-        var tensor = new Tensor<T>(new int[] { batchSize, 1 });
-        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
-        Engine.TensorFill(tensor, value);
-        return tensor;
-    }
-
-    /// <summary>
-    /// Updates generator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateGeneratorWithOptimizer()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates discriminator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateDiscriminatorWithOptimizer()
-    {
-        var parameters = Discriminator.GetParameters();
-        var gradients = Discriminator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
-        Discriminator.UpdateParameters(updatedParameters);
-    }
+            InitialLearningRate = 0.0002,
+            Beta1 = 0.5,
+            Beta2 = 0.999,
+        };
 
     /// <summary>
     /// Resets both optimizer states for a fresh training run.
@@ -686,6 +404,23 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The model's own Layers list is empty: its layers live in the generator and the PatchGAN discriminator.
+    /// The discriminator is read the way it is trained, on the source image paired with the translation.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var result = new Dictionary<string, Tensor<T>>();
+        foreach (var kv in Generator.GetNamedLayerActivations(input))
+            result["Generator/" + kv.Key] = kv.Value;
+        var source = WithBatchAxis(input, Generator.Architecture.InputType);
+        var translated = WithBatchAxis(Generator.Predict(input), Generator.Architecture.InputType);
+        foreach (var kv in Discriminator.GetNamedLayerActivations(ConcatenateImages(source, translated)))
+            result["Discriminator/" + kv.Key] = kv.Value;
+        return result;
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -698,7 +433,10 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainStep(input, expectedOutput);
+        // Source and target share the generator's image layout.
+        TrainStep(
+            WithBatchAxis(input, Generator.Architecture.InputType),
+            WithBatchAxis(expectedOutput, Generator.Architecture.InputType));
     }
 
     /// <inheritdoc/>
@@ -710,7 +448,7 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
-                { "L1Lambda", NumOps.ToDouble(_l1Lambda) }
+                { "L1Lambda", _l1Lambda }
             },
             ModelData = SerializeForMetadata()
         };
