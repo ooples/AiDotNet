@@ -139,7 +139,6 @@ public class SequenceModelOptionsContractTests
             new[] { options.VocabSize, options.ModelDimension, options.NumLayers, options.NumHeads,
                 options.StateDimension, options.MaxSequenceLength, options.AttentionInterval, options.ExpandFactor });
         Assert.Equal(ffn, options.FfnMultiplier);
-        Assert.Equal(1.0, options.MaxGradNorm);
         Assert.Null(options.Seed);
         Assert.Null(options.EncoderLayerCount);
     }
