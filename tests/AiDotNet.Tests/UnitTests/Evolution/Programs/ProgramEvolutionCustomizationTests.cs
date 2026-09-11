@@ -93,6 +93,24 @@ public sealed class ProgramEvolutionCustomizationTests
     }
 
     [Fact]
+    public async Task Custom_loop_output_does_not_create_an_unused_legacy_provenance_sink()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "aidotnet-custom-output-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var options = Options(new CustomVariation());
+            options.Engine.OutputDirectory = directory;
+            var result = await Builder(options, Execution()).BuildAsync();
+            Assert.Equal("return 2", result.ProgramEvolution?.BestProgram?.Source);
+            Assert.False(Directory.Exists(Path.Combine(directory, "provenance")));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Proposal_correctness_and_fitness_share_one_ledger_without_double_charges()
     {
         var ledger = new EvolutionResourceLedger("shared-program", EvolutionResources.Of("cost_units", 3.25m));

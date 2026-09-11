@@ -89,6 +89,18 @@ never supply credentials or sealed test cases as search inputs. No automatic upl
 
 ## Limits and operational requirements
 
+The repository now includes a [C# execution worker](../tools/AiDotNet.CSharp.Worker/README.md) for the interpreter
+command boundary. It compiles real C# console applications and executes their entry points in the worker process;
+compile-only returns before assembly loading. It needs no scripting tool, SDK build or restore during evaluation.
+This supplies execution plumbing, not filesystem/network isolation, sealed evaluation or performance evidence.
+The worker recompiles for each invocation. Built-in fitness receipts count whole dispatched evaluation calls;
+they do not separately report the worker's internal compiler calls, CPU time or memory to `build_calls` or other
+ledger dimensions. Those dimensions currently describe the instrumented proposal pipeline only, unless a caller
+supplies additional evaluator instrumentation. Do not present them as whole-run hardware or compiler totals.
+The asynchronous fitness evaluator rejects truncated output even when the retained prefix matches the expected
+answer, counts canceled dispatched calls and propagates fatal engine failures. Both built-in I/O evaluators export
+owned copies of cases and withhold raw engine failure payloads; their version identities changed accordingly.
+
 - Reference images are owned copies: at most 64 files, 32 MiB each, 128 MiB total. Candidate source is at most 65,536
   UTF-16 characters; emitted PE is bounded to 8 MiB; each audit record is bounded to 2 MiB. These are not peak-RAM limits.
 - Compiler cancellation is cooperative (1–30 seconds), **not an OS security sandbox or hard CPU/memory timeout**.
@@ -108,12 +120,19 @@ never supply credentials or sealed test cases as search inputs. No automatic upl
 
 `tests/AiDotNet.Evolution.CSharp.Tests` invokes real Roslyn parsing/emit using local reference images and scripted
 chat replies; it tests protected edits, failed compilation/repair, evidence and shared-ledger facade wiring.
-The execution double tests wiring only; it is not a runtime benchmark. No live model or paid API call is used.
-Local .NET 8/10 verification passed all 62 compiler-package tests and all 876 focused consumer tests. The compiler
-package's .NET 10 run measured 499/505 covered lines (98.81%) and 331/360 branches (91.94%). Source/test DLL hashes
-were compared before execution. These numbers do not cover net471, default NuGet dependency resolution, full CI,
-live models or representative runtime benchmarks. TRX and coverage were retained under `TestResults/compiler-verified-*`
-and `TestResults/complete-receipts-*`; these generated local artifacts are not committed.
+Scripted execution tests wiring only; separate worker tests execute authored C# in real child processes, including
+the full facade/compiler/correctness/fitness/shared-receipt path. They are not optimization benchmarks or hostile-code
+containment tests. No live model or paid API call is used.
+Local .NET 8/10 verification passed all 79 compiler/worker tests and all 888 focused consumer tests. The initial
+62-test compiler-package run measured 499/505 covered lines (98.81%) and 331/360 branches (91.94%). The worker's
+16-test .NET 8 run measured 45/45 lines (100%) and 34/44 branches (77.27%); the subsequent 79-test suites also include
+the real facade integration. Targeted consumer coverage measured 4,994/5,408 lines (92.34%) and 2,434/2,989 branches
+(81.43%) across program-evolution classes and options, not the entire AiDotNet assembly or builder. Source/test DLL
+hashes were compared before execution. These numbers do not establish default NuGet dependency resolution, full CI,
+Linux worker behavior, live models or representative runtime benchmarks. TRX and coverage are retained under
+`TestResults/compiler-worker-*`, `TestResults/sandbox-fixed-*` and `TestResults/program-path-coverage`; these generated
+local artifacts are not committed. The old broad-assembly coverage attempt was stopped during prolonged instrumentation
+and is not counted as a completed verification run.
 The dedicated workflow checks a pinned companion source revision and retains TRX/coverage; it does not replace normal
 package-path release validation. See [implementation status](https://github.com/ooples/AiDotNet.Evolution/blob/feat/competitive-evolution-platform/docs/IMPLEMENTATION_STATUS.md)
 for the remaining roadmap acceptance work.

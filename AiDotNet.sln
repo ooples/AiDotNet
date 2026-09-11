@@ -53,6 +53,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Evolution.CSharp",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Evolution.CSharp.Tests", "tests\AiDotNet.Evolution.CSharp.Tests\AiDotNet.Evolution.CSharp.Tests.csproj", "{B09A793E-108F-4E83-92C7-1184F78869DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.CSharp.Worker", "tools\AiDotNet.CSharp.Worker\AiDotNet.CSharp.Worker.csproj", "{F978F41B-22C7-45A8-9C11-FA317225BD93}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,18 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|x64.Build.0 = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Debug|x86.Build.0 = Debug|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|x64.ActiveCfg = Release|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|x64.Build.0 = Release|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|x86.ActiveCfg = Release|Any CPU
+		{F978F41B-22C7-45A8-9C11-FA317225BD93}.Release|x86.Build.0 = Release|Any CPU
 		{A4D1CF83-2C02-4F01-A34D-603E706CFE51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A4D1CF83-2C02-4F01-A34D-603E706CFE51}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A4D1CF83-2C02-4F01-A34D-603E706CFE51}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -320,6 +334,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{F978F41B-22C7-45A8-9C11-FA317225BD93} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{A4D1CF83-2C02-4F01-A34D-603E706CFE51} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{B09A793E-108F-4E83-92C7-1184F78869DA} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{4A8C7E1D-2F63-4B9A-A6D5-E8731C20F491} = {0AB3BF05-4346-4AA6-1389-037BE0695223}

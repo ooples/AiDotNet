@@ -19,8 +19,8 @@ namespace AiDotNet.Evolution.Programs;
 /// out, or prints the wrong answer simply scores lower; it never stops the run.
 /// </para>
 /// <para>
-/// Failure text from the engine is truncated and stripped of control characters before it reaches a diagnostic, so
-/// a program that prints a megabyte to standard error cannot bloat a checkpoint or leak raw payloads into a log.
+/// Raw failure text from the engine is withheld; bounded diagnostics describe the failure without exporting
+/// candidate-controlled payloads. This keeps a program's standard error from bloating or leaking into a checkpoint.
 /// At most eight example-level diagnostics are retained. <see cref="VersionHash"/> incorporates a hash of the
 /// examples and the comparison mode, so changing the test set correctly invalidates older checkpoints.
 /// </para>
@@ -84,8 +84,10 @@ public sealed class InputOutputProgramFitnessEvaluator : IProgramFitnessEvaluato
     /// <inheritdoc/>
     public string VersionHash { get; }
 
-    /// <summary>Gets the input/output cases this evaluator scores against.</summary>
-    public IReadOnlyList<ProgramInputOutputExample> Examples => _examples;
+    /// <summary>Gets an independently owned copy of the input/output cases this evaluator scores against.</summary>
+    public IReadOnlyList<ProgramInputOutputExample> Examples => _examples
+        .Select(example => new ProgramInputOutputExample { Input = example.Input, ExpectedOutput = example.ExpectedOutput })
+        .ToList().AsReadOnly();
 
     /// <summary>Gets how captured output is compared with expected output.</summary>
     public ProgramOutputComparison Comparison => _comparison;
@@ -138,7 +140,7 @@ public sealed class InputOutputProgramFitnessEvaluator : IProgramFitnessEvaluato
 
             if (!executed)
             {
-                AddDiagnostic(diagnostics, index, "execution_failed", errorMessage ?? "The engine reported no output.");
+                AddDiagnostic(diagnostics, index, "execution_failed", "The engine reported a failure; its untrusted message was withheld.");
                 continue;
             }
 
@@ -192,7 +194,7 @@ public sealed class InputOutputProgramFitnessEvaluator : IProgramFitnessEvaluato
     {
         var components = new List<string>
         {
-            "program-io-evaluator-v2-dispatched-attempt-costs",
+            "program-io-evaluator-v3-owned-cases-private-receipts",
             ((int)comparison).ToString(CultureInfo.InvariantCulture)
         };
 

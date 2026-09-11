@@ -11,6 +11,7 @@ on:
       - 'src/Directory.Build.props'
       - 'AiDotNet.sln'
       - 'tests/AiDotNet.Evolution.CSharp.Tests/**'
+      - 'tools/AiDotNet.CSharp.Worker/**'
       - 'Directory.Packages.props'
       - '.github/workflows/evolution-csharp.yml'
   workflow_dispatch:
@@ -54,12 +55,12 @@ jobs:
         run: >-
           dotnet build tests/AiDotNet.Evolution.CSharp.Tests/AiDotNet.Evolution.CSharp.Tests.csproj
           -c Release -f ${{ matrix.framework }} -p:UseLocalEvolution=true -m:2
-      - name: Test compiler, repair, facade and receipts without a live provider
+      - name: Test compiler, worker, repair, facade and receipts without a live provider
         run: >-
           dotnet test tests/AiDotNet.Evolution.CSharp.Tests/AiDotNet.Evolution.CSharp.Tests.csproj
           -c Release -f ${{ matrix.framework }} --no-build --no-restore -p:UseLocalEvolution=true
           --logger "trx;LogFileName=compiler.trx" --results-directory TestResults/compiler-${{ matrix.framework }}
-          --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[AiDotNet.Evolution.CSharp]*
+          --collect:"XPlat Code Coverage" -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[AiDotNet.Evolution.CSharp]*,[AiDotNet.CSharp.Worker]*"
       - name: Retain verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

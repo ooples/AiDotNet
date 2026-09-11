@@ -15,5 +15,8 @@
     <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="Moq" />
     <ProjectReference Include="../../src/AiDotNet.Evolution.CSharp/AiDotNet.Evolution.CSharp.csproj" />
+    <ProjectReference Include="../../tools/AiDotNet.CSharp.Worker/AiDotNet.CSharp.Worker.csproj" />
+    <None Include="../../tools/AiDotNet.CSharp.Worker/bin/$(Configuration)/$(TargetFramework)/AiDotNet.CSharp.Worker.runtimeconfig.json" Link="AiDotNet.CSharp.Worker.runtimeconfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../tools/AiDotNet.CSharp.Worker/bin/$(Configuration)/$(TargetFramework)/AiDotNet.CSharp.Worker.deps.json" Link="AiDotNet.CSharp.Worker.deps.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

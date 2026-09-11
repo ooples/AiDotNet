@@ -756,7 +756,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             // Per-proposal audit trail. The sink writes beneath the run directory, bounded and redacted, and stays
             // uncreated unless the caller turned it on.
-            if (programOptions.Provenance.Enabled && runRoot is not null)
+            if (programOptions.CustomVariation is null && programOptions.Provenance.Enabled && runRoot is not null)
             {
                 provenanceSink = new JsonLinesProposalProvenanceSink(
                     Path.Combine(runRoot, "provenance"), programOptions.Provenance);
