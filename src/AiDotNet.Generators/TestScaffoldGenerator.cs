@@ -15368,6 +15368,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine(factoryBody);
         }
+        if (family == TestFamily.TextDetection && model.HasOptionsOnlyConstructor)
+        {
+            // The shared positive invariant supplies an explicit bounded profile and controls
+            // real head weights. Keep the ordinary fixture/default architecture unchanged.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase<double> CreatePositiveTextDetector(");
+            sb.AppendLine("        AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double> options)");
+            sb.AppendLine($"        => new {typeName}<double>(options);");
+        }
         if (model.HasVectorOnlyConstructor)
         {
             string featureWidthConstructor = constructorExpr
