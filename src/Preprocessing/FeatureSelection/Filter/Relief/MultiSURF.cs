@@ -136,7 +136,7 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     double hit_val = NumOps.ToDouble(data[hitIdx, j]);
                     double diffHit = Math.Abs(ri_val - hit_val) / range;
-                    _featureWeights[j] -= diffHit / (n * Math.Max(1, nearHits.Count));
+                    _featureWeights[j] -= diffHit / ((double)n * Math.Max(1, nearHits.Count));
                 }
 
                 // Contribution from misses
@@ -144,7 +144,7 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     double miss_val = NumOps.ToDouble(data[missIdx, j]);
                     double diffMiss = Math.Abs(ri_val - miss_val) / range;
-                    _featureWeights[j] += diffMiss / (n * Math.Max(1, nearMisses.Count));
+                    _featureWeights[j] += diffMiss / ((double)n * Math.Max(1, nearMisses.Count));
                 }
             }
         }
