@@ -50,7 +50,6 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
-    private readonly double _learningRate;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -87,7 +86,6 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _numLayers = _options.NumLayers;
         _numHeads = _options.NumHeads;
         _maxSeqLength = _options.MaxSequenceLength;
-        _learningRate = _options.LearningRate;
         InitializeLayers();
     }
 

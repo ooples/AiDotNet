@@ -90,12 +90,12 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     /// <para><b>For Beginners:</b> The part of the model that looks at pictures usually works
     /// at a different, larger size than the shared space where pictures and text meet.</para>
     /// </remarks>
-    public int VisionHiddenDim { get; set; }
+    public int VisionDim { get; set; }
 
     /// <summary>
     /// Gets or sets the number of layers in the vision tower.
     /// </summary>
-    public int NumVisionLayers { get; set; }
+    public int VisionLayers { get; set; }
 
     /// <summary>
     /// Throws if a dimension every vision-language model requires has been left unset.

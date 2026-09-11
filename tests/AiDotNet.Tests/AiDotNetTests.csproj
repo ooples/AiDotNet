@@ -55,6 +55,7 @@
     <!-- Keep the generator active as an analyzer and reference its assembly so the analyzer's
          diagnostics can also be exercised directly by the Roslyn contract tests below. -->
     <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" />
+    <EmbeddedResource Include="..\..\src\AiDotNet.Generators\TestScaffoldGenerator.cs" LogicalName="Review.TestScaffoldGenerator.cs" />
   </ItemGroup>
 
   <!-- Shared-compile the generator's Roslyn-free floatify helper so its (#1679) logic can be
