@@ -6836,11 +6836,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "sampleRate: 16000, numMels: 64, nFft: 1024, hopLength: 256, " +
-                    "inputDurationSeconds: 0.56, numConvBlocks: 2, baseFilters: 8, hiddenDim: 32, " +
-                    "dropoutRate: 0.0, " +
-                    "emotionLabels: new[] { \"neutral\", \"happy\", \"sad\", \"angry\" }, " +
-                    "includeArousalValence: false)";
+                    "options: new AiDotNet.Audio.Emotion.SpeechEmotionRecognizerOptions { " +
+                    "SampleRate = 16000, NumMels = 64, NFft = 1024, HopLength = 256, " +
+                    "InputDurationSeconds = 0.56, NumConvBlocks = 2, BaseFilters = 8, HiddenDim = 32, " +
+                    "DropoutRate = 0.0, " +
+                    "EmotionLabels = new[] { \"neutral\", \"happy\", \"sad\", \"angry\" }, " +
+                    "IncludeArousalValence = false })";
             }
             else if (model.ClassName == "ConformerFP" && model.TypeParameterCount == 1)
             {
