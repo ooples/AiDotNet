@@ -244,39 +244,104 @@ public class RWKV7LanguageModelTests
         Assert.Equal(3.5, model.FFNMultiplier);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Model_Constructor_ThrowsWhenVocabSizeNotPositive()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Model_Constructor_ThrowsWhenVocabSizeNotPositive(int value)
     {
-        Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(1), new RWKV7Options { VocabSize = 0 }));
+        var options = ValidConstructorOptions();
+        options.VocabSize = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.VocabSize));
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Model_Constructor_ThrowsWhenModelDimensionNotPositive()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Model_Constructor_ThrowsWhenModelDimensionNotPositive(int value)
     {
-        Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, ModelDimension = 0 }));
+        var options = ValidConstructorOptions();
+        options.ModelDimension = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.ModelDimension));
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Model_Constructor_ThrowsWhenNumLayersNotPositive()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Model_Constructor_ThrowsWhenNumLayersNotPositive(int value)
     {
-        Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, NumLayers = 0 }));
+        var options = ValidConstructorOptions();
+        options.NumLayers = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.NumLayers));
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Model_Constructor_ThrowsWhenNumHeadsNotPositive()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Model_Constructor_ThrowsWhenNumHeadsNotPositive(int value)
     {
-        Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, NumHeads = 0 }));
+        var options = ValidConstructorOptions();
+        options.NumHeads = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.NumHeads));
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Model_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Model_Constructor_ThrowsWhenMaxSequenceLengthNotPositive(int value)
     {
-        Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, ModelDimension = 33, NumHeads = 4 }));
+        var options = ValidConstructorOptions();
+        options.MaxSequenceLength = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.MaxSequenceLength));
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Model_Constructor_ThrowsWhenFfnMultiplierInvalid(double value)
+    {
+        var options = ValidConstructorOptions();
+        options.FfnMultiplier = value;
+        AssertConstructorRejects(options, nameof(RWKV7Options.FfnMultiplier));
+    }
+
+    [Fact]
+    public void Model_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
+    {
+        var options = ValidConstructorOptions();
+        options.ModelDimension = 33;
+        options.NumHeads = 4;
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new RWKV7LanguageModel<float>(CreateArch(), options));
+        Assert.Equal("options", exception.ParamName);
+        Assert.Contains("Model dimension (33)", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("number of heads (4)", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static RWKV7Options ValidConstructorOptions()
+    {
+        var options = new RWKV7Options
+        {
+            VocabSize = 100,
+            ModelDimension = 16,
+            NumLayers = 1,
+            NumHeads = 2,
+            MaxSequenceLength = 4,
+            FfnMultiplier = 3.5,
+            Seed = 42
+        };
+        options.Validate();
+        return options;
+    }
+
+    private static void AssertConstructorRejects(RWKV7Options options, string expectedProperty)
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new RWKV7LanguageModel<float>(CreateArch(), options));
+        Assert.Equal("options", exception.ParamName);
+        Assert.Contains($"{nameof(RWKV7Options)}.{expectedProperty}", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact(Timeout = 120000)]
