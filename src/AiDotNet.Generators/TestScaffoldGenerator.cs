@@ -105,6 +105,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "PhysicsInformedNeuralNetwork",
             "MultiFidelityPINN",
             "Gpt4VisionNeuralNetwork",
+            "ECAPATDNNLanguageIdentifier",
+            "Wav2Vec2LanguageIdentifier",
+            "DomainDecompositionPINN",
+            "DeepRitzMethod",
+            "VariationalPINN",
+            "DeepOperatorNetwork",
+            "FinancialA2CAgent",
+            "FinancialPPOAgent",
+            "FinancialSACAgent",
+            "FinRLAgent",
+            "MultiScalePINN",
+            "InverseProblemPINN",
         };
 
     private static readonly string[] ExcludedClassNames = new[]
@@ -5373,6 +5385,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxTextLength = 8, DropoutRate = 0.0 }, " +
                     $"optimizer: {smokeAdamWOptimizer})";
             }
+            else if (model.ClassName == "ECAPATDNNLanguageIdentifier" && model.TypeParameterCount == 1)
+            {
+                // A multi-class classifier, so the harness builds one-hot targets for its
+                // cross-entropy head (a Regression task type would hand it continuous ones).
+                // Four languages, so outputSize 4 is the head the list sizes. All five SE-Res2 blocks
+                // stay; only widths are bounded (16 TDNN channels, 16 mel coefficients, embedding 8).
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new[] { \"en\", \"es\", \"fr\", \"de\" }, " +
+                    "new AiDotNet.Audio.LanguageIdentification.ECAPATDNNOptions { NumMels = 16, " +
+                    "TdnnChannels = 16, EmbeddingDimension = 8 })";
+            }
+            else if (model.ClassName == "Wav2Vec2LanguageIdentifier" && model.TypeParameterCount == 1)
+            {
+                // Four languages as above. One transformer block at width 16, feature-encoder stages
+                // at width 16; dropout off so the invariants see a deterministic forward.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new[] { \"en\", \"es\", \"fr\", \"de\" }, " +
+                    "new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions { HiddenSize = 16, " +
+                    "NumLayers = 1, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16, " +
+                    "HiddenDropout = 0.0, FeatureProjectionDropout = 0.0 })";
+            }
             else if (model.ClassName == "ECAPATDNNSpeaker" && model.TypeParameterCount == 1)
             {
                 // Keep all five ECAPA-TDNN/Res2Net/SE stages while bounding channel
@@ -7217,6 +7258,90 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 4, outputSize: 1), " +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "MultiScalePINN" && model.TypeParameterCount == 1)
+            {
+                // No IMultiScalePDE implementation exists in src; the fixture uses a two-scale Poisson
+                // problem defined in the test project. 32 collocation points per scale, not 5,000.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "multiScalePDE: new AiDotNet.Tests.Helpers.TwoScalePoissonProblem<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPointsPerScale: 32)";
+            }
+            else if (model.ClassName == "InverseProblemPINN" && model.TypeParameterCount == 1)
+            {
+                // No IInverseProblem implementation exists in src; the fixture uses Poisson with one
+                // unknown source strength, defined in the test project.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "inverseProblem: new AiDotNet.Tests.Helpers.PoissonSourceInverseProblem<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPoints: 64)";
+            }
+            else if (model.ClassName == "DomainDecompositionPINN" && model.TypeParameterCount == 1)
+            {
+                // The PINN pin plus two subdomains split at x0 = 0. They are +/-1000 wide so every
+                // generated input row has an owning subdomain network. Bounds are generic List<double>
+                // with integer literals so the float scaffold's <double> -> <float> rewrite reaches them.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "pdeSpecification: new AiDotNet.PhysicsInformed.PDEs.PoissonEquation<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "subdomains: new System.Collections.Generic.List<AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>> { " +
+                    "new AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>(" +
+                    "new System.Collections.Generic.List<double> { -1000, -1000 }.ToArray(), " +
+                    "new System.Collections.Generic.List<double> { 0, 1000 }.ToArray()), " +
+                    "new AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>(" +
+                    "new System.Collections.Generic.List<double> { 0, -1000 }.ToArray(), " +
+                    "new System.Collections.Generic.List<double> { 1000, 1000 }.ToArray()) }, " +
+                    "numCollocationPointsPerSubdomain: 64)";
+            }
+            else if (model.ClassName == "DeepRitzMethod" && model.TypeParameterCount == 1)
+            {
+                // The 2-D Poisson energy from the constructor docs: 1/2 |grad u|^2 - f u, f = 1.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "energyFunctional: (x, u, g) => 0.5f * (g[0, 0] * g[0, 0] + g[0, 1] * g[0, 1]) - u[0], " +
+                    "numQuadraturePoints: 64)";
+            }
+            else if (model.ClassName == "VariationalPINN" && model.TypeParameterCount == 1)
+            {
+                // The Poisson weak form from the constructor docs: grad u . grad v - f v, f = 1.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "weakFormResidual: (x, u, gu, v, gv) => gu[0, 0] * gv[0, 0] + gu[0, 1] * gv[0, 1] - v[0], " +
+                    "numQuadraturePoints: 64, numTestFunctions: 4)";
+            }
+            else if (model.ClassName == "DeepOperatorNetwork" && model.TypeParameterCount == 1)
+            {
+                // 4 sensors + a 2-D query = input width 6; branch and trunk both project to latent 8.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 6, outputSize: 1), " +
+                    "branchArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 8), " +
+                    "trunkArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 2, outputSize: 8), " +
+                    "latentDimension: 8, numSensors: 4)";
             }
             else if (model.ClassName is "PhysicsInformedNeuralNetwork" or "MultiFidelityPINN"
                      && model.TypeParameterCount == 1)
@@ -10480,6 +10605,55 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
                     "numClasses: 4, numFrames: 4, numFeatures: 32)";
             }
+            else if (model.ClassName is "FinancialA2CAgent" or "FinancialSACAgent"
+                     && model.TypeParameterCount == 1)
+            {
+                // StateSize = ActionSize = the RL base's StateDim (4). The actor maps state -> action;
+                // A2C's critic maps state -> value, SAC's maps (state, action) -> Q.
+                string criticInputs = model.ClassName == "FinancialSACAgent" ? "8" : "4";
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 4), " +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    $"inputSize: {criticInputs}, outputSize: 1), " +
+                    "new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42 })";
+            }
+            else if (model.ClassName == "FinancialPPOAgent" && model.TypeParameterCount == 1)
+            {
+                // As A2C, with PPO's own options: one epoch of one minibatch.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 4), " +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 1), " +
+                    "new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42, NumEpochs = 1, NumMiniBatches = 1 })";
+            }
+            else if (model.ClassName == "FinRLAgent" && model.TypeParameterCount == 1)
+            {
+                // The default algorithm (PPO), which requires the secondary (critic) architecture.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "primaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 4), " +
+                    "options: new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42 }, " +
+                    "secondaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1))";
+            }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
                 // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
@@ -13235,7 +13409,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 else
                     sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
             }
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            // Gpt4Vision returns the pooled image embedding in the language space, embeddingDimension
+            // wide (pinned at 16). The generic [4] declared a training target of the wrong width.
+            sb.AppendLine(model.ClassName == "Gpt4VisionNeuralNetwork"
+                ? "    protected override int[] OutputShape => new[] { 16 };"
+                : "    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale vision / vision-language encoders use the original
             // paper's depth and width defaults (DFNCLIP = ViT-H/14 with
@@ -14300,6 +14478,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8, 8 };");
             }
+            else if (model.ClassName == "DeepOperatorNetwork")
+            {
+                // One [sensors | query] row, rank 2 as DeepONet requires; one output per row.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 6 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
             else if (model.ClassName == "WGAN")
             {
                 // One sample, rank 2: TrainStep reads Shape[0] as the batch, so [16] / [4] were read
@@ -14318,11 +14502,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // PINNs too: their width is the PDE's InputDimension, pinned in the constructor above,
                 // so the fixture derives it from the model instead of restating a generic 16.
                 sb.AppendLine(model.ClassName is "HamiltonianNeuralNetwork" or "PhysicsInformedNeuralNetwork"
-                        or "MultiFidelityPINN"
+                        or "MultiFidelityPINN" or "DomainDecompositionPINN" or "DeepRitzMethod" or "VariationalPINN"
+                        or "MultiScalePINN" or "InverseProblemPINN"
                     ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
                     : $"    protected override int[] InputShape => new[] {{ {dim} }};");
                 sb.AppendLine(model.ClassName is "QuantumNeuralNetwork" or "PhysicsInformedNeuralNetwork"
-                        or "MultiFidelityPINN"
+                        or "MultiFidelityPINN" or "DomainDecompositionPINN" or "DeepRitzMethod" or "VariationalPINN"
+                        or "MultiScalePINN" or "InverseProblemPINN"
                     ? "    protected override int[] OutputShape => new[] { 1 };"
                     : model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
@@ -15091,7 +15277,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "TRPOAgent"
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "QMIXAgent"
-                || model.ClassName == "WatkinsQLambdaAgent")
+                || model.ClassName == "WatkinsQLambdaAgent"
+                // The finance A2C / PPO agents (and FinRL, whose default is PPO) run the same
+                // actor-critic policy-gradient algorithms as A2CAgent / PPOAgent above.
+                || model.ClassName == "FinancialA2CAgent"
+                || model.ClassName == "FinancialPPOAgent"
+                || model.ClassName == "FinRLAgent")
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
