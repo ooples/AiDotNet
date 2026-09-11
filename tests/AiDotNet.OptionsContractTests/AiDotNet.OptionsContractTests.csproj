@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Tests do not need public API docs, and MambaOptions' existing model cref is
+         outside this scalar-only project. Malformed XML warnings stay enabled. -->
+    <NoWarn>$(NoWarn);CS1591;CS1574</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Compile the real scalar-only options and their complete base chain. No model,
+       tensor package, generator, or replacement base implementation is involved. -->
+  <ItemGroup>
+    <Compile Include="../../src/Models/Options/ModelOptions.cs" Link="Production/ModelOptions.cs" />
+    <Compile Include="../../src/Models/Options/NeuralNetworkOptions.cs" Link="Production/NeuralNetworkOptions.cs" />
+    <Compile Include="../../src/Models/Options/ModelHyperparameterOptions.cs" Link="Production/ModelHyperparameterOptions.cs" />
+    <Compile Include="../../src/Models/Options/DocumentNeuralNetworkOptions.cs" Link="Production/DocumentNeuralNetworkOptions.cs" />
+    <Compile Include="../../src/NeuralNetworks/Options/SequenceModelOptions.cs" Link="Production/SequenceModelOptions.cs" />
+    <Compile Include="../../src/NeuralNetworks/Options/EagleOptions.cs;../../src/NeuralNetworks/Options/FalconMambaOptions.cs;../../src/NeuralNetworks/Options/FinchOptions.cs;../../src/NeuralNetworks/Options/GatedDeltaNetOptions.cs;../../src/NeuralNetworks/Options/GLAOptions.cs;../../src/NeuralNetworks/Options/GriffinOptions.cs;../../src/NeuralNetworks/Options/HawkOptions.cs;../../src/NeuralNetworks/Options/JambaOptions.cs;../../src/NeuralNetworks/Options/Mamba2Options.cs;../../src/NeuralNetworks/Options/MambaOptions.cs;../../src/NeuralNetworks/Options/RecurrentGemmaOptions.cs;../../src/NeuralNetworks/Options/RWKV4Options.cs;../../src/NeuralNetworks/Options/RWKV7Options.cs;../../src/NeuralNetworks/Options/SambaOptions.cs;../../src/NeuralNetworks/Options/XLSTMOptions.cs;../../src/NeuralNetworks/Options/Zamba2Options.cs;../../src/NeuralNetworks/Options/ZambaOptions.cs" Link="Production/%(Filename)%(Extension)" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceModelOptionsContractTests.cs" Link="SequenceModelOptionsContractTests.cs" />
+  </ItemGroup>
+</Project>

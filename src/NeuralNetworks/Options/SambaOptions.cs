@@ -3,8 +3,19 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Configuration options for the SambaLanguageModel.
+/// Configures the dimensions and attention spacing of the Samba language model.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Samba combines a running memory for older information with
+/// attention to recent tokens. Its attention interval controls how often recurrent blocks
+/// are interleaved with attention blocks.</para>
+/// <para>Ren et al., <i>Samba: Simple Hybrid State Space Models for Efficient Unlimited
+/// Context Language Modeling</i> (2024), combine Mamba with sliding-window attention and
+/// evaluate models up to 3.8 billion parameters. The existing 256-wide, eight-layer defaults
+/// are a small library configuration, not the published 3.8B checkpoint. These settings do
+/// not independently specify the paper's entire training recipe or attention-window policy.</para>
+/// </remarks>
+/// <seealso href="https://arxiv.org/abs/2406.07522">Original Samba paper.</seealso>
 public class SambaOptions : SequenceModelOptions
 {
     /// <summary>
@@ -33,14 +44,23 @@ public class SambaOptions : SequenceModelOptions
         MaxSequenceLength = 512;
     }
 
+    /// <summary>Initializes an instance by copying every declared and inherited setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public SambaOptions(SambaOptions other) : base(other)
+    {
+    }
+
     /// <summary>
-    /// Throws if a value this model requires has been left unset or is not positive.
+    /// Throws if a required model dimension or consumed training setting is invalid.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative.
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
     public void Validate()
     {
         ValidateCore(requiresHeads: false, requiresState: true);
+        Require(AttentionInterval, nameof(AttentionInterval));
     }
 }

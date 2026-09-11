@@ -3,8 +3,18 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Configuration options for the ZambaLanguageModel.
+/// Configures the dimensions and attention spacing of the Zamba language model.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Zamba uses a recurrent backbone for compact memory and adds
+/// attention periodically to recover token-level information. Width and depth determine
+/// model capacity, while the attention interval controls how often the two mechanisms mix.</para>
+/// <para>Glorioso et al., <i>Zamba: A Compact 7B SSM Hybrid Model</i> (2024), describe a
+/// seven-billion-parameter Mamba backbone with a shared attention module. These options
+/// retain the library's existing 3712-wide, 76-layer configuration. Matching those dimensions
+/// alone does not establish checkpoint, weight-sharing, or training-recipe equivalence.</para>
+/// </remarks>
+/// <seealso href="https://arxiv.org/abs/2405.16712">Original Zamba paper.</seealso>
 public class ZambaOptions : SequenceModelOptions
 {
     /// <summary>
@@ -33,14 +43,23 @@ public class ZambaOptions : SequenceModelOptions
         MaxSequenceLength = 4096;
     }
 
+    /// <summary>Initializes an instance by copying every declared and inherited setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public ZambaOptions(ZambaOptions other) : base(other)
+    {
+    }
+
     /// <summary>
-    /// Throws if a value this model requires has been left unset or is not positive.
+    /// Throws if a required model dimension or consumed training setting is invalid.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative.
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
     public void Validate()
     {
         ValidateCore(requiresHeads: false, requiresState: true);
+        Require(AttentionInterval, nameof(AttentionInterval));
     }
 }
