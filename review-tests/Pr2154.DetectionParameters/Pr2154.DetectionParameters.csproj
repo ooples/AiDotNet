@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net471;net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Reuse the explicitly supplied CPU native closure; these tests need no TreeSitter parsers. -->
+    <_GetChildProjectCopyToOutputDirectoryItems>false</_GetChildProjectCopyToOutputDirectoryItems>
+    <GenerateRuntimeConfigDevFile>true</GenerateRuntimeConfigDevFile>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <ProjectReference Include="../../src/AiDotNet.Generators/AiDotNet.Generators.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModuleInitializer.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/GlobalUsings.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Helpers/LicenseTestSupport.cs" />
+    <None Include="../../tests/AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/CvReviewRegressionTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/CvAdapterLiveParameterTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/DetectionModelTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ObjectDetectionTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/OCRTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/TextDetectionTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ModelTestHelpers.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/CvNullableComponentReviewTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/CvInputBoundaryReviewTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/CvTensorOpsEquivalenceTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/FpnRoIPoolerTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/NeckTopDownPathwayTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/ComputerVision/TrOCRIncrementalDecodingTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/ObjectDetectionMetricsTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/ObjectDetectionRangeCacheReviewTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/TextDetectionMetricsTests.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/UnitTests/Metrics/TextRecognitionMetricsTests.cs" />
+  </ItemGroup>
+  <Import Project="../Pr2154.ManagedTestClosure.targets" />
+</Project>

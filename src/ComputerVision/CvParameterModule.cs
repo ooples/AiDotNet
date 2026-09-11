@@ -30,7 +30,7 @@ namespace AiDotNet.ComputerVision;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type of the weights.</typeparam>
-internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterChunkSource<T>
+internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     /// <summary>
     /// The child components this block owns, in a fixed order. Null entries (an optional component
@@ -43,6 +43,52 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
     /// shift), in a fixed order. They are exposed and restored in place.
     /// </summary>
     protected virtual IEnumerable<Tensor<T>> OwnParameterTensors() => Array.Empty<Tensor<T>>();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Follows the same own-then-child order and relative IDs as the value/chunk surfaces. Child
+    /// schemas are queried directly: counting or describing the module must not run a forward pass
+    /// or materialize a lazy child merely to infer its shape from values.
+    /// </remarks>
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var slots = new List<ParameterSlotDescriptor>();
+        int own = 0;
+        foreach (var tensor in OwnParameterTensors())
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                $"w{own}", ParameterSlotRole.Trainable,
+                tensor.Length == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                tensor.Length, shape: tensor.Shape.ToArray(), elementType: typeof(T).FullName));
+            own++;
+        }
+
+        int index = 0;
+        foreach (var child in Children())
+        {
+            IReadOnlyList<ParameterSlotDescriptor> childSlots = child switch
+            {
+                IParameterLayoutSource layout => layout.GetParameterLayout(),
+                IParameterManifestProvider manifest => manifest.ParameterLayout.Slots,
+                _ => throw new InvalidOperationException(
+                    $"{GetType().Name} child #{index} ({child.GetType().Name}) must expose a parameter "
+                    + "layout alongside its live chunks so the registry can validate the same state.")
+            };
+            string prefix = ParameterStableId.IndexSegment(index);
+            foreach (var slot in childSlots)
+            {
+                string id = slot.StableId == "$" ? prefix : prefix + "/" + slot.StableId;
+                slots.Add(new ParameterSlotDescriptor(
+                    id, slot.Role, slot.Readiness, slot.ParameterCount,
+                    shape: slot.Shape, elementType: slot.ElementType,
+                    updatePolicy: slot.UpdatePolicy, persistence: slot.Persistence,
+                    ownership: slot.Ownership, availability: slot.Availability,
+                    materializedParameterCount: slot.MaterializedParameterCount));
+            }
+            index++;
+        }
+        return slots;
+    }
 
     /// <inheritdoc />
     public long ParameterCount
@@ -152,9 +198,10 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
                     + "copy. It must implement IParameterChunkSource<T> so training updates the live weight.");
             }
 
+            string prefix = ParameterStableId.IndexSegment(index);
             foreach (var chunk in chunked.GetParameterStateChunks())
             {
-                string id = chunk.StableId == "$" ? $"{index}" : $"{index}/{chunk.StableId}";
+                string id = chunk.StableId == "$" ? prefix : prefix + "/" + chunk.StableId;
                 yield return new ParameterChunk<T>(id, chunk.Role, chunk.Tensor, chunk.SourceTensor, chunk.IsWritableInPlace);
             }
 
