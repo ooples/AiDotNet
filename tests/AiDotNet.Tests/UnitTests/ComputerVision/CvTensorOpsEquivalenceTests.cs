@@ -794,6 +794,11 @@ public class CvTensorOpsEquivalenceTests
         ["CascadeRefineBoxesDeltas"] = (new[] { 3, 8 }, d => CascadeRCNN<double>.RefineBoxes(CascadeInputBoxes(), d, 96, 64)),
         ["DbBinarizationProbability"] = (new[] { 1, 1, 4, 5 }, p => DBNet<double>.ApplyDifferentiableBinarization(p, Const(new[] { 1, 1, 4, 5 }, 41), 5.0)),
         ["DbBinarizationThreshold"] = (new[] { 1, 1, 4, 5 }, t => DBNet<double>.ApplyDifferentiableBinarization(Const(new[] { 1, 1, 4, 5 }, 42), t, 5.0)),
+        // CRNN's CTC objective: CTCLoss over log-softmax logits [batch, columns, classes]; targets
+        // "2 3" and "4 4" (the repeat needs a blank between them) in CTCLoss's encoded layout.
+        ["CtcLossLogits"] = (new[] { 2, 6, 5 }, x => new AiDotNet.LossFunctions.CTCLoss<double>(5, blankIndex: 0).ComputeTapeLoss(
+            AiDotNetEngine.Current.TensorLogSoftmax(x, axis: -1),
+            new Tensor<double>(new[] { 7 }, new Vector<double>(new double[] { 2, 2, 2, 3, 2, 4, 4 })))),
     };
 
     public static IEnumerable<object[]> GradientCaseNames => GradientCases.Keys.Select(k => new object[] { k });

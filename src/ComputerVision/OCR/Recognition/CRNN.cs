@@ -626,4 +626,153 @@ public partial class CRNN<T> : OCRBase<T>
     }
 
     private Tensor<T> ApplyOutputLayer(Tensor<T> x) => _outputLayer.ForwardTokens(x);
+
+    /// <summary>
+    /// Runs one training step with the CTC loss.
+    /// </summary>
+    /// <param name="input">The text-line image.</param>
+    /// <param name="expectedOutput">
+    /// The target text as label ids <c>[batch, length]</c> (0 is the blank and is treated as padding),
+    /// or as per-column scores <c>[batch, columns, vocabulary]</c> - such as <see cref="Predict"/>'s
+    /// output shape - whose greedy CTC decoding (most likely class per column, repeats merged, blanks
+    /// dropped) is the label sequence.
+    /// </param>
+    /// <remarks>
+    /// Connectionist temporal classification (Graves et al. 2006) is how CRNN is trained in the paper
+    /// (Shi et al. 2016) and every reference implementation: the loss sums over every alignment of the
+    /// label sequence to the image columns, so no per-column targets are needed. Reduced as PyTorch's
+    /// default does: each sequence's loss divided by its label length, then averaged over the batch.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        var labels = CtcLabelsFrom(expectedOutput);
+        var ctc = new CTCLoss<T>(VocabularySize, blankIndex: 0);
+        RecordTrainingLoss(TensorModelTrainer<T>.Step(
+            this, input, EncodeCtcTargets(labels), NumOps.FromDouble(TrainingLearningRate), ForwardLogits,
+            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels)));
+    }
+
+    private Tensor<T> MeanCtcLoss(CTCLoss<T> ctc, Tensor<T> logits, Tensor<T> encodedTargets, int[][] labels)
+    {
+        int columns = logits.Shape[1];
+        for (int b = 0; b < labels.Length; b++)
+        {
+            // CTC needs a column per label plus a blank between each pair of equal neighbours.
+            int required = labels[b].Length + labels[b].Where((label, i) => i > 0 && labels[b][i - 1] == label).Count();
+            if (required > columns)
+            {
+                throw new ArgumentException(
+                    $"Label sequence {b} needs at least {required} columns for CTC, but the recognizer produces {columns}.");
+            }
+        }
+
+        var perSequence = ctc.ComputeTapeLoss(Engine.TensorLogSoftmax(logits, axis: -1), encodedTargets);  // [batch]
+        var weights = new Tensor<T>(new[] { labels.Length });
+        for (int b = 0; b < labels.Length; b++)
+        {
+            weights[b] = NumOps.FromDouble(1.0 / (Math.Max(1, labels[b].Length) * labels.Length));
+        }
+
+        return Engine.ReduceSum(Engine.TensorMultiply(perSequence, weights), null);
+    }
+
+    /// <summary>
+    /// Reads CTC label sequences from label ids <c>[batch, length]</c> or scores <c>[batch, columns, vocabulary]</c>.
+    /// </summary>
+    private int[][] CtcLabelsFrom(Tensor<T> target)
+    {
+        if (target.Rank == 3 && target.Shape[2] == VocabularySize)
+        {
+            int batch = target.Shape[0], columns = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                var sequence = new List<int>();
+                int previous = 0;
+                for (int t = 0; t < columns; t++)
+                {
+                    int best = 0;
+                    double bestValue = double.NegativeInfinity;
+                    for (int v = 0; v < VocabularySize; v++)
+                    {
+                        double value = NumOps.ToDouble(target[(((b * columns) + t) * VocabularySize) + v]);
+                        if (value > bestValue)
+                        {
+                            bestValue = value;
+                            best = v;
+                        }
+                    }
+
+                    if (best != 0 && best != previous)
+                    {
+                        sequence.Add(best);
+                    }
+
+                    previous = best;
+                }
+
+                labels[b] = sequence.ToArray();
+            }
+
+            return labels;
+        }
+
+        if (target.Rank == 2)
+        {
+            int batch = target.Shape[0], length = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                var sequence = new List<int>();
+                for (int t = 0; t < length; t++)
+                {
+                    double id = Math.Round(NumOps.ToDouble(target[(b * length) + t]));
+                    if (id < 0 || id >= VocabularySize)
+                    {
+                        throw new ArgumentException(
+                            $"Label {id} at [{b}, {t}] is outside the vocabulary [0, {VocabularySize}).", nameof(target));
+                    }
+
+                    if (id != 0)
+                    {
+                        sequence.Add((int)id);
+                    }
+                }
+
+                labels[b] = sequence.ToArray();
+            }
+
+            return labels;
+        }
+
+        throw new ArgumentException(
+            $"CRNN training targets are label ids [batch, length] or scores [batch, columns, {VocabularySize}]; " +
+            $"got [{string.Join(", ", target.Shape.ToArray())}].", nameof(target));
+    }
+
+    /// <summary>
+    /// Encodes label sequences in <see cref="CTCLoss{T}"/>'s layout:
+    /// <c>[batch, length0, labels0..., length1, labels1..., ...]</c>.
+    /// </summary>
+    private Tensor<T> EncodeCtcTargets(int[][] labels)
+    {
+        var values = new List<T> { NumOps.FromDouble(labels.Length) };
+        foreach (var sequence in labels)
+        {
+            values.Add(NumOps.FromDouble(sequence.Length));
+            values.AddRange(sequence.Select(label => NumOps.FromDouble(label)));
+        }
+
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
+    }
 }
