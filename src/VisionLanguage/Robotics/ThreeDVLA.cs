@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,13 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2024,
     Authors = "Zhen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.05, WarmupSteps = 1000, MinLearningRate = 1e-6,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhen et al. 2024, Sec. 4: AdamW with beta1 0.9, beta2 0.999 and a weight "
+                        + "decay of 0.05, under a linear warmup over the initial 1K steps rising from "
+                        + "1e-8 to 1e-5, followed by a cosine decay to a minimum learning rate of 1e-6. "
+                        + "The 1e-5 warmup endpoint is the peak rate.")]
 public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly ThreeDVLAOptions _options;
@@ -103,7 +112,9 @@ public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageA
     {
         _options = options ?? new ThreeDVLAOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -51,6 +52,17 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelInputShapeConstraint(MinimumElementCountMember = "MinimumWaveformLength")]
 [ResearchPaper("Demucs: Deep Extractor for Music Sources with extra unlabeled data remixed", "https://doi.org/10.48550/arXiv.1909.01174", Year = 2019, Authors = "Alexandre Défossez, Nicolas Usunier, Léon Bottou, Francis Bach")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, ReferenceBatchSize = 128,
+                DecayRate = 0.2, StepSize = 160,
+                Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Defossez et al. 2019, Sec. 5: the Demucs separation model described in "
+                        + "Section 3 is trained for 400 epochs at a batch size of 128 using Adam with a "
+                        + "learning rate of 5e-4, decaying the learning rate every 160 epochs by a "
+                        + "factor of 5. The 5e-4 elsewhere in the paper at a batch of 64 belongs to the "
+                        + "auxiliary classifier, not to the separator. This model defaults to AdamW; "
+                        + "declaring the paper's Adam is not a downgrade here, because with no weight "
+                        + "decay stated the two are numerically identical.")]
 public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields
@@ -137,7 +149,9 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     {
         _options = options ?? new SourceSeparationOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -58,6 +60,12 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Xu et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-5, ReferenceBatchSize = 128,
+                WarmupFraction = 0.03,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Xu et al. 2024, Sec. 4: training uses a batch size of 128 and a learning rate "
+                        + "of 2e-5 with a cosine scheduler and a warmup ratio of 0.03. The optimizer is "
+                        + "left unspecified because the paper names none.")]
 public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly PLLaVAOptions _options;

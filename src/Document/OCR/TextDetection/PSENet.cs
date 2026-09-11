@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -54,6 +55,18 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.001, WeightDecay = 5e-4,
+                Momentum = 0.99, UseNesterov = true, ReferenceBatchSize = 16,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Wang et al. 2019, Sec. 4: training for 300 epochs at a batch size of 16 with "
+                        + "an initial learning rate of 1e-3, a weight decay of 5e-4 and a Nesterov "
+                        + "momentum of 0.99 without dampening. Recorded verify-only because SGD is a "
+                        + "weaker optimizer than this model's Adam default.")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 1e-4, WeightDecay = 5e-4,
+                Momentum = 0.99, UseNesterov = true, ReferenceBatchSize = 16,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Wang et al. 2019, Sec. 4: fine-tuning runs 400 epochs at a batch size of 16 "
+                        + "with an initial learning rate of 1e-4, otherwise as the training stage.")]
 public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly PSENetOptions _options;

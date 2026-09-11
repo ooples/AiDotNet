@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Globalization;
 using System.Linq;
 using AiDotNet.Attributes;
@@ -61,6 +62,13 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01360",
     Year = 2016,
     Authors = "Guillaume Lample, Miguel Ballesteros, Sandeep Subramanian, Kazuya Kawakami, Chris Dyer")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.01, MaxGradientNorm = 5.0,
+                Source = "Lample et al. 2016, Sec. 5.1: the networks are trained with stochastic "
+                        + "gradient descent at a learning rate of 0.01 and a gradient clipping of 5.0, "
+                        + "updating parameters on every training example one at a time. That per-example "
+                        + "update is not declared as a reference batch size of 1, which would rescale "
+                        + "any user rate by their whole batch. Recorded verify-only because plain SGD is "
+                        + "weaker than this model's AdamW default.")]
 public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 {
     private readonly BiLSTMCRFOptions _options;

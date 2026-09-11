@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,11 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Xie et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.01,
+                WarmupSteps = 5000, Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Xie et al. 2024, Sec. 4: the AdamW optimizer with a weight decay of 0.01, "
+                        + "5,000 steps of warm-up and an initial learning rate of 1e-4 under a cosine "
+                        + "scheduling.")]
 public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ShowOOptions _options;
@@ -102,7 +109,9 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
     {
         _options = options ?? new ShowOOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

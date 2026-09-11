@@ -1,4 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.IO;
 using AiDotNet.Autodiff;
@@ -95,6 +96,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                    Source = "Kharazmi et al. 2019, parameter table: the optimizer is Adam with a learning "
+                            + "rate of 1e-3.")]
     public partial class VariationalPINN<T> : NeuralNetworkBase<T>
     {
         private readonly VariationalPINNOptions _options;
@@ -146,7 +150,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _weakFormResidual = weakFormResidual;
             _numTestFunctions = numTestFunctions;
             _numQuadraturePoints = numQuadraturePoints;
-            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+                ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = true;
 
             InitializeLayers();

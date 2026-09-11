@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,13 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Lin et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.001, ReferenceBatchSize = 256,
+                WarmupFraction = 0.03,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Lin et al. 2024, Sec. 4: the first stage trains for one epoch at a batch size "
+                        + "of 256 using the AdamW optimizer with a cosine learning rate schedule. The "
+                        + "initial learning rate for both stages is 1e-3 with a warmup ratio of 0.03, so "
+                        + "the rate is not blocked by the stage split.")]
 public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaVAOptions _options;
@@ -107,7 +116,9 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
             _options = new VideoLLaVAOptions(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

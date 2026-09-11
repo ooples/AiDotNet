@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
@@ -52,6 +53,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, ReferenceBatchSize = 64,
+                Source = "Schulman et al. 2017, Table 3: the Adam stepsize is 3e-4 with a minibatch "
+                        + "size of 64 over 10 epochs at a horizon of 2048, for the MuJoCo "
+                        + "one-million-timestep benchmark. The Roboschool table leaves the stepsize "
+                        + "blank, so only the MuJoCo row is declared.")]
 public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 

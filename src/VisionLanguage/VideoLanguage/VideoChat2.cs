@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,20 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2023,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.02, ReferenceBatchSize = 2048,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Li et al. 2024, config table: AdamW with momentum 0.9 and 0.999, a weight "
+                        + "decay of 0.02 and a cosine decay schedule across all three stages. Stage 1 "
+                        + "runs at a learning rate of 1e-4 with a batch size of 2048 over 10 epochs.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.02, ReferenceBatchSize = 128,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Li et al. 2024, config table: stage 3 runs at a learning rate of 2e-5 with a "
+                        + "batch size of 128 over 3 epochs, under the same optimizer, decay and "
+                        + "schedule.")]
 public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoChat2Options _options;
@@ -117,7 +133,9 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
             _options = new VideoChat2Options(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

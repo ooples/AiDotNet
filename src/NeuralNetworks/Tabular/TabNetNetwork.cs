@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -59,6 +61,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1908.07442",
     Year = 2021,
     Authors = "Arik, S. O. & Pfister, T.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.02, DecayRate = 0.7, StepSize = 200,
+                Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Arik and Pfister 2021, Sec. 4: all models use Adam with a learning rate of "
+                        + "0.02, decayed by 0.7 every 200 iterations with an exponential decay, over 4k "
+                        + "iterations.")]
 public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabNetOptions<T> _options;
@@ -109,7 +116,9 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new TabNetOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

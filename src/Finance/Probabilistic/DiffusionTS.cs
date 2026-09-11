@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -81,6 +82,12 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2403.01742", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0008, Beta1 = 0.9, Beta2 = 0.96,
+                WarmupSteps = 500, Schedule = LearningRateSchedulerType.LinearWarmup,
+                Source = "Yuan and Qiao 2024, Sec. 4: the network is optimized with Adam at betas 0.9 "
+                        + "and 0.96, under a linearly decaying learning rate that starts at 0.0008 after "
+                        + "500 iterations of warmup. The cosine schedule named alongside is the "
+                        + "diffusion noise schedule, not the learning rate.")]
 public partial class DiffusionTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -256,7 +263,9 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         _options = options ?? new DiffusionTSOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -303,7 +312,9 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         _options = options ?? new DiffusionTSOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;

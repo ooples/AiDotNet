@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -61,6 +63,20 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Wu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0, ReferenceBatchSize = 128, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.Constant,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Wu et al. 2024, hyperparameter table: AdamW with beta1 0.9 and beta2 0.95 and "
+                        + "a gradient clip of 1.0. Stage 2 runs at a constant learning rate of 1e-4 with "
+                        + "a weight decay of 0 and a batch size of 128. Stage 1 uses 1e-3 under a cosine "
+                        + "scheduler.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0.1, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.Constant,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Wu et al. 2024, hyperparameter table: stage 3 runs at a constant learning "
+                        + "rate of 2e-5 with a weight decay of 0.1.")]
 public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusOptions _options;
@@ -104,7 +120,9 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
     {
         _options = options ?? new JanusOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

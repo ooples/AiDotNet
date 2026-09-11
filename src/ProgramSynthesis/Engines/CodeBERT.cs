@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -56,6 +57,14 @@ namespace AiDotNet.ProgramSynthesis.Engines;
     "https://arxiv.org/abs/2002.08155",
     Year = 2020,
     Authors = "Zhangyin Feng, Daya Guo, Duyu Tang, Nan Duan, Xiaocheng Feng, Ming Gong, Linjun Shou, Bing Qin, Ting Liu, Daxin Jiang, Ming Zhou")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Feng et al. 2020, Sec. 3: Adam is used to update the parameters. No rate or "
+                        + "batch is declared: the paper reports a 5e-5 rate at a batch of 64 for one "
+                        + "downstream setting and a 10K warmup for another, and nothing in the text ties "
+                        + "either to the model's own pre-training. The Adam appearing in its citation "
+                        + "list is the author Adam Roberts. This model defaults to AdamW; declaring the "
+                        + "paper's Adam is not a downgrade here, because with no weight decay stated the "
+                        + "two are numerically identical.")]
 public class CodeBERT<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -99,7 +108,9 @@ public class CodeBERT<T> : CodeModelBase<T>
         double learningRate = UsesGenerativeFineTuning(CodeArchitecture.CodeTaskType)
             ? 5e-5
             : 1e-5;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

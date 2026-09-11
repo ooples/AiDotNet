@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -114,6 +115,14 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01354",
     Year = 2016,
     Authors = "Xuezhe Ma, Eduard Hovy")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, Momentum = 0.9, ReferenceBatchSize = 10,
+                MaxGradientNorm = 5.0,
+                Source = "Ma and Hovy 2016, Sec. 3.2: parameter optimization uses minibatch stochastic "
+                        + "gradient descent with a batch size of 10 and momentum 0.9, with gradient "
+                        + "clipping at 5.0. No learning rate is declared because the paper gives 0.01 "
+                        + "for POS tagging and a different value for NER, and no schedule is declared "
+                        + "because its decay has the inverse-time form eta_t = eta_0 / (1 + rho t), "
+                        + "which the attribute cannot express.")]
 public partial class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
@@ -198,7 +207,9 @@ public partial class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         // gradient clipping threshold of 5.0 — not an adaptive optimizer. Match the paper
         // with clipped SGD and the lr_t = lr_0 / (1 + 0.05*t) decay schedule, which is
         // stable over long runs where AdamW's adaptive steps oscillate.
-        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,

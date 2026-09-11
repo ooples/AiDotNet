@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,6 +44,15 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Powerset Multi-class Cross Entropy Loss for Neural Speaker Diarization", "https://doi.org/10.48550/arXiv.2310.13025", Year = 2023, Authors = "Alexis Plaquet, Hervé Bredin")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, DecayRate = 0.5,
+                EarlyStoppingPatience = 30,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Plaquet and Bredin 2023, Sec. 4: speaker segmentation models are trained "
+                        + "using the Adam optimizer at an initial learning rate of 1e-3, with a "
+                        + "scheduler that divides the learning rate by 2 after 30 epochs with no "
+                        + "improvement on the validation metric. This model defaults to AdamW; declaring "
+                        + "the paper's Adam is not a downgrade here, because with no weight decay stated "
+                        + "the two are numerically identical.")]
 public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
     #region Fields
@@ -90,7 +100,9 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
     {
         _options = options ?? new PyAnnoteOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
         InitializeLayers();

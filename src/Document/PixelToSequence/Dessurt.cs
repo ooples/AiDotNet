@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,12 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Dessurt: A Dessert for Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2203.16618", Year = 2022, Authors = "Brian Davis, Bryan Morse, Brian Price, Chris Tensmeyer, Curtis Wigington")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.01,
+                ReferenceBatchSize = 384, GradientAccumulationSteps = 64,
+                Source = "Davis et al. 2022, Sec. 4: the AdamW optimizer with a learning rate of 1e-4 "
+                        + "and a weight decay of 0.01. The final model's last 4 million iterations used "
+                        + "gradient accumulation of 64, giving an effective batch size of 384, which is "
+                        + "the figure declared.")]
 public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly DessurtOptions _options;
@@ -216,13 +223,15 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// customizable.
     /// </remarks>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 1e-4,
                 WeightDecay = 0.01
-            });
+            }));
 
     #region Initialization
 

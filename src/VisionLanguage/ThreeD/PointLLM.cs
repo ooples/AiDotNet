@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,18 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Xu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-3, ReferenceBatchSize = 128,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Xu et al. 2024, Sec. 4: the AdamW optimizer with a cosine learning rate "
+                        + "scheduler throughout. The feature alignment stage trains for 3 epochs at a "
+                        + "batch size of 128 and a learning rate of 2e-3.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 32,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Xu et al. 2024, Sec. 4: the instruction tuning stage trains for 3 epochs at a "
+                        + "batch size of 32 and a learning rate of 2e-5, under the same AdamW optimizer "
+                        + "and cosine scheduler.")]
 public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly PointLLMOptions _options;
@@ -103,7 +117,9 @@ public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
     {
         _options = options ?? new PointLLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

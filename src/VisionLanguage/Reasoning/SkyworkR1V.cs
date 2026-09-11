@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,14 @@ namespace AiDotNet.VisionLanguage.Reasoning;
     Year = 2025,
     Authors = "Skywork Team"
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-6, WeightDecay = 0.05,
+                ReferenceBatchSize = 512, WarmupFraction = 0.03,
+                Source = "Peng et al. 2025, Sec. 4: the model is trained with a learning rate of 1e-6, "
+                        + "a weight decay of 0.05, a warmup ratio of 0.03, a batch size of 512 and one "
+                        + "training epoch per stage, at a context length of 16384 tokens. The optimizer "
+                        + "is left unspecified because the paper names none -- the Adam names in its "
+                        + "text are the authors Adam Kalai, Adam Lerer and Adam Richardson in a "
+                        + "reference.")]
 public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly SkyworkR1VOptions _options;
@@ -102,7 +112,8 @@ public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T
     {
         _options = options ?? new SkyworkR1VOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

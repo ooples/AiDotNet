@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,11 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2024,
     Authors = "Kuckreja et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, ReferenceBatchSize = 144,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Kuckreja et al. 2024, Sec. 4: the AdamW optimizer with a cosine learning rate "
+                        + "scheduler and a global batch size of 144. No peak rate is stated, so the "
+                        + "recipe is recorded but not routed.")]
 public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly GeoChatOptions _options;
@@ -103,7 +110,8 @@ public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<
     {
         _options = options ?? new GeoChatOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
