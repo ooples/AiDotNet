@@ -82,5 +82,44 @@ internal static class DisposeOnceGuard
         }
     }
 
+    /// <summary>
+    /// Disposes every <see cref="IDisposable"/> in <paramref name="owned"/> through <see cref="TryDispose"/>,
+    /// continuing past failures, then throws one <see cref="AggregateException"/> carrying every failure.
+    /// </summary>
+    /// <param name="owned">The resources to release; nulls and non-disposable entries are skipped.</param>
+    /// <param name="owner">Names the owner in the aggregate message.</param>
+    /// <remarks>
+    /// An owner that releases its resources in a plain loop leaks every resource after the first one whose
+    /// <c>Dispose</c> throws. Collecting the failures and reporting them together after the loop releases
+    /// everything that can be released, which is the library's convention for multi-resource disposal
+    /// (compare <c>DataPipeline</c>). Each instance is still disposed at most once, so the same resource
+    /// listed twice, or shared with another owner, is released a single time.
+    /// </remarks>
+    /// <exception cref="AggregateException">One or more resources threw from <c>Dispose</c>.</exception>
+    public static void DisposeAll(IEnumerable<object?> owned, string owner)
+    {
+        if (owned is null) return;
+
+        List<Exception>? failures = null;
+        foreach (var item in owned)
+        {
+            if (item is not IDisposable disposable) continue;
+            try
+            {
+                TryDispose(disposable);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failures ??= new List<Exception>();
+                failures.Add(ex);
+            }
+        }
+
+        if (failures is { Count: > 0 })
+        {
+            throw new AggregateException($"One or more resources owned by {owner} failed to dispose.", failures);
+        }
+    }
+
     private static readonly object _sentinel = new();
 }

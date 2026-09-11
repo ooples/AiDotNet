@@ -123,18 +123,25 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     }
 
     /// <summary>
-    /// Disposes of resources used by the agent, including neural networks.
+    /// Disposes of resources used by the agent, including every network registered in <see cref="Networks"/>.
     /// </summary>
+    /// <remarks>
+    /// Each network is released at most once, even when it is registered twice or shared with another
+    /// owner, through the same once-only guard <see cref="NeuralNetworkBase{T}"/> uses for its layers.
+    /// A network whose <c>Dispose</c> throws no longer stops the loop and leaks every network after it:
+    /// all are released first, then every failure is reported in one <see cref="AggregateException"/>.
+    /// </remarks>
+    /// <exception cref="AggregateException">One or more networks threw from <c>Dispose</c>.</exception>
     public override void Dispose()
     {
-        foreach (var network in Networks)
+        try
         {
-            if (network is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
+            AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(Networks, GetType().Name);
         }
-        base.Dispose();
+        finally
+        {
+            base.Dispose();
+        }
     }
 
     // ===== JIT Compilation Support =====

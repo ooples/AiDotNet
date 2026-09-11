@@ -664,15 +664,15 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// Each network is released at most once, even when two of the agent's fields (or two agents)
     /// hold the same instance, and calling this method again is harmless: disposal goes through
     /// the same process-wide once-only guard that <see cref="NeuralNetworkBase{T}"/> uses for its layers.
+    /// A network whose <c>Dispose</c> throws does not stop the others from being released; every
+    /// failure is reported afterwards in one <see cref="AggregateException"/>.
     /// </remarks>
+    /// <exception cref="AggregateException">One or more networks threw from <c>Dispose</c>.</exception>
     public override void Dispose()
     {
         try
         {
-            foreach (var network in Networks)
-            {
-                DisposeOnceGuard.TryDispose(network);
-            }
+            DisposeOnceGuard.DisposeAll(Networks, GetType().Name);
         }
         finally
         {
