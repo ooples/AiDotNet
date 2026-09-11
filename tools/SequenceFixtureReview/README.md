@@ -4,6 +4,9 @@ The same 13 contracts run the real source generator with synthetic compiler inpu
 At PR head `671836a347436f4b023ebe3f02a86ea333ad0686`, four structural checks fail
 and nine controls pass. After removing the unreachable XLSTM/Hawk rules and the
 shadowed Griffin/Hawk fallback arms, all 13 pass, with no skips.
+The final runner targets `net10.0`, `net8.0` and `net471`; all three passed the
+same 13 contracts locally (39 passing executions, zero skipped). The original
+failure-first comparison above was run on `net10.0`.
 
 All six effective-fixture checks pass **before and after**: XLSTM, Griffin, Hawk,
 GLA, GatedDeltaNet and RecurrentGemma retain their bounded dimensions. This change
