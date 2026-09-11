@@ -115,55 +115,107 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, SelectAction performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
+    /// The actor emits one LOGIT per discrete action (its output layer is linear, so the values are
+    /// unbounded and do not sum to one). The policy is the categorical distribution
+    /// <c>pi(a|s) = softmax(logits)[a]</c>: in training mode an action is sampled from it (using the agent's
+    /// seeded random stream), otherwise the most probable action is returned. The same distribution is the
+    /// one <see cref="Train()"/> differentiates, so exploration and learning agree.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The actor scores every trade option; softmax turns the scores into
+    /// probabilities. While training the agent rolls a weighted die over those probabilities (so it keeps
+    /// trying every option in proportion to how good it currently thinks it is); when trading for real it
+    /// picks the highest-probability option.
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var probs = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
-        
-        if (training)
-        {
-            int actionIdx = SampleAction(probs);
-            var action = new Vector<T>(TradingOptions.ActionSize);
-            action[actionIdx] = NumOps.One;
-            return action;
-        }
+        var logits = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        var probabilities = SoftmaxProbabilities(logits);
 
-        int bestIdx = 0;
-        T maxProb = probs[0];
-        for (int i = 1; i < probs.Length; i++)
-        {
-            if (NumOps.GreaterThan(probs[i], maxProb))
-            {
-                maxProb = probs[i];
-                bestIdx = i;
-            }
-        }
-
-        var result = new Vector<T>(TradingOptions.ActionSize);
-        result[bestIdx] = NumOps.One;
-        return result;
+        int actionIndex = training ? SampleCategorical(probabilities) : ArgMaxIndex(probabilities);
+        var action = new Vector<T>(TradingOptions.ActionSize);
+        action[actionIndex] = NumOps.One;
+        return action;
     }
 
     /// <summary>
-    /// Executes SampleAction for the FinancialA2CAgent.
+    /// Numerically stable softmax of the actor logits (max-subtracted before exponentiation, computed in
+    /// double precision so float agents do not overflow or lose the tail probabilities).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private int SampleAction(Vector<T> probabilities)
+    private static double[] SoftmaxProbabilities(Vector<T> logits)
     {
-        double r = RandomHelper.CreateSecureRandom().NextDouble();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var probabilities = new double[logits.Length];
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            probabilities[i] = numOps.ToDouble(logits[i]);
+            if (probabilities[i] > max)
+            {
+                max = probabilities[i];
+            }
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] = Math.Exp(probabilities[i] - max);
+            sum += probabilities[i];
+        }
+
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] /= sum;
+        }
+
+        return probabilities;
+    }
+
+    /// <summary>
+    /// Samples an action index from a categorical distribution using the agent's seeded random stream.
+    /// </summary>
+    private int SampleCategorical(double[] probabilities)
+    {
+        double r = Random.NextDouble();
         double cumulative = 0;
         for (int i = 0; i < probabilities.Length; i++)
         {
-            cumulative += NumOps.ToDouble(probabilities[i]);
+            cumulative += probabilities[i];
             if (r < cumulative) return i;
         }
+
+        // Only reachable through floating-point round-off in the cumulative sum (or non-finite logits).
         return probabilities.Length - 1;
+    }
+
+    private static int ArgMaxIndex(double[] values)
+    {
+        int best = 0;
+        for (int i = 1; i < values.Length; i++)
+        {
+            if (values[i] > values[best])
+            {
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    private static int ArgMaxIndex(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int best = 0;
+        for (int i = 1; i < values.Length; i++)
+        {
+            if (numOps.GreaterThan(values[i], values[best]))
+            {
+                best = i;
+            }
+        }
+
+        return best;
     }
 
     #endregion
@@ -172,6 +224,12 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     /// <inheritdoc/>
     /// <remarks>
+    /// <para>
+    /// Samples a minibatch of stored transitions, fits the critic to the one-step TD target
+    /// <c>r + gamma * V(s')</c>, and takes one advantage-weighted policy-gradient step on the actor's softmax
+    /// policy (plus an <see cref="TradingAgentOptions{T}.EntropyCoefficient"/> entropy bonus). Returns the
+    /// policy loss plus <see cref="TradingAgentOptions{T}.ValueCoefficient"/> times the critic loss.
+    /// </para>
     /// <para>
     /// <b>For Beginners:</b> In the FinancialA2CAgent model, Train performs a training step. This updates the FinancialA2CAgent architecture so it learns from data.
     /// </para>
@@ -194,12 +252,10 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // the actor instead of one autograd tape per experience (the per-sample loop dominated RL
         // training time — see profiling). Standard mini-batch update.
         int stateDim = batch[0].State.Length;
-        int actionDim = batch[0].Action.Length;
         var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
 
         var statesData = new T[n * stateDim];
         var nextStatesData = new T[n * stateDim];
-        var actionsData = new T[n * actionDim];
         for (int i = 0; i < n; i++)
         {
             var exp = batch[i];
@@ -208,31 +264,57 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
                 statesData[i * stateDim + j] = exp.State[j];
                 nextStatesData[i * stateDim + j] = exp.NextState[j];
             }
-
-            for (int j = 0; j < actionDim; j++)
-            {
-                actionsData[i * actionDim + j] = exp.Action[j];
-            }
         }
 
         var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
         var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
-        var actions = new Tensor<T>([n, actionDim], new Vector<T>(actionsData));
 
+        // One-step advantage A(s,a) = r + gamma * V(s') - V(s), evaluated with the critic BEFORE this
+        // step's critic update (the standard A2C ordering) and treated as a constant for the actor.
+        var vCurrent = _critic.Predict(states).ToVector();
         var vNext = _critic.Predict(nextStates).ToVector();
         var targetData = new T[n];
+        var advantageData = new T[n];
         for (int i = 0; i < n; i++)
         {
             var bootstrap = batch[i].Done ? NumOps.Zero : NumOps.Multiply(gamma, vNext[i]);
             targetData[i] = NumOps.Add(batch[i].Reward, bootstrap);
+            advantageData[i] = NumOps.Subtract(targetData[i], vCurrent[i]);
         }
 
         var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        var advantages = new Tensor<T>([n], new Vector<T>(advantageData));
 
         _critic.Train(states, targets);
-        _actor.Train(states, actions);
+        T valueLoss = _critic.GetLastLoss();
 
-        return NumOps.Zero;
+        // Policy-gradient step on the SAME distribution SelectAction samples from:
+        //   L = -mean_i( A_i * log softmax(z_i)[a_i] ) - beta * mean_i( H(softmax(z_i)) ).
+        // The previous update regressed the logits onto the sampled one-hot action with MSE, which ignores
+        // the advantage entirely (a punished action was reinforced exactly like a rewarded one) and treats
+        // unbounded logits as probabilities.
+        var actionIndices = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            actionIndices[i] = ArgMaxIndex(batch[i].Action);
+        }
+
+        var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
+        var trainableActor = (NeuralNetworkBase<T>)_actor;
+        T policyLoss = trainableActor.TrainWithCustomLoss(states, logits =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
+            var policyObjective = engine.TensorMultiply(logProbs, advantages);
+            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
+            var objective = engine.TensorAdd(policyObjective, engine.TensorMultiplyScalar(entropy, entropyCoefficient));
+            var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
+            return engine.TensorNegate(engine.ReduceMean(objective, allAxes, keepDims: false));
+        });
+
+        T loss = NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
+        LossHistory.Add(loss);
+        return loss;
     }
 
     #endregion
