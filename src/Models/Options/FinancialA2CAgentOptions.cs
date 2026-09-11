@@ -37,4 +37,16 @@ public class FinancialA2CAgentOptions<T> : TradingAgentOptions<T>
     /// </para>
     /// </remarks>
     public int NSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Validates the A2C options.
+    /// </summary>
+    public override void Validate()
+    {
+        base.Validate();
+        if (NSteps < 1)
+            throw new ArgumentException("NSteps must be at least 1.", nameof(NSteps));
+        if (NumEnvironments < 1)
+            throw new ArgumentException("NumEnvironments must be at least 1.", nameof(NumEnvironments));
+    }
 }

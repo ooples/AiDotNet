@@ -62,6 +62,25 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private readonly ReplayBuffer<T> ReplayBuffer;
 
+    /// <summary>
+    /// Action-value critic Q(s, a) over the quoted bid/ask offsets. Without it the agent had no way to tell
+    /// a profitable quote from an unprofitable one: the reward never entered any update.
+    /// </summary>
+    private readonly INeuralNetwork<T> _critic;
+
+    /// <summary>Slow-moving copy of <see cref="_critic"/> supplying the bootstrap value in the TD target.</summary>
+    [Buffer]
+    private readonly INeuralNetwork<T> _targetCritic;
+
+    /// <summary>Slow-moving copy of the policy, used to choose the next action in the TD target.</summary>
+    [Buffer]
+    private readonly INeuralNetwork<T> _targetPolicyNetwork;
+
+    private readonly NeuralNetworkArchitecture<T> _criticArchitecture;
+
+    /// <summary>Gradient updates applied so far; reported through the trading metrics.</summary>
+    private int _updateCount;
+
     #endregion
 
     #region Properties
@@ -139,7 +158,55 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         _architecture = architecture;
         EnsureMarketMakingLayers(architecture, options.StateSize, options.ActionSize);
         _policyNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+
+        // The critic scores a (state, quote) pair, so it takes state and action together and emits one value.
+        // It is built here rather than asked of the caller: the public constructor takes a single policy
+        // architecture, and widening that would break every existing call site.
+        _criticArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: options.StateSize + options.ActionSize,
+            outputSize: 1);
+        EnsureDefaultLayers(_criticArchitecture, options.StateSize + options.ActionSize, 1);
+
+        var lossFunction = TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>();
+        _critic = new NeuralNetwork<T>(_criticArchitecture, lossFunction: lossFunction);
+
+        // CloneForModelConstruction gives each target its OWN layer objects. Building them from the same
+        // architecture instance would make the target the SAME network as the online one by reference, and
+        // the TD target would then be read from the very network the update is moving.
+        _targetCritic = new NeuralNetwork<T>(_criticArchitecture.CloneForModelConstruction(), lossFunction: lossFunction);
+        _targetPolicyNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: lossFunction);
+
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+
+        SoftUpdateTargetNetwork(_critic, _targetCritic, 1.0);
+        SoftUpdateTargetNetwork(_policyNetwork, _targetPolicyNetwork, 1.0);
+    }
+
+    /// <summary>Action-space ascent step turning the deterministic policy gradient into a regression target.</summary>
+    private const double ActorPolicyGradientStep = 0.05;
+
+    /// <summary>Central-difference half-width used to estimate the critic's action sensitivity.</summary>
+    private const double ActionFiniteDifferenceEpsilon = 1e-3;
+
+    /// <summary>
+    /// Evaluates the critic at a state-action pair — what the agent believes this quote is worth.
+    /// </summary>
+    public T EvaluateCritic(Vector<T> state, Vector<T> action)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (action is null) throw new ArgumentNullException(nameof(action));
+
+        return _critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, action))).ToVector()[0];
+    }
+
+    private static Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
+    {
+        var combined = new Vector<T>(state.Length + action.Length);
+        for (int i = 0; i < state.Length; i++) combined[i] = state[i];
+        for (int i = 0; i < action.Length; i++) combined[state.Length + i] = action[i];
+        return combined;
     }
 
     /// <summary>
@@ -268,20 +335,145 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
-        if (batch.Count == 0) return NumOps.Zero;
-        T totalLoss = NumOps.Zero;
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        foreach (var exp in batch)
+        int stateDim = batch[0].State.Length;
+        int actionDim = batch[0].Action.Length;
+        int stateActionDim = stateDim + actionDim;
+        double gamma = Convert.ToDouble(TradingOptions.DiscountFactor);
+
+        // ---- 1. Critic target: y = r + gamma * (1 - done) * Q'(s', mu'(s')) ----
+        // This is where the REWARD enters the update. The previous implementation regressed the policy
+        // onto the actions it had itself taken, so the reward was never read by anything: whatever the
+        // agent happened to quote became its own training target and the quotes could not improve.
+        var statesData = new T[n * stateDim];
+        var nextStatesData = new T[n * stateDim];
+        for (int i = 0; i < n; i++)
         {
-            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
-                _policyNetwork.Predict(Tensor<T>.FromVector(exp.State)).ToVector(),
-                exp.Action);
-
-            _policyNetwork.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(exp.Action));
-            totalLoss = NumOps.Add(totalLoss, loss);
+            for (int j = 0; j < stateDim; j++)
+            {
+                statesData[(i * stateDim) + j] = batch[i].State[j];
+                nextStatesData[(i * stateDim) + j] = batch[i].NextState[j];
+            }
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
+        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+
+        var nextActions = _targetPolicyNetwork.Predict(nextStates).ToVector();
+        var nextStateActionsData = new T[n * stateActionDim];
+        var stateActionsData = new T[n * stateActionDim];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < stateDim; j++)
+            {
+                nextStateActionsData[(i * stateActionDim) + j] = batch[i].NextState[j];
+                stateActionsData[(i * stateActionDim) + j] = batch[i].State[j];
+            }
+
+            for (int j = 0; j < actionDim; j++)
+            {
+                nextStateActionsData[(i * stateActionDim) + stateDim + j] = nextActions[(i * actionDim) + j];
+                stateActionsData[(i * stateActionDim) + stateDim + j] = batch[i].Action[j];
+            }
+        }
+
+        var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
+        var nextQ = _targetCritic.Predict(nextStateActions).ToVector();
+
+        var targetData = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            double bootstrap = batch[i].Done ? 0.0 : gamma * NumOps.ToDouble(nextQ[i]);
+            targetData[i] = NumOps.Add(batch[i].Reward, NumOps.FromDouble(bootstrap));
+        }
+
+        var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
+        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+
+        _critic.Train(stateActions, targets);
+        T criticLoss = _critic.GetLastLoss();
+
+        // ---- 2. Policy update: ascend Q(s, mu(s)) (deterministic policy gradient) ----
+        var means = _policyNetwork.Predict(states).ToVector();
+        var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
+
+        T maxPosition = TradingOptions.MaxPositionSize;
+        T minPosition = NumOps.Negate(maxPosition);
+        var policyTargetData = new T[n * actionDim];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < actionDim; j++)
+            {
+                int flat = (i * actionDim) + j;
+                T ascended = NumOps.Add(
+                    means[flat],
+                    NumOps.FromDouble(ActorPolicyGradientStep * actionGradients[flat]));
+                policyTargetData[flat] = MathHelper.Clamp<T>(ascended, minPosition, maxPosition);
+            }
+        }
+
+        var policyTargets = new Tensor<T>([n, actionDim], new Vector<T>(policyTargetData));
+        _policyNetwork.Train(states, policyTargets);
+        T policyLoss = _policyNetwork.GetLastLoss();
+
+        // ---- 3. Polyak target updates ----
+        double tau = TradingOptions.Tau;
+        SoftUpdateTargetNetwork(_critic, _targetCritic, tau);
+        SoftUpdateTargetNetwork(_policyNetwork, _targetPolicyNetwork, tau);
+
+        if (_updateCount < int.MaxValue)
+        {
+            _updateCount++;
+        }
+
+        T loss = NumOps.Add(criticLoss, policyLoss);
+        LossHistory.Add(loss);
+        return loss;
+    }
+
+    /// <summary>
+    /// Central-difference estimate of <c>dQ/da</c> at the policy's current quote for each sampled state,
+    /// returned as a flat <c>[n * actionDim]</c> buffer. One batched critic pass per direction per sign.
+    /// </summary>
+    private double[] EstimateActionGradients(
+        List<Experience<T>> batch, Vector<T> means, int n, int stateDim, int actionDim, int stateActionDim)
+    {
+        var gradients = new double[n * actionDim];
+        double epsilon = ActionFiniteDifferenceEpsilon;
+
+        for (int dimension = 0; dimension < actionDim; dimension++)
+        {
+            var plusData = new T[n * stateActionDim];
+            var minusData = new T[n * stateActionDim];
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < stateDim; j++)
+                {
+                    plusData[(i * stateActionDim) + j] = batch[i].State[j];
+                    minusData[(i * stateActionDim) + j] = batch[i].State[j];
+                }
+
+                for (int j = 0; j < actionDim; j++)
+                {
+                    T mean = means[(i * actionDim) + j];
+                    int slot = (i * stateActionDim) + stateDim + j;
+                    plusData[slot] = j == dimension ? NumOps.Add(mean, NumOps.FromDouble(epsilon)) : mean;
+                    minusData[slot] = j == dimension ? NumOps.Subtract(mean, NumOps.FromDouble(epsilon)) : mean;
+                }
+            }
+
+            var plusQ = _critic.Predict(new Tensor<T>([n, stateActionDim], new Vector<T>(plusData))).ToVector();
+            var minusQ = _critic.Predict(new Tensor<T>([n, stateActionDim], new Vector<T>(minusData))).ToVector();
+            for (int i = 0; i < n; i++)
+            {
+                gradients[(i * actionDim) + dimension] =
+                    (NumOps.ToDouble(plusQ[i]) - NumOps.ToDouble(minusQ[i])) / (2.0 * epsilon);
+            }
+        }
+
+        return gradients;
     }
 
     #endregion
@@ -326,7 +518,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var experience = new Experience<T>(state, action, reward, nextState, done);
+        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }
 
@@ -337,6 +529,15 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     #endregion
 
     #region Model Metadata
+
+    /// <inheritdoc/>
+    /// <remarks>Adds the number of gradient updates applied under the key <c>"Updates"</c>.</remarks>
+    public override Dictionary<string, T> GetTradingMetrics()
+    {
+        var metrics = base.GetTradingMetrics();
+        metrics["Updates"] = NumOps.FromDouble(_updateCount);
+        return metrics;
+    }
 
     /// <summary>
     /// Executes GetModelMetadata for the MarketMakingAgent.

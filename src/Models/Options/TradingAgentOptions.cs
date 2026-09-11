@@ -361,5 +361,11 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("HiddenLayers must be non-null with positive widths.", nameof(HiddenLayers));
         if (TransactionCost < 0)
             throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
+        if (!(RewardScale > 0.0) || double.IsNaN(RewardScale) || double.IsInfinity(RewardScale))
+            throw new ArgumentException("RewardScale must be a positive, finite number.", nameof(RewardScale));
+        if (SACAlpha < 0.0 || double.IsNaN(SACAlpha) || double.IsInfinity(SACAlpha))
+            throw new ArgumentException("SACAlpha must be a non-negative, finite number.", nameof(SACAlpha));
+        if (!(Tau > 0.0 && Tau <= 1.0))
+            throw new ArgumentException("Tau must be in (0, 1].", nameof(Tau));
     }
 }

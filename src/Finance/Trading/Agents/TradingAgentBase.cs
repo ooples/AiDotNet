@@ -685,6 +685,151 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         return noisy;
     }
 
+    /// <summary>
+    /// Returns <paramref name="action"/> plus independent zero-mean Gaussian noise whose standard deviation
+    /// is <paramref name="standardDeviations"/>[i] in component i, drawn from the agent's seeded stream.
+    /// </summary>
+    /// <remarks>
+    /// The per-component overload exists for agents whose exploration width is itself learned (the SAC
+    /// actor's state-independent log-std), where a single scalar sigma would throw that parameter away.
+    /// </remarks>
+    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, IReadOnlyList<double> standardDeviations)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (standardDeviations is null) throw new ArgumentNullException(nameof(standardDeviations));
+        if (standardDeviations.Count != action.Length)
+        {
+            throw new ArgumentException(
+                $"Expected {action.Length} standard deviations, got {standardDeviations.Count}.",
+                nameof(standardDeviations));
+        }
+
+        var noisy = new Vector<T>(action.Length);
+        for (int i = 0; i < action.Length; i++)
+        {
+            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviations[i] * NextStandardNormal()));
+        }
+
+        return noisy;
+    }
+
+    /// <summary>
+    /// Log-density of a diagonal Gaussian N(mean, diag(exp(logStd)^2)) at <paramref name="action"/>, summed
+    /// over action dimensions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the log-probability of the behaviour policy an agent with a deterministic actor head plus
+    /// Gaussian exploration actually follows, which is exactly the <c>log pi(a|s)</c> the SAC soft value
+    /// target needs. Computed in double precision so a float agent does not lose the tail.
+    /// </para>
+    /// </remarks>
+    protected double GaussianLogProbability(Vector<T> action, Vector<T> mean, IReadOnlyList<double> logStds)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (mean is null) throw new ArgumentNullException(nameof(mean));
+        if (logStds is null) throw new ArgumentNullException(nameof(logStds));
+
+        double total = 0.0;
+        for (int i = 0; i < action.Length; i++)
+        {
+            double logStd = logStds[i];
+            double std = Math.Exp(logStd);
+            double diff = NumOps.ToDouble(action[i]) - NumOps.ToDouble(mean[i]);
+            double z = diff / std;
+            total += (-0.5 * z * z) - logStd - (0.5 * Math.Log(2.0 * Math.PI));
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Differential entropy of a diagonal Gaussian with the given log standard deviations, summed over
+    /// action dimensions: <c>sum_i (logStd_i + 0.5*log(2*pi*e))</c>.
+    /// </summary>
+    protected static double GaussianEntropy(IReadOnlyList<double> logStds)
+    {
+        if (logStds is null) throw new ArgumentNullException(nameof(logStds));
+
+        double half = 0.5 * (1.0 + Math.Log(2.0 * Math.PI));
+        double total = 0.0;
+        for (int i = 0; i < logStds.Count; i++)
+        {
+            total += logStds[i] + half;
+        }
+
+        return total;
+    }
+
+    #endregion
+
+    #region Target Networks
+
+    /// <summary>
+    /// Polyak (soft) update of a target network: <c>target &lt;- tau*source + (1-tau)*target</c>.
+    /// </summary>
+    /// <param name="source">The online network being trained.</param>
+    /// <param name="target">The target network to move toward it.</param>
+    /// <param name="tau">Interpolation coefficient in [0, 1]; 1 is a hard copy.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A target network is a slowly-moving copy of the network being trained. It
+    /// supplies the bootstrap value in the temporal-difference target, and moving it slowly is what keeps
+    /// that target from chasing its own updates.</para>
+    /// </remarks>
+    protected void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target, double tau)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (tau < 0.0 || tau > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tau), tau, "Tau must be in [0, 1].");
+        }
+
+        var sourceParameters = source.GetParameters();
+        var targetParameters = target.GetParameters();
+        if (sourceParameters.Length != targetParameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Target network has {targetParameters.Length} parameters but the online network has "
+                + $"{sourceParameters.Length}; they must share an architecture.");
+        }
+
+        T tauT = NumOps.FromDouble(tau);
+        T oneMinusTau = NumOps.FromDouble(1.0 - tau);
+        var blended = new Vector<T>(targetParameters.Length);
+        for (int i = 0; i < blended.Length; i++)
+        {
+            blended[i] = NumOps.Add(
+                NumOps.Multiply(tauT, sourceParameters[i]),
+                NumOps.Multiply(oneMinusTau, targetParameters[i]));
+        }
+
+        target.UpdateParameters(blended);
+    }
+
+    #endregion
+
+    #region Reward Shaping
+
+    /// <summary>
+    /// Applies <see cref="TradingAgentOptions{T}.RewardScale"/> to a reward before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Trading rewards are fractional returns — often 1e-4 or smaller — which leaves a critic regressing on
+    /// targets far below the scale its initialization and learning rate assume. RewardScale multiplies the
+    /// reward so the value function trains in a sane numeric range. Scaling the reward rescales the value
+    /// function and the advantages by the same constant; it does not change which policy is optimal.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your rewards are tiny numbers the agent barely notices them. Turning
+    /// RewardScale up makes the same signal bigger without changing what counts as a good trade.</para>
+    /// </remarks>
+    protected T ScaleReward(T reward)
+    {
+        double scale = TradingOptions.RewardScale;
+        return scale == 1.0 ? reward : NumOps.Multiply(reward, NumOps.FromDouble(scale));
+    }
+
     #endregion
 
     #region Risk Management
