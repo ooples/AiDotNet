@@ -50,6 +50,7 @@ The 33 added cases cover prediction, preprocessing and initial serialization wit
 | Unchanged `f74c1a6d5c` DLL, unfiltered suite | 182 | 26 | 0 | `pr2154-text-boundary-full-before.trx` |
 | Shared validator, unfiltered suite | 208 | 0 | 0 | `pr2154-text-boundary-full-after.trx` |
 | Fresh-process no-build repeat | 208 | 0 | 0 | `pr2154-text-boundary-full-after-repeat.trx` |
+| Primary reviewer, independent no-build replay | 208 | 0 | 0 | `pr2154-text-boundary-root-independent.trx` |
 
 All original 175 controls passed before and after. Before the fix, null/short arrays produced `NullReferenceException`/`IndexOutOfRangeException`, negative dimensions reached an `OverflowException`, and long arrays were accepted. These are 26 failing cases for one missing shared validation boundary, not 26 distinct defects. The new guard consistently reports `ArgumentException` with `ParamName == "InputSize"` before forwarding. The selected-engine resize/multiply path and strict pixel/gradient controls are unchanged; these CPU runs are not physical-GPU proof.
 
