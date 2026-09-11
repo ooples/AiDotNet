@@ -144,19 +144,23 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
         // Apply FPN neck to get multi-scale features
         var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
-        // Use P4 level for RPN (good balance of resolution and receptive field)
-        var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
+        // Faster R-CNN with FPN (Lin et al. 2017; detectron2, torchvision): the shared RPN head runs on
+        // every level P2-P5 plus P6 (P5 subsampled by 2), each with its own anchor size, and each RoI
+        // is pooled from the level matching its size. This used to read one level, fpnFeatures[1] -
+        // P3, stride 8 - while laying anchors out at stride 16 and pooling with a 1/16 scale, so every
+        // anchor and every RoI sample landed at twice its true position, and the other levels' neck
+        // convs never received a gradient.
+        var rpnLevels = new List<Tensor<T>>(fpnFeatures) { CvTensorOps<T>.MaxPoolPadded(fpnFeatures[^1], 1, 2, 0) };
+        var (objectness, bboxDeltas, anchors, levelAnchorCounts) = _rpn.ForwardLevels(rpnLevels);
 
-        // Stage 1: Region Proposal Network
-        var (objectness, bboxDeltas, anchors) = _rpn.Forward(rpnFeatures);
-
-        // Generate proposals
+        // Generate proposals: top 1000 per level, NMS within each level, best 1000 overall.
         var proposals = _rpn.GenerateProposals(
             objectness, bboxDeltas, anchors,
             imageHeight, imageWidth,
-            preNmsTopK: 2000,
+            preNmsTopK: 1000,
             postNmsTopK: 1000,
-            nmsThreshold: 0.7);
+            nmsThreshold: 0.7,
+            levelAnchorCounts: levelAnchorCounts);
 
         if (proposals.Count == 0 || proposals[0].boxes.Shape[0] == 0)
         {
@@ -173,12 +177,8 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
 
         var proposalBoxes = proposals[0].boxes;
 
-        // Stage 2: RoI feature extraction and classification
-        // Use P4 features for RoI Align
-        var p4Features = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
-        double spatialScale = 1.0 / 16.0; // P4 is typically 1/16 resolution
-
-        var roiFeatures = _roiAlign.Forward(p4Features, proposalBoxes, spatialScale);
+        // Stage 2: RoI feature extraction from the size-matched pyramid level, then classification
+        var roiFeatures = FpnRoIPooler<T>.Pool(_roiAlign, fpnFeatures, EnsureBackbone.Strides, proposalBoxes);
 
         // Flatten RoI features: [num_rois, channels, H, W] -> [num_rois, channels*H*W]
         var flattenedFeatures = FlattenRoIFeatures(roiFeatures);

@@ -127,22 +127,26 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
         // Extract backbone features
         var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
-        // Apply FPN neck
+        // Apply FPN neck to get multi-scale features
         var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
-        // Use P4 level for RPN
-        var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
+        // Cascade R-CNN (Cai & Vasconcelos 2018) on an FPN (Lin et al. 2017; detectron2, torchvision): the shared RPN head runs on
+        // every level P2-P5 plus P6 (P5 subsampled by 2), each with its own anchor size, and each RoI
+        // is pooled from the level matching its size. This used to read one level, fpnFeatures[1] -
+        // P3, stride 8 - while laying anchors out at stride 16 and pooling with a 1/16 scale, so every
+        // anchor and every RoI sample landed at twice its true position, and the other levels' neck
+        // convs never received a gradient.
+        var rpnLevels = new List<Tensor<T>>(fpnFeatures) { CvTensorOps<T>.MaxPoolPadded(fpnFeatures[^1], 1, 2, 0) };
+        var (objectness, bboxDeltas, anchors, levelAnchorCounts) = _rpn.ForwardLevels(rpnLevels);
 
-        // Stage 1: Region Proposal Network
-        var (objectness, bboxDeltas, anchors) = _rpn.Forward(rpnFeatures);
-
-        // Generate initial proposals
+        // Generate initial proposals: top 1000 per level, NMS within each level, best 1000 overall.
         var initialProposals = _rpn.GenerateProposals(
             objectness, bboxDeltas, anchors,
             imageHeight, imageWidth,
-            preNmsTopK: 2000,
+            preNmsTopK: 1000,
             postNmsTopK: 1000,
-            nmsThreshold: 0.7);
+            nmsThreshold: 0.7,
+            levelAnchorCounts: levelAnchorCounts);
 
         if (initialProposals.Count == 0 || initialProposals[0].boxes.Shape[0] == 0)
         {
@@ -156,10 +160,6 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
             };
         }
 
-        // Get P4 features for RoI Align
-        var p4Features = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
-        double spatialScale = 1.0 / 16.0;
-
         // Current boxes to refine
         var currentBoxes = initialProposals[0].boxes;
         Tensor<T>? classLogits = null;
@@ -169,8 +169,9 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
         // Cascade through stages
         for (int stageIdx = 0; stageIdx < _numStages; stageIdx++)
         {
-            // Extract RoI features for current boxes
-            var roiFeatures = _roiAlign.Forward(p4Features, currentBoxes, spatialScale);
+            // Extract RoI features for current boxes, each from its size-matched pyramid level (the
+            // level can change between stages as refinement resizes the boxes)
+            var roiFeatures = FpnRoIPooler<T>.Pool(_roiAlign, fpnFeatures, EnsureBackbone.Strides, currentBoxes);
 
             // Flatten RoI features
             var flattenedFeatures = FlattenRoIFeatures(roiFeatures);

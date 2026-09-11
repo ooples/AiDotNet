@@ -37,6 +37,8 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
     private readonly int _numAnchors;
     private readonly int _featureStride;
     private readonly double _baseAnchorSize;
+    private readonly int[] _levelStrides;
+    private readonly double[] _levelBaseSizes;
 
     /// <summary>
     /// Gets the anchor generator used by this RPN.
@@ -90,7 +92,14 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
         }
         _featureStride = strides[level];
         _baseAnchorSize = baseSizes[level];
+        _levelStrides = strides;
+        _levelBaseSizes = baseSizes;
     }
+
+    /// <summary>
+    /// Gets the number of pyramid levels the RPN has anchors for (one per anchor size).
+    /// </summary>
+    public int LevelCount => _levelStrides.Length;
 
     /// <summary>
     /// Forward pass through the RPN.
@@ -99,28 +108,74 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
     /// <returns>Tuple of (objectness logits, bbox deltas, anchors as list of BoundingBox).</returns>
     public (Tensor<T> objectness, Tensor<T> bboxDeltas, List<BoundingBox<T>> anchors) Forward(Tensor<T> features)
     {
+        var (objectness, bboxDeltas) = Head(features);
+
+        // Generate anchors for this feature map size using configured stride and base size
+        var anchors = _anchorGenerator.GenerateAnchorsForLevel(
+            features.Shape[2], features.Shape[3], stride: _featureStride, baseSize: _baseAnchorSize);
+
+        return (objectness, bboxDeltas, anchors);
+    }
+
+    /// <summary>
+    /// Runs the shared RPN head over every level of a feature pyramid.
+    /// </summary>
+    /// <param name="levels">Pyramid levels, finest first (P2, P3, ...), one per anchor size.</param>
+    /// <returns>
+    /// Objectness <c>[batch, totalAnchors, 2]</c> and deltas <c>[batch, totalAnchors, 4]</c> with the
+    /// levels concatenated finest first, the matching anchors, and how many anchors each level has.
+    /// </returns>
+    /// <remarks>
+    /// The FPN form of the RPN (Lin et al. 2017; detectron2, torchvision): ONE head, shared across
+    /// levels, with anchors of a single size per level - level <c>i</c> uses the i-th anchor size at
+    /// the i-th stride. Each level's anchors are laid out at that level's own stride.
+    /// </remarks>
+    public (Tensor<T> objectness, Tensor<T> bboxDeltas, List<BoundingBox<T>> anchors, int[] levelAnchorCounts) ForwardLevels(
+        IReadOnlyList<Tensor<T>> levels)
+    {
+        if (levels is null || levels.Count == 0)
+        {
+            throw new ArgumentException("At least one pyramid level is required.", nameof(levels));
+        }
+
+        if (levels.Count > _levelStrides.Length)
+        {
+            throw new ArgumentException(
+                $"The RPN has anchors for {_levelStrides.Length} levels but received {levels.Count}.", nameof(levels));
+        }
+
+        var objectness = new Tensor<T>[levels.Count];
+        var deltas = new Tensor<T>[levels.Count];
+        var anchors = new List<BoundingBox<T>>();
+        var counts = new int[levels.Count];
+        for (int l = 0; l < levels.Count; l++)
+        {
+            (objectness[l], deltas[l]) = Head(levels[l]);
+            var levelAnchors = _anchorGenerator.GenerateAnchorsForLevel(
+                levels[l].Shape[2], levels[l].Shape[3], stride: _levelStrides[l], baseSize: _levelBaseSizes[l]);
+            anchors.AddRange(levelAnchors);
+            counts[l] = levelAnchors.Count;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        return levels.Count == 1
+            ? (objectness[0], deltas[0], anchors, counts)
+            : (engine.TensorConcatenate(objectness, 1), engine.TensorConcatenate(deltas, 1), anchors, counts);
+    }
+
+    private (Tensor<T> Objectness, Tensor<T> Deltas) Head(Tensor<T> features)
+    {
         int batch = features.Shape[0];
         int height = features.Shape[2];
         int width = features.Shape[3];
 
         // Shared convolution with ReLU
-        var x = _conv.Forward(features);
-        x = ApplyReLU(x);
+        var x = ApplyReLU(_conv.Forward(features));
 
-        // Get objectness scores
-        var objectness = _clsHead.Forward(x);
-        // Reshape: [B, numAnchors*2, H, W] -> [B, H*W*numAnchors, 2]
-        objectness = ReshapeRPNOutput(objectness, batch, height, width, 2);
-
-        // Get bbox deltas
-        var bboxDeltas = _regHead.Forward(x);
-        // Reshape: [B, numAnchors*4, H, W] -> [B, H*W*numAnchors, 4]
-        bboxDeltas = ReshapeRPNOutput(bboxDeltas, batch, height, width, 4);
-
-        // Generate anchors for this feature map size using configured stride and base size
-        var anchors = _anchorGenerator.GenerateAnchorsForLevel(height, width, stride: _featureStride, baseSize: _baseAnchorSize);
-
-        return (objectness, bboxDeltas, anchors);
+        // [B, numAnchors*2, H, W] -> [B, H*W*numAnchors, 2] and [B, numAnchors*4, H, W] -> [B, H*W*numAnchors, 4]
+        var objectness = ReshapeRPNOutput(_clsHead.Forward(x), batch, height, width, 2);
+        var bboxDeltas = ReshapeRPNOutput(_regHead.Forward(x), batch, height, width, 4);
+        return (objectness, bboxDeltas);
     }
 
     /// <summary>
@@ -134,6 +189,13 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
     /// <param name="preNmsTopK">Maximum proposals before NMS.</param>
     /// <param name="postNmsTopK">Maximum proposals after NMS.</param>
     /// <param name="nmsThreshold">IoU threshold for NMS.</param>
+    /// <param name="levelAnchorCounts">
+    /// Anchors per pyramid level, as returned by <see cref="ForwardLevels"/>. When given, the top
+    /// <paramref name="preNmsTopK"/> are taken and NMS is applied WITHIN each level, then the best
+    /// <paramref name="postNmsTopK"/> are kept across levels - the FPN proposal rule, which stops the
+    /// many fine-level anchors from crowding out the coarse levels. When null, all anchors form one
+    /// group.
+    /// </param>
     /// <returns>Proposal boxes [num_proposals, 4] as (x1, y1, x2, y2).</returns>
     public List<(Tensor<T> boxes, Tensor<T> scores)> GenerateProposals(
         Tensor<T> objectness,
@@ -143,7 +205,8 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
         int imageWidth,
         int preNmsTopK = 2000,
         int postNmsTopK = 1000,
-        double nmsThreshold = 0.7)
+        double nmsThreshold = 0.7,
+        int[]? levelAnchorCounts = null)
     {
         int batch = objectness.Shape[0];
         int objectnessAnchors = objectness.Shape[1];
@@ -176,55 +239,73 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
                 scores[i] = Math.Exp(obj - maxVal) / sumExp;
             }
 
-            // Get top-k proposals before NMS
-            var indices = Enumerable.Range(0, numAnchors)
-                .OrderByDescending(i => scores[i])
-                .Take(preNmsTopK)
-                .ToList();
-
-            // Decode boxes
-            var decodedBoxes = new List<(double x1, double y1, double x2, double y2, double score, int idx)>();
-            foreach (int i in indices)
+            var groups = levelAnchorCounts ?? new[] { numAnchors };
+            if (groups.Sum() != numAnchors)
             {
-                // Get anchor - BoundingBox stores (x1, y1, x2, y2) in XYXY format
-                var anchor = anchors[i];
-                double ax1 = _numOps.ToDouble(anchor.X1);
-                double ay1 = _numOps.ToDouble(anchor.Y1);
-                double ax2 = _numOps.ToDouble(anchor.X2);
-                double ay2 = _numOps.ToDouble(anchor.Y2);
-                double aw = ax2 - ax1;
-                double ah = ay2 - ay1;
-
-                // Get deltas
-                double dx = _numOps.ToDouble(bboxDeltas[b, i, 0]);
-                double dy = _numOps.ToDouble(bboxDeltas[b, i, 1]);
-                double dw = _numOps.ToDouble(bboxDeltas[b, i, 2]);
-                double dh = _numOps.ToDouble(bboxDeltas[b, i, 3]);
-
-                // Anchor center
-                double cx = ax1 + aw / 2;
-                double cy = ay1 + ah / 2;
-
-                // Apply deltas (standard bbox encoding)
-                double predCx = cx + dx * aw;
-                double predCy = cy + dy * ah;
-                double predW = aw * Math.Exp(Math.Min(dw, 4.0)); // Clip to prevent explosion
-                double predH = ah * Math.Exp(Math.Min(dh, 4.0));
-
-                // Convert to (x1, y1, x2, y2)
-                double x1 = Math.Max(0, predCx - predW / 2);
-                double y1 = Math.Max(0, predCy - predH / 2);
-                double x2 = Math.Min(imageWidth, predCx + predW / 2);
-                double y2 = Math.Min(imageHeight, predCy + predH / 2);
-
-                if (x2 > x1 && y2 > y1)
-                {
-                    decodedBoxes.Add((x1, y1, x2, y2, scores[i], i));
-                }
+                throw new ArgumentException(
+                    $"Level anchor counts sum to {groups.Sum()}, but there are {numAnchors} anchors.",
+                    nameof(levelAnchorCounts));
             }
 
-            // Apply NMS
-            var nmsBoxes = ApplyNMS(decodedBoxes, nmsThreshold, postNmsTopK);
+            var kept = new List<(double x1, double y1, double x2, double y2, double score)>();
+            int groupStart = 0;
+            foreach (int groupSize in groups)
+            {
+                int start = groupStart;
+                groupStart += groupSize;
+
+                // Get top-k proposals before NMS
+                var indices = Enumerable.Range(start, groupSize)
+                    .OrderByDescending(i => scores[i])
+                    .Take(preNmsTopK)
+                    .ToList();
+
+                // Decode boxes
+                var decodedBoxes = new List<(double x1, double y1, double x2, double y2, double score, int idx)>();
+                foreach (int i in indices)
+                {
+                    // Get anchor - BoundingBox stores (x1, y1, x2, y2) in XYXY format
+                    var anchor = anchors[i];
+                    double ax1 = _numOps.ToDouble(anchor.X1);
+                    double ay1 = _numOps.ToDouble(anchor.Y1);
+                    double ax2 = _numOps.ToDouble(anchor.X2);
+                    double ay2 = _numOps.ToDouble(anchor.Y2);
+                    double aw = ax2 - ax1;
+                    double ah = ay2 - ay1;
+
+                    // Get deltas
+                    double dx = _numOps.ToDouble(bboxDeltas[b, i, 0]);
+                    double dy = _numOps.ToDouble(bboxDeltas[b, i, 1]);
+                    double dw = _numOps.ToDouble(bboxDeltas[b, i, 2]);
+                    double dh = _numOps.ToDouble(bboxDeltas[b, i, 3]);
+
+                    // Anchor center
+                    double cx = ax1 + aw / 2;
+                    double cy = ay1 + ah / 2;
+
+                    // Apply deltas (standard bbox encoding)
+                    double predCx = cx + dx * aw;
+                    double predCy = cy + dy * ah;
+                    double predW = aw * Math.Exp(Math.Min(dw, 4.0)); // Clip to prevent explosion
+                    double predH = ah * Math.Exp(Math.Min(dh, 4.0));
+
+                    // Convert to (x1, y1, x2, y2)
+                    double x1 = Math.Max(0, predCx - predW / 2);
+                    double y1 = Math.Max(0, predCy - predH / 2);
+                    double x2 = Math.Min(imageWidth, predCx + predW / 2);
+                    double y2 = Math.Min(imageHeight, predCy + predH / 2);
+
+                    if (x2 > x1 && y2 > y1)
+                    {
+                        decodedBoxes.Add((x1, y1, x2, y2, scores[i], i));
+                    }
+                }
+
+                // Apply NMS
+                kept.AddRange(ApplyNMS(decodedBoxes, nmsThreshold, postNmsTopK));
+            }
+
+            var nmsBoxes = kept.OrderByDescending(box => box.score).Take(postNmsTopK).ToList();
 
             // Convert to tensors
             int numProposals = nmsBoxes.Count;

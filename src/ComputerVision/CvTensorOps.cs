@@ -489,20 +489,23 @@ internal static class CvTensorOps<T>
     {
         int n = features.Shape[0], c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
         int rois = batchIndices.Length;
-        int bins = rois * outputSize * outputSize;
-        int taps = samplingRatio * samplingRatio * 4;
+        int side = outputSize * samplingRatio;
 
-        var index = new int[bins * taps];
-        var weight = new T[bins * taps];
+        // Bilinear sampling through the engine's GridSample (align_corners = false, zero padding;
+        // NCHW in and out - the IEngine summary says NHWC, but the engine reads [N, C, H, W]): one grid point per sample, so the op stores [rois * side * side, C] values and
+        // its backward is the engine's native GridSample gradient. The earlier formulation gathered
+        // all four bilinear taps of every sample as separate rows and broadcast a weight per row -
+        // three [rois * bins * 4 * samples, C] tensors, several GB per call at a thousand proposals.
+        //
+        // Exactness against the per-sample loop: a sample with y in [h - 1, h) read its upper tap
+        // clamped to row h - 1, i.e. the edge value; clamping the coordinate to h - 1 reproduces that
+        // under zero padding. A sample outside [0, h) x [0, w) contributes nothing and is excluded
+        // from its bin's average; it is pointed at a valid pixel and given weight zero.
+        var gridValues = new T[rois * side * side * 2];
+        var maskValues = new T[rois * side * side];
         var zero = NumOps.Zero;
-        for (int i = 0; i < weight.Length; i++)
-        {
-            weight[i] = zero;
-        }
-
         for (int r = 0; r < rois; r++)
         {
-            int b = batchIndices[r];
             double x1 = boxes[(4 * r) + 0] * spatialScale, y1 = boxes[(4 * r) + 1] * spatialScale;
             double x2 = boxes[(4 * r) + 2] * spatialScale, y2 = boxes[(4 * r) + 3] * spatialScale;
             double binW = (x2 - x1) / outputSize, binH = (y2 - y1) / outputSize;
@@ -511,9 +514,7 @@ internal static class CvTensorOps<T>
             {
                 for (int pw = 0; pw < outputSize; pw++)
                 {
-                    int bin = ((r * outputSize) + ph) * outputSize + pw;
                     double startY = y1 + (ph * binH), startX = x1 + (pw * binW);
-
                     int count = 0;
                     for (int iy = 0; iy < samplingRatio; iy++)
                     {
@@ -528,51 +529,111 @@ internal static class CvTensorOps<T>
                         }
                     }
 
-                    if (count == 0)
-                    {
-                        continue;
-                    }
-
-                    int tap = bin * taps;
                     for (int iy = 0; iy < samplingRatio; iy++)
                     {
                         for (int ix = 0; ix < samplingRatio; ix++)
                         {
                             double y = startY + ((iy + 0.5) * binH / samplingRatio);
                             double x = startX + ((ix + 0.5) * binW / samplingRatio);
-                            if (!(y >= 0 && y < h && x >= 0 && x < w))
-                            {
-                                tap += 4;
-                                continue;
-                            }
+                            int point = (((r * side) + (ph * samplingRatio) + iy) * side) + (pw * samplingRatio) + ix;
+                            bool valid = y >= 0 && y < h && x >= 0 && x < w;
+                            double sy = valid ? Math.Min(y, h - 1) : 0;
+                            double sx = valid ? Math.Min(x, w - 1) : 0;
 
-                            int y0 = (int)Math.Floor(y), x0 = (int)Math.Floor(x);
-                            int yy1 = Math.Min(y0 + 1, h - 1), xx1 = Math.Min(x0 + 1, w - 1);
-                            double wy1 = y - y0, wy0 = 1.0 - wy1, wx1 = x - x0, wx0 = 1.0 - wx1;
-                            int rowBase = b * h;
-
-                            index[tap] = ((rowBase + y0) * w) + x0;
-                            weight[tap++] = NumOps.FromDouble(wy0 * wx0 / count);
-                            index[tap] = ((rowBase + y0) * w) + xx1;
-                            weight[tap++] = NumOps.FromDouble(wy0 * wx1 / count);
-                            index[tap] = ((rowBase + yy1) * w) + x0;
-                            weight[tap++] = NumOps.FromDouble(wy1 * wx0 / count);
-                            index[tap] = ((rowBase + yy1) * w) + xx1;
-                            weight[tap++] = NumOps.FromDouble(wy1 * wx1 / count);
+                            // Pixel coordinate p to normalised g under align_corners = false.
+                            gridValues[(2 * point) + 0] = NumOps.FromDouble(((2 * sx) + 1) / w - 1);
+                            gridValues[(2 * point) + 1] = NumOps.FromDouble(((2 * sy) + 1) / h - 1);
+                            maskValues[point] = valid ? NumOps.FromDouble(1.0 / count) : zero;
                         }
                     }
                 }
             }
         }
 
-        var positions = Engine.Reshape(Engine.TensorPermute(features, new[] { 0, 2, 3, 1 }), new[] { n * h * w, c });
-        var gathered = Select(positions, index, 0);                                        // [bins*taps, C]
-        var weights = Engine.TensorBroadcastTo(
-            new Tensor<T>(new[] { bins * taps, 1 }, new Vector<T>(weight)), new[] { bins * taps, c });
-        var weighted = Engine.Reshape(Engine.TensorMultiply(gathered, weights), new[] { bins, taps, c });
-        var pooled = Engine.ReduceSum(weighted, new[] { 1 }, false);                       // [bins, C]
-        return Engine.TensorPermute(
-            Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
+        var grid = new Tensor<T>(new[] { rois * side, side, 2 }, new Vector<T>(gridValues));
+        var sampled = SampleByBatch(features, grid, batchIndices, side);                     // [rois * side, side, C]
+        var mask = Engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { rois * side, side, 1 }, new Vector<T>(maskValues)), new[] { rois * side, side, c });
+        var weighted = Engine.Reshape(
+            Engine.TensorMultiply(sampled, mask), new[] { rois, outputSize, samplingRatio, outputSize, samplingRatio, c });
+        var pooled = Engine.ReduceSum(weighted, new[] { 2, 4 }, false);                   // [rois, out, out, C]
+        return Engine.TensorPermute(pooled, new[] { 0, 3, 1, 2 });
+    }
+
+    /// <summary>
+    /// Bilinearly samples one image <c>[1, C, H, W]</c> at a grid <c>[1, rows, cols, 2]</c>, returning
+    /// <c>[rows, cols, C]</c>.
+    /// </summary>
+    private static Tensor<T> SampleImage(Tensor<T> image, Tensor<T> grid, int rows, int cols, int channels)
+    {
+        var sampled = Engine.GridSample(image, grid);                                     // [1, C, rows, cols]
+        return Engine.TensorPermute(Engine.Reshape(sampled, new[] { channels, rows, cols }), new[] { 1, 2, 0 });
+    }
+
+    /// <summary>
+    /// Samples each RoI's grid rows (<c>side</c> rows per RoI) from the image its batch index names.
+    /// </summary>
+    private static Tensor<T> SampleByBatch(Tensor<T> features, Tensor<T> grid, int[] batchIndices, int side)
+    {
+        int n = features.Shape[0], c = features.Shape[1];
+        int rois = batchIndices.Length;
+        if (n == 1)
+        {
+            return SampleImage(features, Engine.Reshape(grid, new[] { 1, rois * side, side, 2 }), rois * side, side, c);
+        }
+
+        var parts = new List<Tensor<T>>();
+        var order = new List<int>();
+        for (int b = 0; b < n; b++)
+        {
+            var members = new List<int>();
+            for (int r = 0; r < rois; r++)
+            {
+                if (batchIndices[r] == b)
+                {
+                    members.Add(r);
+                }
+            }
+
+            if (members.Count == 0)
+            {
+                continue;
+            }
+
+            var rows = new int[members.Count * side];
+            for (int m = 0; m < members.Count; m++)
+            {
+                for (int k = 0; k < side; k++)
+                {
+                    rows[(m * side) + k] = (members[m] * side) + k;
+                }
+            }
+
+            var image = Engine.TensorNarrow(features, 0, b, 1);
+            var imageGrid = Engine.Reshape(Select(grid, rows, 0), new[] { 1, rows.Length, side, 2 });
+            parts.Add(SampleImage(image, imageGrid, rows.Length, side, c));
+            order.AddRange(members);
+        }
+
+        var stacked = parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+
+        // stacked holds each RoI's side rows in `order`; put them back in RoI order.
+        var positionOf = new int[rois];
+        for (int k = 0; k < order.Count; k++)
+        {
+            positionOf[order[k]] = k;
+        }
+
+        var back = new int[rois * side];
+        for (int r = 0; r < rois; r++)
+        {
+            for (int k = 0; k < side; k++)
+            {
+                back[(r * side) + k] = (positionOf[r] * side) + k;
+            }
+        }
+
+        return Select(stacked, back, 0);
     }
 
     /// <summary>
