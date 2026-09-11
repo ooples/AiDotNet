@@ -98,7 +98,7 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     public int NumVisionLayers { get; set; }
 
     /// <summary>
-    /// Throws if a dimension every vision-language model requires has been left unset.
+    /// Validates the shared embedding, text context, and square-image dimensions.
     /// </summary>
     /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative, which means the derived options
@@ -106,9 +106,57 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.Image);
+    }
+
+    /// <summary>Identifies the input geometry a derived model actually consumes.</summary>
+    [Flags]
+    protected enum ValidationRequirements
+    {
+        /// <summary>Only the shared embedding is required.</summary>
+        None = 0,
+        /// <summary>A bounded text-token context is required.</summary>
+        Text = 1,
+        /// <summary>A square image and channel count are required.</summary>
+        Image = 2,
+        /// <summary>Positive patches must produce at least one complete image patch; remainder cropping is supported.</summary>
+        PatchGeometry = 4,
+        /// <summary>The model additionally requires patches to tile the image exactly.</summary>
+        ExactPatchTiling = 8
+    }
+
+    /// <summary>Validates only the dimensions consumed by the selected model paths.</summary>
+    /// <param name="requirements">The model's input-geometry requirements.</param>
+    /// <exception cref="ArgumentException">A required dimension or patch tiling is invalid.</exception>
+    /// <remarks>Audio-only or feature-input paths do not acquire image or token requirements
+    /// merely because their options share this base. Patch validation precedes every division.</remarks>
+    protected void ValidateCore(ValidationRequirements requirements)
+    {
         Require(EmbeddingDimension, nameof(EmbeddingDimension));
-        Require(MaxSequenceLength, nameof(MaxSequenceLength));
-        Require(ImageSize, nameof(ImageSize));
-        Require(Channels, nameof(Channels));
+        if ((requirements & ValidationRequirements.Text) != 0)
+            Require(MaxSequenceLength, nameof(MaxSequenceLength));
+        if ((requirements & (ValidationRequirements.Image | ValidationRequirements.PatchGeometry | ValidationRequirements.ExactPatchTiling)) != 0)
+        {
+            Require(ImageSize, nameof(ImageSize));
+            Require(Channels, nameof(Channels));
+        }
+        if ((requirements & (ValidationRequirements.PatchGeometry | ValidationRequirements.ExactPatchTiling)) != 0)
+        {
+            Require(PatchSize, nameof(PatchSize));
+            if (ImageSize < PatchSize)
+            {
+                throw new ArgumentException(
+                    $"{GetType().Name}.{nameof(ImageSize)} ({ImageSize}) must contain at least one complete " +
+                    $"{GetType().Name}.{nameof(PatchSize)} ({PatchSize}) patch.",
+                    OptionsParameterName);
+            }
+            if ((requirements & ValidationRequirements.ExactPatchTiling) != 0 && ImageSize % PatchSize != 0)
+            {
+                throw new ArgumentException(
+                    $"{GetType().Name}.{nameof(ImageSize)} ({ImageSize}) must be evenly divisible by " +
+                    $"{GetType().Name}.{nameof(PatchSize)} ({PatchSize}).",
+                    OptionsParameterName);
+            }
+        }
     }
 }

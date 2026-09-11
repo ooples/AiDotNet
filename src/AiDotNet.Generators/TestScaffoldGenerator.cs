@@ -5107,9 +5107,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
                     "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
-                    "MaxSequenceLength = 16, ImageSize = 32, Channels = 3, NumPerceiverTokens = 4, " +
+                    "MaxSequenceLength = 16, ImageSize = 32, PatchSize = 8, Channels = 3, NumPerceiverTokens = 4, " +
                     "MaxImagesInContext = 1, VisionHiddenDim = 64, LmHiddenDim = 64, " +
-                    "NumVisionLayers = 1, NumLmLayers = 1, NumHeads = 2, VocabSize = 64, " +
+                    "NumVisionLayers = 1, NumLmLayers = 4, NumHeads = 2, VocabSize = 64, " +
                     "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)

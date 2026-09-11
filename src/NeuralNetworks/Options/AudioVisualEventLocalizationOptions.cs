@@ -69,6 +69,16 @@ public class AudioVisualEventLocalizationOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.None);
+        Require(TemporalResolution, nameof(TemporalResolution));
+        Require(AudioEmbeddingFullyConnectedWidth, nameof(AudioEmbeddingFullyConnectedWidth));
+        Require(AudioEmbeddingSize, nameof(AudioEmbeddingSize));
+        Require(LearningRate, nameof(LearningRate));
+        // The actual dual-stream factory supports zero optional encoder-attention layers.
+        if (NumEncoderLayers < 0)
+            throw new ArgumentException($"{GetType().Name}.{nameof(NumEncoderLayers)} must be non-negative.", OptionsParameterName);
+        // Temporal and fusion attention always use eight heads, even with zero encoders.
+        if (EmbeddingDimension % 8 != 0)
+            throw new ArgumentException($"{GetType().Name}.{nameof(EmbeddingDimension)} must be divisible by the fixed attention head count (8).", OptionsParameterName);
     }
 }

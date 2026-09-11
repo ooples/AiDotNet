@@ -471,12 +471,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     {
         _options = options ?? new Blip2Options();
         _options.Validate();
-        _options.Validate();
-        if (_options.ImageSize % _options.PatchSize != 0)
-            throw new ArgumentException(
-                $"_options.ImageSize ({_options.ImageSize}) must be evenly divisible by _options.PatchSize ({_options.PatchSize}); " +
-                $"got remainder {_options.ImageSize % _options.PatchSize}.",
-                nameof(_options.ImageSize));
 
         Options = _options;
 

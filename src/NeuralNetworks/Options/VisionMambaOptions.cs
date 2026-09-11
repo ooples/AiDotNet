@@ -74,6 +74,27 @@ public class VisionMambaOptions : SequenceModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore(requiresHeads: false, requiresState: true);
+        // This is an image classifier, not a tokenizer-backed language model. The inherited
+        // vocabulary/context settings are deliberately irrelevant to its construction.
+        Require(PatchSize, nameof(PatchSize));
+        ValidateImageDimension(ImageHeight, nameof(ImageHeight));
+        ValidateImageDimension(ImageWidth, nameof(ImageWidth));
+        Require(Channels, nameof(Channels));
+        Require(ModelDimension, nameof(ModelDimension));
+        Require(NumLayers, nameof(NumLayers));
+        Require(NumClasses, nameof(NumClasses));
+        Require(StateDimension, nameof(StateDimension));
+    }
+
+    private void ValidateImageDimension(int dimension, string propertyName)
+    {
+        Require(dimension, propertyName);
+        if (dimension % PatchSize != 0)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{propertyName} ({dimension}) must be evenly divisible by " +
+                $"{GetType().Name}.{nameof(PatchSize)} ({PatchSize}).",
+                OptionsParameterName);
+        }
     }
 }

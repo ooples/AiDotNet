@@ -74,7 +74,7 @@ public class Blip2Options : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.ExactPatchTiling);
     }
 
     /// <summary>

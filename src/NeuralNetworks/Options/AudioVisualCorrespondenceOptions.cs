@@ -57,6 +57,8 @@ public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.None);
+        Require(AudioSampleRate, nameof(AudioSampleRate));
+        Require(VideoFrameRate, nameof(VideoFrameRate));
     }
 }
