@@ -79,6 +79,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, MaxGradientNorm = 5.0,
                 Schedule = LearningRateSchedulerType.ReduceOnPlateau, DecayRate = 0.5,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 StepSize = 3,
                 Source = "Luo and Mesgarani 2019, Sec. IV: Adam with an initial learning rate of 1e-3, halved if validation accuracy does not improve for 3 consecutive epochs, and gradient clipping at maximum L2-norm 5, over 100 epochs.")]
 public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>

@@ -86,3 +86,4 @@ AIDN101 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a 
 AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Every [PaperOptimizer] declaration must cite where the recipe comes from
 AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimizer variants must be unique across optimizer kinds
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
+AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist

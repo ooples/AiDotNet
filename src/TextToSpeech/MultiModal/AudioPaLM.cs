@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,6 +43,14 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2023,
     Authors = "Rubenstein et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 1e-4, MinLearningRate = 1e-5,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Rubenstein et al. 2023: a learning rate schedule of linear ramp-up to 1e-4 followed by exponential decay to 1e-5. The decay is declared as the closest shape this library builds after a ramp; the paper says exponential.")]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 5e-5,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Rubenstein et al. 2023: we finetune with the Adafactor optimizer with a constant learning rate of 5e-5. A stated rate stands Adafactor relative step rule down.")]
 public partial class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AudioPaLMOptions _options;
@@ -82,7 +92,9 @@ public partial class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new AudioPaLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

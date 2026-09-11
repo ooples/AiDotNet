@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,8 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
+[PaperOptimizer(OptimizerKind.ScheduleFreeAdamW, LearningRate = 1.4e-3, WarmupSteps = 8192,
+                Source = "Jeffries et al. 2024: the AdamW variation of the schedule-free optimizer of Defazio et al. 2024, with gradient norm clipping and the learning rate warmed up to 1.4e-3 over 8192 steps. The clipping threshold is not stated, so none is declared.")]
 public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MoonshineOptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +54,9 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public bool SupportsWordTimestamps => false;
 
     public Moonshine(NeuralNetworkArchitecture<T> architecture, string modelPath, MoonshineOptions? options = null) : base(architecture) { _options = options ?? new MoonshineOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Moonshine(NeuralNetworkArchitecture<T> architecture, MoonshineOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MoonshineOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Moonshine(NeuralNetworkArchitecture<T> architecture, MoonshineOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MoonshineOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Moonshine's efficient encoder-decoder architecture.

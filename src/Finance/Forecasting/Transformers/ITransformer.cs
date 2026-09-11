@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +62,10 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("iTransformer: Inverted Transformers Are Effective for Time Series Forecasting", "https://arxiv.org/abs/2310.06625", Year = 2024, Authors = "Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, Mingsheng Long")]
+[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 32, LearningRate = 5e-4,
+                Provenance = RecipeProvenance.Searched,
+                SearchedValues = [1e-3, 5e-4, 1e-4],
+                Source = "Liu et al. 2024, Sec. 4: Adam with a batch size uniformly 32 over 10 epochs. The rate is recorded as searched rather than prescribed: the paper tries 1e-3, 5e-4 and 1e-4, and the middle value stands for the set, which is carried alongside it.")]
 public partial class ITransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -301,7 +306,9 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         {
             session = new InferenceSession(onnxModelPath);
             OnnxSession = session;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             InitializeLayers();
         }
@@ -391,7 +398,9 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         _useInstanceNormalization = useInstanceNormalization;
         _dropout = dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();

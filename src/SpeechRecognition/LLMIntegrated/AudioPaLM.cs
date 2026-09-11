@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +49,14 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioPaLM: A Large Language Model That Can Speak and Listen", "https://arxiv.org/abs/2306.12925", Year = 2023, Authors = "Rubenstein et al.")]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 1e-4, MinLearningRate = 1e-5,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Rubenstein et al. 2023: a learning rate schedule of linear ramp-up to 1e-4 followed by exponential decay to 1e-5. The decay is declared as the closest shape this library builds after a ramp; the paper says exponential.")]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 5e-5,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Rubenstein et al. 2023: we finetune with the Adafactor optimizer with a constant learning rate of 5e-5. A stated rate stands Adafactor relative step rule down.")]
 public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AudioPaLMOptions _options; public override ModelOptions GetOptions() => _options;
@@ -56,7 +66,9 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public bool SupportsWordTimestamps => false;
 
     public AudioPaLM(NeuralNetworkArchitecture<T> architecture, string modelPath, AudioPaLMOptions? options = null) : base(architecture) { _options = options ?? new AudioPaLMOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AudioPaLMOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AudioPaLMOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using AudioPaLM's fused speech-text architecture.

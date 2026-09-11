@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -45,6 +46,11 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2301.02111", Year = 2023, Authors = "Chengyi Wang, Sanyuan Chen, Yu Wu, Ziqiang Zhang, Long Zhou, Shujie Liu, Zhuo Chen, Yanqing Liu, Huaming Wang, Jinyu Li, Lei He, Sheng Zhao, Furu Wei")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, WarmupSteps = 32000,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Wang et al. 2023: AdamW warming up over the first 32k updates to a peak of 5e-4, then linearly decayed.")]
 public partial class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -115,7 +121,9 @@ public partial class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         _options = options ?? new VALLEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

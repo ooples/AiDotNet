@@ -78,6 +78,17 @@ public enum LearningRateSchedulerType
     Noam,
 
     /// <summary>
+    /// Noam with a hold phase: linear warmup, then a hold at the peak, then a power decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule Squeezeformer introduced and the NeMo speech models reuse. Its decay is
+    /// <c>peak * warmup^d / (t - hold)^d</c>, a power of the STEP, which is a different curve from
+    /// <see cref="TriStage"/>, whose decay is a power of the remaining FRACTION of the run.
+    /// Ordinary Noam is the special case with no hold and d = 0.5.
+    /// </remarks>
+    NoamHoldAnnealing,
+
+    /// <summary>
     /// Cyclic learning rate: oscillate between bounds.
     /// </summary>
     Cyclic,

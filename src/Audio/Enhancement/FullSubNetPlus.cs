@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -57,6 +58,8 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3,
+                Source = "Chen et al. 2022: Adam with a learning rate of 1e-3.")]
 public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
@@ -112,7 +115,9 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
     {
         _options = options ?? new FullSubNetPlusOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

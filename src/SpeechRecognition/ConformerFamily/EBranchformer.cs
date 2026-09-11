@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,6 +46,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
+[PaperOptimizer(OptimizerKind.Adam, WeightDecay = 1e-6,
+                Source = "Kim et al. 2023: the Adam optimizer with a weight decay of 1e-6. The paper also uses label smoothing 0.1, which is a loss setting rather than an optimizer one and is not declared here.")]
 public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EBranchformerOptions _options;
@@ -75,7 +79,9 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         _options = options ?? new EBranchformerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();

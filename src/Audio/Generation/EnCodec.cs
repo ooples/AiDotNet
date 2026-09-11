@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -42,6 +43,9 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High Fidelity Neural Audio Compression", "https://arxiv.org/abs/2210.13438", Year = 2022, Authors = "Alexandre Defossez, Jade Copet, Gabriel Synnaeve, Yossi Adi")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, Beta1 = 0.5, Beta2 = 0.9,
+                ReferenceBatchSize = 64,
+                Source = "Defossez et al. 2022, Sec. 4.4: Adam with a learning rate of 3e-4, beta1 0.5 and beta2 0.9, batch size 64, over 300 epochs. The beta1 of 0.5 is well below the usual 0.9 and is the paper value.")]
 public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     /// <inheritdoc />
@@ -109,7 +113,9 @@ public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         _options = options ?? new EnCodecOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

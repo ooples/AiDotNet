@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -66,6 +67,11 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Jaehyeon Kim, Jungil Kong, Juhee Son")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
+                LearningRate = 2e-4, Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                DecayRate = 0.99987506,
+                Source = "Kim et al. 2021, Sec. 3: AdamW with beta1 0.8, beta2 0.99 and weight decay 0.01, initial learning rate 2e-4 decayed by a 0.999^(1/8) factor every epoch. That eighth root is 0.99987506, given here as the decimal the scheduler takes.")]
 public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly VITSModelOptions _options;
@@ -493,7 +499,9 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize training components
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeNativeLayers();
     }

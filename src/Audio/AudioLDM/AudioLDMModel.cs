@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -67,6 +68,8 @@ namespace AiDotNet.Audio.AudioLDM;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://doi.org/10.48550/arXiv.2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-5, ReferenceBatchSize = 8,
+                Source = "Liu et al. 2023, Configuration: the latent diffusion model trained with a learning rate of 3e-5, batch size 8 for AudioLDM-L over 0.6M steps. The VAE is trained separately at 4.5e-6 with batch size six, which is a different component and not what this declares.")]
 public partial class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -283,7 +286,9 @@ public partial class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         // CLAP models use their own tokenizer - when using pretrained CLAP ONNX models,
         // provide the matching CLAP tokenizer instead of relying on this fallback.
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)

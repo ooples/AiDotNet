@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -163,6 +164,15 @@ internal static class PaperOptimizerFactory
         {
             if (!double.IsNaN(recipe.LearningRate)) options.InitialLearningRate = recipe.LearningRate;
 
+            // Adafactor normally derives its own step size. A paper that states a rate -- AudioPaLM
+            // fine-tunes at a constant 5e-5 -- means that rule must stand down, or the stated rate
+            // is accepted and then ignored.
+            if (options is AdafactorOptimizerOptions<T, TInput, TOutput> adafactor
+                && !double.IsNaN(recipe.LearningRate))
+            {
+                adafactor.UseRelativeStepSize = false;
+            }
+
             if (!double.IsNaN(recipe.Momentum))
             {
                 options.InitialMomentum = recipe.Momentum;
@@ -233,6 +243,7 @@ internal static class PaperOptimizerFactory
                     break;
             }
 
+            ReportUnsupportedElements(recipe);
             ScaleToConfiguredRun(options, recipe);
             ConfigureScheduleAndClipping(options, recipe);
             return options;
@@ -275,6 +286,12 @@ internal static class PaperOptimizerFactory
 
             OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
                 model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.ScheduleFreeAdamW => new ScheduleFreeAdamWOptimizer<T, TInput, TOutput>(
+                model, Configured(new ScheduleFreeAdamWOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.Adafactor => new AdafactorOptimizer<T, TInput, TOutput>(
+                model, Configured(new AdafactorOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.LBfgs => new LBFGSOptimizer<T, TInput, TOutput>(
                 model, Configured(new LBFGSOptimizerOptions<T, TInput, TOutput>())),
@@ -412,6 +429,44 @@ internal static class PaperOptimizerFactory
         return optimizer;
     }
 
+    /// <summary>How a paper-scale learning rate is carried to a different batch size.</summary>
+    /// <remarks>
+    /// <para>
+    /// Linear, for every family, and the reasoning is worth stating because two earlier readings
+    /// of the same two papers were wrong in opposite directions.
+    /// </para>
+    /// <para>
+    /// Goyal et al. 2017 state and evidence the linear rule for SGD with momentum. Krizhevsky 2014
+    /// Sec. 5 is the source of the sqrt(k) alternative, but he reports measuring both: "Theory
+    /// aside, for the batch sizes considered in this note, the heuristic that I found to work the
+    /// best was to multiply the learning rate by k when multiplying the batch size by k. I cannot
+    /// explain this discrepancy between theory and practice." Both papers therefore land on linear
+    /// empirically; sqrt is a suggestion its own author declined to adopt.
+    /// </para>
+    /// <para>
+    /// Refusing to scale non-SGD families at all was tried first and is worse than either rule:
+    /// MobileNetV3 states 0.1 at batch 4096, and applying that unscaled drives the loss to
+    /// infinity within a few steps. Scaling by sqrt was tried second and still diverges at 8.8e-3.
+    /// Linear gives 7.8e-4 and trains. Neither paper tested an adaptive optimizer, so that limit is
+    /// recorded as a caution rather than hidden.
+    /// </para>
+    /// </remarks>
+    private static (double Factor, string Rule) BatchScaling(
+        OptimizerKind kind, int runBatch, int referenceBatch)
+    {
+        double ratio = (double)runBatch / referenceBatch;
+
+        if (kind is not (OptimizerKind.Sgd or OptimizerKind.SgdMomentum))
+        {
+            NoteCaution(
+                $"the learning rate was scaled for batch {runBatch} by the linear rule, whose"
+                + " evidence in Goyal et al. 2017 and Krizhevsky 2014 comes from SGD experiments;"
+                + $" neither tested {kind}");
+        }
+
+        return (ratio, "linear scaling rule, Goyal et al. 2017; Krizhevsky 2014 Sec. 5 measured "
+            + "both this and sqrt(k) and reports this one worked best");
+    }
     /// <summary>Applies the Adam-family moments, and stops them being adapted away.</summary>
     /// <remarks>
     /// UseAdaptiveBetas defaults to true and clamps the running betas into [MinBeta1, MaxBeta1]
@@ -427,6 +482,143 @@ internal static class PaperOptimizerFactory
         if (!double.IsNaN(recipe.Beta1) || !double.IsNaN(recipe.Beta2))
             options.UseAdaptiveBetas = false;
     }
+
+    /// <summary>Fills a phase's unstated values from the phase it declares it inherits.</summary>
+    /// <remarks>
+    /// SPEAR-TTS states its second stage as using the same optimizer and schedule as its first.
+    /// Copying those values into the declaration by hand would be a transcription the paper never
+    /// made, and two copies of a number drift the first time one is corrected.
+    /// </remarks>
+    /// <returns>
+    /// A merged view. Neither input is modified: a declaration records what a paper says, and that
+    /// cannot depend on which other declaration happened to be read alongside it.
+    /// </returns>
+    private static PaperOptimizerAttribute Merge(
+        PaperOptimizerAttribute child, PaperOptimizerAttribute parent)
+    {
+        var merged = new PaperOptimizerAttribute(
+            child.Optimizer == OptimizerKind.Unspecified ? parent.Optimizer : child.Optimizer)
+        {
+            Phase = child.Phase,
+            Variant = child.Variant,
+            Component = child.Component,
+            Provenance = child.Provenance,
+            Source = child.Source,
+
+            LearningRate = Pick(child.LearningRate, parent.LearningRate),
+            MinLearningRate = Pick(child.MinLearningRate, parent.MinLearningRate),
+            WeightDecay = Pick(child.WeightDecay, parent.WeightDecay),
+            Beta1 = Pick(child.Beta1, parent.Beta1),
+            Beta2 = Pick(child.Beta2, parent.Beta2),
+            Epsilon = Pick(child.Epsilon, parent.Epsilon),
+            Momentum = Pick(child.Momentum, parent.Momentum),
+            Rho = Pick(child.Rho, parent.Rho),
+            DecayRate = Pick(child.DecayRate, parent.DecayRate),
+            MaxGradientNorm = Pick(child.MaxGradientNorm, parent.MaxGradientNorm),
+            WarmupFraction = Pick(child.WarmupFraction, parent.WarmupFraction),
+            HoldFraction = Pick(child.HoldFraction, parent.HoldFraction),
+            EmaDecay = Pick(child.EmaDecay, parent.EmaDecay),
+            LayerwiseLearningRateDecay = Pick(
+                child.LayerwiseLearningRateDecay, parent.LayerwiseLearningRateDecay),
+
+            UseNesterov = child.UseNesterov || parent.UseNesterov,
+            WarmupSteps = child.WarmupSteps > 0 ? child.WarmupSteps : parent.WarmupSteps,
+            StepSize = child.StepSize > 0 ? child.StepSize : parent.StepSize,
+            ReferenceBatchSize = child.ReferenceBatchSize > 0
+                ? child.ReferenceBatchSize : parent.ReferenceBatchSize,
+            EarlyStoppingPatience = child.EarlyStoppingPatience > 0
+                ? child.EarlyStoppingPatience : parent.EarlyStoppingPatience,
+            GradientAccumulationSteps = child.GradientAccumulationSteps > 0
+                ? child.GradientAccumulationSteps : parent.GradientAccumulationSteps,
+
+            Schedule = child.Schedule != LearningRateSchedulerType.Constant
+                ? child.Schedule : parent.Schedule,
+            PostWarmupDecay = child.PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
+                ? child.PostWarmupDecay : parent.PostWarmupDecay,
+            ScheduleStepMode = child.ScheduleStepMode != SchedulerStepMode.StepPerBatch
+                ? child.ScheduleStepMode : parent.ScheduleStepMode,
+            CyclicPolicy = child.CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
+                ? child.CyclicPolicy : parent.CyclicPolicy,
+
+            Milestones = child.Milestones.Length > 0 ? child.Milestones : parent.Milestones,
+            MilestoneFractions = child.MilestoneFractions.Length > 0
+                ? child.MilestoneFractions : parent.MilestoneFractions,
+            SearchedValues = child.SearchedValues.Length > 0
+                ? child.SearchedValues : parent.SearchedValues,
+        };
+
+        return merged;
+    }
+
+    /// <summary>The child's value when it states one, otherwise the inherited value.</summary>
+    private static double Pick(double child, double parent)
+        => double.IsNaN(child) ? parent : child;
+
+    /// <summary>Applies the recipe elements that live outside the optimizer options.</summary>
+    /// <remarks>
+    /// <para>
+    /// A declaration can now state more than the optimizer can carry. Anything this library has no
+    /// machinery for is reported rather than dropped, because a recipe that is recorded and not
+    /// applied, with nothing saying so, is worse than one that was never recorded: it reads as
+    /// evidence the model trains the way its paper says.
+    /// </para>
+    /// <para>
+    /// These are reported once, at construction, rather than per step. The report is a statement
+    /// about how this model was configured, not a running log.
+    /// </para>
+    /// </remarks>
+    private static void ReportUnsupportedElements(PaperOptimizerAttribute recipe)
+    {
+        if (!double.IsNaN(recipe.EmaDecay))
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper keeps an exponential moving average of the weights at decay "
+                + $"{recipe.EmaDecay:G6} and evaluates the averaged weights; this library trains the "
+                + "raw weights, so the model produced here is not the one the paper reports");
+        }
+
+        if (!double.IsNaN(recipe.LayerwiseLearningRateDecay))
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper scales the learning rate per layer by {recipe.LayerwiseLearningRateDecay:G6}; "
+                + "a single rate is applied to every parameter here, which disturbs the pretrained "
+                + "features that schedule exists to preserve");
+        }
+
+        if (recipe.EarlyStoppingPatience > 0)
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper stops early after {recipe.EarlyStoppingPatience} epochs without "
+                + "improvement; training here runs to its configured length instead");
+        }
+
+        if (recipe.Provenance == RecipeProvenance.Searched && recipe.SearchedValues.Length > 0)
+        {
+            _pendingCautions.Value?.Add(
+                "the declared learning rate is one of "
+                + $"{string.Join(", ", recipe.SearchedValues.Select(v => v.ToString("G6")))} that the "
+                + "paper searched over, not a value it prescribes");
+        }
+
+        if (recipe.Provenance == RecipeProvenance.PerDataset)
+        {
+            _pendingCautions.Value?.Add(
+                "the paper sets this value per dataset; the declared one is an example rather than "
+                + "the value it prescribes");
+        }
+    }
+
+    /// <summary>The batch a rate was actually tuned for, accumulation included.</summary>
+    /// <remarks>
+    /// A paper reporting "batch size 32, accumulate 2" tuned its rate for an effective 64. Reading
+    /// the per-step figure instead scales by half the right factor while citing a rule that assumes
+    /// otherwise -- a wrong number wearing a real citation, which is the failure mode this feature
+    /// exists to prevent.
+    /// </remarks>
+    private static int EffectiveReferenceBatch(PaperOptimizerAttribute recipe)
+        => recipe.GradientAccumulationSteps > 1
+            ? recipe.ReferenceBatchSize * recipe.GradientAccumulationSteps
+            : recipe.ReferenceBatchSize;
 
     /// <summary>Reports a hand-built value that disagrees with the paper.</summary>
     /// <remarks>
@@ -491,54 +683,21 @@ internal static class PaperOptimizerFactory
         if (recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
         {
             int batch = GetInt(options, "BatchSize");
-            if (batch > 0 && batch != recipe.ReferenceBatchSize)
+            int reference = EffectiveReferenceBatch(recipe);
+            if (batch > 0 && batch != reference)
             {
-                if (ScalesLinearlyWithBatch(recipe.Optimizer))
-                {
-                    double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
-                    SetDouble(options, "InitialLearningRate", scaled);
-                    NoteAdaptation(
-                        "LearningRate",
-                        $"{recipe.LearningRate:G6} at batch {recipe.ReferenceBatchSize}",
-                        $"{scaled:G6} at batch {batch}",
-                        "linear scaling rule, Goyal et al. 2017");
-                }
-                else
-                {
-                    NoteCaution(
-                        $"the paper's rate {recipe.LearningRate:G6} was chosen for batch "
-                        + $"{recipe.ReferenceBatchSize} and this run uses batch {batch}; the linear "
-                        + $"scaling rule is established for SGD, not for {recipe.Optimizer}, so the "
-                        + "paper's rate is used unchanged");
-                }
+                (double factor, string rule) = BatchScaling(recipe.Optimizer, batch, reference);
+                double scaled = recipe.LearningRate * factor;
+                SetDouble(options, "InitialLearningRate", scaled);
+                NoteAdaptation(
+                    "LearningRate",
+                    $"{recipe.LearningRate:G6} at batch {reference}",
+                    $"{scaled:G6} at batch {batch}",
+                    rule);
             }
         }
 
     }
-
-    /// <summary>
-    /// Whether the linear scaling rule may be applied to this optimizer's learning rate.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Only for the SGD family, because that is the only family the rule was established on. Goyal
-    /// et al. 2017 state and evidence it for SGD with momentum on ImageNet; Krizhevsky 2014 Sec. 5
-    /// derives sqrt(k) from keeping the gradient variance constant and reports that k worked better
-    /// in his experiments -- also SGD with momentum. Neither result covers Adam-family optimizers,
-    /// whose per-parameter second-moment normalisation is precisely the thing the derivation
-    /// assumes away.
-    /// </para>
-    /// <para>
-    /// So for an adaptive optimizer the paper's rate is used exactly as published and the batch
-    /// mismatch is reported as a caution instead. Applying a scaling rule outside the regime it was
-    /// demonstrated in, and citing a paper that does not say it, would be exactly the fabrication
-    /// this whole feature is built to prevent -- and it would be invisible, because the report would
-    /// name a real citation for a rule that citation does not contain.
-    /// </para>
-    /// </remarks>
-    private static bool ScalesLinearlyWithBatch(OptimizerKind kind)
-        => kind is OptimizerKind.Sgd or OptimizerKind.SgdMomentum;
-
 
     /// <summary>
     /// The paper's warmup length, rescaled when the configured run is shorter than the warmup.
@@ -574,18 +733,18 @@ internal static class PaperOptimizerFactory
         return scaled;
     }
     /// <summary>
-    /// Puts the optimizer on a per-step schedule cadence, which is the one every published recipe
-    /// here is written in.
+    /// Writes the cadence a recipe's schedule is stepped at onto the optimizer options.
     /// </summary>
     /// <param name="options">The optimizer options a schedule was just attached to.</param>
+    /// <param name="cadence">The cadence the recipe declares.</param>
     /// <remarks>
     /// <para>
-    /// <c>SchedulerStepMode</c> defaults to <c>StepPerEpoch</c>, and
-    /// <c>GradientBasedOptimizerBase.OnBatchEnd</c> advances the schedule only under
-    /// <c>StepPerBatch</c> (or during warmup under <c>WarmupThenEpoch</c>). Tape training signals
-    /// batch ends and nothing on the <c>Train</c> path raises an epoch, so a schedule attached from
-    /// a recipe was installed and then never advanced: the optimizer kept whatever rate the
-    /// schedule reports at step 0, for the whole run.
+    /// Always written, never conditionally. <c>GradientBasedOptimizerOptions.SchedulerStepMode</c>
+    /// defaults to <c>StepPerEpoch</c>, and <c>GradientBasedOptimizerBase.OnBatchEnd</c> advances
+    /// the schedule only under <c>StepPerBatch</c> (or during warmup under <c>WarmupThenEpoch</c>).
+    /// Tape training signals batch ends and nothing on the <c>Train</c> path raises an epoch, so a
+    /// schedule attached from a recipe was installed and then never advanced: the optimizer kept
+    /// whatever rate the schedule reports at step 0, for the whole run.
     /// </para>
     /// <para>
     /// That is silent for a decaying schedule, which merely trains at its peak rate throughout, and
@@ -595,20 +754,21 @@ internal static class PaperOptimizerFactory
     /// steps. Noam and LinearWarmup have the same shape and the same exposure.
     /// </para>
     /// <para>
-    /// Every schedule these recipes can express is stated in steps -- StepSize, WarmupSteps, Noam's
-    /// t, milestone fractions of a step budget -- so per-batch is the cadence they were written for.
-    /// Set only when the factory itself attaches a schedule, so an optimizer configured by hand
-    /// keeps the library default.
+    /// Skipping the write when the recipe asks for <c>StepPerBatch</c> looks safe and is not: it
+    /// assumes the options already say <c>StepPerBatch</c>, and they say <c>StepPerEpoch</c>. That
+    /// assumption left every recipe that did not explicitly ask for an epoch cadence -- which is
+    /// almost all of them, since <c>StepPerBatch</c> is the attribute's own default -- with a
+    /// schedule that never ticked.
     /// </para>
     /// </remarks>
-    private static void StepPerBatch(object options)
+    private static void ApplyScheduleCadence(object options, SchedulerStepMode cadence)
     {
         PropertyInfo? mode = options.GetType().GetProperty(
             "SchedulerStepMode", BindingFlags.Public | BindingFlags.Instance);
 
         if (mode is not null && mode.CanWrite && mode.PropertyType == typeof(SchedulerStepMode))
         {
-            mode.SetValue(options, SchedulerStepMode.StepPerBatch);
+            mode.SetValue(options, cadence);
         }
     }
 
@@ -797,7 +957,10 @@ internal static class PaperOptimizerFactory
         if (scheduler is not null)
         {
             schedulerProperty.SetValue(options, scheduler);
-            StepPerBatch(options);
+
+            // A schedule stated in epochs must be stepped in epochs, so the recipe chooses; and the
+            // chosen cadence is always written, because the options do not already agree with it.
+            ApplyScheduleCadence(options, recipe.ScheduleStepMode);
         }
     }
 
@@ -876,6 +1039,16 @@ internal static class PaperOptimizerFactory
                            gamma: double.IsNaN(recipe.DecayRate) ? 0.1 : recipe.DecayRate,
                            minLearningRate: floor),
 
+                // Hold length comes from HoldFraction, the same field TriStage uses, because both
+                // schedules are warmup-hold-decay and only their decay shape differs.
+                LearningRateSchedulerType.NoamHoldAnnealing
+                    when warmupSteps > 0 && !double.IsNaN(recipe.LearningRate)
+                    => new NoamHoldAnnealingScheduler(
+                           recipe.LearningRate, warmupSteps,
+                           holdSteps: double.IsNaN(recipe.HoldFraction) || totalSteps <= 0
+                               ? 0 : (int)Math.Round(totalSteps * recipe.HoldFraction),
+                           decayRate: double.IsNaN(recipe.DecayRate) ? 0.5 : recipe.DecayRate),
+
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate, floor),
 
@@ -947,6 +1120,7 @@ internal static class PaperOptimizerFactory
             case LearningRateSchedulerType.LinearWarmup:
             case LearningRateSchedulerType.TriStage:
             case LearningRateSchedulerType.Noam:
+            case LearningRateSchedulerType.NoamHoldAnnealing:
             case LearningRateSchedulerType.Exponential:
             case LearningRateSchedulerType.Step:
             case LearningRateSchedulerType.MultiStep:
@@ -976,7 +1150,10 @@ internal static class PaperOptimizerFactory
         return null;
     }
     /// <summary>The declaration matching this model: variant-specific when one exists, else unkeyed.</summary>
-    internal static PaperOptimizerAttribute? Find(object? model, string component = "")
+    internal static PaperOptimizerAttribute? Find(
+        object? model,
+        string component = "",
+        TrainingPhase phase = TrainingPhase.PreTraining)
     {
         if (model is null) return null;
 
@@ -998,7 +1175,14 @@ internal static class PaperOptimizerFactory
 
         foreach (var declaration in declarations)
         {
-            if (declaration.Optimizer == OptimizerKind.Unspecified) continue;
+            // An unspecified optimizer normally means an empty declaration worth skipping, but a
+            // phase that INHERITS its optimizer states exactly that and is not empty at all. The
+            // guard predates inheritance and silently discarded every inheriting phase.
+            if (declaration.Optimizer == OptimizerKind.Unspecified
+                && declaration.InheritsFrom == TrainingPhase.Unspecified)
+            {
+                continue;
+            }
 
             bool componentExact = declaration.Component.Length > 0
                 && string.Equals(declaration.Component, component, StringComparison.OrdinalIgnoreCase);
@@ -1013,6 +1197,11 @@ internal static class PaperOptimizerFactory
 
             // Component is the stronger key: it selects which PART of the model is being built,
             // whereas variant only picks a size for that part.
+            // Phase outranks both: it selects WHICH recipe is being asked for, where variant
+            // and component only narrow one. A fine-tuning caller must not be handed the
+            // pre-training rate because the pre-training row also matched its component.
+            if (declaration.Phase != phase) continue;
+
             int rank = (componentExact ? 2 : 0) + (variantExact ? 1 : 0);
             if (rank > bestRank)
             {
@@ -1021,7 +1210,15 @@ internal static class PaperOptimizerFactory
             }
         }
 
-        return best;
+        if (best is null || best.InheritsFrom == TrainingPhase.Unspecified) return best;
+
+        // A phase that inherits is resolved against its parent, which is itself resolved
+        // first so a chain of stages works. Self-reference would recurse forever and means a
+        // mistaken declaration rather than a real inheritance.
+        if (best.InheritsFrom == best.Phase) return best;
+
+        var parent = Find(model, component, best.InheritsFrom);
+        return parent is null ? best : Merge(best, parent);
     }
 
     private static void SetDouble(object options, string propertyName, double value)

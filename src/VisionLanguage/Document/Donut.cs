@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -57,6 +59,8 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2022,
     Authors = "Kim et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Kim et al. 2022, Sec. 4: Adam with an initial pre-training learning rate of 1e-4, decreased as training progresses over 200K steps. No schedule is declared because the paper says only that the rate decreases, without naming a curve; fine-tuning selects a rate from 1e-5 to 1e-4, which is a range rather than a value. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DonutOptions _options;
@@ -113,15 +117,15 @@ public partial class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandi
         _useNativeMode = true;
         // Donut (Kim et al. 2022 §4) fine-tunes with a low learning rate (~1e-4); the
         // AdamW default of 1e-3 overshoots on the first step. Use the paper-faithful rate.
-        _optimizer =
-            optimizer
-            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 1e-4,
-                }
-            );
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+                optimizer
+                ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = 1e-4,
+                    }
+                ));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -51,6 +52,8 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 1e-4, Momentum = 0.9,
+                Source = "Graves 2012: a learning rate of 1e-4 and a momentum of 0.9 with steepest descent.")]
 public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -109,7 +112,9 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         _options = options ?? new RNNTransducerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();

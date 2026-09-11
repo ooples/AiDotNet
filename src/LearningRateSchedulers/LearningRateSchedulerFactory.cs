@@ -168,6 +168,8 @@ public static class LearningRateSchedulerFactory
             LearningRateSchedulerType.LinearWarmup => new LinearWarmupScheduler(baseLearningRate, Math.Max(1, totalSteps / 10), totalSteps),
             LearningRateSchedulerType.Cyclic => new CyclicLRScheduler(baseLearningRate / 10, baseLearningRate, Math.Max(1, totalSteps / 4)),
             LearningRateSchedulerType.ReduceOnPlateau => new ReduceOnPlateauScheduler(baseLearningRate),
+            LearningRateSchedulerType.NoamHoldAnnealing => new NoamHoldAnnealingScheduler(
+                baseLearningRate, Math.Max(1, totalSteps / 10), Math.Max(0, totalSteps / 4), 1.0),
             LearningRateSchedulerType.Noam => new NoamSchedule(
                 modelDimension: 512, warmupSteps: Math.Max(1, totalSteps / 10)),
             LearningRateSchedulerType.TriStage => TriStageScheduler.FromFractions(

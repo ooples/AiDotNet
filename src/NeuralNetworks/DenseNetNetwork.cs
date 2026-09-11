@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
@@ -63,6 +64,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, UseNesterov = true, Momentum = 0.9,
+                LearningRate = 0.1, WeightDecay = 1e-4, ReferenceBatchSize = 64,
+                Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
+                MilestoneFractions = [0.5, 0.75],
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Huang et al. 2017, Sec. 4: SGD with Nesterov momentum 0.9 without dampening and weight decay 1e-4, initial learning rate 0.1 divided by 10 at 50% and 75% of the total epochs, batch size 64 on CIFAR (256 on ImageNet). The decay points are kept as the fractions the paper states rather than transcribed for one epoch count. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly DenseNetOptions _options;
@@ -156,13 +163,14 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         // path benefits from the AMSGrad stability fix without going
         // through the tape-only path. Callers passing an explicit
         // optimizer are unaffected.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                UseAMSGrad = true
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-4,
+                    UseAMSGrad = true
+                }));
         _lossFunction = lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType);
 
         InitializeLayers();

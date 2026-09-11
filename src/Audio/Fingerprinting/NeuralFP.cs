@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -45,6 +46,10 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Audio Fingerprint for High-Specific Audio Retrieval Based on Contrastive Learning", "https://arxiv.org/abs/2010.11910", Year = 2021, Authors = "Sungkyun Chang, Donmoon Lee, Jeongsoo Park, Hyungui Lim, Kyogu Lee, Karam Ko, Yoonchang Han")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 640,
+                MinLearningRate = 1e-7,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Chang et al. 2021: an initial learning rate of 1e-4 * N/640 with cosine decay, no warmup or restarts, reaching 1e-7 in 100 epochs. The paper states its own linear scaling against a reference batch of 640, which is what the reference batch here records.")]
 internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields
@@ -109,7 +114,8 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     {
         _options = options ?? new NeuralFPOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.SampleRate = _options.SampleRate;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
