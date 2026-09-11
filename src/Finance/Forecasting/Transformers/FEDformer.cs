@@ -268,9 +268,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     public FEDformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sequenceLength = 96,
-        int predictionHorizon = 96,
-        int numFeatures = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FEDformerOptions<T>? options = null)
@@ -289,18 +286,22 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
-        _numEncoderLayers = 2;
-        _numDecoderLayers = 1;
-        _numHeads = 8;
-        _modelDimension = 512;
-        _feedForwardDimension = 2048;
-        _useInstanceNormalization = true;
-        _dropout = 0.05;
-        _numModes = 64;
-        _movingAverageKernel = 25;
+
+        // Every field below was previously a LITERAL here while the native constructor read the
+        // same value from a parameter, so the two constructors described different models even
+        // when handed the same options object. Both now read the options.
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _numEncoderLayers = options.NumEncoderLayers;
+        _numDecoderLayers = options.NumDecoderLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
+        _numModes = options.NumModes;
+        _movingAverageKernel = options.MovingAverageKernel;
 
         InferenceSession? session = null;
         try

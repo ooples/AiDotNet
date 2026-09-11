@@ -210,29 +210,46 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     public PatchTST(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sequenceLength = 96,
-        int predictionHorizon = 24,
-        int numFeatures = 7,
-        int patchSize = 16,
-        int stride = 8,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PatchTSTOptions<T>? options = null)
-        : base(architecture, onnxModelPath, sequenceLength, predictionHorizon, numFeatures)
+        : this(options ?? new PatchTSTOptions<T>(), architecture, onnxModelPath, optimizer, lossFunction)
     {
-        options ??= new PatchTSTOptions<T>();
+    }
+
+    /// <summary>
+    /// Initializes the ONNX-backed model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs SequenceLength, PredictionHorizon and NumFeatures and runs
+    /// before the body, so the options must be resolved first. Options come first in the parameter
+    /// list because a nullable and a non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private PatchTST(
+        PatchTSTOptions<T> options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, onnxModelPath, options.SequenceLength, options.PredictionHorizon, options.NumFeatures)
+    {
         _options = options;
         Options = _options;
 
-        _patchSize = patchSize;
-        _stride = stride;
-        _numLayers = 3;
-        _numHeads = 4;
-        _modelDimension = 128;
-        _feedForwardDimension = 256;
-        _channelIndependent = true;
-        _useInstanceNormalization = true;
-        _dropout = 0.05;
+        // Every field below was previously a LITERAL here while the native constructor read the
+        // same value from a parameter, so the two constructors described different models even
+        // when handed the same options object. Both now read the options.
+        _patchSize = options.PatchSize;
+        _stride = options.Stride;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _channelIndependent = options.ChannelIndependent;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
