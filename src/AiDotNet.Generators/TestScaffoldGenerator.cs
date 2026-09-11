@@ -10728,8 +10728,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 11), " +
-                    "imageSize: 32, hiddenDim: 64, numEncoderLayers: 2, " +
-                    "numDecoderLayers: 2, numHeads: 4, numQueries: 8)";
+                    "options: new AiDotNet.Document.Options.TableTransformerOptions { " +
+                    "ImageSize = 32, HiddenDim = 64, NumEncoderLayers = 2, " +
+                    "NumDecoderLayers = 2, NumHeads = 4, NumQueries = 8 })";
             }
             else if (model.ClassName == "DocBank" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
