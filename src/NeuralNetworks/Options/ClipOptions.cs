@@ -33,6 +33,11 @@ public class ClipOptions : VisionLanguageInputOptions
         ImageSize = 224;
     }
 
+    /// <summary>Copies the CLIP input dimensions and inherited model settings.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public ClipOptions(ClipOptions other) : base(other) { }
+
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

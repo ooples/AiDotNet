@@ -29,6 +29,7 @@
     <Compile Include="../../src/NeuralNetworks/Options/VisionLanguageInputOptions.cs" Link="Production/VisionLanguageInputOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/ClipOptions.cs" Link="Production/ClipOptions.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/ClipOptionsContractTests.cs" Link="ClipOptionsContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceAndDocumentOptionsBoundaryTests.cs" Link="SequenceAndDocumentOptionsBoundaryTests.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/SequenceModelOptions.cs" Link="Production/SequenceModelOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/VisionMambaOptions.cs" Link="Production/VisionMambaOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/VisionScanPattern.cs" Link="Production/VisionScanPattern.cs" />
@@ -37,6 +38,8 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceValidationSurfaceTests.cs" Link="SequenceValidationSurfaceTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/ModelHyperparameterSurfaceTests.cs" Link="ModelHyperparameterSurfaceTests.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/Gpt4VisionOptions.cs" Link="Production/Gpt4VisionOptions.cs" />
+    <Compile Include="../../src/NeuralNetworks/Options/FlamingoOptions.cs" Link="Production/FlamingoOptions.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/VisionLanguageNativeValidationContractTests.cs" Link="VisionLanguageNativeValidationContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/Gpt4VisionOptionsContractTests.cs" Link="Gpt4VisionOptionsContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SharedOptionsDocumentationContractTests.cs" Link="SharedOptionsDocumentationContractTests.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/GanOptions.cs;../../src/NeuralNetworks/Options/VideoCLIPOptions.cs;../../src/NeuralNetworks/Options/AudioVisualCorrespondenceOptions.cs;../../src/NeuralNetworks/Options/LLaVAOptions.cs;../../src/NeuralNetworks/Options/BlipOptions.cs;../../src/NeuralNetworks/Options/Blip2Options.cs;../../src/NeuralNetworks/Options/ImageBindOptions.cs" Link="Production/%(Filename)%(Extension)" />

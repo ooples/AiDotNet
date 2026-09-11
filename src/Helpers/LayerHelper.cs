@@ -33750,36 +33750,49 @@ public static partial class LayerHelper<T>
         int numEncoderLayers = 6,
         int numAttentionHeads = 8)
     {
-        // Per Arandjelovic & Zisserman 2017 (L3-Net): VGG-style encoder producing a 512-D
-        // embedding via [Conv-BN-ReLU] blocks with progressive channel expansion. In sequential/1D
-        // mode the convolutions become Dense blocks. The paper's BatchNorm conditions each block so
-        // the activations stay well-scaled; BatchNorm degenerates at batch_size == 1 (its per-batch
-        // statistics make the gradient exactly zero on a single sample, per Ioffe & Szegedy 2015),
-        // so we substitute LayerNormalization — batch-independent and identical at inference. Each
-        // block is therefore Dense -> LayerNorm -> Tanh.
-        //
-        // The normalization is NOT optional polish: without it a deep stack of saturating Tanh
-        // layers vanishes the gradient and the network plateaus after a handful of steps — it cannot
-        // even memorize a single example, its loss flatlines (the #1670/#1675 LossStrictlyDecreases
-        // symptom: loss identical at step 100 and step 600). Pre-activation LayerNorm keeps each Tanh
-        // in its responsive region so the gradient flows through the full depth.
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
-        IActivationFunction<T>? nullActivation = null;
+        // Keep the historical argument for source compatibility. This Dense encoder does not
+        // contain attention layers; an attention-head count cannot configure its topology.
+        var layout = CreateAudioVisualCorrespondenceLayout(embeddingDimension, numEncoderLayers);
+        foreach (var layer in layout.Encoder) yield return layer;
+        foreach (var layer in layout.Fusion) yield return layer;
+    }
 
-        // VGG-style encoder: 4 blocks with progressive channel expansion (64/128/256/512 in the
-        // paper; 128/256/512/512 here), each Dense -> LayerNorm -> Tanh.
-        foreach (int width in new[] { 128, 256, 512, 512 })
+    /// <summary>Builds the shared Dense encoder and its separate correspondence fusion path.</summary>
+    internal static (List<ILayer<T>> Encoder, List<ILayer<T>> Fusion) CreateAudioVisualCorrespondenceLayout(
+        int embeddingDimension,
+        int numEncoderLayers)
+    {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (numEncoderLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numEncoderLayers));
+
+        var encoder = new List<ILayer<T>>();
+        IActivationFunction<T>? linear = null;
+        for (int block = 0; block < numEncoderLayers; block++)
         {
-            yield return new DenseLayer<T>(width, nullActivation);
-            yield return new LayerNormalizationLayer<T>(width);
-            yield return new ActivationLayer<T>(tanhActivation);
+            // Reach the requested embedding width even for a one- or two-block encoder.
+            // LayerNorm before Tanh preserves the existing single-sample training behavior.
+            int width = block == numEncoderLayers - 1 ? embeddingDimension : block switch
+            {
+                0 => Math.Max(1, embeddingDimension / 4),
+                1 => Math.Max(1, embeddingDimension / 2),
+                _ => embeddingDimension
+            };
+            encoder.Add(new DenseLayer<T>(width, linear));
+            encoder.Add(new LayerNormalizationLayer<T>(width));
+            encoder.Add(new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>()));
         }
 
-        // Fusion FC per paper: 512 -> 128 (normed Tanh) -> 2 (linear correspondence logits).
-        yield return new DenseLayer<T>(128, nullActivation);
-        yield return new LayerNormalizationLayer<T>(128);
-        yield return new ActivationLayer<T>(tanhActivation);
-        yield return new DenseLayer<T>(2, nullActivation);
+        int fusionWidth = Math.Max(1, embeddingDimension / 4);
+        var fusion = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(fusionWidth, linear),
+            new LayerNormalizationLayer<T>(fusionWidth),
+            new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>()),
+            new DenseLayer<T>(2, linear)
+        };
+        return (encoder, fusion);
     }
 
     /// <summary>

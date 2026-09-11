@@ -20,7 +20,9 @@ namespace AiDotNet.Generators;
 /// <para>
 /// Reuses <see cref="ParameterMemberSemanticModel"/> rather than inventing a second opinion about
 /// what a member is. Its vocabulary already answers the question this generator asks:
-/// <c>Trainable</c> is in the parameter vector and must NOT be written twice; <c>Fitted</c>,
+/// <c>Trainable</c> belongs to the parameter registry and must NOT be written twice by a
+/// flat-vector checkpoint owner; neural layer checkpoints need a declaration for raw model storage.
+/// <c>Fitted</c>,
 /// <c>Frozen</c> and <c>Buffer</c> are learned state that the vector does not carry; <c>Scratch</c>
 /// is recomputable; <c>Alias</c> is a view of something else; <c>External</c> belongs to another
 /// runtime. Unclassified numeric state is already an error under AIDN088, which is what makes
@@ -91,8 +93,11 @@ public class ModelStateGenerator : IIncrementalGenerator
         if (hook.Parameters[0].Type is not INamedTypeSymbol { TypeArguments.Length: 1 } registry) return;
 
         var numeric = registry.TypeArguments[0].ToDisplayString();
-        bool persistsParametersSeparately = PersistsParametersSeparately(type);
         bool onNeuralNetworkTrunk = InheritsNeuralNetworkBase(type);
+        // NeuralNetworkBase persists layer graphs, not the model-owned raw tensor/vector/
+        // matrix fields exposed by its parameter registry. Those fields belong to this
+        // named state envelope; the layer-bearing exclusion below prevents double ownership.
+        bool persistsParametersSeparately = !onNeuralNetworkTrunk && PersistsParametersSeparately(type);
         bool emitSerializationSurface = NeedsGeneratedSerializationSurface(type);
 
         // The type that DECLARES the hook cannot also override it. It gets a Core method instead,
@@ -172,7 +177,7 @@ public class ModelStateGenerator : IIncrementalGenerator
                 && !IsObjectCollection(memberType)
                 && !IsLayerList(memberType)
                 && !IsRandom(memberType)
-                && !CanRestoreReadonlyNumericArray(memberType))
+                && !CanRestoreReadonlyNumericStorage(memberType, numeric, onNeuralNetworkTrunk))
             {
                 continue;
             }
@@ -208,9 +213,10 @@ public class ModelStateGenerator : IIncrementalGenerator
             //   External   not this model's to save
             // Conflicting is excluded too, because a member carrying contradictory annotations is a
             // question for AIDN089 to answer rather than something to guess at here.
-            // ModelBase and NeuralNetworkBase have a separate generated parameter registry, so
-            // trainable storage on those trunks must not be written twice. Their legacy sibling
-            // bases do not: their ordinary payload knows only the base fields. On those trunks the
+            // ModelBase persists its generated flat parameter registry, so trainable storage on
+            // that trunk must not be written twice. NeuralNetworkBase instead persists its layer
+            // graph; its raw model-owned fields are not part of that payload. Legacy sibling
+            // bases also know only their ordinary base fields. On those trunks the
             // declared-state envelope is the generated persistence mechanism for trainable storage
             // too. Treating every trunk as if it owned a parameter registry dropped the learned
             // coefficients from GAMLSS and ZeroInflatedRegression while their clones appeared to
@@ -527,12 +533,18 @@ public class ModelStateGenerator : IIncrementalGenerator
            && named.Name is "List" or "Dictionary";
 
     /// <summary>
-    /// Numeric arrays own mutable contents even when their field reference is readonly. The state
+    /// Numeric storage owns mutable contents even when its field reference is readonly. The state
     /// registry has explicit in-place readers for these shapes, so readonly is not a reason to drop
     /// them from generated persistence.
     /// </summary>
-    private static bool CanRestoreReadonlyNumericArray(ITypeSymbol type)
-        => IsDoubleArray(type) || IsJaggedDoubleArray(type);
+    private static bool CanRestoreReadonlyNumericStorage(ITypeSymbol type, string numeric, bool onNeuralNetworkTrunk)
+        => IsDoubleArray(type) || IsJaggedDoubleArray(type)
+           // Neural checkpoints serialize layer graphs separately, so their raw numeric fields
+           // need this envelope. Other trunks retain their existing ownership contract here.
+           || (onNeuralNetworkTrunk && type is INamedTypeSymbol { TypeArguments.Length: 1 } named
+               && named.Name is "Tensor" or "Vector" or "Matrix"
+               && named.ContainingNamespace.ToDisplayString() == "AiDotNet.Tensors.LinearAlgebra"
+               && named.TypeArguments[0].ToDisplayString() == numeric);
 
     /// <summary>
     /// A flat Vector&lt;T&gt; checkpoint cannot preserve a double-backed working value when T is float.
@@ -680,6 +692,8 @@ public class ModelStateGenerator : IIncrementalGenerator
         {
             var inPlaceNumericCollection = key switch
             {
+                "Tensor<T>" or "Vector<T>" or "Matrix<T>" =>
+                    $"state.DeclareInPlace(\"{id}\", {getter});",
                 "List<Vector<T>>" or "List<Matrix<T>>" or "List<Tensor<T>>"
                     or "Dictionary<string, Vector<T>>" or "Dictionary<int, Vector<T>>" =>
                     $"state.DeclareInPlace(\"{id}\", {getter});",

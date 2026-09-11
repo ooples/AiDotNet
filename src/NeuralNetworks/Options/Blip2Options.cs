@@ -40,6 +40,19 @@ public class Blip2Options : VisionLanguageModelOptions
         LanguageModelBackbone = LanguageModelBackbone.OPT;
     }
 
+    /// <summary>Copies every BLIP-2 setting and its inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public Blip2Options(Blip2Options other) : base(other)
+    {
+        QformerHiddenDim = other.QformerHiddenDim;
+        LmHiddenDim = other.LmHiddenDim;
+        NumQformerLayers = other.NumQformerLayers;
+        NumQueryTokens = other.NumQueryTokens;
+        NumLmDecoderLayers = other.NumLmDecoderLayers;
+        LanguageModelBackbone = other.LanguageModelBackbone;
+    }
+
 
     /// <summary>
     /// Gets or sets the feature width of the native query transformer that extracts image information.
@@ -105,10 +118,22 @@ public class Blip2Options : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.ExactPatchTiling);
+        Require(QformerHiddenDim, nameof(QformerHiddenDim));
+        Require(VisionDim, nameof(VisionDim));
+        Require(LmHiddenDim, nameof(LmHiddenDim));
+        Require(NumQformerLayers, nameof(NumQformerLayers));
+        Require(NumQueryTokens, nameof(NumQueryTokens));
+        Require(NumHeads, nameof(NumHeads));
+        Require(NumLmDecoderLayers, nameof(NumLmDecoderLayers));
+        Require(VocabSize, nameof(VocabSize));
     }
 
     /// <summary>
     /// Gets or sets the language model backbone.
     /// </summary>
+    /// <value>Defaults to <see cref="LanguageModelBackbone.OPT"/>, preserving the model's previous constructor default.</value>
+    /// <remarks><para><b>For Beginners:</b> This selects the language-model family used
+    /// for tokenizer and generation conventions. It does not convert or replace the supplied
+    /// ONNX language graph; the graph and tokenizer must belong to a compatible family.</para></remarks>
     public LanguageModelBackbone LanguageModelBackbone { get; set; }
 }

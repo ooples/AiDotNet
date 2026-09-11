@@ -68,5 +68,11 @@ public class BlipOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VocabSize, nameof(VocabSize));
+        Require(HiddenDim, nameof(HiddenDim));
+        Require(NumEncoderLayers, nameof(NumEncoderLayers));
+        Require(NumDecoderLayers, nameof(NumDecoderLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(MlpDim, nameof(MlpDim));
     }
 }

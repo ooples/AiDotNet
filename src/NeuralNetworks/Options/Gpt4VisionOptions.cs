@@ -65,5 +65,12 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
         Require(VisionDim, nameof(VisionDim));
+        Require(ContextWindowSize, nameof(ContextWindowSize));
+        Require(MaxImagesPerRequest, nameof(MaxImagesPerRequest));
+        Require(HiddenDim, nameof(HiddenDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumLmLayers, nameof(NumLmLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(VocabSize, nameof(VocabSize));
     }
 }
