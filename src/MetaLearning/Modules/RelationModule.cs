@@ -6,6 +6,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 using AiDotNet.Models.Parameters;
@@ -18,9 +21,15 @@ namespace AiDotNet.MetaLearning.Modules;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// The relation module is the core component that makes Relation Networks unique.
-/// It takes concatenated features from two examples and outputs a scalar relation score
-/// indicating how similar/related they are.
+/// The relation module <c>g</c> of Sung et al. 2018 maps a pair of embeddings to a relation score in (0, 1). The
+/// paper's module concatenates the pair and ends with a ReLU layer and a sigmoid unit (Figure 2); see
+/// <see cref="RelationModuleType"/> for the other architectures. The input is the concatenation of two equally wide
+/// embeddings, the sample's first, as one vector or one row per pair.
+/// </para>
+/// <para>
+/// The weights are sized on the first forward pass, when the embedding width is known, and initialised as PyTorch
+/// initialises <c>nn.Linear</c>. This used to be a single dot product with at most
+/// <see cref="HiddenDimension"/> inputs and a sigmoid - no hidden layer, and the rest of the input ignored.
 /// </para>
 /// <para><b>For Beginners:</b> Instead of using a fixed formula to measure similarity
 /// (like Euclidean distance), the relation module is a small neural network that LEARNS
@@ -44,27 +53,30 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
 
     /// <inheritdoc />
-    /// <remarks>The relation network weights. Restore writes into the existing vector rather than replacing it, matching the hand-written surface.</remarks>
+    /// <remarks>The relation module's weights; a restore of a different length resizes them to it.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(new VectorFieldParameterSource<T>(
             () => _weights,
             value =>
             {
+                if (value.Length != _weights.Length) _weights = new Vector<T>(value.Length);
                 for (int i = 0; i < _weights.Length; i++) _weights[i] = value[i];
             }));
     }
     // NumOps inherited from ModelBase
 
-    private readonly int _hiddenDimension;
+    private int _hiddenDimension;
+    private RelationModuleType _relationType;
+    private int _inputWidth;
     [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T> _weights;
+    private Vector<T> _weights = new Vector<T>(0);
     private bool _isTraining;
 
     /// <summary>
-    /// Initializes a new instance of RelationModule.
+    /// Initializes a new instance of RelationModule with the paper's concatenation architecture.
     /// </summary>
-    /// <param name="hiddenDimension">The hidden layer dimension.</param>
+    /// <param name="hiddenDimension">Width of the pair representation before the sigmoid unit.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> The hidden dimension controls how complex the
     /// relation function can be. Larger values allow more complex comparisons
@@ -72,53 +84,101 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     public RelationModule(int hiddenDimension)
+        : this(hiddenDimension, RelationModuleType.Concatenate)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of RelationModule with the given architecture.
+    /// </summary>
+    /// <param name="hiddenDimension">Width of the pair representation before the sigmoid unit.</param>
+    /// <param name="relationType">How the module combines the pair.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The hidden dimension is not positive.</exception>
+    public RelationModule(int hiddenDimension, RelationModuleType relationType)
+    {
+        if (hiddenDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "The hidden dimension must be positive.");
+        }
+
         _hiddenDimension = hiddenDimension;
-        _weights = new Vector<T>(hiddenDimension);
+        _relationType = relationType;
         _isTraining = false;
+    }
+
+    /// <summary>Gets the width of the pair representation before the sigmoid unit.</summary>
+    public int HiddenDimension => _hiddenDimension;
+
+    /// <summary>Gets how the module combines the pair.</summary>
+    public RelationModuleType RelationType => _relationType;
+
+    /// <summary>Gets the width of each embedding in a pair; zero until the first forward pass.</summary>
+    public int InputWidth => _inputWidth;
+
+    /// <summary>The live weight vector (no copy).</summary>
+    internal Vector<T> Weights => _weights;
+
+    /// <summary>
+    /// Sizes and initialises the weights for embeddings of <paramref name="width"/>, once.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The module was already sized for another width.</exception>
+    internal void EnsureInitialized(int width, Random random)
+    {
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "Embeddings must be at least one wide.");
+        if (_weights.Length > 0)
+        {
+            if (width != _inputWidth)
+            {
+                throw new InvalidOperationException(
+                    $"This relation module compares {_inputWidth}-wide embeddings, not {width}-wide ones.");
+            }
+
+            return;
+        }
+
+        _inputWidth = width;
+        _weights = new Vector<T>(RelationFunction<T>.ParameterCount(_relationType, width, _hiddenDimension));
+        RelationFunction<T>.Initialize(_relationType, _weights, 0, width, _hiddenDimension, random);
     }
 
     /// <summary>
     /// Performs forward pass through the relation module.
     /// </summary>
-    /// <param name="combinedFeatures">Combined feature tensor of two examples.</param>
-    /// <returns>Relation score tensor (scalar value between 0 and 1).</returns>
-    /// <remarks>
-    /// <para>
-    /// The forward pass computes a relation score by:
-    /// 1. Computing a weighted sum of the combined features
-    /// 2. Applying a sigmoid activation to produce a score in [0, 1]
-    /// </para>
-    /// <para><b>For Beginners:</b> This takes the concatenated features of two examples
-    /// and produces a number indicating how related they are. A value close to 1 means
-    /// very related (likely same class), while close to 0 means unrelated.
-    /// </para>
-    /// </remarks>
+    /// <param name="combinedFeatures">
+    /// The pair's concatenated embeddings, sample first: <c>[2 * width]</c> for one pair or <c>[pairs, 2 * width]</c>.
+    /// </param>
+    /// <returns>Relation scores in (0, 1): <c>[1]</c> for one pair, <c>[pairs]</c> for rows.</returns>
+    /// <exception cref="ArgumentException">The input is not one or more concatenated pairs.</exception>
     public Tensor<T> Forward(Tensor<T> combinedFeatures)
     {
-        // Simplified: compute dot product of features with weights
-        int inputSize = 1;
-        for (int i = 0; i < combinedFeatures.Shape.Length; i++)
+        if (combinedFeatures is null) throw new ArgumentNullException(nameof(combinedFeatures));
+        int rank = combinedFeatures.Shape.Length;
+        if (rank != 1 && rank != 2)
         {
-            inputSize *= combinedFeatures.Shape[i];
+            throw new ArgumentException(
+                $"A relation module reads one concatenated pair or one pair per row, not a rank-{rank} tensor.",
+                nameof(combinedFeatures));
         }
 
-        T score = NumOps.Zero;
-        int weightSize = Math.Min(inputSize, _weights.Length);
-
-        for (int i = 0; i < weightSize; i++)
+        int pairWidth = combinedFeatures.Shape[rank - 1];
+        if (pairWidth == 0 || pairWidth % 2 != 0)
         {
-            score = NumOps.Add(score, NumOps.Multiply(combinedFeatures.GetFlat(i), _weights[i]));
+            throw new ArgumentException(
+                $"A relation module reads the concatenation of two equally wide embeddings, but a pair here is "
+                + $"{pairWidth} wide.", nameof(combinedFeatures));
         }
 
-        // Apply sigmoid activation
-        double scoreValue = NumOps.ToDouble(score);
-        double sigmoidScore = 1.0 / (1.0 + Math.Exp(-scoreValue));
+        int width = pairWidth / 2;
+        EnsureInitialized(width, RandomHelper.CreateSecureRandom());
+        var rows = rank == 1 ? combinedFeatures.Reshape(1, pairWidth) : combinedFeatures;
+        int pairs = rows.Shape[0];
 
-        var output = new Tensor<T>(new int[] { 1 });
-        output[0] = NumOps.FromDouble(sigmoidScore);
-
-        return output;
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var sample = engine.TensorMatMul(rows, Half(pairWidth, width, 0));
+        var query = engine.TensorMatMul(rows, Half(pairWidth, width, width));
+        var scores = new RelationFunction<T>(_relationType, _weights, 0, width, _hiddenDimension).Scores(sample, query, null);
+        return rank == 1 ? scores.Reshape(1) : scores.Reshape(pairs);
     }
 
     /// <summary>
@@ -133,15 +193,29 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <summary>
     /// Creates a deep copy of the relation module.
     /// </summary>
-    /// <returns>A new RelationModule with copied weights.</returns>
+    /// <returns>A new RelationModule with the same architecture and copied weights.</returns>
     public new RelationModule<T> Clone()
     {
-        var cloned = new RelationModule<T>(_hiddenDimension);
+        var cloned = new RelationModule<T>(_hiddenDimension, _relationType)
+        {
+            _inputWidth = _inputWidth,
+            _weights = new Vector<T>(_weights.Length),
+            _isTraining = _isTraining,
+        };
         for (int i = 0; i < _weights.Length; i++)
         {
             cloned._weights[i] = _weights[i];
         }
+
         return cloned;
+    }
+
+    /// <summary><c>[pairWidth, width]</c>: picks the <paramref name="width"/> columns from <paramref name="start"/>.</summary>
+    private Tensor<T> Half(int pairWidth, int width, int start)
+    {
+        var select = new Tensor<T>(new[] { pairWidth, width });
+        for (int i = 0; i < width; i++) select[(start + i) * width + i] = NumOps.One;
+        return select;
     }
 
     #region ModelBase Overrides
@@ -150,7 +224,14 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override Tensor<T> Predict(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <remarks>
+    /// A relation module is trained as part of a Relation Network, whose loss reaches it through the relation scores
+    /// of a whole episode. This used to do nothing silently.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        => throw new NotSupportedException(
+            "A relation module is trained by RelationNetworkAlgorithm, through the relation scores of each episode.");
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
