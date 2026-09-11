@@ -161,7 +161,31 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
             }
         }
 
+        // Derived environments reset their own per-episode state here, after the base bookkeeping is
+        // fresh and BEFORE the first observation of the new episode is built from it.
+        OnReset();
+
         return BuildObservation(_currentStep);
+    }
+
+    /// <summary>
+    /// Resets per-episode state owned by a derived environment. Called by <see cref="Reset"/> after the base
+    /// positions, cash, portfolio value and start index have been reset, and before the first observation of
+    /// the new episode is built.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this when a subclass keeps its own episode state (reward statistics, drawdown peaks,
+    /// turnover, inventory, ...) so that every episode starts from the same baseline without callers having
+    /// to remember a separate reset call. The base implementation does nothing. The base
+    /// <see cref="Random"/> stream has already been used for the random start (if any), so drawing from it
+    /// here stays reproducible under a fixed seed.
+    /// </para>
+    /// <para><b>For Beginners:</b> <see cref="Reset"/> clears the shared portfolio bookkeeping; this hook is
+    /// where a specialized environment clears anything extra it remembers between steps.</para>
+    /// </remarks>
+    protected virtual void OnReset()
+    {
     }
 
     /// <inheritdoc/>
