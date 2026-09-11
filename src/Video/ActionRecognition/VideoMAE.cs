@@ -265,26 +265,11 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// ignored it and always used <c>numFrames</c> (default 16), so an architecture declaring 8-frame
     /// clips produced a model reporting and masking for 16. An explicit <c>numFrames</c> that disagrees
     /// with the declared count is rejected rather than silently overridden. The parameter's default
-    /// value cannot be told apart from an explicit 16, so it defers to the architecture.
+    /// value cannot be told apart from an explicit 16, so it defers to the architecture. The rule lives
+    /// in <see cref="VideoClipFrameCount"/>, shared with TimeSformer.
     /// </remarks>
     private static int ResolveNumFrames(NeuralNetworkArchitecture<T> architecture, int numFrames)
-    {
-        int declared = architecture.InputFrames;
-        if (declared <= 0)
-        {
-            return numFrames;
-        }
-
-        if (numFrames != declared && numFrames != DefaultNumFrames)
-        {
-            throw new ArgumentException(
-                $"numFrames ({numFrames}) conflicts with the architecture's declared InputFrames ({declared}). " +
-                "Pass the same value, or omit numFrames to use the architecture's frame count.",
-                nameof(numFrames));
-        }
-
-        return declared;
-    }
+        => VideoClipFrameCount.Resolve(architecture, numFrames, DefaultNumFrames);
 
     #endregion
 
