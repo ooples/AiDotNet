@@ -12,6 +12,7 @@ using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Validation;
 using AiDotNet.LossFunctions;
 
+// ci-proof canary (delta-reuse harness): a comment-only change to a runtime file. Never merged to master.
 namespace AiDotNet.Finance.Trading.Agents;
 
 /// <summary>
