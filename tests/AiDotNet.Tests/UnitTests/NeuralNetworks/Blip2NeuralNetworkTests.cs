@@ -278,7 +278,7 @@ public class Blip2NeuralNetworkTests
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { LanguageModelBackbone = LanguageModelBackbone.FlanT5, ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumQueryTokens = 32, NumHeads = 2, NumLmDecoderLayers = 1 });
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { LanguageModelBackbone = LanguageModelBackbone.FlanT5, ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumQueryTokens = 32, NumHeads = 2, NumLmDecoderLayers = 1 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -294,7 +294,7 @@ public class Blip2NeuralNetworkTests
     {
         // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 48, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 2, NumHeads = 2, NumLmDecoderLayers = 1 });
+        var network = new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 48, VisionDim = 32, LmHiddenDim = 32, NumQformerLayers = 2, NumHeads = 2, NumLmDecoderLayers = 1 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -337,7 +337,7 @@ public class Blip2NeuralNetworkTests
     private static Blip2NeuralNetwork<float> CreateSmallBlip2Network(
         NeuralNetworkArchitecture<float> architecture)
     {
-        return new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionHiddenDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumHeads = 2, NumLmDecoderLayers = 1 });
+        return new Blip2NeuralNetwork<float>(architecture, options: new Blip2Options { ImageSize = 28, PatchSize = 14, VocabSize = 64, EmbeddingDimension = 16, QformerHiddenDim = 32, VisionDim = 32, LmHiddenDim = 32, NumQformerLayers = 1, NumHeads = 2, NumLmDecoderLayers = 1 });
     }
 
     #endregion

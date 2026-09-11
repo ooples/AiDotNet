@@ -479,7 +479,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
         _qformerHiddenDim = _options.QformerHiddenDim;
-        _visionHiddenDim = _options.VisionHiddenDim;
+        _visionHiddenDim = _options.VisionDim;
         _lmHiddenDim = _options.LmHiddenDim;
         _numQformerLayers = _options.NumQformerLayers;
         _numHeads = _options.NumHeads;

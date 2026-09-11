@@ -3,7 +3,7 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Configuration options for the VisionMambaLanguageModel.
+/// Configuration options for the image-classifying VisionMambaModel.
 /// </summary>
 public class VisionMambaOptions : SequenceModelOptions
 {

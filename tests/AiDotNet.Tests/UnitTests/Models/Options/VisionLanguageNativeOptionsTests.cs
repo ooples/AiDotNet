@@ -35,6 +35,13 @@ public class VisionLanguageNativeOptionsTests
         StateDimension
     }
 
+    public enum AudioVisualDimension
+    {
+        EmbeddingDimension,
+        AudioEmbeddingFullyConnectedWidth,
+        AudioEmbeddingSize
+    }
+
     public static IEnumerable<object[]> Families()
     {
         foreach (ModelFamily family in Enum.GetValues(typeof(ModelFamily)))
@@ -225,6 +232,110 @@ public class VisionLanguageNativeOptionsTests
     public void AudioVisualEventLocalization_PreservesZeroEncoderLayerSupport()
     {
         new AudioVisualEventLocalizationOptions { NumEncoderLayers = 0 }.Validate();
+    }
+
+    [Theory]
+    [InlineData(AudioVisualDimension.EmbeddingDimension, 0)]
+    [InlineData(AudioVisualDimension.EmbeddingDimension, -1)]
+    [InlineData(AudioVisualDimension.AudioEmbeddingFullyConnectedWidth, 0)]
+    [InlineData(AudioVisualDimension.AudioEmbeddingFullyConnectedWidth, -1)]
+    [InlineData(AudioVisualDimension.AudioEmbeddingSize, 0)]
+    [InlineData(AudioVisualDimension.AudioEmbeddingSize, -1)]
+    public void AudioVisualEventLocalization_ValidatesConsumedWidths(AudioVisualDimension dimension, int value)
+    {
+        var options = new AudioVisualEventLocalizationOptions();
+        options.Validate();
+        string property;
+        switch (dimension)
+        {
+            case AudioVisualDimension.EmbeddingDimension:
+                options.EmbeddingDimension = value;
+                property = nameof(options.EmbeddingDimension);
+                break;
+            case AudioVisualDimension.AudioEmbeddingFullyConnectedWidth:
+                options.AudioEmbeddingFullyConnectedWidth = value;
+                property = nameof(options.AudioEmbeddingFullyConnectedWidth);
+                break;
+            case AudioVisualDimension.AudioEmbeddingSize:
+                options.AudioEmbeddingSize = value;
+                property = nameof(options.AudioEmbeddingSize);
+                break;
+            default: throw new ArgumentOutOfRangeException(nameof(dimension));
+        }
+        AssertInvalid(options.Validate, typeof(AudioVisualEventLocalizationOptions), property);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void AudioVisualEventLocalization_RejectsInvalidTimingAndLearningRate(double value)
+    {
+        var options = new AudioVisualEventLocalizationOptions();
+        options.Validate();
+        options.TemporalResolution = value;
+        AssertInvalid(options.Validate, typeof(AudioVisualEventLocalizationOptions), nameof(options.TemporalResolution));
+        options.TemporalResolution = 0.1;
+        options.LearningRate = value;
+        AssertInvalid(options.Validate, typeof(AudioVisualEventLocalizationOptions), nameof(options.LearningRate));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(9)]
+    public void AudioVisualEventLocalization_RejectsWidthsIncompatibleWithItsFixedHeads(int width)
+    {
+        var options = new AudioVisualEventLocalizationOptions { EmbeddingDimension = width, NumEncoderLayers = 0 };
+        AssertInvalid(options.Validate, typeof(AudioVisualEventLocalizationOptions), nameof(options.EmbeddingDimension));
+    }
+
+    [Fact]
+    public void AudioVisualEventLocalization_RejectsNegativeDepthButAcceptsTheMinimumWidth()
+    {
+        var options = new AudioVisualEventLocalizationOptions { EmbeddingDimension = 8, NumEncoderLayers = 0 };
+        options.Validate();
+        options.NumEncoderLayers = -1;
+        AssertInvalid(options.Validate, typeof(AudioVisualEventLocalizationOptions), nameof(options.NumEncoderLayers));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Correspondence_RejectsInvalidConsumedSampleRate(int sampleRate)
+    {
+        var options = new AudioVisualCorrespondenceOptions();
+        options.Validate();
+        options.AudioSampleRate = sampleRate;
+        AssertInvalid(options.Validate, typeof(AudioVisualCorrespondenceOptions), nameof(options.AudioSampleRate));
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Correspondence_RejectsInvalidConsumedFrameRate(double frameRate)
+    {
+        var options = new AudioVisualCorrespondenceOptions();
+        options.Validate();
+        options.VideoFrameRate = frameRate;
+        AssertInvalid(options.Validate, typeof(AudioVisualCorrespondenceOptions), nameof(options.VideoFrameRate));
+    }
+
+    [Fact]
+    public void Unified_PreservesZeroDepthAndRequiresItsActualTextContext()
+    {
+        var options = new UnifiedMultimodalNetworkOptions { NumTransformerLayers = 0 };
+        options.Validate();
+        options.NumTransformerLayers = -1;
+        AssertInvalid(options.Validate, typeof(UnifiedMultimodalNetworkOptions), nameof(options.NumTransformerLayers));
+        options.NumTransformerLayers = 0;
+        options.MaxSequenceLength = 0;
+        AssertInvalid(options.Validate, typeof(UnifiedMultimodalNetworkOptions), nameof(options.MaxSequenceLength));
     }
 
     private static void AssertInvalid(Action validate, Type optionsType, string property)

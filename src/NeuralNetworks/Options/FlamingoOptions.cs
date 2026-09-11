@@ -31,9 +31,9 @@ public class FlamingoOptions : VisionLanguageModelOptions
         NumPerceiverTokens = 64;
         MaxImagesInContext = 5;
         Channels = 3;
-        VisionHiddenDim = 1024;
+        VisionDim = 1024;
         LmHiddenDim = 2048;
-        NumVisionLayers = 24;
+        VisionLayers = 24;
         NumLmLayers = 32;
         NumHeads = 16;
         VocabSize = 32000;
@@ -59,8 +59,14 @@ public class FlamingoOptions : VisionLanguageModelOptions
     public int LmHiddenDim { get; set; }
 
     /// <summary>
-    /// Gets or sets the num lm layers.
+    /// Gets or sets the number of language-model transformer layers.
     /// </summary>
+    /// <value>At least 4; defaults to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The native architecture inserts an image cross-attention
+    /// gate once per four language layers. A shorter stack has no gate and cannot condition
+    /// its generated text on the image, so validation rejects it.</para>
+    /// </remarks>
     public int NumLmLayers { get; set; }
 
     /// <summary>

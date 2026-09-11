@@ -15,6 +15,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class VisionMambaModelTests
 {
+    public VisionMambaModelTests() => TestModuleInitializer.EnsureInitialized();
+
     private static NeuralNetworkArchitecture<float> CreateArch(
         int height = 32, int width = 32, int channels = 3, int numClasses = 10)
     {
@@ -71,8 +73,13 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenNumClassesNotPositive()
     {
-        Assert.Throws<ArgumentException>(() =>
-            new VisionMambaModel<float>(CreateArch(16, 16, numClasses: 1), options: new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4, NumClasses = 0 }));
+        var options = new VisionMambaOptions { ImageHeight = 16, ImageWidth = 16, PatchSize = 4 };
+        options.Validate();
+        options.NumClasses = 0;
+        var error = Assert.Throws<ArgumentException>(() =>
+            new VisionMambaModel<float>(CreateArch(16, 16, numClasses: 1), options));
+        Assert.Equal("options", error.ParamName);
+        Assert.Contains(nameof(VisionMambaOptions) + "." + nameof(VisionMambaOptions.NumClasses), error.Message);
     }
 
     [Theory]

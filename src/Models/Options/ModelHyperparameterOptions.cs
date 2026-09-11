@@ -26,10 +26,25 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
 {
+    /// <summary>Initializes the shared hyperparameters with their defaults.</summary>
+    protected ModelHyperparameterOptions()
+    {
+    }
+
+    /// <summary>Copies the shared hyperparameters and inherited model settings.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    protected ModelHyperparameterOptions(ModelHyperparameterOptions other) : base(other)
+    {
+        MaxGradNorm = other.MaxGradNorm;
+    }
+
     /// <summary>
     /// Gets or sets the maximum global gradient norm, above which gradients are rescaled
     /// during training. Zero or negative disables clipping.
     /// </summary>
+    /// <value>Defaults to 1.0, a library safeguard rather than a model-specific paper value.
+    /// Zero or a negative value disables clipping.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> During training the model adjusts itself based on how wrong
     /// it was. Occasionally that correction is enormous and destabilises everything learned so
@@ -94,6 +109,36 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
                 $"{GetType().Name}.{propertyName} is {value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, "
                     + "but it must be a finite number greater than zero. Set it explicitly, or ensure "
                     + $"{GetType().Name}'s parameterless constructor assigns its model's published default.",
+                OptionsParameterName);
+        }
+    }
+
+    /// <summary>Requires a finite, non-negative setting, allowing zero to disable a penalty.</summary>
+    /// <param name="value">The value to check.</param>
+    /// <param name="propertyName">The name of the property being checked.</param>
+    /// <exception cref="ArgumentException">Thrown when the value is non-finite or negative.</exception>
+    protected void RequireNonNegative(double value, string propertyName)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{propertyName} must be a finite number greater than or equal to zero.",
+                OptionsParameterName);
+        }
+    }
+
+    /// <summary>Requires a finite decay coefficient in the half-open interval [0, 1).</summary>
+    /// <param name="value">The value to check.</param>
+    /// <param name="propertyName">The name of the property being checked.</param>
+    /// <exception cref="ArgumentException">Thrown when the value is non-finite or outside [0, 1).</exception>
+    /// <remarks>Adam bias correction divides by one minus a power of this coefficient;
+    /// a coefficient of exactly one is therefore invalid, while zero is supported.</remarks>
+    protected void RequireDecayCoefficient(double value, string propertyName)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0 || value >= 1.0)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{propertyName} must be a finite number greater than or equal to zero and less than one.",
                 OptionsParameterName);
         }
     }

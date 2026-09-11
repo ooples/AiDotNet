@@ -93,23 +93,9 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     /// Creates an RWKV-4 language model using native library layers.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="vocabSize">
-    /// Size of the token vocabulary. Typical: 50277 for RWKV-4 models (using the 20B tokenizer).
-    /// <para><b>For Beginners:</b> How many different words/tokens the model knows.</para>
-    /// </param>
-    /// <param name="modelDimension">
-    /// Model dimension (d_model). Default: 256.
-    /// <para><b>For Beginners:</b> Width of the hidden representation. RWKV-4 169M uses 768,
-    /// 1.5B uses 2048, 7B uses 4096, 14B uses 5120.</para>
-    /// </param>
-    /// <param name="numLayers">
-    /// Number of RWKV layers. Default: 4.
-    /// <para><b>For Beginners:</b> Depth of the network. RWKV-4 169M uses 12 layers,
-    /// 1.5B uses 24, 7B uses 32, 14B uses 40.</para>
-    /// </param>
-    /// <param name="maxSeqLength">Maximum sequence length. Default: 512.</param>
     /// <param name="lossFunction">Optional loss function for training. Defaults to cross-entropy for text generation.</param>
-    /// <param name="options">Optional RWKV-4 specific options.</param>
+    /// <param name="options">The model's vocabulary, hidden width, block count, context length,
+    /// and RWKV-4 settings. Null uses <see cref="RWKV4Options"/> defaults.</param>
     public RWKV4LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         RWKV4Options? options = null,

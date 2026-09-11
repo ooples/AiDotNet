@@ -5108,8 +5108,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
                     "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
                     "MaxSequenceLength = 16, ImageSize = 32, PatchSize = 8, Channels = 3, NumPerceiverTokens = 4, " +
-                    "MaxImagesInContext = 1, VisionHiddenDim = 64, LmHiddenDim = 64, " +
-                    "NumVisionLayers = 1, NumLmLayers = 4, NumHeads = 2, VocabSize = 64, " +
+                    "MaxImagesInContext = 1, VisionDim = 64, LmHiddenDim = 64, " +
+                    "VisionLayers = 1, NumLmLayers = 4, NumHeads = 2, VocabSize = 64, " +
                     "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
@@ -6549,22 +6549,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Mamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, MaxSequenceLength = 32 })";
             }
-            else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
-            {
-                // Float and iteration capping made the paper-default fixture fit the watchdog, but
-                // its 50,277-way embedding/head still reduced the memorization loss by only 0.75%
-                // in 15 steps (the invariant requires >1%). Exercise the same public
-                // embedding -> stacked ExtendedLSTM -> normalization -> LM-head construction path
-                // with two recurrent blocks at smoke width/vocabulary/context. Supplying no custom
-                // architecture layers deliberately preserves the model contract: InitializeLayers
-                // builds these defaults through LayerHelper, while production/user custom layers and
-                // all production constructor defaults remain untouched.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 16, outputSize: 64), new AiDotNet.NeuralNetworks.Options.XLSTMOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16 })";
-            }
             else if (model.ClassName == "BloombergGPT" && model.TypeParameterCount == 1)
             {
                 // BloombergGPT's production defaults retain the finance-language-model vocabulary,
@@ -6967,7 +6951,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.FalconMambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 1, StateDimension = 8, ExpandFactor = 2, MaxSequenceLength = 32 })";
             }
-            else if ((model.ClassName is "HawkLanguageModel" or "GLALanguageModel" or "GatedDeltaNetLanguageModel")
+            else if ((model.ClassName is "GLALanguageModel" or "GatedDeltaNetLanguageModel")
                      && model.TypeParameterCount == 1)
             {
                 // These recurrent language models retain their paper/default vocabulary, width,
@@ -6977,15 +6961,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Pin generated-test initialization because these recurrent gates otherwise draw
                 // from the process-shared RNG and the exact trajectory depends on sibling test order.
                 pinInitSeed = true;
-                // Hawk is purely recurrent and declares no head count; the other two do.
-                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "NumHeads = 4, ";
                 string recurrentOptionsType = model.ClassName.Replace("LanguageModel", "Options");
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 32, outputSize: 128), " +
                     $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
-                    $"ModelDimension = 32, NumLayers = 1, {headArgument}MaxSequenceLength = 32 }})";
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -9196,7 +9178,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
                     "options: new AiDotNet.NeuralNetworks.Options.LLaVAOptions { ImageSize = 112, Channels = 3, " +
                     "PatchSize = 14, VocabSize = 32, MaxSequenceLength = 16, " +
-                    "EmbeddingDimension = 32, VisionHiddenDim = 32, NumVisionLayers = 2, " +
+                    "EmbeddingDimension = 32, VisionDim = 32, VisionLayers = 2, " +
                     "NumLmLayers = 2, NumHeads = 4 })";
             }
             else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)
@@ -11419,23 +11401,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"taskType: {taskTypeExpr}, " +
                     $"{sizeExpr})";
 
-                // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to a 256k
-                // vocabulary, giving a foundation-sized embedding and language head. Keep the
+                // RecurrentGemma defaults to a 256k vocabulary, giving a foundation-sized
+                // embedding and language head. Keep the
                 // production defaults untouched and construct runnable generated fixtures through
                 // their public scale knobs. RecurrentGemma reached the timeout ladder's shrink rung
                 // even after FP32 and repetition/sample caps: its finite-difference invariant still
                 // exceeded 120 s when run after the rest of its class. Preserve the complete
                 // embedding -> RG-LRU -> normalization -> logits topology at one 32-wide recurrent
-                // block and a 256-token smoke vocabulary; Griffin/Hawk remain at the earlier vocab-
-                // only cap because their full-width fixtures already fit the gate.
+                // block and a 256-token smoke vocabulary. Griffin/Hawk use their dedicated
+                // bounded constructor rule above and never reach this fallback.
                 const string optionsNamespace = "AiDotNet.NeuralNetworks.Options.";
                 string scaleArgs = model.ClassName switch
                 {
                     "RecurrentGemmaLanguageModel" =>
                         ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
                             + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
-                    "GriffinLanguageModel" => ", new " + optionsNamespace + "GriffinOptions { VocabSize = 4096 }",
-                    "HawkLanguageModel" => ", new " + optionsNamespace + "HawkOptions { VocabSize = 4096 }",
                     _ => ""
                 };
 
