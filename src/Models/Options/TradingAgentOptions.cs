@@ -101,18 +101,31 @@ public class TradingAgentOptions<T> : ModelOptions
     public int WarmupSteps { get; set; } = 1000;
 
     /// <summary>
-    /// Initial exploration rate.
+    /// Initial exploration rate for epsilon-greedy agents (the financial DQN agent).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The probability of taking a uniformly random action before any gradient update has been applied.
+    /// Epsilon then follows <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>.
+    /// </para>
+    /// </remarks>
     public double EpsilonStart { get; set; } = 1.0;
 
     /// <summary>
-    /// Final exploration rate.
+    /// Final (floor) exploration rate for epsilon-greedy agents; epsilon never decays below this value.
     /// </summary>
     public double EpsilonEnd { get; set; } = 0.01;
 
     /// <summary>
-    /// Exploration decay rate.
+    /// Multiplicative exploration decay applied once per gradient update, in (0, 1].
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After <c>k</c> gradient updates epsilon is <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^k)</c> — the
+    /// same per-update schedule the library's <c>DQNAgent</c> uses. With the defaults (1.0, 0.01, 0.995)
+    /// epsilon reaches its floor after about 920 updates. 1.0 disables decay.
+    /// </para>
+    /// </remarks>
     public double EpsilonDecay { get; set; } = 0.995;
 
     #endregion
@@ -314,6 +327,8 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("ReplayBufferSize must be positive.", nameof(ReplayBufferSize));
         if (EpsilonStart < EpsilonEnd)
             throw new ArgumentException("EpsilonStart must be >= EpsilonEnd.", nameof(EpsilonStart));
+        if (!(EpsilonDecay > 0.0 && EpsilonDecay <= 1.0))
+            throw new ArgumentException("EpsilonDecay must be in (0, 1].", nameof(EpsilonDecay));
         if (TransactionCost < 0)
             throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
     }

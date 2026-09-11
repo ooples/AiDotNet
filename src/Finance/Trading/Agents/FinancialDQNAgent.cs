@@ -116,18 +116,48 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Action Selection
 
+    /// <summary>
+    /// Number of gradient updates this agent has applied. Drives the epsilon schedule (and, being
+    /// persisted with the agent, lets a reloaded agent resume its schedule instead of restarting it).
+    /// </summary>
+    private int _updateCount;
+
+    /// <summary>
+    /// Current exploration rate: <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>, where
+    /// <c>updates</c> counts the gradient updates applied so far (the same per-update multiplicative
+    /// schedule as the library's <c>DQNAgent</c>). No decay happens during warmup, while nothing is learned.
+    /// </summary>
+    public double CurrentEpsilon
+    {
+        get
+        {
+            double start = TradingOptions.EpsilonStart;
+            double end = TradingOptions.EpsilonEnd;
+            double decayed = start * Math.Pow(TradingOptions.EpsilonDecay, _updateCount);
+            return Math.Max(end, decayed);
+        }
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, SelectAction performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
+    /// Epsilon-greedy: in training mode, with probability <see cref="CurrentEpsilon"/> a uniformly random
+    /// action is taken, otherwise the action with the highest Q-value. Both draws come from the agent's
+    /// seeded random stream. Epsilon decays from <see cref="TradingAgentOptions{T}.EpsilonStart"/> toward
+    /// <see cref="TradingAgentOptions{T}.EpsilonEnd"/> by <see cref="TradingAgentOptions{T}.EpsilonDecay"/> per
+    /// gradient update.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Early in training the agent mostly tries random trades to learn what they do;
+    /// as it learns, it increasingly trusts its own Q-value estimates.
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        if (training && RandomHelper.CreateSecureRandom().NextDouble() < TradingOptions.EpsilonStart)
+        if (training && Random.NextDouble() < CurrentEpsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
-            int randomAction = RandomHelper.CreateSecureRandom().Next(TradingOptions.ActionSize);
+            int randomAction = Random.Next(TradingOptions.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
         }
@@ -223,6 +253,12 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
         var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
+
+        // One gradient update applied: advance the epsilon schedule.
+        if (_updateCount < int.MaxValue)
+        {
+            _updateCount++;
+        }
 
         if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
         {
@@ -335,6 +371,15 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     #endregion
 
     #region Model Metadata
+
+    /// <inheritdoc/>
+    /// <remarks>Adds the current exploration rate under the key <c>"Epsilon"</c>.</remarks>
+    public override Dictionary<string, T> GetTradingMetrics()
+    {
+        var metrics = base.GetTradingMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(CurrentEpsilon);
+        return metrics;
+    }
 
     /// <inheritdoc/>
     /// <remarks>
