@@ -363,6 +363,8 @@ Assert-Contract ($sourceJob.Contains("fetch-depth: `${{ github.event_name == 'pu
         -not $sourceJob.Contains("== 'push' && 0 ||")) `
     'validation-source lacks the history to rebuild the validated tree and diff it in map coordinates'
 $deltaMapStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve certified shard map for delta reuse'
+Assert-Contract ($deltaMapStep -match '(?m)^\s+id:\s*delta-map\s*$' -and $deltaMapStep.Contains('timeout-minutes: 10')) `
+    'the delta-map step lost the id its outputs are read through, or its duration bound'
 Assert-Contract ([bool] $deltaMapStep -and $deltaMapStep.Contains('continue-on-error: true') -and
         $deltaMapStep.Contains('Resolve-CertifiedShardMap.ps1') -and $deltaMapStep.Contains('Test-CertifiedShardMap.ps1')) `
     'delta reuse does not select with an audited map, or a map failure can fail the push instead of disabling delta reuse'
