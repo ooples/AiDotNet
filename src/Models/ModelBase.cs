@@ -60,7 +60,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// The components this model's parameters live in, in registration order, which is also the
     /// serialization order.
     /// </summary>
-    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    // Per-instance bookkeeping, never learned state: the registries hold accessors that close over this instance,
+    // so persisting them wrote a registry into the payload and a load replaced a copy's live registry with an
+    // empty one rebuilt from JSON, after which the copy declared nothing. [Scratch] keeps them out of it.
+    [AiDotNet.Attributes.Scratch]
+    private ParameterComponentRegistry<T> _parameterRegistry = new();
+    [AiDotNet.Attributes.Scratch]
     private bool _componentsRegistered;
 
     /// <summary>
@@ -106,8 +111,27 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     }
 
     /// <summary>State that is not a flat parameter vector, declared once and persisted by the base.</summary>
-    private readonly ModelStateRegistry<T> _stateRegistry = new();
+    [AiDotNet.Attributes.Scratch]
+    private ModelStateRegistry<T> _stateRegistry = new();
+    [AiDotNet.Attributes.Scratch]
     private bool _stateRegistered;
+
+    /// <summary>
+    /// Gives a <c>MemberwiseClone</c> copy its own per-instance bookkeeping.
+    /// </summary>
+    /// <remarks>
+    /// The parameter-component and state registries hold accessors that close over the instance that
+    /// registered them. A memberwise copy shares both, so it would read and write the ORIGINAL's fields
+    /// through them. Reset, the copy registers afresh against itself on first use.
+    /// </remarks>
+    private protected void ResetBookkeepingAfterMemberwiseClone()
+    {
+        _parameterRegistry = new ParameterComponentRegistry<T>();
+        _componentsRegistered = false;
+        _stateRegistry = new ModelStateRegistry<T>();
+        _stateRegistered = false;
+        _disposed = false;
+    }
 
     /// <summary>
     /// Declare state here that <see cref="GetParameters"/> does not carry -- a retained training set,
@@ -556,6 +580,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
     // --- IDisposable ---
 
+    [AiDotNet.Attributes.Scratch]
     private bool _disposed;
 
     /// <inheritdoc/>

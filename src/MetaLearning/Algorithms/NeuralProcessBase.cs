@@ -43,8 +43,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     /// <summary>Learned encoder parameters for mapping context pairs to representations.</summary>
     protected Vector<T> EncoderParams;

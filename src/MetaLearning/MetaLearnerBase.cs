@@ -52,8 +52,18 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     {
         RegisterParameterComponent(ParamModel);
     }
+    /// <summary>A cached parameter view of <see cref="MetaModel"/>: the same storage, never a second copy.</summary>
+    [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
+    /// <summary>The meta-model's parameter surface, for every algorithm.</summary>
+    /// <remarks>
+    /// Each algorithm used to declare its own copy of this cache, and the parameter generator registered every copy
+    /// - with the base's, and <see cref="BaseModel"/> - as a component. The learner's parameter vector repeated the
+    /// meta-model's weights once per populated view, so it changed length as caches filled and a copy of a learner
+    /// serialized a different vector from the original. One cache, declared an alias, now serves them all.
+    /// </remarks>
+    protected IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     #region Fields
 
@@ -111,6 +121,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     // Engine inherited from ModelBase
 
     /// <inheritdoc/>
+    [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
     public IFullModel<T, TInput, TOutput> BaseModel => MetaModel;
 
     /// <inheritdoc/>
@@ -1526,8 +1537,19 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// It used to be a bare <c>MemberwiseClone</c>: a copy shared the original's meta-model and every piece of
+    /// learned state, so meta-training the copy silently trained the original too. The copy now owns a
+    /// duplicate of everything mutable (<see cref="AiDotNet.Models.CloneEngine.CopyFittedFields"/>), and its
+    /// declared state registers against the copy rather than the original.
+    /// </remarks>
     public override IFullModel<T, TInput, TOutput> DeepCopy()
-        => (MetaLearnerBase<T, TInput, TOutput>)MemberwiseClone();
+    {
+        var copy = (MetaLearnerBase<T, TInput, TOutput>)MemberwiseClone();
+        copy.ResetBookkeepingAfterMemberwiseClone();
+        AiDotNet.Models.CloneEngine.CopyFittedFields(this, copy);
+        return copy;
+    }
 
     #endregion
 }

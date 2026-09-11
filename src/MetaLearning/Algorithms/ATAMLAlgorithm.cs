@@ -62,8 +62,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly ATAMLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;

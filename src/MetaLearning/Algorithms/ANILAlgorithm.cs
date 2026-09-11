@@ -81,8 +81,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly ANILOptions<T, TInput, TOutput> _anilOptions;
 
