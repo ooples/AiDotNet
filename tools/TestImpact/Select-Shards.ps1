@@ -30,6 +30,12 @@
     treated as historical. Pull requests must use PullRequestHeadSha instead: the event's
     base.sha is stale whenever the pull request is behind its base branch.
 
+.PARAMETER DeltaFromTree
+    A Git tree that was already validated. Selection is scoped to the paths that differ between
+    it and HEAD - the change a landed commit adds on top of what a pull request run tested. Used
+    by post-merge reuse to decide which of the pull request's shards master's own later commits
+    could have affected. Mutually exclusive with PullRequestHeadSha and BaseSha.
+
 .PARAMETER ShardManifestFile
     JSON array of { name, project, filter } for every shard (the converted test-shards.yml).
     Test sources are never in the coverage map, so without this every test-file change escalates;
@@ -44,6 +50,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $ExpectedShards,
     [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
     [Parameter(ParameterSetName = 'Select')] [string] $ShardManifestFile,
+    [Parameter(ParameterSetName = 'Select')] [string] $DeltaFromTree,
     [Parameter(ParameterSetName = 'Select')]
     [Parameter(ParameterSetName = 'Classify')] [string] $BaseSha,
     [Parameter(ParameterSetName = 'Select')]
@@ -270,28 +277,25 @@ function Assert-ShardMap {
     }
 }
 
-function ConvertTo-ChangedRanges {
+function ConvertTo-DiffHunks {
     <#
-        Parses zero-context hunks in the map commit's coordinates. ChangedFiles is authoritative:
-        rename-only, binary and mode-only changes do not necessarily have an @@ header, but they
-        must still reach the fail-safe selector.
-    #>
-    param(
-        [AllowEmptyCollection()] [string[]] $DiffLines,
-        [AllowEmptyCollection()] [string[]] $ChangedFiles = @()
-    )
+        Parses zero-context hunks into { OldStart, OldCount, NewStart, NewCount } per file, keyed by
+        the new path (the old one for a deletion).
 
-    $changed = @{}
+        Hunk BODY lines are counted, and headers are only recognised while none is pending, because
+        diff body lines are raw file content behind a one-character prefix, and content can forge any
+        header: a REMOVED line whose text begins with '-- ' is rendered '--- ...', byte-identical to
+        an old-file header. Reproduced with real git: deleting the line '-- remove me' emitted
+        '--- remove me', the old parser took it as a header, nulled the current file, and silently
+        dropped every later hunk of that file - under-selection with no escalation. A zero-context
+        hunk '@@ -a,n +b,m @@' is followed by exactly n+m body lines (plus uncounted '\ No newline'
+        markers), so counting them makes body content inert no matter what it says.
+    #>
+    param([AllowEmptyCollection()] [string[]] $DiffLines)
+
+    $hunks = @{}
     $current = $null
     $deletedPath = $null
-    # Hunk BODY lines still pending. Headers are only recognised while this is zero, because diff
-    # body lines are raw file content behind a one-character prefix, and content can forge any
-    # header: a REMOVED line whose text begins with '-- ' is rendered '--- ...', byte-identical to
-    # an old-file header. Reproduced with real git: deleting the line '-- remove me' emitted
-    # '--- remove me', the old parser took it as a header, nulled $current, and silently dropped
-    # every later hunk of that file - under-selection with no escalation. A zero-context hunk
-    # '@@ -a,n +b,m @@' is followed by exactly n+m body lines (plus uncounted '\ No newline'
-    # markers), so counting them makes body content inert no matter what it says.
     $pendingBody = 0
     foreach ($line in $DiffLines) {
         if ($pendingBody -gt 0) {
@@ -308,24 +312,49 @@ function ConvertTo-ChangedRanges {
             $current = if ($to -eq '/dev/null') { $deletedPath } else { $to -replace '^b/', '' }
         }
         elseif ($line.StartsWith('@@') -and $line -match '^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
-            $start = [int] $Matches[1]
-            $count = if ($Matches[2]) { [int] $Matches[2] } else { 1 }
+            $oldStart = [int] $Matches[1]
+            $oldCount = if ($Matches[2]) { [int] $Matches[2] } else { 1 }
+            $newStart = [int] $Matches[3]
             $newCount = if ($Matches[4]) { [int] $Matches[4] } else { 1 }
-            $pendingBody = $count + $newCount
+            $pendingBody = $oldCount + $newCount
             if ($current) {
-                if (-not $changed.ContainsKey($current)) {
-                    $changed[$current] = [System.Collections.Generic.List[int]]::new()
+                if (-not $hunks.ContainsKey($current)) {
+                    $hunks[$current] = [System.Collections.Generic.List[object]]::new()
                 }
-                if ($count -gt 0) {
-                    [void] $changed[$current].Add($start)
-                    [void] $changed[$current].Add($start + $count - 1)
-                }
-                else {
-                    [void] $changed[$current].Add([Math]::Max(1, $start))
-                    [void] $changed[$current].Add([Math]::Max(1, $start + 1))
-                }
+                [void] $hunks[$current].Add([int[]] @($oldStart, $oldCount, $newStart, $newCount))
             }
         }
+    }
+    return $hunks
+}
+
+function ConvertTo-ChangedRanges {
+    <#
+        The OLD side of each zero-context hunk as flat start/end pairs. A pure insertion has no old
+        lines, so it is recorded as the two old lines it sits between. ChangedFiles is authoritative:
+        rename-only, binary and mode-only changes do not necessarily have an @@ header, but they must
+        still reach the fail-safe selector.
+    #>
+    param(
+        [AllowEmptyCollection()] [string[]] $DiffLines,
+        [AllowEmptyCollection()] [string[]] $ChangedFiles = @()
+    )
+
+    $changed = @{}
+    $hunks = ConvertTo-DiffHunks -DiffLines $DiffLines
+    foreach ($path in $hunks.Keys) {
+        $ranges = [System.Collections.Generic.List[int]]::new()
+        foreach ($hunk in $hunks[$path]) {
+            if ($hunk[1] -gt 0) {
+                [void] $ranges.Add($hunk[0])
+                [void] $ranges.Add($hunk[0] + $hunk[1] - 1)
+            }
+            else {
+                [void] $ranges.Add([Math]::Max(1, $hunk[0]))
+                [void] $ranges.Add([Math]::Max(1, $hunk[0] + 1))
+            }
+        }
+        $changed[$path] = $ranges
     }
 
     foreach ($path in $ChangedFiles) {
@@ -336,6 +365,156 @@ function ConvertTo-ChangedRanges {
     return $changed
 }
 
+function Convert-RangesThroughHunks {
+    <#
+        Carries line ranges expressed in a LATER version of a file back to an EARLIER one, through
+        the zero-context hunks of earlier -> later (old = earlier, new = later).
+
+        Selection needs a change's lines in the map commit's numbering. For a pull request that is
+        behind master, or a landed commit measured against the tree its pull request validated, the
+        change is naturally expressed against a base the map does not describe; diffing the map
+        against HEAD instead would sweep in every edit master made to the same file since the map.
+        This carries the change's own ranges back instead.
+
+        It never narrows what a line can affect: a later line that is unchanged since the earlier
+        version maps to its exact earlier line; one inside a changed region maps to the WHOLE earlier
+        region it replaced (or, where nothing was replaced, the two earlier lines it sits between);
+        and a range touching the spot where earlier lines were deleted also takes the deleted lines.
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [int[]] $Ranges,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Hunks
+    )
+
+    if ($Hunks.Count -eq 0) { return , ([int[]] $Ranges) }
+
+    # Alternating segments: Same (a later run of lines with an exact earlier counterpart) and
+    # Changed (a later run, possibly empty, that replaced an earlier run, possibly empty).
+    $segments = [System.Collections.Generic.List[object]]::new()
+    $oldConsumed = 0
+    $newConsumed = 0
+    foreach ($hunk in @($Hunks | Sort-Object { $_[0] }, { $_[2] })) {
+        $oldStart, $oldCount, $newStart, $newCount = $hunk
+        $oldBefore = if ($oldCount -gt 0) { $oldStart - 1 } else { $oldStart }
+        $newBefore = if ($newCount -gt 0) { $newStart - 1 } else { $newStart }
+        $same = $oldBefore - $oldConsumed
+        if ($same -ne ($newBefore - $newConsumed)) {
+            throw 'inconsistent diff hunks: unchanged runs differ in length'
+        }
+        if ($same -gt 0) {
+            [void] $segments.Add([pscustomobject]@{ Kind = 'Same'; NewFrom = $newConsumed + 1; NewTo = $newBefore; Offset = $oldConsumed - $newConsumed })
+        }
+        [void] $segments.Add([pscustomobject]@{
+            Kind = 'Changed'; NewFrom = $newStart; NewTo = $newStart + $newCount - 1
+            OldFrom = $oldStart; OldTo = $oldStart + $oldCount - 1; NewCount = $newCount; OldCount = $oldCount
+        })
+        $oldConsumed = $oldBefore + $oldCount
+        $newConsumed = $newBefore + $newCount
+    }
+    [void] $segments.Add([pscustomobject]@{ Kind = 'Same'; NewFrom = $newConsumed + 1; NewTo = [int]::MaxValue; Offset = $oldConsumed - $newConsumed })
+
+    $result = [System.Collections.Generic.List[int]]::new()
+    for ($i = 0; $i + 1 -lt $Ranges.Count; $i += 2) {
+        $from = [int] $Ranges[$i]
+        $to = [int] $Ranges[$i + 1]
+        foreach ($segment in $segments) {
+            if ($segment.Kind -eq 'Same') {
+                $a = [Math]::Max($from, $segment.NewFrom)
+                $b = [Math]::Min($to, $segment.NewTo)
+                if ($a -le $b) {
+                    [void] $result.Add($a + $segment.Offset)
+                    [void] $result.Add($b + $segment.Offset)
+                }
+                continue
+            }
+            # A Changed segment with later lines is hit when the range overlaps them. One with none
+            # is a deletion: '@@ -a,n +b,0 @@' removed earlier lines from between later lines b and
+            # b + 1, so it is hit when the range touches either of those two neighbours.
+            $hit = if ($segment.NewCount -gt 0) {
+                $from -le $segment.NewTo -and $to -ge $segment.NewFrom
+            } else {
+                $from -le $segment.NewFrom + 1 -and $to -ge $segment.NewFrom
+            }
+            if (-not $hit) { continue }
+            if ($segment.OldCount -gt 0) {
+                [void] $result.Add($segment.OldFrom)
+                [void] $result.Add($segment.OldTo)
+            }
+            else {
+                [void] $result.Add([Math]::Max(1, $segment.OldFrom))
+                [void] $result.Add([Math]::Max(1, $segment.OldFrom + 1))
+            }
+        }
+    }
+    return , ([int[]] $result.ToArray())
+}
+
+function Test-RangesTouchIntroducedLines {
+    <#
+        Whether any range reaches later lines that did not exist in the earlier version (the new
+        side of a hunk). Such a line's earlier home is unknown from the diff alone: if the base
+        branch MOVED code since the map, the moved lines appear as fresh insertions, and carrying a
+        change to them back would land on the insertion point instead of the code's mapped lines.
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [int[]] $Ranges,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Hunks
+    )
+    foreach ($hunk in $Hunks) {
+        if ($hunk[3] -le 0) { continue }
+        $newFrom = $hunk[2]
+        $newTo = $hunk[2] + $hunk[3] - 1
+        for ($i = 0; $i + 1 -lt $Ranges.Count; $i += 2) {
+            if ($Ranges[$i] -le $newTo -and $Ranges[$i + 1] -ge $newFrom) { return $true }
+        }
+    }
+    return $false
+}
+
+function Get-ScopedChangedRanges {
+    <#
+        The change from Base to HEAD, for exactly Paths, in the map commit's line numbers: the
+        change's own old-side ranges, carried back through map -> Base. Base may be a commit or a
+        tree (post-merge delta reuse compares against a rebuilt tree).
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $MapSha,
+        [Parameter(Mandatory)] [string] $Base,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths
+    )
+
+    $changed = @{}
+    if ($Paths.Count -eq 0) { return $changed }
+    $changeDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $Base HEAD -- @Paths)
+    if ($LASTEXITCODE -ne 0) { throw "git diff from '$Base' failed" }
+    $ownRanges = ConvertTo-ChangedRanges -DiffLines $changeDiff -ChangedFiles $Paths
+    $mapDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $MapSha $Base -- @Paths)
+    if ($LASTEXITCODE -ne 0) { throw "git diff from the map commit '$MapSha' to '$Base' failed" }
+    $mapHunks = ConvertTo-DiffHunks -DiffLines $mapDiff
+
+    $sweep = [System.Collections.Generic.List[string]]::new()
+    foreach ($path in $ownRanges.Keys) {
+        $ranges = [int[]] @($ownRanges[$path])
+        # Two statements: an if-expression yielding @() unrolls to $null.
+        $hunks = @()
+        if ($mapHunks.ContainsKey($path)) { $hunks = @($mapHunks[$path]) }
+        $changed[$path] = [System.Collections.Generic.List[int]]::new([int[]] (Convert-RangesThroughHunks -Ranges $ranges -Hunks $hunks))
+        if (Test-RangesTouchIntroducedLines -Ranges $ranges -Hunks $hunks) { [void] $sweep.Add($path) }
+    }
+
+    # Where the change reaches lines the base branch introduced since the map, their mapped origin
+    # is unknowable from this diff, so add back everything map -> HEAD changed in that file: the
+    # original, broader behaviour, which sees a move as the deletion of the mapped lines.
+    if ($sweep.Count -gt 0) {
+        $sweepDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $MapSha HEAD -- @($sweep))
+        if ($LASTEXITCODE -ne 0) { throw "git diff from the map commit '$MapSha' to HEAD failed" }
+        $sweepRanges = ConvertTo-ChangedRanges -DiffLines $sweepDiff
+        foreach ($path in $sweep) {
+            if ($sweepRanges.ContainsKey($path)) { $changed[$path].AddRange([int[]] @($sweepRanges[$path])) }
+        }
+    }
+    return $changed
+}
 function Get-ChangedRanges {
     param([string] $MapSha)
 
@@ -1585,6 +1764,96 @@ file class Private { }
         -FindReferrers $find -FindBuildTimeReferences $findGenerated -MaximumClosure 1
     Assert-True (-not $wide['tests/P/Shared/Base.cs'].Routable) 'a closure wider than the limit was routed'
 
+    # ---- Carrying a change's ranges back to the map's numbering. -------------------------------
+    # Hand-checked cases first. map -> base: line 4 replaced (4 -> 4), 2 lines inserted after 7,
+    # line 12 deleted.
+    $hunks = @([int[]] @(4, 1, 4, 1), [int[]] @(7, 0, 8, 2), [int[]] @(12, 1, 13, 0))
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(2, 2) -Hunks $hunks) -join ',') -eq '2,2') 'an unchanged early line moved'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(10, 10) -Hunks $hunks) -join ',') -eq '8,8') 'a line after an insertion did not shift back'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(8, 8) -Hunks $hunks) -join ',') -eq '7,8') 'an inserted line did not map to its insertion point'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(4, 4) -Hunks $hunks) -join ',') -eq '4,4') 'a replaced line did not map to what it replaced'
+    # Map line 12 was deleted from between base lines 13 and 14: both neighbours take it, and the
+    # line before them (base 12 = map 10) does not. An off-by-one here once shifted the pair to 12/13.
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(13, 13) -Hunks $hunks) -join ',') -match '(^|,)12,12(,|$)') 'a change before a deletion lost the deleted line'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(14, 14) -Hunks $hunks) -join ',') -match '(^|,)12,12(,|$)') 'a change after a deletion lost the deleted line'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(12, 12) -Hunks $hunks) -join ',') -eq '10,10') 'a change two lines from a deletion took the deleted line'
+    Assert-True (((Convert-RangesThroughHunks -Ranges @(20, 20) -Hunks $hunks) -join ',') -eq '19,19') 'a line after a deletion did not shift forward'
+    Assert-True (Test-RangesTouchIntroducedLines -Ranges @(9, 9) -Hunks $hunks) 'a change on an introduced line was not flagged'
+    Assert-True (-not (Test-RangesTouchIntroducedLines -Ranges @(2, 2) -Hunks $hunks)) 'a change on a mapped line was flagged'
+
+    # Then a property check against real git diffs. Every line is a unique token, so "the same
+    # code" is unambiguous: whenever a change touches a base line whose token exists in the map, the
+    # map line holding that token must be inside the carried-back ranges. Edits include MOVES,
+    # which git shows as delete + insert - the case the introduced-line sweep exists for.
+    $propertyRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("carry-ranges-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $propertyRoot -Force | Out-Null
+    try {
+        $random = [System.Random]::new(20260911)
+        function New-EditedLines([string[]] $Lines, [string] $Tag, [int] $Edits) {
+            $list = [System.Collections.Generic.List[string]]::new([string[]] $Lines)
+            for ($e = 0; $e -lt $Edits; $e++) {
+                $at = $random.Next([Math]::Max(1, $list.Count))
+                switch ($random.Next(4)) {
+                    0 { if ($list.Count -gt 3) { $list.RemoveAt($at) } }
+                    1 { $list.Insert($at, "$Tag$e-$($random.Next(100000))") }
+                    2 { if ($list.Count -gt 0) { $list[$at] = "$Tag$e-$($random.Next(100000))" } }
+                    3 { if ($list.Count -gt 3) { $moved = $list[$at]; $list.RemoveAt($at); $list.Insert($random.Next($list.Count + 1), $moved) } }
+                }
+            }
+            return , ([string[]] $list.ToArray())
+        }
+        function Get-FileHunks([string] $From, [string] $To) {
+            $diff = @(& git diff --no-index --no-renames --no-ext-diff -U0 -- $From $To 2>$null)
+            $parsed = ConvertTo-DiffHunks -DiffLines $diff
+            if ($parsed.Count -eq 0) { return }
+            # Emits each hunk (an int[4]) separately; callers collect them with @().
+            return @($parsed.Values)[0]
+        }
+
+        $violations = 0
+        for ($trial = 0; $trial -lt 120; $trial++) {
+            $mapLines = [string[]] @(1..25 | ForEach-Object { "m$_" })
+            $baseLines = New-EditedLines $mapLines 'b' ($random.Next(1, 5))
+            $headLines = New-EditedLines $baseLines 'h' ($random.Next(1, 4))
+            $mapFile = Join-Path $propertyRoot "map.txt"; $baseFile = Join-Path $propertyRoot "base.txt"; $headFile = Join-Path $propertyRoot "head.txt"
+            [System.IO.File]::WriteAllText($mapFile, ($mapLines -join "`n") + "`n")
+            [System.IO.File]::WriteAllText($baseFile, ($baseLines -join "`n") + "`n")
+            [System.IO.File]::WriteAllText($headFile, ($headLines -join "`n") + "`n")
+
+            $own = @(Get-FileHunks $baseFile $headFile)
+            if ($own.Count -eq 0) { continue }
+            $ownRanges = [System.Collections.Generic.List[int]]::new()
+            foreach ($h in $own) {
+                if ($h[1] -gt 0) { $ownRanges.Add($h[0]); $ownRanges.Add($h[0] + $h[1] - 1) }
+                else { $ownRanges.Add([Math]::Max(1, $h[0])); $ownRanges.Add([Math]::Max(1, $h[0] + 1)) }
+            }
+            $mapToBase = @(Get-FileHunks $mapFile $baseFile)
+            $carried = [System.Collections.Generic.List[int]]::new([int[]] (Convert-RangesThroughHunks -Ranges $ownRanges.ToArray() -Hunks $mapToBase))
+            if (Test-RangesTouchIntroducedLines -Ranges $ownRanges.ToArray() -Hunks $mapToBase) {
+                foreach ($h in @(Get-FileHunks $mapFile $headFile)) {
+                    if ($h[1] -gt 0) { $carried.Add($h[0]); $carried.Add($h[0] + $h[1] - 1) }
+                    else { $carried.Add([Math]::Max(1, $h[0])); $carried.Add([Math]::Max(1, $h[0] + 1)) }
+                }
+            }
+
+            foreach ($h in $own) {
+                $touched = if ($h[1] -gt 0) { @($h[0]..($h[0] + $h[1] - 1)) } else { @($h[0], ($h[0] + 1)) }
+                foreach ($baseLine in $touched) {
+                    if ($baseLine -lt 1 -or $baseLine -gt $baseLines.Count) { continue }
+                    $mapLine = [Array]::IndexOf($mapLines, $baseLines[$baseLine - 1]) + 1
+                    if ($mapLine -lt 1) { continue }
+                    $inside = $false
+                    for ($c = 0; $c + 1 -lt $carried.Count; $c += 2) {
+                        if ($mapLine -ge $carried[$c] -and $mapLine -le $carried[$c + 1]) { $inside = $true; break }
+                    }
+                    if (-not $inside) { $violations++ }
+                }
+            }
+        }
+        Assert-True ($violations -eq 0) "carrying ranges back to the map dropped $violations mapped line(s) a change touched"
+    }
+    finally { Remove-Item -LiteralPath $propertyRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
     # An empty build-time pathspec would make git grep search the whole repository.
     $configuredBuildTime = $script:BuildTimeDirectories
     try {
@@ -1789,20 +2058,40 @@ try {
     $changed = Get-ChangedRanges -MapSha $mapSha
     $currentPaths = @($changed.Keys)
     $scopeToPullRequest = $false
-    if ($PullRequestHeadSha -and $BaseSha) { throw 'pass PullRequestHeadSha or BaseSha, not both' }
+    if (@(@($PullRequestHeadSha, $BaseSha, $DeltaFromTree) | Where-Object { $_ }).Count -gt 1) {
+        throw 'pass at most one of PullRequestHeadSha, BaseSha and DeltaFromTree'
+    }
     if ($PullRequestHeadSha) {
         $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha
         $scopeToPullRequest = $true
         Write-Host "pull request base (merge commit's first parent): $BaseSha"
     }
+    if ($DeltaFromTree) {
+        # A tree, not a commit: the validated pull-request merge commit may no longer be fetchable,
+        # but its tree can be rebuilt and compared exactly; see Resolve-CiValidationReuse.ps1.
+        if ($DeltaFromTree -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+            throw "delta tree '$DeltaFromTree' is not a complete Git object id"
+        }
+        & git cat-file -e "$DeltaFromTree^{tree}" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "delta tree '$DeltaFromTree' is not present in this checkout" }
+        $BaseSha = $DeltaFromTree
+        $scopeToPullRequest = $true
+        Write-Host "delta from validated tree: $DeltaFromTree"
+    }
     if ($BaseSha) {
-        & git cat-file -e "$BaseSha^{commit}"
-        if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
+        $baseKind = if ($DeltaFromTree) { 'tree' } else { 'commit' }
+        & git cat-file -e "$BaseSha^{$baseKind}"
+        if ($LASTEXITCODE -ne 0) { throw "base $baseKind '$BaseSha' is not present in this checkout" }
         $currentPaths = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
         if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from current base '$BaseSha' failed" }
         $currentPaths = @($currentPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
     Write-Host "changed files since the map: $($changed.Count); changed by the current change: $($currentPaths.Count)"
+    if ($scopeToPullRequest) {
+        # The change's own ranges, carried back to the map's numbering. The map-to-HEAD ranges above
+        # would also sweep in every edit the base branch made to the same files since the map.
+        $changed = Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths
+    }
 
     # Test sources the map cannot index, among the paths selection will actually consider.
     $testRoutes = @{}

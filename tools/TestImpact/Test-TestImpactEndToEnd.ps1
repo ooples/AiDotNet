@@ -13,6 +13,7 @@ $coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
 $missMeasurer = Join-Path $PSScriptRoot 'Measure-SelectionMiss.ps1'
 $certificateWriter = Join-Path $PSScriptRoot 'New-ShardMapCertificate.ps1'
 $certificateValidator = Join-Path $PSScriptRoot 'Test-CertifiedShardMap.ps1'
+$reuseResolver = Join-Path $PSScriptRoot 'Resolve-CiValidationReuse.ps1'
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ("aidotnet-impact-e2e-" + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
@@ -370,6 +371,7 @@ try {
         # refs/pull/N/merge: base-branch tip first, pull request head second.
         Invoke-Git checkout --quiet --detach $masterSha
         Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $testedMergeSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
         @(
             [ordered]@{ name = 'Alpha'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~UnitTests.Alpha' },
             [ordered]@{ name = 'Beta'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~UnitTests.Beta' },
@@ -423,6 +425,58 @@ try {
             -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile non-merge-selection.json 6>$null
         Assert-True ([bool] (Get-Content non-merge-selection.json -Raw | ConvertFrom-Json).escalate) `
             'a checkout that is not a merge commit was trusted as a pull-request merge'
+
+        # ---- Post-merge DELTA reuse, from the same pull request. --------------------------------
+        # The pull request was validated as $testedMergeSha and its run executed Alpha and Always.
+        # Before it lands, master gains more commits. Exact-tree reuse can never match now; delta
+        # reuse must rebuild the validated tree from its parents and decide from what master added.
+        $testedTree = ((Invoke-Git rev-parse "$testedMergeSha^{tree}") | Out-String).Trim()
+        $pullRequestShards = '["Alpha","Always"]'
+        function Invoke-DeltaPlanFixture([string] $Name, [string] $Tree = $testedTree) {
+            & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $Tree `
+                -PullRequestShardsJson $pullRequestShards -MapFile certified/shard-map.json `
+                -ShardManifestFile shard-manifest.json -SelectorPath $selector -OutFile "$Name.json" 6>$null
+            return Get-Content "$Name.json" -Raw | ConvertFrom-Json
+        }
+
+        # (a) Master edits a line only Beta executes. Δ selects Beta + Always; the pull request ran
+        #     Alpha + Always, so only Always is re-run and Alpha's results are imported.
+        Invoke-Git checkout --quiet --detach $masterSha
+        @('one', 'alpha before', 'three', 'beta changed on master', 'five') |
+            Set-Content -LiteralPath src/Feature.cs -Encoding utf8
+        Invoke-Git commit --quiet -am master-runtime-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-partial'
+        Assert-True ($plan.mode -ceq 'Partial') "an overlapping master delta did not plan a partial re-run: $($plan.mode) - $($plan.why)"
+        Assert-True ((@($plan.rerun) -join ',') -ceq 'Always') `
+            "the partial re-run was not exactly the overlap: rerun=$(@($plan.rerun) -join ','); routes=$(@($plan.routes) -join ' | ')"
+        Assert-True ((@($plan.import) -join ',') -ceq 'Alpha') `
+            "the partial re-run did not import the untouched pull-request shard: import=$(@($plan.import) -join ',')"
+        Assert-True ($plan.tree -ceq $testedTree) 'the validated tree was not rebuilt exactly from its parents'
+
+        # (b) Master adds only documentation: nothing the pull request certified can have changed.
+        Invoke-Git checkout --quiet --detach $masterSha
+        New-Item -ItemType Directory -Path docs -Force | Out-Null
+        'release notes' | Set-Content -LiteralPath docs/notes.md -Encoding utf8
+        Invoke-Git add docs/notes.md
+        Invoke-Git commit --quiet -m master-docs-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-reuse'
+        Assert-True ($plan.mode -ceq 'Reuse') "a documentation-only master delta was not reused outright: $($plan.mode) - $($plan.why)"
+
+        # (c) Master changes CI control: the full matrix, whatever the pull request ran.
+        Invoke-Git checkout --quiet --detach $masterSha
+        'later selector change' | Set-Content -LiteralPath tools/TestImpact/Later.ps1 -Encoding utf8
+        Invoke-Git add tools/TestImpact/Later.ps1
+        Invoke-Git commit --quiet -m master-control-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-control'
+        Assert-True ($plan.mode -ceq 'None') 'a master delta containing a CI-control edit was reused'
+
+        # (d) A tree that the parents do not rebuild to is never trusted.
+        $plan = Invoke-DeltaPlanFixture 'delta-wrong-tree' (((Invoke-Git rev-parse "$baseSha^{tree}") | Out-String).Trim())
+        Assert-True ($plan.mode -ceq 'None' -and $plan.why -like '*could not be rebuilt*') `
+            'a validated tree that its parents do not rebuild to was trusted'
 
         $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1
