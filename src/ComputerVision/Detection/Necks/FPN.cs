@@ -143,15 +143,20 @@ public class FPN<T> : NeckBase<T>
 
         // Top-down pathway with lateral connections
         // Start from the deepest level (smallest spatial resolution)
+        Tensor<T>? deeperMerged = null;
         for (int i = _numLevels - 1; i >= 0; i--)
         {
             Tensor<T> current = lateralFeatures[i];
 
-            // Add upsampled feature from deeper level (if not the deepest)
-            if (i < _numLevels - 1)
+            // Top-down input is the MERGED map of the next deeper level (M_{i+1} in Lin et al. 2017),
+            // before its smoothing conv. This used to read outputFeatures[^1] - but the list is built with
+            // Insert(0, ...), so [^1] is the DEEPEST level, not the next one: every level took its
+            // top-down signal from the coarsest map, the second-deepest level fed nothing, and a
+            // detector reading one pyramid level (Faster/Cascade R-CNN use P3) left the other levels'
+            // convs without any gradient.
+            if (deeperMerged is not null)
             {
-                // Get the output from the next deeper level and upsample
-                var upsampled = Upsample2x(outputFeatures[^1]);
+                var upsampled = Upsample2x(deeperMerged);
 
                 // Resize if dimensions don't match exactly (due to odd sizes)
                 if (upsampled.Shape[2] != current.Shape[2] || upsampled.Shape[3] != current.Shape[3])
@@ -161,6 +166,8 @@ public class FPN<T> : NeckBase<T>
 
                 current = Add(current, upsampled);
             }
+
+            deeperMerged = current;
 
             // Apply output convolution
             var output = Conv1x1(current, _outputWeights[i], _outputBiases[i]);
