@@ -32,7 +32,7 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
         MaxImagesPerRequest = 10;
         HiddenDim = 4096;
         VisionLayers = 24;
-        NumLanguageLayers = 32;
+        NumLmLayers = 32;
         NumHeads = 32;
         PatchSize = 14;
         VocabSize = 128256;
@@ -50,9 +50,10 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     public int MaxImagesPerRequest { get; set; }
 
     /// <summary>
-    /// Gets or sets the num language layers.
+    /// Gets or sets the number of native language-model blocks, using the same name
+    /// as the Flamingo and LLaVA options. This does not resize a loaded ONNX graph.
     /// </summary>
-    public int NumLanguageLayers { get; set; }
+    public int NumLmLayers { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

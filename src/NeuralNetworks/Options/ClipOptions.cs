@@ -1,11 +1,15 @@
-using AiDotNet.Models.Options;
-
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Configuration options for the ClipNeuralNetwork.
+/// Input and embedding configuration for the ONNX-only ClipNeuralNetwork.
 /// </summary>
-public class ClipOptions : VisionLanguageModelOptions
+/// <remarks>
+/// <para>The three dimensions must match the supplied ONNX encoders; they do not resize
+/// the graphs. The image path accepts three RGB channels. Patch sizes, vocabularies, tower
+/// widths, heads, and layer counts are properties of those graphs, not configurable native
+/// layers, so this options type does not expose setters for them.</para>
+/// </remarks>
+public class ClipOptions : VisionLanguageInputOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ClipOptions"/> class carrying
@@ -38,6 +42,6 @@ public class ClipOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
     }
 }

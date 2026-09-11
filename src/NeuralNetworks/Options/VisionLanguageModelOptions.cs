@@ -3,7 +3,7 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
-/// Shared configuration for vision-language and multimodal models (CLIP, BLIP, BLIP-2,
+/// Shared native-tower configuration for vision-language and multimodal models (BLIP, BLIP-2,
 /// Flamingo, LLaVA, ImageBind, GPT-4 Vision, VideoCLIP and relatives).
 /// </summary>
 /// <remarks>
@@ -11,39 +11,17 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <b>For Beginners:</b> These models read pictures and text together. The settings here
 /// describe how big the pictures are, how they get chopped into patches, how much text the
 /// model can read at once, and how wide its internal representations are. Each model's own
-/// options class ships the values from its paper, so you do not normally set any of them.
+/// options class supplies its shipped defaults.
 /// </para>
 /// <para>
-/// Derived options classes assign their paper's values in their parameterless constructor.
+/// Derived options classes assign their shipped values in their parameterless constructor.
 /// See <see cref="ModelHyperparameterOptions"/> for why these properties are non-nullable.
+/// ONNX-only input contracts use <see cref="VisionLanguageInputOptions"/> instead. Native
+/// tower settings do not resize a loaded ONNX graph.
 /// </para>
 /// </remarks>
-public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
+public abstract class VisionLanguageModelOptions : VisionLanguageInputOptions
 {
-    /// <summary>
-    /// Gets or sets the width of the shared embedding space that images and text are
-    /// projected into.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Both a picture and a sentence get turned into a list of
-    /// numbers of this length, so they can be compared to each other.</para>
-    /// </remarks>
-    public int EmbeddingDimension { get; set; }
-
-    /// <summary>
-    /// Gets or sets the longest text sequence, in tokens, the model is configured to process.
-    /// </summary>
-    public int MaxSequenceLength { get; set; }
-
-    /// <summary>
-    /// Gets or sets the side length, in pixels, of the square image the model expects.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Input images are resized to this many pixels on each side —
-    /// 224 and 336 are the common choices.</para>
-    /// </remarks>
-    public int ImageSize { get; set; }
-
     /// <summary>
     /// Gets or sets the side length, in pixels, of each square patch the image is divided into.
     /// </summary>
@@ -132,12 +110,14 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     /// merely because their options share this base. Patch validation precedes every division.</remarks>
     protected void ValidateCore(ValidationRequirements requirements)
     {
-        Require(EmbeddingDimension, nameof(EmbeddingDimension));
+        var inputs = InputValidationRequirements.None;
         if ((requirements & ValidationRequirements.Text) != 0)
-            Require(MaxSequenceLength, nameof(MaxSequenceLength));
+            inputs |= InputValidationRequirements.Text;
         if ((requirements & (ValidationRequirements.Image | ValidationRequirements.PatchGeometry | ValidationRequirements.ExactPatchTiling)) != 0)
+            inputs |= InputValidationRequirements.Image;
+        ValidateInputs(inputs);
+        if ((inputs & InputValidationRequirements.Image) != 0)
         {
-            Require(ImageSize, nameof(ImageSize));
             Require(Channels, nameof(Channels));
         }
         if ((requirements & (ValidationRequirements.PatchGeometry | ValidationRequirements.ExactPatchTiling)) != 0)

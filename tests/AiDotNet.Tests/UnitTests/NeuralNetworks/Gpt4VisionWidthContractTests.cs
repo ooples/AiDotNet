@@ -21,7 +21,7 @@ public class Gpt4VisionWidthContractTests
         var options = new Gpt4VisionOptions
         {
             VisionDim = width, EmbeddingDimension = 16, HiddenDim = 16,
-            VisionLayers = 1, NumLanguageLayers = 1, NumHeads = 2,
+            VisionLayers = 1, NumLmLayers = 1, NumHeads = 2,
             ImageSize = 8, PatchSize = 4, MaxSequenceLength = 8,
             ContextWindowSize = 16, VocabSize = 512, MaxImagesPerRequest = 1
         };

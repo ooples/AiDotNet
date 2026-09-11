@@ -26,6 +26,9 @@
     <Compile Include="../../src/Models/Options/DocumentNeuralNetworkOptions.cs" Link="Production/DocumentNeuralNetworkOptions.cs" />
     <Compile Include="../../src/Models/Options/AudioHyperparameterOptions.cs" Link="Production/AudioHyperparameterOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/VisionLanguageModelOptions.cs" Link="Production/VisionLanguageModelOptions.cs" />
+    <Compile Include="../../src/NeuralNetworks/Options/VisionLanguageInputOptions.cs" Link="Production/VisionLanguageInputOptions.cs" />
+    <Compile Include="../../src/NeuralNetworks/Options/ClipOptions.cs" Link="Production/ClipOptions.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/ClipOptionsContractTests.cs" Link="ClipOptionsContractTests.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/SequenceModelOptions.cs" Link="Production/SequenceModelOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/Options/VisionMambaOptions.cs" Link="Production/VisionMambaOptions.cs" />
     <Compile Include="../../src/NeuralNetworks/VisionScanPattern.cs" Link="Production/VisionScanPattern.cs" />

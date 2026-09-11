@@ -7,6 +7,16 @@ namespace AiDotNet.Tests.UnitTests.Models.Options;
 public class Gpt4VisionOptionsContractTests
 {
     [Fact]
+    public void LanguageDepth_UsesTheExistingGenerativeFamilyName()
+    {
+        var property = typeof(Gpt4VisionOptions).GetProperty(nameof(LLaVAOptions.NumLmLayers));
+        Assert.NotNull(property);
+        Assert.Equal(typeof(int), property.PropertyType);
+        Assert.Equal(32, property.GetValue(new Gpt4VisionOptions()));
+        Assert.Null(typeof(Gpt4VisionOptions).GetProperty("NumLanguageLayers"));
+    }
+
+    [Fact]
     public void SharedVisionWidth_RetainsTheFormerConstructorDefault()
     {
         var options = new Gpt4VisionOptions();
@@ -14,7 +24,7 @@ public class Gpt4VisionOptionsContractTests
         Assert.Equal(4096, options.EmbeddingDimension);
         Assert.Equal(4096, options.HiddenDim);
         Assert.Equal(24, options.VisionLayers);
-        Assert.Equal(32, options.NumLanguageLayers);
+        Assert.Equal(32, options.NumLmLayers);
         options.Validate();
     }
 
