@@ -117,6 +117,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "FinRLAgent",
             "MultiScalePINN",
             "InverseProblemPINN",
+            "CodeT5",
+            "NeuralProgramSynthesizer",
         };
 
     private static readonly string[] ExcludedClassNames = new[]
@@ -139,6 +141,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // single step cannot have; measured, 7 of its invariants failed that way (predicted shift 22.6
         // against ~1000), none of them a defect. It is exercised by the meta-learners that own it.
         "LinearVectorModel",
+
+        // A self-supervised EVALUATION harness, not a model: Train is empty and Predict forwards to the
+        // encoder it wraps. It scores an encoder's embeddings by k-nearest-neighbour accuracy; that
+        // encoder is what a model-family fixture would test, and it has its own.
+        "KNNEvaluator",
+
+        // Runs a caller-supplied ONNX graph (constructed from ONNX bytes or a .onnx path). A generated
+        // fixture has no real graph to load, so there is nothing of the adapter's own to test.
+        "OnnxFullModelAdapter",
+
+        // An inference-serving engine, not a trainable model: it owns no layer stack, takes its weights
+        // through SetFromFullWeights and predicts over per-rank paged KV caches. Its behaviour is covered
+        // by the dedicated AiDotNet.Serving.Tests integration suites (single-device equivalence, paged
+        // serving, wiring, GPU paged attention).
+        "TensorParallelPagedModel",
 
         // Internal AutoML wrapper around UNet+VAE+Scheduler+Conditioner.
         // Even with a parameterless ctor that wires up sensible defaults,
@@ -496,6 +513,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> NeckTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "InputChannels", "OutputChannels", "TopResolution" };
+
+    /// <summary>Overridable surface of <c>VolatilityModelTestBase</c>: the default factory and the
+    /// simulated-series length. Filtering keeps the generic shape members, which it does not have, out.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> VolatilityModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "CreateModel", "ReturnCount" };
 
     private static readonly System.Collections.Generic.HashSet<string> SafetyModuleTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -3277,6 +3299,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string visionDetectorOptions = string.Empty;
         bool extendsTextConditioning = false;
         bool extendsNeck = false;
+        bool extendsClassicalVolatility = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3456,6 +3479,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsTextConditioning = true;
             else if (baseName.StartsWith("NeckBase", System.StringComparison.Ordinal))
                 extendsNeck = true;
+            else if (baseName.StartsWith("ClassicalVolatilityModelBase", System.StringComparison.Ordinal))
+                extendsClassicalVolatility = true;
             else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
@@ -3623,6 +3648,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             VisionDetectorOptionsType = visionDetectorOptions,
             ExtendsTextConditioningBase = extendsTextConditioning,
             ExtendsNeckBase = extendsNeck,
+            ExtendsClassicalVolatilityBase = extendsClassicalVolatility,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
@@ -4050,6 +4076,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // the factory.
         if (model.ExtendsNeckBase)
             return TestFamily.Neck;
+
+        // Priority 0e: Volatility. The GARCH-type models fit a return series (Train ignores its target)
+        // and forecast conditional volatility; they implement IVolatilityModel, not a model interface
+        // any other family can drive, so without this they resolved to no family at all.
+        if (model.ExtendsClassicalVolatilityBase)
+            return TestFamily.Volatility;
 
         // Priority 0d: TensorModule. Tensor-to-Tensor components whose only required constructor
         // argument is a width (CenteringMechanism(int dimension), RelationModule(int hiddenDimension)).
@@ -7258,6 +7290,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 4, outputSize: 1), " +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "CodeT5" && model.TypeParameterCount == 1)
+            {
+                // One encoder and one decoder block at width 16; MaxSequenceLength 32 covers the
+                // 32-token fixture the positional encoding is sized for. Dropout off.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + ")";
+            }
+            else if (model.ClassName == "NeuralProgramSynthesizer" && model.TypeParameterCount == 1)
+            {
+                // The same architecture, with a CodeT5 on it as the required code model.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + ", " +
+                    "new AiDotNet.ProgramSynthesis.Engines.CodeT5<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + "))";
             }
             else if (model.ClassName == "MultiScalePINN" && model.TypeParameterCount == 1)
             {
@@ -12171,7 +12236,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // These two factories are emitted with <double> constructors and a double return type,
             // so they derive from the double convenience base rather than a <float> form.
             || baseClassName == "TensorModuleTestBase"
-            || baseClassName == "NeckTestBase";
+            || baseClassName == "NeckTestBase"
+            || baseClassName == "VolatilityModelTestBase";
         // A non-generic model (LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>)
         // has no type argument to rewrite, so a float scaffold would declare IFullModel<float, ...>
         // over a double-only type and fail to compile (CS0266).
@@ -16114,6 +16180,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.VisionDetector => VisionDetectorTestBaseMembers,
             TestFamily.TensorModule => TensorModuleTestBaseMembers,
             TestFamily.Neck => NeckTestBaseMembers,
+            TestFamily.Volatility => VolatilityModelTestBaseMembers,
             _ => null,
         };
         if (allowedMembers is not null)
@@ -16252,6 +16319,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.UsesTensorInput && model.HasLeadingIntConstructor;
             case TestFamily.Neck:
                 return model.ExtendsNeckBase;
+            case TestFamily.Volatility:
+                return model.ExtendsClassicalVolatilityBase;
 
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
@@ -18485,6 +18554,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         public bool ExtendsNeckBase { get; set; }
 
+        public bool ExtendsClassicalVolatilityBase { get; set; }
+
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
         public bool UsesMatrixInput { get; set; }
@@ -18643,6 +18714,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         VisionDetector,
         TensorModule,
         Neck,
+        Volatility,
         NeuralNetwork
     }
 
@@ -19456,6 +19528,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VisionDetector:        return "ObjectDetectorTestBase";
             case TestFamily.TensorModule:          return "TensorModuleTestBase";
             case TestFamily.Neck:                  return "NeckTestBase";
+            case TestFamily.Volatility:            return "VolatilityModelTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
         }
@@ -19559,6 +19632,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.Neck:
                 return "AiDotNet.ComputerVision.Detection.Necks.NeckBase<double>";
+            case TestFamily.Volatility:
+                return "AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<double>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:
