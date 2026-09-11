@@ -22,6 +22,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -95,6 +96,30 @@ namespace AiDotNet.AutoML
         /// <summary>Gets or sets the latent spatial width (default: 64 for 512x512 images with 8x downscaling).</summary>
         public int LatentWidth { get; set; } = 64;
 
+        /// <summary>Gets or sets the width of the conditioning vector, which is the context width of the noise
+        /// predictor's cross-attention.</summary>
+        /// <remarks>DiffusionAutoML sets it from the training inputs. The default, 768, is the width of CLIP ViT-L/14,
+        /// Stable Diffusion 1.x's text encoder.</remarks>
+        public int ConditioningDim { get; set; } = 768;
+
+        /// <summary>Gets or sets the number of image channels the autoencoder reconstructs.</summary>
+        /// <remarks>DiffusionAutoML sets it from the training targets.</remarks>
+        public int ImageChannels { get; set; } = 3;
+
+        /// <summary>Gets or sets the number of attention heads in the noise predictor.</summary>
+        /// <remarks>It must divide <see cref="BaseChannels"/>, which the search space keeps a multiple of 64.</remarks>
+        public int NumHeads { get; set; } = 8;
+
+        /// <summary>Gets or sets the number of transformer blocks in the DiT and U-ViT noise predictors.</summary>
+        /// <remarks>12 is the depth of DiT-S and DiT-B (Peebles and Xie 2023, Table 1).</remarks>
+        public int TransformerDepth { get; set; } = 12;
+
+        /// <summary>Gets or sets the probability that a training step drops its condition.</summary>
+        /// <remarks>Classifier-free guidance combines a conditional and an unconditional prediction, so one network
+        /// has to learn both: Ho and Salimans (2022, Algorithm 1) discard the conditioning with probability p_uncond,
+        /// and report that 0.5 "consistently performs worse" than 0.1 or 0.2.</remarks>
+        public double ConditioningDropoutProbability { get; set; } = 0.1;
+
         /// <summary>Gets or sets the optional random seed.</summary>
         public int? Seed { get; set; }
 
@@ -115,6 +140,11 @@ namespace AiDotNet.AutoML
                 ["LatentDim"] = LatentDim,
                 ["LatentHeight"] = LatentHeight,
                 ["LatentWidth"] = LatentWidth,
+                ["ConditioningDim"] = ConditioningDim,
+                ["ImageChannels"] = ImageChannels,
+                ["NumHeads"] = NumHeads,
+                ["TransformerDepth"] = TransformerDepth,
+                ["ConditioningDropoutProbability"] = ConditioningDropoutProbability,
                 ["Seed"] = Seed ?? 0
             };
         }
@@ -161,6 +191,21 @@ namespace AiDotNet.AutoML
 
             if (parameters.TryGetValue("LatentWidth", out var lw))
                 config.LatentWidth = Convert.ToInt32(lw);
+
+            if (parameters.TryGetValue("ConditioningDim", out var cd))
+                config.ConditioningDim = Convert.ToInt32(cd);
+
+            if (parameters.TryGetValue("ImageChannels", out var ic))
+                config.ImageChannels = Convert.ToInt32(ic);
+
+            if (parameters.TryGetValue("NumHeads", out var nh))
+                config.NumHeads = Convert.ToInt32(nh);
+
+            if (parameters.TryGetValue("TransformerDepth", out var td))
+                config.TransformerDepth = Convert.ToInt32(td);
+
+            if (parameters.TryGetValue("ConditioningDropoutProbability", out var cdp))
+                config.ConditioningDropoutProbability = Convert.ToDouble(cdp);
 
             if (parameters.TryGetValue("Seed", out var seed))
             {
@@ -291,6 +336,7 @@ namespace AiDotNet.AutoML
 
                     // Get next trial parameters
                     var parameters = await SuggestNextTrialAsync();
+                    AddDataShape(parameters, inputs, targets);
                     var trialStopwatch = Stopwatch.StartNew();
 
                     try
@@ -334,6 +380,7 @@ namespace AiDotNet.AutoML
                 {
                     // Create a default model if no successful trials
                     var defaultParams = GetDefaultParameters();
+                    AddDataShape(defaultParams, inputs, targets);
                     BestModel = await CreateModelWithHookAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), defaultParams);
                     BestConfig = DiffusionTrialConfig<T>.FromDictionary(defaultParams);
                 }
@@ -407,28 +454,8 @@ namespace AiDotNet.AutoML
             {
                 var config = DiffusionTrialConfig<T>.FromDictionary(parameters);
 
-                // Create noise predictor based on config
-                var noisePredictor = CreateNoisePredictor(config);
-
-                // Create VAE
-                var vae = CreateVAE(config);
-
-                // Create scheduler
-                var scheduler = CreateScheduler(config);
-
-                // Create conditioner (simple text embedding)
-                var conditioner = new SimpleConditioner<T>(config.BaseChannels * 4);
-
-                // Create the latent diffusion model wrapper
-                var model = new DiffusionAutoMLModel<T>(
-                    noisePredictor,
-                    vae,
-                    scheduler,
-                    conditioner,
-                    config,
-                    _seed);
-
-                return model;
+                // The model builds the noise predictor, autoencoder, scheduler and conditioner the trial names.
+                return (IFullModel<T, Tensor<T>, Tensor<T>>)new DiffusionAutoMLModel<T>(config, config.Seed ?? _seed);
             });
         }
 
@@ -537,61 +564,45 @@ namespace AiDotNet.AutoML
             }
         }
 
-        private UNetNoisePredictor<T> CreateNoisePredictor(DiffusionTrialConfig<T> config)
+        /// <summary>
+        /// Adds the sizes a trial takes from the data rather than from the search: the conditioning width the
+        /// noise predictor's cross-attention reads, and the image the autoencoder reconstructs.
+        /// </summary>
+        /// <remarks>
+        /// Left at their defaults, the noise predictor's context width (768) never matched the conditioner's
+        /// (four times the base channels), and the latent size never matched the images.
+        /// </remarks>
+        private static void AddDataShape(Dictionary<string, object> parameters, Tensor<T> inputs, Tensor<T> targets)
         {
-            return new UNetNoisePredictor<T>(
-                inputChannels: config.LatentDim,
-                outputChannels: config.LatentDim,
-                baseChannels: config.BaseChannels,
-                numResBlocks: config.NumResBlocks,
-                seed: config.Seed);
-        }
-
-        private StandardVAE<T> CreateVAE(DiffusionTrialConfig<T> config)
-        {
-            return new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: config.LatentDim,
-                baseChannels: config.BaseChannels / 2,
-                numResBlocksPerLevel: config.NumResBlocks,
-                seed: config.Seed);
-        }
-
-        private INoiseScheduler<T> CreateScheduler(DiffusionTrialConfig<T> config)
-        {
-            int numSteps = config.InferenceSteps;
-            var schedulerConfig = SchedulerConfig<T>.CreateDefault();
-
-            INoiseScheduler<T> scheduler;
-            switch (config.SchedulerType)
+            if (inputs.Length > 0)
             {
-                case DiffusionSchedulerType.DDPM:
-                    // DDPM is the original slow scheduler; DDIM is a more efficient equivalent
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.DDIM:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.Euler:
-                case DiffusionSchedulerType.EulerAncestral:
-                case DiffusionSchedulerType.DPMSolver:
-                    // PNDM uses pseudo numerical methods similar to Euler/DPM-Solver
-                    // and provides high quality with fewer steps
-                    scheduler = new PNDMScheduler<T>(schedulerConfig);
-                    break;
-                case DiffusionSchedulerType.LCM:
-                    // LCM uses few steps with high quality - PNDM is best suited for few-step inference
-                    scheduler = new PNDMScheduler<T>(schedulerConfig);
-                    numSteps = Math.Min(4, numSteps);
-                    break;
-                default:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
+                int batch = inputs.Shape.Length > 1 ? Math.Max(1, inputs.Shape[0]) : 1;
+                parameters["ConditioningDim"] = Math.Max(1, inputs.Length / batch);
             }
 
-            scheduler.SetTimesteps(numSteps);
-            return scheduler;
+            if (targets.Shape.Length == 4)
+            {
+                int factor = DiffusionAutoMLModel<T>.AutoencoderDownsampling;
+                if (targets.Shape[2] % factor != 0 || targets.Shape[3] % factor != 0)
+                {
+                    throw new ArgumentException(
+                        $"Image sides must be multiples of {factor}, the autoencoder's downsampling; got " +
+                        $"{targets.Shape[2]} x {targets.Shape[3]}.", nameof(targets));
+                }
+
+                parameters["ImageChannels"] = targets.Shape[1];
+                parameters["LatentHeight"] = targets.Shape[2] / factor;
+                parameters["LatentWidth"] = targets.Shape[3] / factor;
+            }
         }
+
+        /// <summary>Gets or sets the autoencoder training steps each trial runs before its denoiser trains.</summary>
+        /// <remarks>Latent diffusion trains in two phases (Rombach et al. 2022): "First, we train an autoencoder",
+        /// then the diffusion model in its latent space.</remarks>
+        public int AutoencoderTrainingIterations { get; set; } = 100;
+
+        /// <summary>Gets or sets the denoiser training steps each trial runs.</summary>
+        public int DiffusionTrainingIterations { get; set; } = 100;
 
         private async Task TrainModelAsync(
             IFullModel<T, Tensor<T>, Tensor<T>> model,
@@ -601,26 +612,76 @@ namespace AiDotNet.AutoML
         {
             await Task.Run(() =>
             {
-                const int defaultTrainingIterations = 100;
+                // Phase one: the autoencoder, when the targets are images. Latent targets need none.
+                if (model is DiffusionAutoMLModel<T> diffusion && diffusion.IsImage(targets))
+                {
+                    for (int i = 0; i < AutoencoderTrainingIterations; i++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        diffusion.TrainAutoencoder(targets);
+                    }
+                }
 
-                for (int i = 0; i < defaultTrainingIterations; i++)
+                // Phase two: the denoiser on the autoencoder's latents, mini-batched by NeuralBatchHelper (#1296).
+                for (int i = 0; i < DiffusionTrainingIterations; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    // Chunked diffusion AutoML training iteration (#1296):
-                    // each iteration previously did one full-batch Train on
-                    // the entire inputs/targets pair. NeuralBatchHelper
-                    // dispatches to mini-batched Train calls for NN models;
-                    // closed-form / classical models fall through.
                     NeuralBatchHelper.TrainMaybeBatched(model, inputs, targets);
                 }
             }, cancellationToken);
         }
+
+        /// <summary>
+        /// Scores a trial by how close its conditioned samples come to the paired validation images.
+        /// </summary>
+        /// <remarks>
+        /// The inherited scorer compares Predict with the targets, but a latent diffusion model's Predict denoises
+        /// a latent: it takes no condition and returns no image. This runs the conditioned sampler instead, so the
+        /// sampler, step count and guidance scale under search all affect the score. The starting noise is seeded,
+        /// so every trial starts from the same noise.
+        /// </remarks>
+        protected override Task<double> EvaluateModelAsync(
+            IFullModel<T, Tensor<T>, Tensor<T>> model,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets)
+        {
+            if (model is not DiffusionAutoMLModel<T> diffusion)
+                return base.EvaluateModelAsync(model, validationInputs, validationTargets);
+
+            return Task.Run(() =>
+            {
+                var samples = diffusion.GenerateConditioned(validationInputs, _seed ?? 0);
+                if (samples.Length != validationTargets.Length)
+                {
+                    throw new ArgumentException(
+                        $"The conditioned samples hold {samples.Length} values and the validation targets " +
+                        $"{validationTargets.Length}; the targets must be images of the configured size.",
+                        nameof(validationTargets));
+                }
+
+                double sum = 0.0;
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    double difference = NumOps.ToDouble(samples[i]) - NumOps.ToDouble(validationTargets[i]);
+                    sum += difference * difference;
+                }
+
+                return samples.Length == 0 ? 0.0 : sum / samples.Length;
+            });
+        }
     }
 
     /// <summary>
-    /// Simple conditioner that creates conditioning embeddings from input tensors.
+    /// Turns a conditioning vector into the one-token context a noise predictor's cross-attention reads.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <remarks>
+    /// Cross-attention takes context of shape [batch, tokens, width]. This conditioner has no weights: each row
+    /// of the condition becomes one token, zero-padded or truncated to the width, and the noise predictor's key
+    /// and value projections learn what to read from it. The null condition for classifier-free guidance is the
+    /// zero token, so an all-zero condition is the unconditional one. It used to return a rank-1 vector for a
+    /// condition and a [batch, 77, width] tensor for the null condition.
+    /// </remarks>
     internal class SimpleConditioner<T> : IConditioningModule<T>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -633,36 +694,36 @@ namespace AiDotNet.AutoML
 
         public SimpleConditioner(int embeddingDim)
         {
+            if (embeddingDim <= 0)
+                throw new ArgumentOutOfRangeException(nameof(embeddingDim), embeddingDim, "The conditioning width must be positive.");
+
             _embeddingDim = embeddingDim;
         }
 
+        /// <summary>Encodes a condition of shape [features] or [batch, ...] as context [batch, 1, EmbeddingDimension].</summary>
         public Tensor<T> Encode(Tensor<T> condition)
         {
-            // Simple pass-through or projection
-            if (condition.Shape.Length == 1 && condition.Shape[0] == _embeddingDim)
-            {
+            if (condition is null)
+                throw new ArgumentNullException(nameof(condition));
+            if (condition.Shape.Length == 3 && condition.Shape[1] == 1 && condition.Shape[2] == _embeddingDim)
                 return condition;
-            }
 
-            // Create a simple embedding by averaging or padding
-            var result = new Tensor<T>(new[] { _embeddingDim });
-            var resultSpan = result.AsWritableSpan();
-            var condSpan = condition.AsSpan();
+            int batch = condition.Shape.Length > 1 ? condition.Shape[0] : 1;
+            if (batch <= 0 || condition.Length == 0)
+                throw new ArgumentException("A condition needs at least one value per sample.", nameof(condition));
 
-            int srcLen = condSpan.Length;
-            for (int i = 0; i < _embeddingDim; i++)
+            int features = condition.Length / batch;
+            int copied = Math.Min(features, _embeddingDim);
+            var context = new Tensor<T>(new[] { batch, 1, _embeddingDim });
+            var target = context.AsWritableSpan();
+            var source = condition.AsSpan();
+            for (int b = 0; b < batch; b++)
             {
-                if (i < srcLen)
-                {
-                    resultSpan[i] = condSpan[i];
-                }
-                else
-                {
-                    resultSpan[i] = NumOps.Zero;
-                }
+                for (int f = 0; f < copied; f++)
+                    target[b * _embeddingDim + f] = source[b * features + f];
             }
 
-            return result;
+            return context;
         }
 
         public Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
@@ -706,10 +767,10 @@ namespace AiDotNet.AutoML
             return result;
         }
 
+        /// <summary>The null condition: one zero token per sample, the shape <see cref="Encode"/> returns.</summary>
         public Tensor<T> GetUnconditionalEmbedding(int batchSize)
         {
-            // Return zero embedding for unconditional generation
-            return new Tensor<T>(new[] { batchSize, MaxSequenceLength, _embeddingDim });
+            return new Tensor<T>(new[] { Math.Max(1, batchSize), 1, _embeddingDim });
         }
 
         public Tensor<T> Tokenize(string text)
@@ -747,23 +808,28 @@ namespace AiDotNet.AutoML
     }
 
     /// <summary>
-    /// Wrapper model that combines diffusion components into an IFullModel.
+    /// The latent diffusion model a <see cref="DiffusionAutoML{T}"/> trial builds: a noise predictor trained on an
+    /// autoencoder's latents and conditioned through cross-attention on a conditioning vector.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This model wraps a complete diffusion pipeline (noise predictor,
-    /// VAE encoder/decoder, noise scheduler, and conditioning) into a single model object.
-    /// It is automatically created by the DiffusionAutoML search process after finding the
-    /// best configuration. You typically do not create this directly - use DiffusionAutoML
-    /// to search for and build the optimal diffusion model.</para>
+    /// <para>
+    /// It derives from <see cref="LatentDiffusionModelBase{T}"/>, so the denoiser trains with the shared DDPM step
+    /// on the gradient tape (Ho et al. 2020, Algorithm 1), noised and timestepped by the trial's own scheduler.
+    /// Train takes the condition as its input and the image, or an already-encoded latent, as its target.
+    /// </para>
+    /// <para>
+    /// It replaces a hand-written wrapper whose Train computed the denoising loss, discarded it, and stepped on
+    /// an SPSA estimate taken through the whole sampling loop against the target image. That wrapper noised
+    /// with a schedule of its own and "guided" by multiplying the noise prediction by the scale. It handed
+    /// cross-attention a rank-1 condition of the wrong width, and it built a U-Net and a DDIM or PNDM scheduler
+    /// whichever predictor and scheduler the trial named.
+    /// </para>
+    /// <para>
+    /// Predict keeps the latent-diffusion contract and denoises a latent. <see cref="GenerateConditioned"/> turns
+    /// conditions into images.
+    /// </para>
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// // DiffusionAutoMLModel is typically created by DiffusionAutoML.SearchAsync()
-    /// // Use the model for generation after search:
-    /// Tensor&lt;float&gt; generated = model.Predict(noiseTensor);
-    /// </code>
-    /// </example>
     [ModelDomain(ModelDomain.Generative)]
     [ModelCategory(ModelCategory.Diffusion)]
     [ModelTask(ModelTask.Generation)]
@@ -771,371 +837,365 @@ namespace AiDotNet.AutoML
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
-    internal partial class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+    [ResearchPaper("High-Resolution Image Synthesis with Latent Diffusion Models", "https://arxiv.org/abs/2112.10752")]
+    [ResearchPaper("Classifier-Free Diffusion Guidance", "https://arxiv.org/abs/2207.12598")]
+    internal partial class DiffusionAutoMLModel<T> : LatentDiffusionModelBase<T>
     {
+        /// <summary>
+        /// The autoencoder's downsampling: four levels, 2^3 = 8, the factor Latent Diffusion and DiT use.
+        /// </summary>
+        internal const int AutoencoderDownsampling = 8;
+
+        private static readonly int[] AutoencoderChannelMultipliers = { 1, 2, 4, 4 };
 
         /// <inheritdoc />
-        /// <remarks>The noise predictor then the VAE, the order the hand-written concatenation used and therefore the serialization order.</remarks>
+        /// <remarks>The noise predictor then the autoencoder, the previous wrapper's serialization order.</remarks>
         protected override void RegisterComponents()
         {
             RegisterParameterComponent(_noisePredictor);
             RegisterParameterComponent(_vae);
         }
-        private readonly UNetNoisePredictor<T> _noisePredictor;
-        private readonly StandardVAE<T> _vae;
-        private readonly INoiseScheduler<T> _scheduler;
-        private readonly IConditioningModule<T> _conditioner;
+
+        // Stored under the constructor's own parameter names so the clone plan replays the constructor.
         private readonly DiffusionTrialConfig<T> _config;
         private readonly int? _seed;
-        private Random _random;
-        private T _lastTrainingLoss;
 
+        private readonly NoisePredictorBase<T> _noisePredictor;
+        private readonly StandardVAE<T> _vae;
+        private readonly SimpleConditioner<T> _conditioner;
 
-        public string[] FeatureNames { get; set; } = Array.Empty<string>();
+        /// <inheritdoc />
+        public override INoisePredictor<T> NoisePredictor => _noisePredictor;
 
-        public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+        /// <inheritdoc />
+        public override IVAEModel<T> VAE => _vae;
 
-        public DiffusionAutoMLModel(
-            UNetNoisePredictor<T> noisePredictor,
-            StandardVAE<T> vae,
-            INoiseScheduler<T> scheduler,
-            IConditioningModule<T> conditioner,
-            DiffusionTrialConfig<T> config,
-            int? seed)
+        /// <inheritdoc />
+        public override IConditioningModule<T>? Conditioner => _conditioner;
+
+        /// <inheritdoc />
+        /// <remarks>Guarded because the base constructor runs before this one assigns the configuration.</remarks>
+        public override int LatentChannels => _config?.LatentDim ?? new DiffusionTrialConfig<T>().LatentDim;
+
+        /// <summary>Gets the trial configuration the model was built from.</summary>
+        public DiffusionTrialConfig<T> Config => _config;
+
+        /// <summary>
+        /// Builds the noise predictor, autoencoder, scheduler and conditioner a trial configuration names.
+        /// </summary>
+        /// <param name="config">The trial configuration, or null for its defaults.</param>
+        /// <param name="seed">Seeds weight initialization and the training noise and timesteps, or null.</param>
+        public DiffusionAutoMLModel(DiffusionTrialConfig<T>? config = null, int? seed = null)
+            : base(CreateOptions(config, seed), CreateScheduler(config))
         {
-            _noisePredictor = noisePredictor;
-            _vae = vae;
-            _scheduler = scheduler;
-            _conditioner = conditioner;
-            _config = config;
+            _config = config ?? new DiffusionTrialConfig<T>();
             _seed = seed;
-            _random = seed.HasValue
-                ? RandomHelper.CreateSeededRandom(seed.Value)
-                : RandomHelper.CreateSecureRandom();
-            _lastTrainingLoss = NumOps.Zero;
+            _noisePredictor = CreateNoisePredictor(_config, seed);
+            _vae = new StandardVAE<T>(
+                inputChannels: _config.ImageChannels,
+                latentChannels: _config.LatentDim,
+                baseChannels: Math.Max(1, _config.BaseChannels / 2),
+                channelMultipliers: (int[])AutoencoderChannelMultipliers.Clone(),
+                numResBlocksPerLevel: _config.NumResBlocks,
+                seed: seed);
+            _conditioner = new SimpleConditioner<T>(_config.ConditioningDim);
+            SetGuidanceScale(_config.GuidanceScale);
+        }
+
+        private static DiffusionModelOptions<T> CreateOptions(DiffusionTrialConfig<T>? config, int? seed)
+        {
+            var resolved = config ?? new DiffusionTrialConfig<T>();
+
+            // The options' own schedule defaults are DDPM's (Ho et al. 2020): T = 1000, betas linear from 1e-4 to 0.02.
+            return new DiffusionModelOptions<T>
+            {
+                LearningRate = resolved.LearningRate,
+                DefaultInferenceSteps = resolved.InferenceSteps,
+                LatentChannels = resolved.LatentDim,
+                Seed = seed,
+            };
+        }
+
+        private static INoiseScheduler<T> CreateScheduler(DiffusionTrialConfig<T>? config)
+        {
+            // The same DDPM schedule the options declare, so training and sampling agree.
+            var schedule = SchedulerConfig<T>.CreateDefault();
+            var type = (config ?? new DiffusionTrialConfig<T>()).SchedulerType;
+            switch (type)
+            {
+                case DiffusionSchedulerType.DDPM:
+                    return new DDPMScheduler<T>(schedule);
+                case DiffusionSchedulerType.DDIM:
+                    return new DDIMScheduler<T>(schedule);
+                case DiffusionSchedulerType.Euler:
+                    return new EulerDiscreteScheduler<T>(schedule);
+                case DiffusionSchedulerType.EulerAncestral:
+                    return new EulerAncestralDiscreteScheduler<T>(schedule);
+                case DiffusionSchedulerType.DPMSolver:
+                    return new DPMSolverMultistepScheduler<T>(schedule);
+                case DiffusionSchedulerType.LCM:
+                    // LCM's few-step sampler assumes a consistency-distilled model (Luo et al. 2023); a denoiser
+                    // trained here is not one. It is built because the search space names it.
+                    return new LCMScheduler<T>(schedule);
+                default:
+                    throw new NotSupportedException($"Scheduler type {type} is not supported.");
+            }
+        }
+
+        private static NoisePredictorBase<T> CreateNoisePredictor(DiffusionTrialConfig<T> config, int? seed)
+        {
+            switch (config.NoisePredictorType)
+            {
+                case NoisePredictorType.UNet:
+                    return new UNetNoisePredictor<T>(
+                        inputChannels: config.LatentDim,
+                        outputChannels: config.LatentDim,
+                        baseChannels: config.BaseChannels,
+                        numResBlocks: config.NumResBlocks,
+                        contextDim: config.ConditioningDim,
+                        numHeads: config.NumHeads,
+                        inputHeight: config.LatentHeight,
+                        seed: seed);
+                case NoisePredictorType.DiT:
+                    RequireSquareLatent(config);
+                    return new DiTNoisePredictor<T>(
+                        inputChannels: config.LatentDim,
+                        hiddenSize: config.BaseChannels,
+                        numLayers: config.TransformerDepth,
+                        numHeads: config.NumHeads,
+                        patchSize: PatchSize(config),
+                        contextDim: config.ConditioningDim,
+                        latentSpatialSize: config.LatentHeight,
+                        seed: seed);
+                case NoisePredictorType.UViT:
+                    RequireSquareLatent(config);
+                    return new UViTNoisePredictor<T>(
+                        inputChannels: config.LatentDim,
+                        hiddenSize: config.BaseChannels,
+                        numLayers: config.TransformerDepth,
+                        numHeads: config.NumHeads,
+                        patchSize: PatchSize(config),
+                        contextDim: config.ConditioningDim,
+                        latentSpatialSize: config.LatentHeight,
+                        seed: seed);
+                default:
+                    throw new NotSupportedException($"Noise predictor type {config.NoisePredictorType} is not supported.");
+            }
+        }
+
+        /// <summary>Patch size 2, DiT's "/2" configurations (Peebles and Xie 2023), unless a latent side is odd.</summary>
+        private static int PatchSize(DiffusionTrialConfig<T> config)
+            => config.LatentHeight % 2 == 0 && config.LatentWidth % 2 == 0 ? 2 : 1;
+
+        private static void RequireSquareLatent(DiffusionTrialConfig<T> config)
+        {
+            if (config.LatentHeight != config.LatentWidth)
+            {
+                throw new NotSupportedException(
+                    $"The {config.NoisePredictorType} noise predictor takes a square latent; got {config.LatentHeight} x {config.LatentWidth}.");
+            }
         }
 
         /// <summary>
-        /// Parameterless constructor that wires the AutoML wrapper around a
-        /// default UNet noise predictor, StandardVAE, DDIM scheduler, and
-        /// SimpleConditioner — using <see cref="DiffusionTrialConfig{T}"/>'s
-        /// own defaults (DDIM, 50 inference steps, baseChannels=128,
-        /// numResBlocks=2, latentDim=4). Used by the auto-generated
-        /// DiffusionModelTestBase scaffold which can't synthesise the
-        /// full dependency graph manually. AutoML's actual trial path
-        /// continues to call the explicit constructor with a tuned config.
+        /// Whether a tensor is an image batch for the autoencoder: [batch, image channels, height, width], with a
+        /// channel count the latent does not share.
         /// </summary>
-        public DiffusionAutoMLModel()
-            : this(
-                noisePredictor: new UNetNoisePredictor<T>(
-                    inputChannels: new DiffusionTrialConfig<T>().LatentDim,
-                    outputChannels: new DiffusionTrialConfig<T>().LatentDim,
-                    baseChannels: new DiffusionTrialConfig<T>().BaseChannels,
-                    numResBlocks: new DiffusionTrialConfig<T>().NumResBlocks,
-                    seed: null),
-                vae: new StandardVAE<T>(
-                    inputChannels: 3,
-                    latentChannels: new DiffusionTrialConfig<T>().LatentDim,
-                    baseChannels: new DiffusionTrialConfig<T>().BaseChannels / 2,
-                    numResBlocksPerLevel: new DiffusionTrialConfig<T>().NumResBlocks,
-                    seed: null),
-                scheduler: new DDIMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
-                conditioner: new SimpleConditioner<T>(embeddingDim: 768),
-                config: new DiffusionTrialConfig<T>(),
-                seed: null)
+        public bool IsImage(Tensor<T> tensor)
+            => tensor is not null
+               && tensor.Shape.Length == 4
+               && tensor.Shape[1] == _vae.InputChannels
+               && tensor.Shape[1] != LatentChannels;
+
+        /// <summary>
+        /// One step of the first training phase: the autoencoder learns to reconstruct the images.
+        /// </summary>
+        /// <remarks>
+        /// Rombach et al. (2022) "separate training into two distinct phases: First, we train an autoencoder",
+        /// then the denoiser on its latents. The denoiser's latents are encoded before its gradient tape opens, so
+        /// the autoencoder stays fixed while the denoiser trains.
+        /// </remarks>
+        public void TrainAutoencoder(Tensor<T> images)
         {
-        }
-
-        public override Tensor<T> Predict(Tensor<T> input)
-        {
-            // Encode conditioning
-            var condition = _conditioner.Encode(input);
-
-            // Start from noise
-            int latentSize = _config.LatentDim;
-            var latent = SampleNoise(new[] { 1, latentSize, _config.LatentHeight, _config.LatentWidth });
-
-            // Set scheduler timesteps
-            _scheduler.SetTimesteps(_config.InferenceSteps);
-            var timesteps = _scheduler.Timesteps;
-
-            // Denoising loop
-            foreach (var t in timesteps)
+            if (images is null)
+                throw new ArgumentNullException(nameof(images));
+            if (!IsImage(images))
             {
-                var noisePred = _noisePredictor.PredictNoise(latent, t, condition);
-
-                // Apply classifier-free guidance if scale > 1
-                if (_config.GuidanceScale > 1.0)
-                {
-                    // Simplified guidance - in practice would need unconditional prediction
-                    var scale = NumOps.FromDouble(_config.GuidanceScale);
-                    var noisePredSpan = noisePred.AsWritableSpan();
-                    for (int i = 0; i < noisePredSpan.Length; i++)
-                    {
-                        noisePredSpan[i] = NumOps.Multiply(noisePredSpan[i], scale);
-                    }
-                }
-
-                // Convert tensors to vectors for scheduler step
-                var noisePredVec = new Vector<T>(noisePred.AsSpan().ToArray());
-                var latentVec = new Vector<T>(latent.AsSpan().ToArray());
-                var eta = NumOps.Zero; // deterministic mode (DDIM-style)
-
-                var newLatentVec = _scheduler.Step(noisePredVec, t, latentVec, eta);
-
-                // Convert back to tensor
-                var newLatent = new Tensor<T>(latent._shape);
-                var newLatentSpan = newLatent.AsWritableSpan();
-                for (int j = 0; j < newLatentVec.Length && j < newLatentSpan.Length; j++)
-                    newLatentSpan[j] = newLatentVec[j];
-                latent = newLatent;
+                throw new ArgumentException(
+                    $"Autoencoder training takes images of shape [batch, {_vae.InputChannels}, height, width].", nameof(images));
             }
 
-            // Decode from latent space
-            return _vae.Decode(latent);
+            EnsureOwnWeights();
+            _vae.Train(images, images);
         }
 
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        /// <inheritdoc />
+        /// <remarks>The denoiser trains on z = E(x), the scaled latent of the image (Rombach et al. 2022), and a
+        /// target that is already a latent is used as it is.</remarks>
+        protected override Tensor<T> PrepareTrainingSample(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            // Encode target to latent space
-            var latent = _vae.Encode(expectedOutput);
+            if (expectedOutput is null)
+                throw new ArgumentNullException(nameof(expectedOutput));
 
-            // Sample random timestep
-            int maxT = _config.InferenceSteps;
-            int t = _random.Next(1, maxT + 1);
-
-            // Sample noise and add to latent
-            var noise = SampleNoise(latent._shape);
-            var noisyLatent = AddNoise(latent, noise, t);
-
-            // Encode conditioning
-            var condition = _conditioner.Encode(input);
-
-            // Predict noise
-            var predictedNoise = _noisePredictor.PredictNoise(noisyLatent, t, condition);
-
-            // Compute loss and store for monitoring
-            var loss = ComputeMSELoss(predictedNoise, noise);
-            _lastTrainingLoss = loss;
-
-            // Update parameters via SPSA gradient estimation and apply
-            var gradients = ComputeGradients(input, expectedOutput);
-            ApplyGradients(gradients, NumOps.FromDouble(1e-4));
+            return IsImage(expectedOutput) ? EncodeToLatent(expectedOutput, sampleMode: true) : expectedOutput;
         }
 
-        public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+        /// <inheritdoc />
+        /// <remarks>The condition is the Train input, dropped per sample with the configured probability so the
+        /// network also learns the unconditional prediction guidance needs.</remarks>
+        protected override Tensor<T> PredictTrainingNoise(
+            Tensor<T> noisySample,
+            int[] timesteps,
+            bool isBatched,
+            Tensor<T> input,
+            Tensor<T> expectedOutput)
         {
-            var copy = DeepCopy();
-            ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
-            return copy;
+            var latents = ToLatentLayout(noisySample);
+            int batch = latents.Shape[0];
+            var context = TrainingContext(input, batch);
+
+            Tensor<T> prediction;
+            if (batch == 1 || timesteps.Length == 1)
+            {
+                prediction = _noisePredictor.PredictNoise(latents, timesteps[0], context);
+            }
+            else
+            {
+                // A timestep per sample (Ho et al. 2020, Algorithm 1), so each sample is its own forward.
+                int channels = latents.Shape[1], height = latents.Shape[2], width = latents.Shape[3];
+                int tokens = context.Shape[1], contextWidth = context.Shape[2];
+                var parts = new Tensor<T>[batch];
+                for (int b = 0; b < batch; b++)
+                {
+                    parts[b] = _noisePredictor.PredictNoise(
+                        Engine.TensorSlice(latents, new[] { b, 0, 0, 0 }, new[] { 1, channels, height, width }),
+                        timesteps[b],
+                        Engine.TensorSlice(context, new[] { b, 0, 0 }, new[] { 1, tokens, contextWidth }));
+                }
+
+                prediction = Engine.TensorConcatenate(parts, axis: 0);
+            }
+
+            return noisySample.Shape.Length >= 4 ? prediction : Engine.Reshape(prediction, noisySample._shape);
+        }
+
+        private Tensor<T> TrainingContext(Tensor<T> condition, int batch)
+        {
+            var context = _conditioner.Encode(condition);
+            if (context.Shape[0] != batch)
+            {
+                if (batch == 1)
+                {
+                    // One sample: its condition is every value given, whatever its shape.
+                    context = _conditioner.Encode(condition.Reshape(new[] { 1, condition.Length }));
+                }
+                else if (context.Shape[0] == 1)
+                {
+                    context = Engine.TensorTile(context, new[] { batch, 1, 1 });
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        $"{context.Shape[0]} conditions were given for a batch of {batch} samples.", nameof(condition));
+                }
+            }
+
+            double dropout = _config.ConditioningDropoutProbability;
+            if (dropout <= 0.0)
+                return context;
+
+            // Ho and Salimans 2022, Algorithm 1: "with probability p_uncond", discard the conditioning.
+            var unconditional = _conditioner.GetUnconditionalEmbedding(1);
+            var rows = new Tensor<T>[batch];
+            bool anyDropped = false;
+            for (int b = 0; b < batch; b++)
+            {
+                bool drop = RandomGenerator.NextDouble() < dropout;
+                anyDropped |= drop;
+                rows[b] = drop
+                    ? unconditional
+                    : Engine.TensorSlice(context, new[] { b, 0, 0 }, new[] { 1, context.Shape[1], context.Shape[2] });
+            }
+
+            return anyDropped ? Engine.TensorConcatenate(rows, axis: 0) : context;
+        }
+
+        /// <summary>Gives a latent the [batch, channels, height, width] layout the noise predictor takes.</summary>
+        private Tensor<T> ToLatentLayout(Tensor<T> sample)
+        {
+            if (sample.Shape.Length >= 4)
+                return sample;
+
+            // [channels, height, width] is one unbatched latent; [batch, values] carries its batch first.
+            if (sample.Shape.Length == 3)
+                return Engine.Reshape(sample, new[] { 1, sample.Shape[0], sample.Shape[1], sample.Shape[2] });
+
+            int batch = sample.Shape.Length == 2 ? Math.Max(1, sample.Shape[0]) : 1;
+            int perSample = sample.Length / batch;
+            int channels = LatentChannels;
+            if (perSample % channels != 0)
+            {
+                throw new ArgumentException(
+                    $"A latent of {perSample} values per sample cannot hold {channels} channels.", nameof(sample));
+            }
+
+            int spatial = perSample / channels;
+            int side = (int)Math.Sqrt(spatial);
+            return side * side == spatial
+                ? Engine.Reshape(sample, new[] { batch, channels, side, side })
+                : Engine.Reshape(sample, new[] { batch, channels, 1, spatial });
         }
 
         /// <summary>
-        /// Returns empty because diffusion models operate on latent space noise, not
-        /// named tabular features, so per-feature importance is not meaningful.
+        /// Samples one image per condition with classifier-free guidance (Ho and Salimans 2022): the guided noise
+        /// is eps(z, null) + w * (eps(z, c) - eps(z, null)) at the configured guidance scale w.
         /// </summary>
-        public override Dictionary<string, T> GetFeatureImportance()
+        /// <param name="condition">One conditioning vector per image: [features] or [batch, features].</param>
+        /// <param name="seed">Seeds the starting noise, or null for a fresh draw.</param>
+        /// <returns>Images of shape [batch, image channels, latent height * 8, latent width * 8].</returns>
+        public Tensor<T> GenerateConditioned(Tensor<T> condition, int? seed = null)
         {
-            return new Dictionary<string, T>();
+            if (condition is null)
+                throw new ArgumentNullException(nameof(condition));
+
+            var context = _conditioner.Encode(condition);
+            int batch = context.Shape[0];
+            double scale = GuidanceScale;
+
+            // w = 1 is plain conditional sampling, so the unconditional pass is only paid for when it changes the
+            // result - the same test the base's text-to-image sampler makes.
+            var unconditional = scale > 1.0 && _noisePredictor.SupportsCFG
+                ? _conditioner.GetUnconditionalEmbedding(batch)
+                : null;
+
+            var latentShape = new[] { batch, LatentChannels, _config.LatentHeight, _config.LatentWidth };
+            var latents = SampleNoiseTensor(latentShape, CreateInferenceRng(seed));
+            Scheduler.SetTimesteps(_config.InferenceSteps);
+            foreach (var timestep in Scheduler.Timesteps)
+            {
+                var noise = _noisePredictor.PredictNoise(latents, timestep, context);
+                if (unconditional is not null)
+                    noise = ApplyGuidance(_noisePredictor.PredictNoise(latents, timestep, unconditional), noise, scale);
+
+                var stepped = Scheduler.Step(noise.ToVector(), timestep, latents.ToVector(), NumOps.Zero);
+                latents = new Tensor<T>(latentShape, stepped);
+            }
+
+            return DecodeFromLatent(latents);
         }
 
-        public override IEnumerable<int> GetActiveFeatureIndices()
-        {
-            return Enumerable.Range(0, _config.LatentDim);
-        }
-
-        public override bool IsFeatureUsed(int featureIndex)
-        {
-            return featureIndex >= 0 && featureIndex < _config.LatentDim;
-        }
-
-        /// <summary>
-        /// Feature selection is not applicable to diffusion models. All latent dimensions
-        /// are required for coherent generation.
-        /// </summary>
-        /// <exception cref="NotSupportedException">Always thrown. Diffusion models require all latent dimensions.</exception>
-        public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-        {
-            throw new NotSupportedException(
-                "Feature selection is not supported for diffusion models. All latent dimensions are required for coherent generation.");
-        }
-
+        /// <inheritdoc />
         public override ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = new ModelMetadata<T>
-            {
-                Name = "DiffusionAutoMLModel",
-                Description = "Diffusion model created by AutoML search",
-                Version = "1.0",
-                Complexity = ParameterCount
-            };
-
+            var metadata = base.GetModelMetadata();
             metadata.SetProperty("NoisePredictorType", _config.NoisePredictorType.ToString());
             metadata.SetProperty("SchedulerType", _config.SchedulerType.ToString());
             metadata.SetProperty("InferenceSteps", _config.InferenceSteps);
             metadata.SetProperty("GuidanceScale", _config.GuidanceScale);
             metadata.SetProperty("BaseChannels", _config.BaseChannels);
             metadata.SetProperty("LatentDim", _config.LatentDim);
-
+            metadata.SetProperty("ConditioningDim", _config.ConditioningDim);
+            metadata.SetProperty("Seed", _seed ?? 0);
             return metadata;
-        }
-
-        public override void SaveModel(string filePath)
-        {
-            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                var data = Serialize();
-                File.WriteAllBytes(filePath, data);
-            }
-        }
-
-        public override void LoadModel(string filePath)
-        {
-            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                var data = File.ReadAllBytes(filePath);
-                Deserialize(data);
-            }
-        }
-
-        public override void SaveState(Stream stream)
-        {
-            if (stream is null)
-                throw new ArgumentNullException(nameof(stream));
-
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                var data = Serialize();
-                stream.Write(data, 0, data.Length);
-                stream.Flush();
-            }
-        }
-
-        public override void LoadState(Stream stream)
-        {
-            if (stream is null)
-                throw new ArgumentNullException(nameof(stream));
-
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                using var ms = new MemoryStream();
-                stream.CopyTo(ms);
-                var data = ms.ToArray();
-                Deserialize(data);
-            }
-        }
-
-        public override Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
-        {
-            var loss = lossFunction ?? DefaultLossFunction;
-            var parameters = GetParameters();
-            var gradients = new T[parameters.Length];
-            T epsilon = NumOps.FromDouble(1e-5);
-            T twoEps = NumOps.FromDouble(2e-5);
-
-            // SPSA gradient estimation: 2 forward passes regardless of parameter count.
-            // Per-parameter finite differences don't work for diffusion models because
-            // Predict uses random noise — each call measures sampling noise, not parameter sensitivity.
-            var rng = RandomHelper.CreateSecureRandom();
-            var delta = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-                delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
-
-            // Vectorized perturbations: params ± epsilon * delta
-            var eDelta = Engine.Multiply(delta, epsilon);
-
-            SetParameters(Engine.Add(parameters, eDelta));
-            T lossPlus = loss.ComputeLoss(Predict(input), target);
-
-            SetParameters(Engine.Subtract(parameters, eDelta));
-            T lossMinus = loss.ComputeLoss(Predict(input), target);
-
-            // Vectorized SPSA gradient: g = (L+ - L-) / (2*eps*delta)
-            T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            var scaledDelta = Engine.Multiply(delta, twoEps);
-            var gradientVec = Engine.Divide(Engine.Fill(parameters.Length, lossDiff), scaledDelta);
-
-            SetParameters(parameters);
-            return gradientVec;
-        }
-
-        public override void ApplyGradients(Vector<T> gradients, T learningRate)
-        {
-            var parameters = GetParameters();
-            if (gradients.Length != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Gradient vector length ({gradients.Length}) must match parameter count ({parameters.Length}).",
-                    nameof(gradients));
-            }
-
-            SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
-        }
-
-        private Tensor<T> SampleNoise(int[] shape)
-        {
-            var tensor = new Tensor<T>(shape);
-            var span = tensor.AsWritableSpan();
-
-            for (int i = 0; i < span.Length; i += 2)
-            {
-                double u1 = _random.NextDouble();
-                double u2 = _random.NextDouble();
-                while (u1 <= double.Epsilon) u1 = _random.NextDouble();
-
-                double mag = Math.Sqrt(-2.0 * Math.Log(u1));
-                double z0 = mag * Math.Cos(2 * Math.PI * u2);
-                double z1 = mag * Math.Sin(2 * Math.PI * u2);
-
-                span[i] = NumOps.FromDouble(z0);
-                if (i + 1 < span.Length)
-                    span[i + 1] = NumOps.FromDouble(z1);
-            }
-
-            return tensor;
-        }
-
-        private Tensor<T> AddNoise(Tensor<T> latent, Tensor<T> noise, int timestep)
-        {
-            double t = timestep / (double)_config.InferenceSteps;
-            double alpha = 1.0 - t;
-            double sigma = t;
-
-            var result = new Tensor<T>(latent._shape);
-            var resultSpan = result.AsWritableSpan();
-            var latentSpan = latent.AsSpan();
-            var noiseSpan = noise.AsSpan();
-
-            var alphaT = NumOps.FromDouble(Math.Sqrt(alpha));
-            var sigmaT = NumOps.FromDouble(Math.Sqrt(sigma));
-
-            for (int i = 0; i < resultSpan.Length; i++)
-            {
-                var scaledLatent = NumOps.Multiply(latentSpan[i], alphaT);
-                var scaledNoise = NumOps.Multiply(noiseSpan[i], sigmaT);
-                resultSpan[i] = NumOps.Add(scaledLatent, scaledNoise);
-            }
-
-            return result;
-        }
-
-        private T ComputeMSELoss(Tensor<T> predicted, Tensor<T> target)
-        {
-            var predSpan = predicted.AsSpan();
-            var targetSpan = target.AsSpan();
-
-            T sum = NumOps.Zero;
-            int count = Math.Min(predSpan.Length, targetSpan.Length);
-
-            for (int i = 0; i < count; i++)
-            {
-                var diff = NumOps.Subtract(predSpan[i], targetSpan[i]);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-            }
-
-            return NumOps.Divide(sum, NumOps.FromDouble(count));
         }
     }
 }
