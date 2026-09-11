@@ -10,6 +10,8 @@ namespace AiDotNet.Tests.Generators;
 /// <summary>Verifies that the compiled, generated fixtures construct the intended real models.</summary>
 public sealed class GeneratedHeavyFixtureRuntimeTests
 {
+    public GeneratedHeavyFixtureRuntimeTests() => TestModuleInitializer.EnsureInitialized();
+
     [Fact]
     public void MemFlow_GeneratedFactoryAndShapesUseTheBoundedTwoFrameArchitecture()
     {

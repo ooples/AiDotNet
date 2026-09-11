@@ -19,6 +19,8 @@ namespace AiDotNet.Tests.Generators;
 
 public sealed class TransformerNERSmokeFixtureContractTests
 {
+    public TransformerNERSmokeFixtureContractTests() => TestModuleInitializer.EnsureInitialized();
+
     [Theory]
     [InlineData(4, 0.0, 0.0025)]
     [InlineData(4, 0.001, 0.001)]

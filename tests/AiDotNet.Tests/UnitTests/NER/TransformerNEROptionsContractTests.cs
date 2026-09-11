@@ -1,7 +1,9 @@
 using AiDotNet.Enums;
+using AiDotNet.Models;
 using AiDotNet.NER.Options;
 using AiDotNet.NER.TransformerBased;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -10,6 +12,8 @@ namespace AiDotNet.Tests.UnitTests.NER;
 
 public sealed class TransformerNEROptionsContractTests
 {
+    public TransformerNEROptionsContractTests() => TestModuleInitializer.EnsureInitialized();
+
     [Theory]
     [InlineData(0.0)]
     [InlineData(0.001)]
@@ -38,7 +42,7 @@ public sealed class TransformerNEROptionsContractTests
         Assert.Equal(0.0, copy.WarmupInitialLearningRate);
         Assert.Equal(original.LabelNames, copy.LabelNames);
         Assert.NotSame(original.LabelNames, copy.LabelNames);
-        Assert.NotSame(original.OnnxOptions, copy.OnnxOptions);
+        AssertIndependentOnnxOptions(original.OnnxOptions, copy.OnnxOptions);
         copy.LabelNames[0] = "COPY-ONLY";
         Assert.NotEqual(copy.LabelNames[0], original.LabelNames[0]);
     }
@@ -68,10 +72,51 @@ public sealed class TransformerNEROptionsContractTests
         Assert.Equal(initialRate, clonedOptions.WarmupInitialLearningRate);
         Assert.Equal(originalOptions.LabelNames, clonedOptions.LabelNames);
         Assert.NotSame(originalOptions.LabelNames, clonedOptions.LabelNames);
-        Assert.NotSame(originalOptions.OnnxOptions, clonedOptions.OnnxOptions);
+        AssertIndependentOnnxOptions(originalOptions.OnnxOptions, clonedOptions.OnnxOptions);
         Assert.Equal(model.GetParameters().ToArray(), clone.GetParameters().ToArray());
         clonedOptions.LabelNames[0] = "CLONE-ONLY";
         Assert.NotEqual(clonedOptions.LabelNames[0], originalOptions.LabelNames[0]);
+    }
+
+    [Fact]
+    public void SharedCloneEngine_DirectOnnxConfigurationCopyIsIndependent()
+    {
+        var original = CreateOptions(0.0).OnnxOptions;
+
+        var copy = Assert.IsType<OnnxModelOptions>(CloneEngine.CopyConfiguration(original));
+
+        AssertIndependentOnnxOptions(original, copy);
+    }
+
+    [Fact]
+    public void SharedCloneEngine_NestedOnnxConfigurationCopyIsIndependent()
+    {
+        var original = CreateOptions(0.0);
+
+        var copy = Assert.IsType<TransformerNEROptions>(CloneEngine.CopyConfiguration(original));
+
+        Assert.NotSame(original, copy);
+        AssertIndependentOnnxOptions(original.OnnxOptions, copy.OnnxOptions);
+    }
+
+    private static void AssertIndependentOnnxOptions(OnnxModelOptions original, OnnxModelOptions copy)
+    {
+        Assert.NotSame(original, copy);
+        Assert.Equal(original.ExecutionProvider, copy.ExecutionProvider);
+        Assert.Equal(original.GpuDeviceId, copy.GpuDeviceId);
+        Assert.Equal(original.ProfileOutputPath, copy.ProfileOutputPath);
+        Assert.Equal(original.FallbackProviders, copy.FallbackProviders);
+        Assert.NotSame(original.FallbackProviders, copy.FallbackProviders);
+        Assert.Equal(original.CustomOptions, copy.CustomOptions);
+        Assert.NotSame(original.CustomOptions, copy.CustomOptions);
+
+        copy.GpuDeviceId = 9;
+        copy.FallbackProviders[0] = OnnxExecutionProvider.Cpu;
+        copy.CustomOptions["session.intra_op.allow_spinning"] = "1";
+
+        Assert.Equal(3, original.GpuDeviceId);
+        Assert.Equal(OnnxExecutionProvider.Cuda, original.FallbackProviders[0]);
+        Assert.Equal("0", original.CustomOptions["session.intra_op.allow_spinning"]);
     }
 
     private static TransformerNEROptions CreateOptions(double initialRate) => new()
@@ -85,7 +130,12 @@ public sealed class TransformerNEROptionsContractTests
         DropoutRate = 0,
         LearningRate = 0.01,
         WarmupSteps = 4,
-        WarmupInitialLearningRate = initialRate
+        WarmupInitialLearningRate = initialRate,
+        OnnxOptions = new OnnxModelOptions
+        {
+            GpuDeviceId = 3,
+            CustomOptions = new() { ["session.intra_op.allow_spinning"] = "0" }
+        }
     };
 
     private static TinyBERTNER<float> CreateModel(TransformerNEROptions options) => new(

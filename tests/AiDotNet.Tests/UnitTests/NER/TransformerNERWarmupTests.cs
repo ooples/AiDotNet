@@ -16,6 +16,8 @@ namespace AiDotNet.Tests.UnitTests.NER;
 /// <summary>Verifies the public warmup contract on a real model's optimizer and training path.</summary>
 public sealed class TransformerNERWarmupTests
 {
+    public TransformerNERWarmupTests() => TestModuleInitializer.EnsureInitialized();
+
     [Theory]
     [InlineData(0.0)]
     [InlineData(0.001)]
