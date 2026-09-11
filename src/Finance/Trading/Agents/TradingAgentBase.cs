@@ -532,6 +532,42 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
 
     #endregion
 
+    #region Exploration
+
+    /// <summary>
+    /// Draws a standard-normal sample N(0, 1) from the agent's seeded <see cref="ReinforcementLearningAgentBase{T}.Random"/>
+    /// stream (Box-Muller), so exploration noise is zero-mean, symmetric, and reproducible under
+    /// <see cref="TradingAgentOptions{T}.Seed"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Exploration noise must be as likely to push a position down as up; a
+    /// one-sided draw (for example a uniform value in [0, 0.1)) silently biases every exploratory trade.</para>
+    /// </remarks>
+    protected double NextStandardNormal()
+    {
+        // 1 - U maps [0, 1) to (0, 1], so the logarithm is always finite.
+        double u1 = 1.0 - Random.NextDouble();
+        double u2 = Random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="action"/> plus independent zero-mean Gaussian noise with standard deviation
+    /// <paramref name="standardDeviation"/> in every component, drawn from the agent's seeded stream.
+    /// </summary>
+    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, double standardDeviation)
+    {
+        var noisy = new Vector<T>(action.Length);
+        for (int i = 0; i < action.Length; i++)
+        {
+            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviation * NextStandardNormal()));
+        }
+
+        return noisy;
+    }
+
+    #endregion
+
     #region Risk Management
 
     /// <summary>

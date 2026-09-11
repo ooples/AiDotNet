@@ -182,19 +182,19 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var action = _policyNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
-        
-        if (training)
-        {
-            // Add exploration noise
-            var noise = new Vector<T>(action.Length);
-            for (int i = 0; i < noise.Length; i++)
-                noise[i] = NumOps.FromDouble(RandomHelper.CreateSecureRandom().NextDouble() * 0.05);
-            
-            return action.Add(noise);
-        }
 
-        return action;
+        // Zero-mean Gaussian exploration from the agent's seeded stream. The previous U[0, 0.05) noise was
+        // unseeded and one-sided (mean +0.025), so every exploratory quote was skewed the same way and the
+        // skew compounded into the policy, which is regressed onto the actions it took.
+        return training
+            ? AddGaussianExplorationNoise(action, ExplorationNoiseStandardDeviation)
+            : action;
     }
+
+    /// <summary>
+    /// Standard deviation of the Gaussian exploration noise added to the policy output in training mode.
+    /// </summary>
+    private const double ExplorationNoiseStandardDeviation = 0.05;
 
     #endregion
 
