@@ -1,0 +1,149 @@
+name: CodeQL build-mode proof
+
+# MEASUREMENT ONLY. Compares the real traced-build CodeQL job (sonarcloud.yml `codeql`) against
+# `build-mode: none` and a traced build with analyzers skipped. Nothing is uploaded to code
+# scanning (upload: never); each variant publishes its SARIF + database diagnostics as an Actions
+# artifact for offline comparison. Push runs traced + none (2 jobs). workflow_dispatch selects
+# variants explicitly so at most 2 jobs run at a time.
+
+permissions: read-all
+
+on:
+  push:
+    branches:
+      - codeql-proof/buildmode
+    paths:
+      - '.github/workflows/codeql-buildmode-proof.yml'
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: 'JSON array of variants: traced, none, none-scoped, traced-noanalyzers (keep to <= 2)'
+        required: true
+        default: '["none-scoped","traced-noanalyzers"]'
+
+concurrency:
+  group: codeql-buildmode-proof-${{ github.ref }}-${{ github.event_name }}-${{ inputs.variants }}
+  cancel-in-progress: false
+
+jobs:
+  proof:
+    name: CodeQL (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.variants || '["traced","none"]') }}
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/PyPy || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore src/AiDotNet.csproj
+
+      - name: Initialize CodeQL (traced)
+        if: startsWith(matrix.variant, 'traced')
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          languages: csharp
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Initialize CodeQL (build-mode none)
+        if: matrix.variant == 'none'
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          languages: csharp
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Initialize CodeQL (build-mode none, traced scope)
+        if: matrix.variant == 'none-scoped'
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          languages: csharp
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config-proof-scoped.yml
+          queries: security-and-quality
+
+      - name: Build for CodeQL (net10.0)
+        if: matrix.variant == 'traced'
+        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
+
+      - name: Build for CodeQL (net10.0, analyzers skipped, generators kept)
+        if: matrix.variant == 'traced-noanalyzers'
+        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0 -p:RunAnalyzers=false -p:RunAnalyzersDuringBuild=false
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          category: "/language:csharp"
+          upload: never
+          upload-database: false
+          output: sarif-results
+
+      - name: Collect database diagnostics
+        if: always()
+        shell: bash
+        run: |
+          db="${{ runner.temp }}/codeql_databases/csharp"
+          mkdir -p proof-out
+          ls -la "$db" || true
+          if [ -d "$db/diagnostic" ]; then cp -r "$db/diagnostic" proof-out/diagnostic; fi
+          if [ -d "$db/log" ]; then tar -czf proof-out/db-log.tgz -C "$db" log; fi
+          CODEQL="$(command -v codeql || true)"
+          [ -z "$CODEQL" ] && CODEQL="$(find /opt/hostedtoolcache/CodeQL -name codeql -type f -perm -u+x 2>/dev/null | head -1)"
+          echo "codeql=$CODEQL"
+          if [ -n "$CODEQL" ] && [ -d "$db" ]; then
+            "$CODEQL" database export-diagnostics "$db" --format=sarif-latest --output=proof-out/db-diagnostics.sarif || true
+            "$CODEQL" database print-baseline "$db" > proof-out/baseline.txt 2>&1 || true
+          fi
+          du -sh "$db" > proof-out/db-size.txt 2>&1 || true
+          ls -la proof-out
+
+      - name: Upload SARIF + diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: codeql-proof-${{ matrix.variant }}
+          path: |
+            sarif-results
+            proof-out
+          retention-days: 14
+          if-no-files-found: warn

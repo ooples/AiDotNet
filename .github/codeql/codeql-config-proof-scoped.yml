@@ -1,0 +1,36 @@
+# PROOF ONLY (codeql-buildmode-proof.yml, variant none-scoped).
+# Same as codeql-config.yml, but restricted to the source set the traced job actually compiles:
+# `dotnet build src/AiDotNet.csproj` => src/** (minus the sub-projects AiDotNet.csproj removes via
+# <Compile Remove>) plus the AiDotNet.Generators ProjectReference. build-mode none otherwise
+# extracts every .cs file in the repository, which makes its timing and alert set incomparable.
+
+name: "AiDotNet CodeQL Config (proof: traced scope)"
+
+paths:
+  - 'src/**'
+
+paths-ignore:
+  - 'tests/**'
+  - 'AiDotNetTests/**'
+  - 'AiDotNetTestConsole/**'
+  - 'AiDotNetBenchmarkTests/**'
+  - 'examples/**'
+  - 'docs/**'
+  - '**/*.md'
+  - '**/*.txt'
+  - '**/*.json'
+  - '**/*.xml'
+  - 'src/AiDotNet.Serving/**'
+  - 'src/AiDotNet.Dashboard/**'
+  - 'src/AiDotNet.Storage.Elasticsearch/**'
+  - 'src/AiDotNet.Storage.Postgres/**'
+  - 'src/AiDotNet.Storage.Redis/**'
+  - 'src/AiDotNet.Storage.Neo4j/**'
+  - 'src/AiDotNet.Storage.Sqlite/**'
+  - 'src/AiDotNet.Privacy.HE/**'
+  - 'src/AiDotNet.Playground/**'
+  - 'src/AiDotNet.Playground.Functions/**'
+  - 'src/Generated/**'
+
+languages:
+  - csharp
