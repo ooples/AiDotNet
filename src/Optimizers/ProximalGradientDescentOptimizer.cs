@@ -768,7 +768,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     }
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         // Snapshot before the tensors are mutated, for the same reason UpdateSolution and
         // UpdateParameters do it: the proximal operator is not invertible, so the saved pre-update
