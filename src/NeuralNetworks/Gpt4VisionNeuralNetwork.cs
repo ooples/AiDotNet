@@ -201,7 +201,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _embeddingDimension = _options.EmbeddingDimension;
-        _visionEmbeddingDim = _options.VisionEmbeddingDim;
+        _visionEmbeddingDim = _options.VisionDim;
         _maxSequenceLength = _options.MaxSequenceLength;
         _contextWindowSize = _options.ContextWindowSize;
         _imageSize = _options.ImageSize;
@@ -235,7 +235,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _embeddingDimension = _options.EmbeddingDimension;
-        _visionEmbeddingDim = _options.VisionEmbeddingDim;
+        _visionEmbeddingDim = _options.VisionDim;
         _maxSequenceLength = _options.MaxSequenceLength;
         _contextWindowSize = _options.ContextWindowSize;
         _imageSize = _options.ImageSize;
