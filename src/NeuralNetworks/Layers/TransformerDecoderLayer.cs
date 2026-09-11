@@ -204,6 +204,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// with what it has already generated, maintaining grammar, style, and topic consistency.
     /// </para>
     /// </remarks>
+    [SubLayerInput("1, _embeddingSize")]
     private MultiHeadAttentionLayer<T> _selfAttention;
 
     /// <summary>
@@ -225,6 +226,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// it prevents sudden spikes or drops that might disrupt the learning process.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm1;
 
     /// <summary>
@@ -246,6 +248,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// are most important when generating the next word in the target language.
     /// </para>
     /// </remarks>
+    [SubLayerInput("1, _embeddingSize")]
     private MultiHeadAttentionLayer<T> _crossAttention;
 
     /// <summary>
@@ -267,6 +270,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// helping maintain consistent signal strength throughout the network.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
@@ -287,6 +291,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// This expansion gives the network more capacity to learn complex transformations.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private FeedForwardLayer<T> _feedForward;
 
     /// <summary>
@@ -307,6 +312,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// This is the standard FFN architecture in transformers: expand → activate → project back.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_feedForwardDim")]
     private FeedForwardLayer<T> _feedForwardProjection;
 
     /// <summary>
@@ -328,6 +334,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// or for the final output projection in the complete transformer model.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm3;
 
     /// <summary>
@@ -629,81 +636,65 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     protected override void EnsureInitialized()
     {
-        if (_isInitialized) return;
+        // TWO CONDITIONS, as in TransformerEncoderLayer: _isInitialized means the sublayers EXIST with
+        // resolved shapes; DeclaredSubLayerWeightsMaterialized means their weights are ALLOCATED. A
+        // shapes-only walk satisfies only the first, so this stays re-enterable and the write path's
+        // second call is the one that allocates.
+        if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
 
         lock (InitializationLock)
         {
-            if (_isInitialized) return;
+            if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
             if (_embeddingSize <= 0)
                 throw new InvalidOperationException(
                     "TransformerDecoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
 
-            var activation = _lazyFfnActivation ?? new GELUActivation<T>();
-
-            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
-            _norm1 = new LayerNormalizationLayer<T>();
-            _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
-            _norm2 = new LayerNormalizationLayer<T>();
-            _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
-            _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
-            _norm3 = new LayerNormalizationLayer<T>();
-
-            RegisterSubLayer(_selfAttention);
-            RegisterSubLayer(_norm1);
-            RegisterSubLayer(_crossAttention);
-            RegisterSubLayer(_norm2);
-            RegisterSubLayer(_feedForward);
-            RegisterSubLayer(_feedForwardProjection);
-            RegisterSubLayer(_norm3);
-
-            // Lazy children are created after the model-construction seed scope has ended, and
-            // compiled first-forward execution may occur on another thread. Derive their seeds from
-            // this decoder's already-wired seed so initialization is independent of execution order.
-            if (RandomSeed.HasValue)
+            // Sublayers are built once; a re-entry only upgrades shapes to weights.
+            if (!_isInitialized)
             {
-                var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
-                _selfAttention.RandomSeed = subSeedRng.Next();
-                _norm1.RandomSeed = subSeedRng.Next();
-                _crossAttention.RandomSeed = subSeedRng.Next();
-                _norm2.RandomSeed = subSeedRng.Next();
-                _feedForward.RandomSeed = subSeedRng.Next();
-                _feedForwardProjection.RandomSeed = subSeedRng.Next();
-                _norm3.RandomSeed = subSeedRng.Next();
+                var activation = _lazyFfnActivation ?? new GELUActivation<T>();
+
+                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+                _norm1 = new LayerNormalizationLayer<T>();
+                _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+                _norm2 = new LayerNormalizationLayer<T>();
+                _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
+                _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
+                _norm3 = new LayerNormalizationLayer<T>();
+
+                RegisterSubLayer(_selfAttention);
+                RegisterSubLayer(_norm1);
+                RegisterSubLayer(_crossAttention);
+                RegisterSubLayer(_norm2);
+                RegisterSubLayer(_feedForward);
+                RegisterSubLayer(_feedForwardProjection);
+                RegisterSubLayer(_norm3);
+
+                // Lazy children are created after the model-construction seed scope has ended, and
+                // compiled first-forward execution may occur on another thread. Derive their seeds from
+                // this decoder's already-wired seed so initialization is independent of execution order.
+                if (RandomSeed.HasValue)
+                {
+                    var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
+                    _selfAttention.RandomSeed = subSeedRng.Next();
+                    _norm1.RandomSeed = subSeedRng.Next();
+                    _crossAttention.RandomSeed = subSeedRng.Next();
+                    _norm2.RandomSeed = subSeedRng.Next();
+                    _feedForward.RandomSeed = subSeedRng.Next();
+                    _feedForwardProjection.RandomSeed = subSeedRng.Next();
+                    _norm3.RandomSeed = subSeedRng.Next();
+                }
+
             }
 
-            // Eagerly resolve each sub-layer with its CORRECT input shape so
-            // its ParameterCount reflects the real weight count before its
-            // first Forward fires. The previous foreach-loop used the same
-            // {1, _embeddingSize} shape for every sub-layer, which silently
-            // resolved _feedForwardProjection as (in=embed, out=embed) — the
-            // wrong shape (the projection's real input is _feedForwardDim).
-            // That bug caused SetParameters' parent-side slicing to be off
-            // by 2304×768 elements after the FFN expand, and Clone produced
-            // divergent outputs even though every byte copied identically.
-            // Mirror TransformerEncoderLayer.EnsureInitialized's exact per-
-            // sub-layer ResolveFromShape pattern (which already gets this
-            // right).
-            int[] subInputShape = new[] { _embeddingSize };
-            if (IsResolvingShapesOnly)
-            {
-                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
-                _norm1.ResolveShapesOnly(subInputShape);
-                _crossAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
-                _norm2.ResolveShapesOnly(subInputShape);
-                _feedForward.ResolveShapesOnly(subInputShape);
-                _feedForwardProjection.ResolveShapesOnly(new[] { _feedForwardDim });
-                _norm3.ResolveShapesOnly(subInputShape);
-            }
-            else
-            {
-                _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-                _norm1.ResolveFromShape(subInputShape);
-                _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-                _norm2.ResolveFromShape(subInputShape);
-                _feedForward.ResolveFromShape(subInputShape);
-                _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
-                _norm3.ResolveFromShape(subInputShape);
-            }
+            // Each child's input width is declared on its field with [SubLayerInput]; the base
+            // decides whether the caller wants shapes or weights. The hand-written resolve this
+            // replaces sent the LayerNorms a SPECULATIVE shapes-only call, which LayerNorm rightly
+            // ignores, so a decoder that no forward reached kept its norms unsized: Gpt4Vision's
+            // image-only path left 12 gamma/beta chunks that its clone's deserialize then
+            // materialized (55 chunks against 67). The feed-forward projection still takes
+            // _feedForwardDim, the width of the expansion that feeds it.
+            BringUpDeclaredSubLayers();
 
             _isInitialized = true;
         }
