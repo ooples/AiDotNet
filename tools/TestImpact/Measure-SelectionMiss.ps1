@@ -14,14 +14,14 @@
     actually failed. Any shard in that intersection is a MISS - a regression selection would have
     let through.
 
-    Two things this deliberately does not do:
+    Historical audits use the map that was actually in effect, not the map built from the run being
+    audited. The only exception is an explicitly labelled FreshCoverage bootstrap/re-seed: the
+    certificate policy binds that candidate to the same source tree and complete shard universe,
+    refuses it after a historical miss, and requires a genuinely reduced partition. That bootstrap
+    does not replace later historical replay audits.
 
-      It does not use the map built FROM the run being audited. That map records exactly what each
-      shard executed in that run, so it answers a circular question. The map that would really have
-      been in effect is the previous one, and that is what the caller must pass.
-
-      It does not treat a miss as merely informational. A non-zero miss count is an exit code,
-      because a miss rate that is only ever printed is a number nobody reads.
+    A miss is never merely informational. A non-zero miss count is an exit code, because a miss
+    rate that is only ever printed is a number nobody reads.
 
     A miss is not automatically a selector bug - a flaky or pre-existing failure in an unrelated
     shard counts as a miss here even though selection was right to skip it. That is intentional:
@@ -29,8 +29,9 @@
     two apart. A clean run of this over time is the evidence that selection is safe to rely on.
 
 .PARAMETER MapFile
-    The shard map that WOULD have been in effect, identified by the source run's marker rather than
-    guessed from workflow chronology. Never a map built from the run being audited.
+    For HistoricalReplay, the shard map that would have been in effect, identified by the source
+    marker rather than guessed from chronology. FreshCoverage may supply the same-tree candidate;
+    New-ShardMapCertificate.ps1 enforces the distinct provenance rules for those two typed bases.
 
 .PARAMETER OutcomesFile
     JSON array of { shard, outcome } for every shard in the audited run. `outcome` is the shard's
@@ -38,7 +39,14 @@
 
 .PARAMETER SelectorPath
     Select-Shards.ps1. Invoked as a subprocess so the audit exercises the SHIPPING selector rather
-    than a copy of its logic that is free to drift from it.
+    than a copy of its logic that is free to drift from it. The audit-only unchanged-map switch is
+    passed explicitly so an exact map/source tree still exercises a reduced selection; ordinary PR
+    selection does not receive that capability and continues to fail closed on an empty diff.
+
+.PARAMETER CurrentChangeBaseSha
+    Optional base of the current change under audit. Map-to-HEAD source ranges are still measured
+    from the map SHA; this second boundary prevents already-merged selector-control edits from
+    being mistaken for edits in every later pull request.
 
 .PARAMETER OutFile
     Optional path for the JSON report.
@@ -48,6 +56,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Measure')] [string] $MapFile,
     [Parameter(Mandatory, ParameterSetName = 'Measure')] [string] $OutcomesFile,
     [Parameter(ParameterSetName = 'Measure')] [string] $SelectorPath = "$PSScriptRoot/Select-Shards.ps1",
+    [Parameter(ParameterSetName = 'Measure')] [string] $CurrentChangeBaseSha,
     [Parameter(ParameterSetName = 'Measure')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
@@ -178,7 +187,16 @@ foreach ($outcome in $outcomes) {
 $failed = @($outcomes | Where-Object { [string] $_.outcome -ne 'success' } | ForEach-Object { [string] $_.shard })
 
 $selectionFile = Join-Path ([System.IO.Path]::GetTempPath()) "selection-audit-$PID.json"
-& $SelectorPath -MapFile $MapFile -ExpectedShards @($allShards) -OutFile $selectionFile | Out-Null
+$selectorArguments = @{
+    MapFile = $MapFile
+    ExpectedShards = @($allShards)
+    AuditUnchangedMap = $true
+    OutFile = $selectionFile
+}
+if ($CurrentChangeBaseSha) {
+    $selectorArguments.BaseSha = $CurrentChangeBaseSha
+}
+& $SelectorPath @selectorArguments | Out-Null
 $selection = Get-Content -LiteralPath $selectionFile -Raw | ConvertFrom-Json
 Remove-Item -LiteralPath $selectionFile -ErrorAction SilentlyContinue
 

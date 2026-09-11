@@ -13,6 +13,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+enum ShardMapCertificationBasis {
+    HistoricalReplay
+    FreshCoverage
+}
+
 function ConvertTo-RequiredInteger {
     param([object] $Value, [string] $Name, [long] $Minimum = 0)
     $isInteger = $Value -is [byte] -or $Value -is [sbyte] -or
@@ -40,12 +45,22 @@ function Assert-CertifiedShardMap {
     $mapSchema = ConvertTo-RequiredInteger -Value $Map.schemaVersion -Name 'map schemaVersion' -Minimum 1
     if ($mapSchema -ne 1) { throw "unsupported map schema $mapSchema" }
     $schema = ConvertTo-RequiredInteger -Value $Certificate.schemaVersion -Name 'certificate schemaVersion' -Minimum 1
-    if ($schema -ne 2) { throw "unsupported certification schema $schema" }
+    if ($schema -ne 2 -and $schema -ne 3) { throw "unsupported certification schema $schema" }
+    $basis = [ShardMapCertificationBasis]::HistoricalReplay
+    if ($schema -eq 3) {
+        if (-not $Certificate.PSObject.Properties['basis']) {
+            throw 'schema-v3 certificate is missing basis'
+        }
+        $basisText = [string] $Certificate.basis
+        if (-not [Enum]::TryParse[ShardMapCertificationBasis]($basisText, $false, [ref] $basis)) {
+            throw "certificate has unsupported basis '$basisText'"
+        }
+    }
     $actualRun = ConvertTo-RequiredInteger -Value $Certificate.certificationRunId -Name 'certificationRunId' -Minimum 1
     if ($actualRun -ne $ExpectedCertificationRunId) {
         throw "certificate belongs to run $actualRun, not artifact run $ExpectedCertificationRunId"
     }
-    [void] (ConvertTo-RequiredInteger -Value $Certificate.candidateMapRunId -Name 'candidateMapRunId' -Minimum 1)
+    $candidateRun = ConvertTo-RequiredInteger -Value $Certificate.candidateMapRunId -Name 'candidateMapRunId' -Minimum 1
     [void] (ConvertTo-RequiredInteger -Value $Certificate.auditSourceRunId -Name 'auditSourceRunId' -Minimum 1)
     $misses = ConvertTo-RequiredInteger -Value $Certificate.missCount -Name 'missCount'
     if ($misses -ne 0) { throw "certificate records $misses selection miss(es)" }
@@ -86,6 +101,16 @@ function Assert-CertifiedShardMap {
     if ($candidateSha -cne $mapSha) { throw 'certificate and map identify different source commits' }
     if ([string] $Certificate.auditSourceSha -cnotmatch '^[0-9a-f]{40}$') {
         throw 'auditSourceSha is not a full lowercase commit id'
+    }
+    if ($basis -eq [ShardMapCertificationBasis]::FreshCoverage -and
+        [string] $Certificate.auditSourceSha -cne $mapSha) {
+        throw 'fresh-coverage evidence must audit the map source tree itself'
+    }
+    if ($basis -eq [ShardMapCertificationBasis]::FreshCoverage -and $candidateRun -ne $actualRun) {
+        throw 'fresh-coverage evidence must bind the candidate map to its certification run'
+    }
+    if ($basis -eq [ShardMapCertificationBasis]::HistoricalReplay -and $candidateRun -eq $actualRun) {
+        throw 'historical replay must cite a candidate map from an earlier workflow run'
     }
 }
 
@@ -130,6 +155,26 @@ if ($SelfTest) {
     catch {
         [void] $failures.Add("valid certificate rejected: $($_.Exception.Message)")
     }
+
+    $freshCertificate = $certificate.PSObject.Copy()
+    $freshCertificate.schemaVersion = 3
+    $freshCertificate | Add-Member -NotePropertyName basis -NotePropertyValue FreshCoverage
+    $freshCertificate.candidateMapRunId = 12
+    $freshCertificate.auditSourceSha = $sha
+    try {
+        Assert-CertifiedShardMap -Map $map -Certificate $freshCertificate -ExpectedCertificationRunId 12
+    }
+    catch {
+        [void] $failures.Add("valid fresh-coverage certificate rejected: $($_.Exception.Message)")
+    }
+    $badFresh = $freshCertificate.PSObject.Copy()
+    $badFresh.auditSourceSha = $certificate.auditSourceSha
+    Assert-Rejection { Assert-CertifiedShardMap $map $badFresh 12 } `
+        'fresh coverage for another tree was accepted' 'must audit the map source tree'
+    $badFresh = $freshCertificate.PSObject.Copy()
+    $badFresh.candidateMapRunId = 10
+    Assert-Rejection { Assert-CertifiedShardMap $map $badFresh 12 } `
+        'fresh coverage from another map run was accepted' 'bind the candidate map'
 
     $bad = $certificate.PSObject.Copy(); $bad.missCount = 1
     Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
