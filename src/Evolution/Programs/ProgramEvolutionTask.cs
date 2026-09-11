@@ -11,9 +11,9 @@ namespace AiDotNet.Evolution.Programs;
 /// <para>
 /// The task supplies the three things <c>EvolutionEngine&lt;ProgramGenome&gt;</c> cannot know by itself: what a
 /// valid candidate looks like, which candidates count as the same, and how good one is.
-/// <see cref="CanonicalizeAsync"/> uses <see cref="ProgramGenome.Id"/>, the SHA-256 of the normalized source, so a
-/// child that differs from its parent only in line endings or trailing white space is recognized as a duplicate
-/// before any evaluation is paid for. <see cref="EvaluateAsync"/> enforces the configured program bounds, delegates
+/// <see cref="CanonicalizeAsync"/> uses <see cref="ProgramGenome.Id"/>, a versioned hash of exact source and language.
+/// Display normalization is not used for deduplication because whitespace can change string literals.
+/// <see cref="EvaluateAsync"/> enforces the configured program bounds, delegates
 /// scoring to the <see cref="IProgramFitnessEvaluator"/>, and then merges the descriptor set's coordinates into the
 /// result.
 /// </para>
@@ -102,7 +102,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         Guard.NotNull(context);
 
         ProgramGenome genome = candidate.CanonicalGenome.Genome;
-        if (genome.NormalizedSource.Length > _options.MaxProgramChars)
+        if (genome.Source.Length > _options.MaxProgramChars)
         {
             return new EvolutionTaskResult(
                 EvolutionEvaluationStatus.Rejected,
@@ -111,7 +111,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
                     new EvolutionDiagnostic(
                         "program_too_long",
                         "The candidate is " +
-                        genome.NormalizedSource.Length.ToString(CultureInfo.InvariantCulture) +
+                        genome.Source.Length.ToString(CultureInfo.InvariantCulture) +
                         " characters, above the configured limit of " +
                         _options.MaxProgramChars.ToString(CultureInfo.InvariantCulture) + ".")
                 });
@@ -140,8 +140,8 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
 
         if (result is null)
         {
-            return EvolutionTaskResult.Failed(
-                "program_evaluator_returned_null", "The fitness evaluator returned no result.");
+            // No receipt after dispatch is unknown consumption, not a known zero-cost failure.
+            throw new InvalidOperationException("The fitness evaluator returned no result or resource receipt.");
         }
 
         if (_descriptors.Count == 0 || result.Status != EvolutionEvaluationStatus.Completed) return result;
@@ -150,7 +150,7 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         foreach (KeyValuePair<string, double> pair in _descriptors.Compute(genome)) merged[pair.Key] = pair.Value;
         foreach (KeyValuePair<string, double> pair in result.Descriptors) merged[pair.Key] = pair.Value;
 
-        return new EvolutionTaskResult(
+        var mergedResult = new EvolutionTaskResult(
             result.Status,
             result.Quality,
             result.Direction,
@@ -158,7 +158,10 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
             result.Objectives,
             result.ConstraintViolations,
             result.CostUnits,
-            result.Diagnostics);
+            result.Diagnostics,
+            result.Metrics,
+            result.Artifacts);
+        return result.MeasurementOrigin is null ? mergedResult : mergedResult.WithMeasurementOrigin(result.MeasurementOrigin);
     }
 
     private static string BuildVersionHash(
@@ -169,9 +172,10 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
         EvolveBlockMarkers markers = options.ResolveEvolveBlockMarkers();
         var components = new List<string>
         {
-            "program-evolution-task-v2",
+            "program-evolution-task-v6-measurement-origin",
             options.Language.ToString(),
-            markers.ToString(),
+            markers.Start,
+            markers.End,
             options.EnforceEvolveBlocks ? "enforce" : "free",
             options.MaxProgramChars.ToString(CultureInfo.InvariantCulture),
             descriptors.VersionHash,
@@ -181,6 +185,12 @@ public sealed class ProgramEvolutionTask : IEvolutionTask<ProgramGenome>
             // checkpoint-compatibility check.
             evaluator.Id
         };
+
+        if (options.ResourceAccounting is { } resources)
+        {
+            components.Add("program-resource-cost-unit-v1");
+            components.Add(resources.CostUnitVersionHash);
+        }
 
         return "program-task-" + EvolutionHash.Combine(components);
     }

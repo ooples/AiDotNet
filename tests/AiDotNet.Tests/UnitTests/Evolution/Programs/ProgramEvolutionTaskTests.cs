@@ -33,7 +33,7 @@ public sealed class ProgramEvolutionTaskTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task CanonicalIdentityIsTheNormalizedSourceAndLanguageHash()
+    public async System.Threading.Tasks.Task CanonicalIdentityIsTheExactSourceAndLanguageHash()
     {
         ProgramEvolutionTask task = Task();
         var genome = new ProgramGenome("print(1)  \r\n", ProgramLanguage.Python);
@@ -41,9 +41,12 @@ public sealed class ProgramEvolutionTaskTests
         EvolutionCanonicalGenome<ProgramGenome> canonical = await task.CanonicalizeAsync(genome);
 
         Assert.Equal(genome.Id, canonical.Id);
-        Assert.Equal(ProgramGenome.ComputeId("print(1)", ProgramLanguage.Python), canonical.Id);
+        Assert.Equal(ProgramGenome.ComputeId(genome.Source, ProgramLanguage.Python), canonical.Id);
         Assert.NotEqual(ProgramGenome.ComputeId("print(1)"), canonical.Id);
-        Assert.Same(genome, canonical.Genome);
+        Assert.NotSame(genome, canonical.Genome);
+        Assert.Equal(genome, canonical.Genome);
+        Assert.Equal(genome.Source, canonical.Genome.Source);
+        Assert.Equal(genome.Description, canonical.Genome.Description);
     }
 
     [Fact]

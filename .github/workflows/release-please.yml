@@ -141,6 +141,7 @@ jobs:
           set -e
           version=${{ needs.release-please.outputs.version }}
           dotnet pack src/AiDotNet.csproj -c Release -o out --no-build /p:PackageVersion=$version
+          dotnet pack src/AiDotNet.Evolution.CSharp/AiDotNet.Evolution.CSharp.csproj -c Release -o out --no-build /p:PackageVersion=$version
           echo "Package created: AiDotNet.$version.nupkg"
 
           # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c). They are versioned in

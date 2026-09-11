@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
+using AiDotNet.Interfaces;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Models;
@@ -148,6 +149,94 @@ public sealed class SandboxedProgramFitnessEvaluatorTests
         EvolutionDiagnostic diagnostic = Assert.Single(result.Diagnostics);
         Assert.True(diagnostic.Message.Length < 300, "Failure text must be bounded before it reaches a checkpoint.");
         Assert.True(diagnostic.IsRedacted);
+    }
+
+    [Theory]
+    [InlineData(ProgramOutputComparison.Ordinal)]
+    [InlineData(ProgramOutputComparison.TrimmedOrdinal)]
+    [InlineData(ProgramOutputComparison.TrimmedOrdinalIgnoreCase)]
+    [InlineData(ProgramOutputComparison.NormalizedWhitespace)]
+    public async Task TruncatedMatchingPrefixNeverPasses(ProgramOutputComparison comparison)
+    {
+        var evaluator = new SandboxedProgramFitnessEvaluator(
+            new ScriptedProgramExecutionEngine(_ => Ok("ok", truncated: true)),
+            new[] { Example("in", "ok") }, comparison);
+
+        EvolutionTaskResult result = await evaluator.EvaluateAsync(Genome(), Context);
+
+        Assert.Equal(0.0, result.Quality);
+        Assert.Equal(1.0, result.CostUnits);
+        Assert.Contains("truncated", Assert.Single(result.Diagnostics).Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task DispatchedCancellationIsCharged(int completed)
+    {
+        int calls = 0;
+        var engine = new ScriptedProgramExecutionEngine(_ =>
+            calls++ < completed ? Ok("ok") : throw new OperationCanceledException());
+        var evaluator = new SandboxedProgramFitnessEvaluator(
+            engine, new[] { Example("a", "ok"), Example("b", "ok") });
+
+        EvolutionTaskResult result = await evaluator.EvaluateAsync(Genome(), Context);
+
+        Assert.Equal(EvolutionEvaluationStatus.Canceled, result.Status);
+        Assert.Equal(completed + 1.0, result.CostUnits);
+        Assert.Equal(completed + 1, engine.Calls);
+    }
+
+    [Fact]
+    public async Task FatalEngineFailureEscapesRatherThanBecomingKnownCost()
+    {
+        var evaluator = new SandboxedProgramFitnessEvaluator(
+            new ScriptedProgramExecutionEngine(_ => throw new OutOfMemoryException("synthetic")),
+            new[] { Example("in", "ok") });
+
+        await Assert.ThrowsAsync<OutOfMemoryException>(
+            async () => await evaluator.EvaluateAsync(Genome(), Context));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExportedExamplesCannotMutateAnEvaluatorsVersionedTask(bool asynchronous)
+    {
+        var engine = new ScriptedProgramExecutionEngine(_ => Ok("ok"));
+        var examples = new[] { Example("in", "ok") };
+        var synchronous = new InputOutputProgramFitnessEvaluator(engine, examples);
+        var sandboxed = new SandboxedProgramFitnessEvaluator(engine, examples);
+        IProgramFitnessEvaluator evaluator = asynchronous ? sandboxed : synchronous;
+        string version = evaluator.VersionHash;
+        var exported = asynchronous ? sandboxed.Examples : synchronous.Examples;
+        exported[0].ExpectedOutput = "changed";
+        exported[0].Input = "changed";
+
+        EvolutionTaskResult result = await evaluator.EvaluateAsync(Genome(), Context);
+
+        Assert.Equal(1.0, result.Quality);
+        Assert.Equal(version, evaluator.VersionHash);
+        Assert.Equal("in", (asynchronous ? sandboxed.Examples : synchronous.Examples)[0].Input);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailurePayloadCannotLeakThroughRedactedDiagnostics(bool asynchronous)
+    {
+        const string payload = "PRIVATE_SENTINEL_do_not_emit";
+        var engine = new ScriptedProgramExecutionEngine(_ => Failed(ProgramExecuteErrorCode.ExecutionFailed, payload));
+        var examples = new[] { Example("in", "ok") };
+        IProgramFitnessEvaluator evaluator = asynchronous
+            ? new SandboxedProgramFitnessEvaluator(engine, examples)
+            : new InputOutputProgramFitnessEvaluator(engine, examples);
+
+        EvolutionTaskResult result = await evaluator.EvaluateAsync(Genome(), Context);
+
+        EvolutionDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.True(diagnostic.IsRedacted);
+        Assert.DoesNotContain(payload, diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]

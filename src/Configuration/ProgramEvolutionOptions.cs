@@ -1,3 +1,4 @@
+using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
 using AiDotNet.Interfaces;
 using AiDotNet.ProgramSynthesis.Enums;
@@ -166,6 +167,27 @@ public sealed class ProgramEvolutionOptions
         set => _variation = value;
     }
 
+    /// <summary>Gets or sets a trusted custom proposal loop instead of the built-in LLM operator.</summary>
+    /// <remarks>The caller owns this live operator; clones share it. It owns model configuration and provenance.
+    /// ConfigureChatClient is unnecessary for a custom loop, and the built-in prompt/variation options do not
+    /// configure it. Use a fresh operator for an independent run. Correctness and fitness still run through the facade.</remarks>
+    public IProgramVariationOperator? CustomVariation { get; set; }
+
+    /// <summary>Gets or sets a caller-owned fitness backend, such as a trusted runtime-measurement service.</summary>
+    /// <remarks>
+    /// Configure this through the program-evolution facade instead of TestCases or EvaluatorScript. The existing
+    /// correctness gate, descriptors and resource accounting still apply. The backend owns execution isolation,
+    /// timeouts, honest same-unit cost receipts and immutable Id/VersionHash identities covering its workload,
+    /// runtime, measurement and scoring policy. Configuration clones share it; it is neither cloned, serialized
+    /// nor disposed by the builder. Use a fresh instance for independent runs. For minimization, also configure
+    /// EvolutionOptions.ArchiveDirection through ConfigureEvolution; the archive defaults to maximization and
+    /// rejects results in a different direction. This does not implement a benchmark.
+    /// </remarks>
+    public IProgramFitnessEvaluator? CustomFitnessEvaluator { get; set; }
+
+    /// <summary>Gets or sets evaluation accounting on a caller-owned shared resource ledger.</summary>
+    public ProgramEvolutionResourceOptions? ResourceAccounting { get; set; }
+
     /// <summary>Gets or sets the execution boundary and resource limits applied to untrusted program text.</summary>
     public ProgramSandboxOptions Sandbox
     {
@@ -226,6 +248,9 @@ public sealed class ProgramEvolutionOptions
         get => _provenance ??= new ProposalProvenanceOptions();
         set => _provenance = value;
     }
+
+    // Reading the public lazy getter creates enabled options; inspection must not opt a caller into recording.
+    internal bool HasEnabledProvenance => _provenance?.Enabled == true;
 
     /// <summary>Gets or sets on-disk retention of evaluation artifacts; <c>null</c> keeps artifacts in memory only.</summary>
     /// <remarks>
@@ -385,7 +410,10 @@ public sealed class ProgramEvolutionOptions
 
             // EmbeddingNoveltyOptions validates in its constructor and exposes only get-only properties, so the
             // instance is a value and sharing the reference is safe. The mutable subsystems below are deep-copied.
-            Novelty = Novelty
+            Novelty = Novelty,
+            CustomVariation = CustomVariation,
+            CustomFitnessEvaluator = CustomFitnessEvaluator,
+            ResourceAccounting = ResourceAccounting
         };
 
         copy._diff = _diff is null ? null : _diff.Clone();
@@ -445,6 +473,20 @@ public sealed class ProgramEvolutionOptions
         _provenance?.Validate();
         _artifactStore?.Validate();
         _runOutput?.Validate();
+
+        if (CustomVariation is not null && _provenance?.Enabled == true)
+            throw new ArgumentException("Custom variation owns proposal provenance; disable the built-in provenance sink.", nameof(CustomVariation));
+        if (CustomVariation is IEvolutionProposalCostProvider costed && ResourceAccounting is { } resources &&
+            !string.Equals(costed.CostUnitVersionHash, resources.CostUnitVersionHash, StringComparison.Ordinal))
+            throw new ArgumentException("Proposal and evaluator cost-unit semantics must match.", nameof(ResourceAccounting));
+
+        if (CustomFitnessEvaluator is { } customFitness)
+        {
+            if (_testCases?.Count > 0 || !string.IsNullOrWhiteSpace(_script?.EvaluatorScript))
+                throw new ArgumentException("CustomFitnessEvaluator cannot be combined with TestCases or EvaluatorScript; configure independent correctness checks through the facade.", nameof(CustomFitnessEvaluator));
+            VersionPinnedProgramFitnessEvaluator.ValidateIdentity(customFitness.Id, nameof(customFitness.Id));
+            VersionPinnedProgramFitnessEvaluator.ValidateIdentity(customFitness.VersionHash, nameof(customFitness.VersionHash));
+        }
 
         // Both of these write files, so they need somewhere to write. Refuse at configuration time rather than
         // after the first evaluation has already been paid for.
@@ -521,9 +563,9 @@ public sealed class ProgramEvolutionOptions
         return copy;
     }
 
-    // The engine options are copied by EvolutionEngineOptions.Copy() rather than by a list maintained here. The
+    // The engine options are copied by EvolutionEngineOptions.SnapshotAndValidate() rather than by a list maintained here. The
     // hand-written copy this replaces silently dropped 19 of the 41 options, so a program-evolution run discarded
     // its cascade, early stopping, target quality, migration topology, selection policy and output directory
     // without reporting anything.
-    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => source.Copy();
+    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => source.SnapshotAndValidate();
 }

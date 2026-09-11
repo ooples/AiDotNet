@@ -1,5 +1,6 @@
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs.Metrics;
 using Xunit;
 

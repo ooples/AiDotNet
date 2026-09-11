@@ -7,6 +7,23 @@ namespace AiDotNetTests.UnitTests.Evolution.Programs;
 
 public sealed class FencedCodeExtractorTests
 {
+    [Theory]
+    [InlineData("\r\ntext = @\"first\rsecond\nthird\";  \r\n")]
+    [InlineData("x\r\ny\rz\nlast  ")]
+    [InlineData("    first\n\nsecond\n\n")]
+    public void Executable_extraction_preserves_every_content_character(string source)
+    {
+        Assert.Equal(source, FencedCodeExtractor.ExtractExact("```csharp\n" + source + "\n```", ProgramLanguage.CSharp).Code);
+    }
+
+    [Fact]
+    public void Executable_extraction_requires_a_complete_fence()
+    {
+        Assert.False(FencedCodeExtractor.ExtractExact("```csharp\nx = 1;\n", ProgramLanguage.CSharp).HasCode);
+        Assert.False(FencedCodeExtractor.ExtractExact("x = 1;", ProgramLanguage.CSharp).HasCode);
+        Assert.False(FencedCodeExtractor.ExtractExact("```csharp\n \n```", ProgramLanguage.CSharp).HasCode);
+    }
+
     [Fact]
     public void LabelledFenceIsPreferredOverProse()
     {
