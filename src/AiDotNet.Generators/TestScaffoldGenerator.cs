@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -5223,9 +5223,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the generated iteration contract below compares the established post-warmup points.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, new AiDotNet.NER.Options.TransformerNEROptions { " +
+                    "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { " +
                     "HiddenDimension = 32, NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.000001 })";
+                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.000001 }))";
             }
             else if (model.ClassName == "ELECTRANER" && model.TypeParameterCount == 1)
             {
@@ -5236,9 +5236,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // bounded transformer fixture; the production/paper-facing default stays unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, new AiDotNet.NER.Options.TransformerNEROptions { " +
+                    "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { " +
                     "HiddenDimension = 32, NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.000001 })";
+                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.000001 }))";
             }
             else if (model.ClassName == "FinBERTTone" && model.TypeParameterCount == 1)
             {
@@ -5531,9 +5531,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputSize: 32, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+                    "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 }))";
+            }
+            else if (model.ClassName == "LegalBERTNER" && model.TypeParameterCount == 1)
+            {
+                // Same defect and the same remedy as FinBERTNER above: without a fixture it inherits
+                // the full BERT-base NER shape (768 hidden, 12 encoder blocks, 3072 FFN, padding to
+                // 256 tokens) to label an eight-token generated task, and its many-iteration training
+                // probes overrun the 120 s gate.
+                //
+                // This is rung 3 of the escalation and the only one left. Rung 1, <float>, is already
+                // applied (Fp32TestClassNames) and the HeavyTimeout note records it as insufficient:
+                // "still OOM or time out on the forward/training even at <float>". Rung 2, the
+                // NER-family smoke-iteration caps, is applied too. The note then says a CI-smoke
+                // constructorExpr "could rescue several, but that per-model work is deferred" — this
+                // is that work, and it is the reason the model was left running full-scale in the
+                // nightly lane instead.
+                //
+                // Measured: 31 optimizer steps of the BERT-base fixture took 114 s against a 120 s
+                // budget, so Training_ShouldReduceLoss passed or failed with machine load rather than
+                // with the code. The smoke shape exercises the same transformer encoder and
+                // token-classification head, and keeps AdamW at the 5e-5 BERT fine-tuning rate the
+                // paper specifies. Production defaults are untouched and fully user-customizable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 }))";
             }
             else if (model.ClassName == "TabPFNNetwork" && model.TypeParameterCount == 1)
             {
@@ -5608,18 +5636,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if ((model.ClassName == "XLMRoBERTaNER" || model.ClassName == "TemplateNER")
                      && model.TypeParameterCount == 1)
             {
-                // TransformerNEROptions defaults to 5e-5, the standard fine-tuning rate for a
-                // PRE-TRAINED checkpoint (Conneau et al., ACL 2020 for XLM-R). The generated fixtures
-                // build randomly-initialised weights instead, where that rate overshoots: both models
-                // reported the SAME two-iteration loss ABOVE their one-iteration loss (3.4570 vs
-                // 2.8475) on MoreData_ShouldNotDegrade, which is the shared TransformerNERBase
-                // training path rather than anything model-specific. Bind a gentler rate through the
-                // public option; the library default stays at the published fine-tuning value.
+                // The paper-scale TemplateNER fixture took 8.52 minutes in an isolated serial
+                // process and reached at least 32.68 GiB working set. Its XLM-R sibling takes
+                // this same constructor branch. Bound only the generated encoder's width/depth
+                // and padded sequence through public options, keeping the established 5e-6 smoke
+                // learning rate and the live branch's default dropout (0.1). Production defaults,
+                // optimizer topology, test assertions and iteration budgets remain unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 768, outputSize: 4), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { LearningRate = 5e-6 })";
+                    "inputSize: 32, outputSize: 9), " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 16, LearningRate = 5e-6 }))";
             }
             else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -6010,6 +6039,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
+            }
+            else if (model.ClassName == "KMaXDeepLab" && model.TypeParameterCount == 1)
+            {
+                // Same family and the same rung as Mask2Former above. Its own fallback geometry is
+                // 640x640 over 133 classes, and the k-means cross-attention (queries x pixels x dim)
+                // makes each training iteration multi-second at that size.
+                //
+                // Rungs 1 and 2 are applied: it is in Fp32TestClassNames with a measured rationale,
+                // and it carries the segmentation family's iteration caps. Both were recorded as
+                // insufficient -- the HeavyTimeout note names it for a memorization task that
+                // "overran even the fp32 blame-hang" -- and the same note says a CI-smoke fixture
+                // "could rescue several, but that per-model work is deferred". This is that work.
+                //
+                // numClasses is the real lever, not just resolution: the base derives its stuff/thing
+                // split from it (numClasses/3), and the mask decoder's query set scales with it.
+                // ModelSize stays R50, which is already the smaller of the two available. The k-means
+                // mask-transformer pipeline is unchanged and paper defaults remain user-selectable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4)";
             }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
@@ -6596,20 +6646,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumBridgeLayers = 1, NumHeads = 4, VocabSize = 64, " +
                     "MaxSequenceLength = 16, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "XLMRoBERTaNER" && model.TypeParameterCount == 1)
-            {
-                // Conneau et al. keep XLM-R Base at 12 layers / 768 hidden / 12 heads; retain
-                // those public TransformerNER defaults. Their official fine-tuning recipe sweeps
-                // as low as 5e-6. The generated 1-vs-2 update comparison diverged at the shared
-                // 5e-5 default (2.848 -> 3.456), and dropout made the two cloned trajectories
-                // compare different masks. Use the conservative published sweep point and disable
-                // test-fixture dropout so this measures optimizer direction, not mask variance.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 768, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { LearningRate = 5e-6, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "PixelLM" && model.TypeParameterCount == 1)
             {
                 // PixelLM retains its paper-default SegFormer-B5 widths [64,128,320,768],
@@ -6678,9 +6714,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 })";
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 }))";
             }
             else if ((model.ClassName == "SECBertNER" || model.ClassName == "SpanBERTNER"
                      || model.ClassName == "RELNER" || model.ClassName == "RoBERTaNER"
@@ -6697,9 +6733,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 })";
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 }))";
             }
             else if (model.ClassName == "TriaffineNER" && model.TypeParameterCount == 1)
             {
@@ -6766,9 +6802,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 })";
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 }))";
             }
             else if (model.ClassName == "PromptNER" && model.TypeParameterCount == 1)
             {
@@ -6797,9 +6833,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 })";
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 }))";
             }
             else if (model.ClassName == "Chirp" && model.TypeParameterCount == 1)
             {
@@ -6890,9 +6926,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9), " +
-                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 })";
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 }))";
             }
             else if (model.ClassName == "PURENER" && model.TypeParameterCount == 1)
             {
@@ -8818,6 +8854,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.Vocoders.VocosOptions { MelChannels = 8, ConvNeXtDim = 16, " +
                     "NumBackboneBlocks = 2, IntermediateDim = 32, FftSize = 16, HopSize = 4, " +
                     "LearningRate = 2e-4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MelGAN" && model.TypeParameterCount == 1)
+            {
+                // Same rung as Vocos above, and the only rung left open for this model. MelGAN's
+                // generator is 512 base channels over 3 residual stacks, and its memorization and
+                // training probes overrun the 180 s gate at that width.
+                //
+                // Rung 2 is CLOSED here rather than merely unapplied: its cap entry records that
+                // adding MelGAN to the iteration-override block "would fail the build with CS0102 --
+                // the cap rung is closed", because its family branch already emits those members.
+                // The same note adds that its remaining failures "are the memorization / training
+                // probes at the 180 s gate, not MoreData, so the existing caps do not reach them".
+                // A fixture is the one lever that reaches them.
+                //
+                // NgfBase is the ONLY knob that may move here. InitializeLayers builds the default
+                // HiFi-GAN generator as CreateDefaultHiFiGANLayers(MelChannels, NgfBase, 1), and it
+                // guards the two it does not consume: setting NumResStacks or DropoutRate away from
+                // their defaults throws "configured but not applied by the paper-faithful HiFi-GAN
+                // generator default; supply explicit Architecture.Layers". That guard is right --
+                // silently ignoring a configured option is worse than refusing it -- and an earlier
+                // draft of this fixture set NumResStacks = 1 and failed all 33 tests on it.
+                //
+                // MelChannels is applied and would shrink further, but it is the 80 in this fixture's
+                // declared [1,80,1] -> [1,1,256] contract, so moving it changes the output axes
+                // rather than only the cost. Width alone is the safe lever; the multi-scale
+                // generator and paper defaults are otherwise unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 32, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.MelGANOptions { NgfBase = 32 })";
             }
             else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
             {
@@ -10977,6 +11044,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // argument keeps every strict invariant active without a serialization-only empty model.
                 constructorExpr = $"new {typeName}<double>(" +
                     "new AiDotNet.Tensors.LinearAlgebra.Vector<double>(3))";
+            }
+            else if (model.ClassName == "MemFlow" && model.TypeParameterCount == 1)
+            {
+                // Apply the explicit fixture before the parameterless fallback: MemFlow exposes both
+                // constructors, and its production default builds 256x256 frames at 64 features over
+                // 8 layers. The bounded fixture must not be shadowed by that convenient default.
+                //
+                // InputDepth stays 6: the two frames are stacked channel-wise and the lazy feature
+                // conv is sized from InputDepth, so 3 would build a single-frame extractor and
+                // PredictCore's Shape[1]/2 split would halve the wrong axis. Only the scale changes --
+                // the memory-augmented flow pipeline is unchanged, and paper defaults stay intact.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
+                    "numFeatures: 8, numLayers: 2)";
             }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
@@ -14131,22 +14214,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // be [seq, 32]; feeding the paper-width [8, 768] into a 32-wide model throws
             // "embedding dimension (768) does not match weight dimension (32)" inside MultiHeadAttention.
             // Keep this list in sync with the HiddenDimension = 32 constructorExpr branches.
-            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER" or "SciBERTNER" or "BiaffineNER" or "TriaffineNER"
+            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "LegalBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER" or "SciBERTNER" or "BiaffineNER" or "TriaffineNER" or "TemplateNER" or "XLMRoBERTaNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
-            // XLMRoBERTaNER keeps the paper's 12 layers / 768 hidden / 12 heads (see its
-            // constructorExpr above), so one Train step on [8, 768] costs ~3.4 s and
-            // Training_ShouldReduceLoss runs TrainingIterations * 3 = 30 of them. MEASURED in
-            // isolation on this branch: 101 s against its 120 s gate -- 84% of budget with nothing
-            // else in the process. That margin does not survive a serialized shard, where the
-            // process-wide TensorArena pool carries rentals from every class that ran first, so the
-            // same test aborts at 120 s in CI and shows the "[1 ms]" duration xUnit reports for a
-            // cancelled test. Rung 1 (<float>) was tried FIRST and measured at 103 s -- no help,
-            // because the cost here is arithmetic volume, not footprint. So cap the shared training
-            // count instead, exactly as RecurrentGemmaLanguageModel does: five gives 15 real
-            // optimizer steps, the invariant ("training reduces the loss") is untouched, and the
-            // model keeps every one of its paper defaults.
+            // Preserve XLM-R's existing five-update fixture budget (15 for loss reduction).
+            // Its old paper-scale fixture needed this cap; bounding the constructor above does
+            // not change the established assertion or its configured number of optimizer steps.
             if (model.ClassName == "XLMRoBERTaNER")
             {
                 sb.AppendLine("    protected override int TrainingIterations => 5;");
@@ -14374,16 +14448,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 "DeBERTaNER" or "PubMedBERTNER" => 1,
                 _ => 2
             };
-            // LegalBERTNER falls in the default 1-vs-2 iteration bucket, and its second Adam step
-            // rises further than the shared 0.5 bound allows: measured GetLastLoss 2.847519 after
-            // one step against 3.455980 after two, a gap of 0.608. That is the same early-training
-            // transient the DistilBERT/BioBERT/BLINK note above describes, just larger on a BERT
-            // encoder that has barely left initialisation — every other LegalBERTNER invariant
-            // passes, Training_ShouldReduceLoss and Training_ShouldChangeParameters included, and
-            // SequenceLabelingNERBase already pairs correctly with CrossEntropyWithLogitsLoss so
-            // this is NOT the raw-logit/CategoricalCrossEntropy mispairing fixed for the LM heads.
-            // Give it the 1.0 its BERT-family siblings FinBERT / FinBERTTone / FinGPT already use.
-            double moreDataTolerance = model.ClassName == "LegalBERTNER" ? 1.0 : 0.5;
+            // LegalBERTNER used to need its own 1.0 here: at the default 1-vs-2 bucket its second
+            // Adam step rose 0.608 past the first, beyond the shared 0.5 bound. That tolerance was
+            // holding up a comparison the invariant no longer makes. NERModelTestBase's
+            // MoreData_ShouldNotDegrade compared a short run against a longer one, which asserts
+            // per-step monotonicity that stochastic optimisation does not provide; it now takes a
+            // baseline after the first step and compares once, after an adequate budget, the way
+            // Training_ShouldReduceLoss and the base invariant already do (#2135).
+            //
+            // The number was also not stable enough to tune: measured at 0.608 when it was written
+            // and 1.167 in the nightly that finally exceeded it. A per-model bound tracking a value
+            // that moves with initialisation is the symptom the base comment warns about, not a fix.
+            double moreDataTolerance = 0.5;
             sb.AppendLine($"    protected override int MoreDataShortIterations => {shortIterations};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {longIterations};");
             sb.AppendLine($"    protected override double MoreDataTolerance => {moreDataTolerance.ToString(System.Globalization.CultureInfo.InvariantCulture)};");

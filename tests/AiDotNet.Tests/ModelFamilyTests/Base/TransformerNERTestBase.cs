@@ -1,5 +1,10 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.NER.Options;
+using AiDotNet.NER.TransformerBased;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
+using System.Reflection;
 using Xunit;
 using System.Threading.Tasks;
 using AiDotNet.Tensors.Helpers;
@@ -13,6 +18,71 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class TransformerNERTestBase<T> : NERModelTestBase<T>
 {
+    /// <summary>
+    /// Explicitly opts a generated smoke fixture into a positive first warmup update. This retains
+    /// its established learning-rate trajectory without changing the production zero-start contract.
+    /// </summary>
+    protected static TOptions WithPositiveSmokeWarmup<TOptions>(TOptions options)
+        where TOptions : TransformerNEROptions
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.WarmupSteps > 0 && options.WarmupInitialLearningRate == 0.0)
+        {
+            options.WarmupInitialLearningRate = options.LearningRate / options.WarmupSteps;
+        }
+        return options;
+    }
+
+    /// <inheritdoc />
+    protected override void PrepareForGradientFlowInvariant(
+        INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+    {
+        base.PrepareForGradientFlowInvariant(network, input, target);
+        if (network is not TransformerNERBase<T> transformer
+            || transformer.GetOptions() is not TransformerNEROptions options
+            || options.WarmupSteps <= 0 || options.WarmupInitialLearningRate != 0.0)
+        {
+            return;
+        }
+
+        // Read the actual model-owned optimizer: its constructor may have received a custom
+        // optimizer, and a clone may already have advanced its scheduler. Options alone cannot
+        // establish that this particular next step is intentionally zero. Never mutate that state.
+        FieldInfo? optimizerField = typeof(TransformerNERBase<T>).GetField("_optimizer",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(optimizerField);
+        if (optimizerField.GetValue(network) is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer
+            || optimizer.SchedulerStepMode != SchedulerStepMode.StepPerBatch
+            || optimizer.CurrentStep != 0 || optimizer.GetCurrentLearningRate() != 0.0
+            || optimizer.LearningRateScheduler is not LinearWarmupScheduler scheduler
+            || scheduler.CurrentStep != 0 || scheduler.CurrentLearningRate != 0.0)
+        {
+            return;
+        }
+        double nextRate = scheduler.GetLearningRateAtStep(1);
+        if (!(nextRate > 0.0) || double.IsInfinity(nextRate)) return;
+
+        var initialHashes = ComputeChunkHashes(network);
+        Assert.NotEmpty(initialHashes);
+        network.Train(input, target);
+        Assert.Equal(initialHashes, ComputeChunkHashes(network));
+        Assert.Equal(1, optimizer.CurrentStep);
+        Assert.Equal(1, scheduler.CurrentStep);
+        Assert.Equal(nextRate, scheduler.CurrentLearningRate);
+        Assert.Equal(nextRate, optimizer.GetCurrentLearningRate());
+        foreach (var chunk in EnumerateParameterChunks(network))
+        {
+            for (int i = 0; i < chunk.Length; i++)
+            {
+                double value = ConvertToDouble(chunk[i]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    Assert.Fail("A parameter became non-finite during the intentional zero-rate warmup step.");
+                }
+            }
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public virtual async Task ContextualSensitivity_DifferentContext_DifferentLabels()
     {

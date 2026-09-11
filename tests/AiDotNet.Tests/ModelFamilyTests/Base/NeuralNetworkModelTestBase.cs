@@ -1389,7 +1389,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// FNV-1a-style mix over the raw IEEE-754 bit pattern of each value so
     /// a NaN→NaN no-change doesn't collide with a real param update.
     /// </summary>
-    private static System.Collections.Generic.List<long> ComputeChunkHashes(INeuralNetworkModel<T> network)
+    protected static System.Collections.Generic.List<long> ComputeChunkHashes(INeuralNetworkModel<T> network)
     {
         var hashes = new System.Collections.Generic.List<long>();
         foreach (var chunk in EnumerateParameterChunks(network))
@@ -3055,6 +3055,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // gradient computation.
     // =====================================================
 
+    /// <summary>
+    /// Performs an explicitly verified, zero-rate scheduler step before measuring a weight update.
+    /// Ordinary fixtures need no preparation; the nonzero-change and full finite checks stay shared.
+    /// </summary>
+    protected virtual void PrepareForGradientFlowInvariant(
+        INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+    {
+    }
+
     [Fact(Timeout = 120000)]
     public virtual async Task GradientFlow_ShouldBeNonZeroAndFinite()
     {
@@ -3094,6 +3103,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             catch (System.Exception) { /* warmup-only; the actual assertion runs below */ }
         }
         network.SetTrainingMode(true);
+
+        PrepareForGradientFlowInvariant(network, input, target);
 
         // Bounded sampling — see Training_ShouldChangeParameters for the
         // rationale. On paper-scale models the full snapshot OOMs; the

@@ -17,7 +17,12 @@ name: Heavy Timeout Models (nightly)
 on:
   schedule:
     - cron: '0 6 * * *'   # 06:00 UTC nightly
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      chunk_size:
+        description: 'Test classes per test-host process. Lower bounds peak memory; higher spends less time re-discovering the assembly.'
+        required: false
+        default: '6'
 
 # Don't fight the PR test workflow's concurrency group; this is its own long-running lane.
 concurrency:
@@ -66,7 +71,7 @@ jobs:
       - name: Build (Release, net10.0)
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
 
-      - name: Run heavy-timeout models (best-effort, non-gating)
+      - name: Run heavy-timeout models (informational, non-PR-gating)
         # Only the tagged models. A category filter alone does NOT keep xUnit serial, so the built
         # xunit.runner.json is rewritten to serialize collection execution (one model in flight at a
         # time) and Workstation GC is selected. Without this the heaviest models stack memory and
@@ -88,24 +93,153 @@ jobs:
         # process-wide, so the dotnet test below inherits it without a separate step that
         # workflow-level env would override.
         shell: pwsh
-        continue-on-error: true
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
           # Dedicated enterprise CI license key (save-capable, ~unlimited activations). ModuleInitializer
           # swaps it for the deterministic synthetic offline license for the suite; it also validates online.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+          HEAVY_CHUNK_SIZE: ${{ inputs.chunk_size }}
         run: |
           # Exits 1 when the runner config is missing, which is the same fail-fast this lane had: these
           # models are flagged heavy precisely because they OOM without serialization, so falling
           # through to a parallel run would waste the runner to reach the same failure.
           ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
-            -c Release --framework net10.0 --no-build --no-restore `
-            --filter 'Category=HeavyTimeout' `
-            --logger 'trx;LogFileName=heavy-timeout.trx' `
-            --logger 'console;verbosity=normal' `
-            --results-directory artifacts/heavy-timeout
+
+          # RUN IN CHUNKS, EACH IN ITS OWN PROCESS (#2087).
+          #
+          # A single `dotnet test` over the whole category ran every paper-scale model in one test
+          # host, and the host's memory only ever grew: serialized execution stops them overlapping
+          # but does not return a model's weights to the OS between classes. The 16 GB hosted runner
+          # was reached partway through and the OOM killer took the runner agent with it, which
+          # GitHub reports as "The runner has received a shutdown signal" rather than as a test
+          # failure. `continue-on-error` cannot catch that -- a dead runner is not a failed step.
+          #
+          # That it was cumulative rather than one bad model is visible in where it died on five
+          # consecutive nights: Mask2Former (09-09), MoMask (09-08), CogView4 (09-06) and SDXLTurbo
+          # (09-05), between 9 minutes and 1.5 hours in. Different model every night, always a few
+          # minutes after the previous test passed.
+          #
+          # Chunking rather than one-process-per-class: this lane now covers 219 classes / ~3,800
+          # tests, not the 11 tests the previous comment here described, because the generator's
+          # HeavyTimeoutTestClassNames set has grown to include the whole Diffusion family. VSTest
+          # discovers the entire ~72k-case assembly on every invocation regardless of --filter, so
+          # 219 invocations would spend most of the budget re-discovering. A chunk bounds peak
+          # memory to ChunkSize classes while paying discovery once per chunk.
+          #
+          # ChunkSize is deliberately small. Past runs died within roughly 8-19 minutes of starting
+          # tests, which is only a handful of these classes, so the ceiling is reached quickly.
+          $chunkSize = 6
+          if ($env:HEAVY_CHUNK_SIZE) {
+            $parsedChunkSize = 0
+            if (-not [int]::TryParse($env:HEAVY_CHUNK_SIZE, [ref]$parsedChunkSize) -or $parsedChunkSize -lt 1) {
+              Write-Host "::error title=Invalid chunk_size::'$($env:HEAVY_CHUNK_SIZE)' is not a positive integer."
+              exit 1
+            }
+            $chunkSize = $parsedChunkSize
+          }
+
+          $testProject = 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
+          $resultsDir  = 'artifacts/heavy-timeout'
+          New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+
+          function Get-AvailableMemoryMb {
+            # /proc/meminfo is the runner's own view. nproc-based estimates and GC counters both
+            # report the process, and the thing being exhausted here is the machine.
+            $line = Select-String -Path '/proc/meminfo' -Pattern '^MemAvailable:\s+(\d+) kB' -ErrorAction SilentlyContinue
+            if ($null -eq $line) { return -1 }
+            return [int]([int]$line.Matches[0].Groups[1].Value / 1024)
+          }
+
+          # Discovered, not hardcoded. HeavyTimeout comes from two places -- hand-written
+          # [Trait("Category","HeavyTimeout")] attributes AND TestScaffoldGenerator's
+          # HeavyTimeoutTestClassNames set -- so any list written here would drift out of step with
+          # the generator the first time a model is added to it.
+          Write-Host '--- discovering HeavyTimeout test classes ---'
+          $listed = @(dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
+            --filter 'Category=HeavyTimeout' --list-tests 2>&1)
+          $discoveryExit = $LASTEXITCODE
+
+          if ($discoveryExit -ne 0) {
+            Write-Host "::error title=HeavyTimeout discovery failed::dotnet test --list-tests exited $discoveryExit."
+            $listed | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+            exit $discoveryExit
+          }
+
+          $classes = @($listed |
+            ForEach-Object { $_ -replace '\r', '' } |
+            Where-Object { $_ -match '^\s{4}\S+\.\S+' } |
+            ForEach-Object { ($_.Trim() -split '\(')[0] } |
+            ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } |
+            Sort-Object -Unique)
+
+          if (-not $classes -or $classes.Count -eq 0) {
+            # Discovery returning nothing would otherwise "pass" this lane by running no tests at
+            # all, which is the same silent zero-coverage this issue is about.
+            Write-Host '::error title=No HeavyTimeout tests discovered::The lane found no test classes, so it would report success having run nothing.'
+            $listed | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+
+          $chunks = @()
+          for ($i = 0; $i -lt $classes.Count; $i += $chunkSize) {
+            $end = [Math]::Min($i + $chunkSize - 1, $classes.Count - 1)
+            $chunks += ,@($classes[$i..$end])
+          }
+
+          Write-Host "--- $($classes.Count) HeavyTimeout class(es) in $($chunks.Count) chunk(s) of up to $chunkSize, one process each ---"
+
+          $rows   = @()
+          $failed = 0
+          $index  = 0
+
+          foreach ($chunk in $chunks) {
+            $index++
+            $label   = 'chunk{0:d3}' -f $index
+            $filter  = 'Category=HeavyTimeout&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
+            $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
+            $memPre  = Get-AvailableMemoryMb
+            $started = Get-Date
+
+            Write-Host "::group::$label ($($chunk.Count)): $names  -- MemAvailable ${memPre} MB before"
+
+            dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
+              --filter $filter `
+              --logger "trx;LogFileName=$label.trx" `
+              --logger 'console;verbosity=normal' `
+              --results-directory $resultsDir
+            $exit = $LASTEXITCODE
+
+            $memPost  = Get-AvailableMemoryMb
+            $duration = [int]((Get-Date) - $started).TotalSeconds
+            Write-Host '::endgroup::'
+
+            if ($exit -ne 0) { $failed++ }
+            $rows += [pscustomobject]@{
+              Label = $label; Names = $names; Exit = $exit
+              Seconds = $duration; MemPre = $memPre; MemPost = $memPost
+            }
+            Write-Host "$label -> exit $exit in ${duration}s (MemAvailable ${memPre} MB -> ${memPost} MB)"
+          }
+
+          # The dashboard this lane exists to be. Reading it should not require opening the log,
+          # and the memory columns are what turns the next runner death into evidence rather than
+          # another "shutdown signal" with nothing behind it.
+          $summary = @()
+          $summary += '## Heavy Timeout Models'
+          $summary += ''
+          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed."
+          $summary += ''
+          $summary += '| Chunk | Result | Seconds | Mem before | Mem after | Classes |'
+          $summary += '|---|---|---:|---:|---:|---|'
+          foreach ($r in $rows) {
+            $result = if ($r.Exit -eq 0) { 'pass' } else { "FAIL (exit $($r.Exit))" }
+            $summary += "| $($r.Label) | $result | $($r.Seconds) | $($r.MemPre) MB | $($r.MemPost) MB | $($r.Names) |"
+          }
+          $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed ==="
+          if ($failed -gt 0) { exit 1 }
 
       - name: Upload results
         if: always()
