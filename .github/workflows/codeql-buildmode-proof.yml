@@ -3,8 +3,8 @@ name: CodeQL build-mode proof
 # MEASUREMENT ONLY. Compares the real traced-build CodeQL job (sonarcloud.yml `codeql`) against
 # `build-mode: none` and a traced build with analyzers skipped. Nothing is uploaded to code
 # scanning (upload: never); each variant publishes its SARIF + database diagnostics as an Actions
-# artifact for offline comparison. Push runs traced + none (2 jobs). workflow_dispatch selects
-# variants explicitly so at most 2 jobs run at a time.
+# artifact for offline comparison. Each push runs the 2-variant list in the matrix default below
+# (run 1: traced + none; run 2: none-scoped + traced-noanalyzers), so at most 2 jobs run at once.
 
 permissions: read-all
 
@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        variant: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.variants || '["traced","none"]') }}
+        variant: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.variants || '["none-scoped","traced-noanalyzers"]') }}
     steps:
 
       - name: Checkout code
@@ -92,6 +92,21 @@ jobs:
           build-mode: none
           config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
+
+      # build-mode none restores EVERY project in the checkout and merges all .cs into one
+      # compilation. Run 1 showed src/AiDotNet.Playground.Functions (PackageReference AiDotNet
+      # 0.113.0 -> AiDotNet.Tensors 0.9.1, same 1.0.0.0 assembly version as 0.130.3) made the
+      # extractor bind the core library against Tensors 0.9.1, plus AiDotNet.dll type clashes.
+      # Prune the checkout to exactly what the traced job compiles so the comparison is fair.
+      - name: Prune checkout to traced scope (none-scoped only)
+        if: matrix.variant == 'none-scoped'
+        shell: bash
+        run: |
+          rm -rf AiDotNet.sln AiDotNetBenchmarkTests PhaseATestRunner benchmarks samples testconsole tests tools examples docs website .wip
+          rm -rf src/AiDotNet.Dashboard src/AiDotNet.Playground src/AiDotNet.Playground.Functions src/AiDotNet.Privacy.HE src/AiDotNet.Serving src/AiDotNet.Storage.* src/Generated
+          rm -f src/Polyfills/LanguageFeaturePolyfills.cs
+          echo "remaining project files:"; find . -name '*.csproj' -o -name '*.sln' -o -name '*.slnx' | grep -v '/\.git/'
+          echo "remaining .cs files: $(find . -name '*.cs' -not -path './.git/*' | wc -l)"
 
       - name: Initialize CodeQL (build-mode none, traced scope)
         if: matrix.variant == 'none-scoped'
