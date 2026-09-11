@@ -607,7 +607,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         for (int s = 0; s < sampleCount; s++)
         {
-            int i = (int)(s * bodyParams.Length / (double)sampleCount);
+            int i = (int)((double)s * bodyParams.Length / sampleCount);
 
             // Skip if not in adaptation fraction
             double position = i / (double)bodyParams.Length;
