@@ -5,6 +5,19 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the AudioVisualCorrespondenceNetwork.
 /// </summary>
+/// <remarks>
+/// <para><see cref="VisionLanguageModelOptions.NumEncoderLayers"/> specifies the actual number
+/// of shared Dense/LayerNorm/Tanh encoder blocks. The default remains six; the former factory
+/// ignored this value and always built four blocks. <see cref="VisionLanguageInputOptions.EmbeddingDimension"/>
+/// is the actual final encoder width. Correcting that topology changes the layer/parameter
+/// layout of checkpoints made with the old factory; retraining or an explicit checkpoint
+/// migration is required rather than treating the old four-block state as a six-block model.</para>
+/// <para><see cref="VisionLanguageModelOptions.Channels"/> controls visual patch inputs and
+/// defaults to three. It is validated when a visual modality API is used; feature-input
+/// Predict/Train do not consume channel geometry. Frames must be channel-first and their spatial dimensions divisible by
+/// sixteen. Custom architecture layers retain their Predict/Train behavior, but do not declare
+/// the modality encoder/fusion roles required by the audio/visual embedding APIs.</para>
+/// </remarks>
 public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
 {
     /// <summary>
@@ -28,6 +41,15 @@ public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
         AudioSampleRate = 16000; // DEFAULT_SAMPLE_RATE
         VideoFrameRate = 25.0; // DEFAULT_FRAME_RATE
         NumEncoderLayers = 6;
+    }
+
+    /// <summary>Copies the audio/video rates and every inherited configuration setting.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public AudioVisualCorrespondenceOptions(AudioVisualCorrespondenceOptions other) : base(other)
+    {
+        AudioSampleRate = other.AudioSampleRate;
+        VideoFrameRate = other.VideoFrameRate;
     }
 
 
@@ -62,7 +84,11 @@ public class AudioVisualCorrespondenceOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.None);
+        Require(NumEncoderLayers, nameof(NumEncoderLayers));
         Require(AudioSampleRate, nameof(AudioSampleRate));
         Require(VideoFrameRate, nameof(VideoFrameRate));
     }
+
+    internal void ValidateVisualChannels(int configuredChannels)
+        => Require(configuredChannels, nameof(Channels));
 }

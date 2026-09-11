@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
@@ -156,9 +157,19 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     #region Constructors
 
+    private string _videoOutputName = string.Empty;
+    private string _textOutputName = string.Empty;
+    private int _onnxChannels = 3;
+    private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.Vector
+        | OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
+
     /// <summary>
     /// Creates a VideoCLIP network using pretrained ONNX models.
     /// </summary>
+    /// <remarks>Frame count, image/channel dimensions, text context and embedding width must
+    /// match the supplied graphs. Native-only tower overrides are rejected. FrameRate remains
+    /// nominal metadata, not a resampling operation. Loaded signatures are exposed separately
+    /// in <see cref="MultimodalModelLayoutBase{T}.OnnxConfiguration"/>.</remarks>
     public VideoCLIPNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string videoEncoderPath,
@@ -170,8 +181,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
-        _options.Validate();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(videoEncoderPath))
@@ -192,6 +202,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
+        _onnxChannels = _options.Channels;
         _patchSize = 16;
         _visionHiddenDim = 768;
         _textHiddenDim = 512;
@@ -208,18 +219,33 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         {
             videoEncoder = new InferenceSession(videoEncoderPath);
             textEncoder = new InferenceSession(textEncoderPath);
-            _videoEncoder = videoEncoder;
-            _textEncoder = textEncoder;
+            var videoGraph = new OnnxGraphSignature(OnnxModelRole.VideoEncoder, videoEncoder);
+            var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textEncoder);
+            videoGraph.RequireInputSet("pixel_values");
+            videoGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float,
+                1, _numFrames, _onnxChannels, _imageSize, _imageSize);
+            textGraph.RequireInputSet("input_ids", "attention_mask");
+            textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            string videoOutputName = videoGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            string textOutputName = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, _numFrames, _onnxChannels, videoGraph, textGraph);
             InitializeLayers();
+            _videoEncoder = videoEncoder;
+            _textEncoder = textEncoder;
+            _videoOutputName = videoOutputName;
+            _textOutputName = textOutputName;
+            OnnxConfiguration = configuration;
         }
         catch
         {
-            videoEncoder?.Dispose();
-            textEncoder?.Dispose();
+            try { textEncoder?.Dispose(); }
+            finally { videoEncoder?.Dispose(); }
             throw;
         }
     }
@@ -1174,6 +1200,11 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         var sampledFrames = SampleFrames(frames, _numFrames);
 
+        foreach (var frame in sampledFrames)
+            if (frame.Rank != 3 || frame.Shape[0] != _onnxChannels
+                || frame.Shape[1] != _imageSize || frame.Shape[2] != _imageSize)
+                throw new ArgumentException($"ONNX video frames must have shape [{_onnxChannels}, {_imageSize}, {_imageSize}].", nameof(frames));
+
         int channels = sampledFrames[0].Shape[0];
         int height = sampledFrames[0].Shape[1];
         int width = sampledFrames[0].Shape[2];
@@ -1204,15 +1235,8 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         };
 
         using var results = _videoEncoder.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < outputTensor.Length; i++)
-        {
-            embedding[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return Normalize(embedding);
+        var outputTensor = results.First(result => result.Name == _videoOutputName).AsTensor<float>();
+        return Normalize(OnnxEmbeddingContract.Read<T>(outputTensor, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.VideoEncoder));
     }
 
     private List<Tensor<T>> SampleFrames(List<Tensor<T>> frames, int targetCount)
@@ -1330,15 +1354,8 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         };
 
         using var results = _textEncoder.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < outputTensor.Length; i++)
-        {
-            embedding[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return Normalize(embedding);
+        var outputTensor = results.First(result => result.Name == _textOutputName).AsTensor<float>();
+        return Normalize(OnnxEmbeddingContract.Read<T>(outputTensor, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.TextEncoder));
     }
 
     #endregion
@@ -1561,6 +1578,22 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration
+                ?? throw new InvalidOperationException("ONNX configuration has not been initialized.");
+            return new ModelMetadata<T>
+            {
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    { "ImageSize", _imageSize }, { "EmbeddingDimension", _embeddingDimension },
+                    { "MaxSequenceLength", _maxSequenceLength }, { "NumFrames", _numFrames },
+                    { "FrameRate", _frameRate }, { "UseNativeMode", false },
+                    { nameof(OnnxConfiguration), configuration }
+                },
+                ModelData = SerializeForMetadata()
+            };
+        }
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>

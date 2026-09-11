@@ -93,5 +93,13 @@ public class ImageBindOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(AudioSampleRate, nameof(AudioSampleRate));
+        Require(AudioMaxDuration, nameof(AudioMaxDuration));
+        Require(ImuTimesteps, nameof(ImuTimesteps));
+        Require(NumVideoFrames, nameof(NumVideoFrames));
+        Require(VocabSize, nameof(VocabSize));
+        Require(HiddenDim, nameof(HiddenDim));
+        Require(NumEncoderLayers, nameof(NumEncoderLayers));
+        Require(NumHeads, nameof(NumHeads));
     }
 }

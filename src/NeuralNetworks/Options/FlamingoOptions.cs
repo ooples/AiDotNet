@@ -89,6 +89,14 @@ public class FlamingoOptions : VisionLanguageModelOptions
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
         Require(LearningRate, nameof(LearningRate));
+        Require(NumPerceiverTokens, nameof(NumPerceiverTokens));
+        Require(MaxImagesInContext, nameof(MaxImagesInContext));
+        Require(VisionDim, nameof(VisionDim));
+        Require(LmHiddenDim, nameof(LmHiddenDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(VocabSize, nameof(VocabSize));
+        Require(NumPerceiverLayers, nameof(NumPerceiverLayers));
         if (NumLmLayers < 4)
         {
             throw new ArgumentException(

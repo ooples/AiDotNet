@@ -59,7 +59,7 @@ public class JambaOptions : SequenceModelOptions
     /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
     /// non-finite or outside its supported range. The message identifies the invalid property.
     /// </exception>
-    public void Validate()
+    internal void Validate()
     {
         ValidateCore(requiresHeads: false, requiresState: true);
         Require(AttentionInterval, nameof(AttentionInterval));

@@ -58,7 +58,7 @@ public class Mamba2Options : SequenceModelOptions
     /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative.
     /// </exception>
-    public void Validate()
+    internal void Validate()
     {
         ValidateCore(requiresHeads: true, requiresState: true);
     }

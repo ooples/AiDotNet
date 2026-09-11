@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
@@ -60,6 +61,9 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
     private int _imageSize;
     private InferenceSession _imageSession;
     private InferenceSession _textSession;
+    private string _imageOutputName = string.Empty;
+    private string _textOutputName = string.Empty;
+    private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
     private bool _disposed;
 
     /// <summary>
@@ -124,28 +128,39 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
 
-        using (var sessionOptions = new SessionOptions())
+        InferenceSession? imageSession = null;
+        InferenceSession? textSession = null;
+        using var sessionOptions = new SessionOptions();
+        try
         {
-            try
-            {
-                _imageSession = new InferenceSession(imageEncoderPath, sessionOptions);
-                try
-                {
-                    _textSession = new InferenceSession(textEncoderPath, sessionOptions);
-                }
-                catch
-                {
-                    _imageSession.Dispose();
-                    throw;
-                }
-            }
-            catch
-            {
-                throw;
-            }
+            imageSession = new InferenceSession(imageEncoderPath, sessionOptions);
+            textSession = new InferenceSession(textEncoderPath, sessionOptions);
+            var imageGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, imageSession);
+            var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textSession);
+            imageGraph.RequireInputSet("pixel_values");
+            imageGraph.RequireInput("pixel_values", Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            textGraph.RequireInputSet("input_ids", "attention_mask");
+            textGraph.RequireInput("input_ids", Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            textGraph.RequireInput("attention_mask", Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            string imageOutputName = imageGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts,
+                "image_embeds", "pooler_output", "last_hidden_state");
+            string textOutputName = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts,
+                "text_embeds", "pooler_output", "last_hidden_state");
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, imageGraph, textGraph);
+            InitializeLayers();
+            _imageSession = imageSession;
+            _textSession = textSession;
+            _imageOutputName = imageOutputName;
+            _textOutputName = textOutputName;
+            OnnxConfiguration = configuration;
         }
-
-        InitializeLayers();
+        catch
+        {
+            try { textSession?.Dispose(); }
+            finally { imageSession?.Dispose(); }
+            throw;
+        }
     }
 
     protected override void InitializeLayers()
@@ -197,6 +212,8 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
                 { "EmbeddingDimension", _embeddingDimension },
                 { "MaxSequenceLength", _maxSequenceLength },
                 { "ImageSize", _imageSize },
+                { nameof(OnnxConfiguration), OnnxConfiguration
+                    ?? throw new InvalidOperationException("ONNX configuration has not been initialized.") },
                 { "ImageEncoderPath", _imageEncoderPath },
                 { "TextEncoderPath", _textEncoderPath }
             }
@@ -326,37 +343,8 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         };
 
         using var results = _textSession.Run(inputs);
-        var output = results.FirstOrDefault(r =>
-            r.Name == "text_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
-
-        if (output == null)
-            throw new InvalidOperationException("Could not find suitable output in text encoder model.");
-
-        var embedding = new T[_embeddingDimension];
-        if (output.Dimensions.Length == 3)
-        {
-            int dim = output.Dimensions[2];
-            if (dim < _embeddingDimension)
-            {
-                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
-            }
-
-            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
-                embedding[i] = NumOps.FromDouble(output[0, 0, i]);
-        }
-        else
-        {
-            int dim = output.Dimensions[1];
-            if (dim < _embeddingDimension)
-            {
-                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
-            }
-
-            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
-                embedding[i] = NumOps.FromDouble(output[0, i]);
-        }
-
-        return new Vector<T>(embedding);
+        var output = results.First(result => result.Name == _textOutputName).AsTensor<float>();
+        return OnnxEmbeddingContract.Read<T>(output, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.TextEncoder);
     }
 
     private Vector<T> GenerateImageEmbedding(double[] imageData)
@@ -369,37 +357,8 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         };
 
         using var results = _imageSession.Run(inputs);
-        var output = results.FirstOrDefault(r =>
-            r.Name == "image_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
-
-        if (output == null)
-            throw new InvalidOperationException("Could not find suitable output in image encoder model.");
-
-        var embedding = new T[_embeddingDimension];
-        if (output.Dimensions.Length == 3)
-        {
-            int dim = output.Dimensions[2];
-            if (dim < _embeddingDimension)
-            {
-                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
-            }
-
-            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
-                embedding[i] = NumOps.FromDouble(output[0, 0, i]);
-        }
-        else
-        {
-            int dim = output.Dimensions[1];
-            if (dim < _embeddingDimension)
-            {
-                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
-            }
-
-            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
-                embedding[i] = NumOps.FromDouble(output[0, i]);
-        }
-
-        return new Vector<T>(embedding);
+        var output = results.First(result => result.Name == _imageOutputName).AsTensor<float>();
+        return OnnxEmbeddingContract.Read<T>(output, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.ImageEncoder);
     }
 
     private static int[] PadOrTruncateTokens(int[] tokens, int targetLength)

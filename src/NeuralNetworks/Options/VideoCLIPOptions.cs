@@ -117,6 +117,37 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(NumFrames, nameof(NumFrames));
+        Require(FrameRate, nameof(FrameRate));
+        Require(VisionDim, nameof(VisionDim));
+        Require(TextHiddenDim, nameof(TextHiddenDim));
+        Require(NumFrameEncoderLayers, nameof(NumFrameEncoderLayers));
+        Require(NumTemporalLayers, nameof(NumTemporalLayers));
+        Require(NumTextLayers, nameof(NumTextLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(VocabSize, nameof(VocabSize));
+        if (!Enum.IsDefined(typeof(TemporalAggregationType), TemporalAggregation))
+            throw new ArgumentException($"{GetType().Name}.{nameof(TemporalAggregation)} is not a defined aggregation mode.", OptionsParameterName);
+    }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        Require(Channels, nameof(Channels));
+        Require(NumFrames, nameof(NumFrames));
+        var defaults = new VideoCLIPOptions();
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(VisionDim, defaults.VisionDim, nameof(VisionDim));
+        RequireNativeDefaultForOnnx(TextHiddenDim, defaults.TextHiddenDim, nameof(TextHiddenDim));
+        RequireNativeDefaultForOnnx(NumFrameEncoderLayers, defaults.NumFrameEncoderLayers, nameof(NumFrameEncoderLayers));
+        RequireNativeDefaultForOnnx(NumTemporalLayers, defaults.NumTemporalLayers, nameof(NumTemporalLayers));
+        RequireNativeDefaultForOnnx(NumTextLayers, defaults.NumTextLayers, nameof(NumTextLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(TemporalAggregation, defaults.TemporalAggregation, nameof(TemporalAggregation));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(NumEncoderLayers, defaults.NumEncoderLayers, nameof(NumEncoderLayers));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
     }
 
     /// <summary>

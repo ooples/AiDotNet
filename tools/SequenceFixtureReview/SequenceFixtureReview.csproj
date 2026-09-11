@@ -17,4 +17,15 @@
     <Compile Include="../../tests/AiDotNet.Tests/Generators/GeneratedSequenceFixtureContractTests.cs" Link="GeneratedSequenceFixtureContractTests.cs" />
     <EmbeddedResource Include="$(GeneratorSourcePath)" LogicalName="Review.TestScaffoldGenerator.cs" />
   </ItemGroup>
+  <ItemGroup Condition="'$(ReviewModelDirectory)' == ''">
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReviewModelDirectory)' != ''">
+    <Reference Include="AiDotNet"><HintPath>$(ReviewModelDirectory)/AiDotNet.dll</HintPath></Reference>
+    <Reference Include="AiDotNet.Tensors"><HintPath>$(ReviewModelDirectory)/AiDotNet.Tensors.dll</HintPath></Reference>
+  </ItemGroup>
+  <Target Name="ValidateReviewModelDirectory" BeforeTargets="ResolveReferences" Condition="'$(ReviewModelDirectory)' != ''">
+    <Error Condition="!Exists('$(ReviewModelDirectory)/AiDotNet.dll') or !Exists('$(ReviewModelDirectory)/AiDotNet.Tensors.dll')"
+           Text="ReviewModelDirectory must contain both real AiDotNet.dll and AiDotNet.Tensors.dll." />
+  </Target>
 </Project>

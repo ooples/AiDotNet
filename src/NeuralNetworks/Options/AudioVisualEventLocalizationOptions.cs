@@ -31,24 +31,47 @@ public class AudioVisualEventLocalizationOptions : VisionLanguageModelOptions
         AudioEmbeddingSize = VGGishAudioEmbedding<double>.PaperEmbeddingSize;
     }
 
+    /// <summary>Copies the timing, optimizer rate, audio widths and inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public AudioVisualEventLocalizationOptions(AudioVisualEventLocalizationOptions other) : base(other)
+    {
+        LearningRate = other.LearningRate;
+        TemporalResolution = other.TemporalResolution;
+        AudioEmbeddingFullyConnectedWidth = other.AudioEmbeddingFullyConnectedWidth;
+        AudioEmbeddingSize = other.AudioEmbeddingSize;
+    }
+
     /// <summary>
     /// Gets or sets the learning rate for gradient descent parameter updates. Default: 0.001.
     /// </summary>
+    /// <value>A finite positive step scale; defaults to 0.001, preserving the previous property initializer.</value>
+    /// <remarks><para><b>For Beginners:</b> This scales native training updates. Larger steps
+    /// change weights faster but can make optimization unstable; prediction does not train the model.</para></remarks>
     public double LearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the temporal resolution.
     /// </summary>
+    /// <value>A positive interval in seconds; defaults to 0.1, preserving the former DEFAULT_TEMPORAL_RESOLUTION constant.</value>
+    /// <remarks><para><b>For Beginners:</b> This describes the spacing of event time bins.
+    /// Smaller intervals distinguish more closely timed events; callers must provide aligned audio/video inputs.</para></remarks>
     public double TemporalResolution { get; set; }
 
     /// <summary>
     /// Gets or sets the audio embedding fully connected width.
     /// </summary>
+    /// <value>A positive feature count; defaults to <see cref="VGGishAudioEmbedding{T}.PaperFullyConnectedWidth"/>, the existing VGGish projection width.</value>
+    /// <remarks><para><b>For Beginners:</b> This sizes the native audio projection's internal
+    /// fully connected representation. Wider projections allocate more weights before the audio embedding is produced.</para></remarks>
     public int AudioEmbeddingFullyConnectedWidth { get; set; }
 
     /// <summary>
     /// Gets or sets the audio embedding size.
     /// </summary>
+    /// <value>A positive feature count; defaults to <see cref="VGGishAudioEmbedding{T}.PaperEmbeddingSize"/>, the existing VGGish output width.</value>
+    /// <remarks><para><b>For Beginners:</b> Each audio segment is represented by this many
+    /// values before it is combined with visual features. This is distinct from the projection's internal width.</para></remarks>
     public int AudioEmbeddingSize { get; set; }
 
     /// <summary>

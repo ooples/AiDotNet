@@ -59,6 +59,13 @@ public class LLaVAOptions : VisionLanguageModelOptions
     public void Validate()
     {
         ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VocabSize, nameof(VocabSize));
+        Require(VisionDim, nameof(VisionDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumLmLayers, nameof(NumLmLayers));
+        Require(NumHeads, nameof(NumHeads));
+        if (string.IsNullOrWhiteSpace(VisionEncoderType))
+            throw new ArgumentException($"{GetType().Name}.{nameof(VisionEncoderType)} must identify a vision encoder.", OptionsParameterName);
     }
 
     /// <summary>

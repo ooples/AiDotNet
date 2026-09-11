@@ -12,6 +12,10 @@
     <ReviewGeneratorProject Condition="'$(ReviewGeneratorProject)' == ''">../../src/AiDotNet.Generators/AiDotNet.Generators.csproj</ReviewGeneratorProject>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/VisionLanguageCopyContractTests.cs" Link="VisionLanguageCopyContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/SequenceAndDocumentOptionsBoundaryTests.cs" Link="SequenceAndDocumentOptionsBoundaryTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/Options/VisionLanguageNativeValidationContractTests.cs" Link="VisionLanguageNativeValidationContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/VisionLanguageNativeConstructorValidationTests.cs" Link="VisionLanguageNativeConstructorValidationTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit" />
