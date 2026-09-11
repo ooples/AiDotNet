@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines.Autodiff;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -83,7 +84,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions(double learningRate = 2e-4)
         => new()
         {
             InitialLearningRate = 0.0002,
@@ -358,7 +359,10 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
         // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateStandardGanAdamOptions());
+        // Chen et al. 2016, appendix: learning rate 2e-4 for D and 1e-3 for G. Q is D's head in the
+        // paper, so it trains at D's rate.
+        _generatorOptimizer = generatorOptimizer
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateStandardGanAdamOptions(learningRate: 1e-3));
         _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreateStandardGanAdamOptions());
         _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork, CreateStandardGanAdamOptions());
 
@@ -428,80 +432,49 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         Discriminator.SetTrainingMode(true);
         QNetwork.SetTrainingMode(true);
 
-        // ----- Train Discriminator -----
-
-        // Concatenate noise and latent codes for generator
+        // ONE generator forward, recorded on the generator's tape (#1390); D trains on a detached copy.
         var generatorInput = ConcatenateTensors(noise, latentCodes);
+        using var generatorTape = new GradientTape<T>();
+        var fakeTracked = Generator.ForwardForTraining(generatorInput);
+        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
+        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
 
-        // Generate fake images
-        var fakeImages = Generator.Predict(generatorInput);
-
-        // Real labels
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train on real images
-        var realPredictions = Discriminator.Predict(realImages);
-        T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
-
-        var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        UpdateDiscriminatorParameters();
-
-        // Train on fake images
-        var fakePredictions = Discriminator.Predict(fakeImages);
-        T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
-
-        var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        UpdateDiscriminatorParameters();
-
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-
-        // ----- Train Generator and Q Network -----
-
-        Generator.SetTrainingMode(true);
-        // Keep Discriminator and QNetwork in training mode - required for backpropagation
-        // We just don't call UpdateDiscriminatorParameters() during generator training
-        QNetwork.SetTrainingMode(true);
-
-        // Train generator with adversarial + mutual information loss via tape
-        var newGeneratorInput = ConcatenateTensors(noise, latentCodes);
-        var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T miCoeff = _mutualInfoCoefficient;
-        var capturedLatentCodes = latentCodes;
-
-        var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(newGeneratorInput, genOutput =>
+        // ----- Discriminator: maximise V(D, G) -----
+        // Its two updates used to step on GetParameterGradients() after no backward pass at all.
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
         {
-            // GAN loss: fool discriminator — BCE(disc(fake), real_labels).
-            // Use ForwardForTraining (NOT Predict) so the discriminator's ops RECORD onto the
-            // generator's active gradient tape. Predict runs the eval/inference path (fused,
-            // non-recording), which left the tape with no edge from the loss back through the
-            // discriminator to genOutput — so d(GANloss)/d(generator) was zero and the generator
-            // never updated (GradientFlow_ShouldBeNonZeroAndFinite: "no parameters changed").
-            // Per Chen et al. 2016 (InfoGAN) the generator is trained by backpropagating the
-            // discriminator's adversarial signal AND the Q-network's mutual-information signal into
-            // the generator, which requires both subnetworks to be differentiated through here.
-            var discScore = Discriminator.ForwardForTraining(genOutput);
-            var diff = Engine.TensorSubtract(discScore, allRealLabels);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            var ganLossTensor = Engine.ReduceMean(squared, allAxes, keepDims: false);
+            var realScores = Discriminator.ForwardForTraining(realImages);
+            var fakeScores = Discriminator.ForwardForTraining(fakeImages);
+            var discriminatorObjective = Engine.TensorAdd(
+                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
+                _discriminatorOptimizer);
+        }
 
-            // Mutual information loss: Q(fake) should predict latent codes — likewise tape-tracked.
-            var predictedCodes = QNetwork.ForwardForTraining(genOutput);
-            var codeDiff = Engine.TensorSubtract(predictedCodes, capturedLatentCodes);
-            var codeSq = Engine.TensorMultiply(codeDiff, codeDiff);
-            var codeAxes = Enumerable.Range(0, codeSq.Shape.Length).ToArray();
-            var miLossTensor = Engine.ReduceMean(codeSq, codeAxes, keepDims: false);
-
-            // Total = GAN loss + lambda * MI loss
-            return Engine.TensorAdd(ganLossTensor, Engine.TensorMultiplyScalar(miLossTensor, miCoeff));
+        // ----- Generator and Q: minimise V(D, G) - lambda * L_I(G, Q) (Chen et al. 2016, eq. 6) -----
+        // One loss, two networks: the generator AND the Q network are stepped, each by its own
+        // optimizer. The old closure trained the generator alone, so Q -- whose loss was in it -- never
+        // moved. The adversarial term is the non-saturating -log D(G(z, c)). For the continuous codes
+        // this model draws, Q(c|x) is a unit-variance factored Gaussian, whose negative log-likelihood is
+        // the squared error up to a constant -- the form the paper uses for continuous codes.
+        var generatorScores = Discriminator.ForwardFrozenOnTape(fakeTracked);
+        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
+        var predictedCodes = QNetwork.ForwardForTraining(fakeTracked);
+        var codeError = Engine.TensorSubtract(predictedCodes, latentCodes);
+        var mutualInfoTensor = Engine.ReduceMean(
+            Engine.TensorMultiply(codeError, codeError),
+            Enumerable.Range(0, codeError.Shape.Length).ToArray(),
+            keepDims: false);
+        var generatorObjective = Engine.TensorAdd(
+            adversarialLoss, Engine.TensorMultiplyScalar(mutualInfoTensor, _mutualInfoCoefficient));
+        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
+        {
+            ((NeuralNetworkBase<T>)Generator, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorOptimizer),
+            ((NeuralNetworkBase<T>)QNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_qNetworkOptimizer),
         });
-
-        // Compute mutual info loss separately for tracking
-        var newFakeImages = Generator.Predict(newGeneratorInput);
-        var predictedCodesTracking = QNetwork.Predict(newFakeImages);
-        T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodesTracking, latentCodes, batchSize);
+        T mutualInfoLoss = mutualInfoTensor.Length > 0 ? mutualInfoTensor[0] : NumOps.Zero;
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);
@@ -677,99 +650,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         }
 
         return codes;
-    }
-
-    /// <summary>
-    /// Updates the parameters of the generator network using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the generator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the generator's weights
-    /// based on how well it fooled the discriminator and produced recoverable codes.
-    /// </para>
-    /// </remarks>
-    private void UpdateGeneratorParameters()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _generatorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameters of the discriminator network using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the discriminator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the discriminator's weights
-    /// based on how well it distinguished real images from fake ones.
-    /// </para>
-    /// </remarks>
-    private void UpdateDiscriminatorParameters()
-    {
-        var parameters = Discriminator.GetParameters();
-        var gradients = Discriminator.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
-        Discriminator.UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameters of the Q network using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the Q network,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the Q network's weights
-    /// based on how well it predicted the latent codes from generated images.
-    /// </para>
-    /// </remarks>
-    private void UpdateQNetworkParameters()
-    {
-        var parameters = QNetwork.GetParameters();
-        var gradients = QNetwork.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _qNetworkOptimizer.UpdateParameters(parameters, gradients);
-        QNetwork.UpdateParameters(updatedParams);
     }
 
     /// <summary>

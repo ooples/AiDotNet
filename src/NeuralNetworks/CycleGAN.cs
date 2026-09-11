@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines.Autodiff;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -385,81 +386,65 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
                 nameof(realB));
         }
 
-        // ----- Train Discriminators -----
+        GeneratorAtoB.SetTrainingMode(true);
+        GeneratorBtoA.SetTrainingMode(true);
+        DiscriminatorA.SetTrainingMode(true);
+        DiscriminatorB.SetTrainingMode(true);
 
-        // Generate fake images (detached for discriminator training)
-        var fakeB = GeneratorAtoB.Predict(realA);
-        var fakeA = GeneratorBtoA.Predict(realB);
+        // Both generators' forwards are recorded once on the generator tape (#1390) and shared by
+        // every term; the discriminators train on detached copies of the translations.
+        using var generatorTape = new GradientTape<T>();
+        var fakeB = GeneratorAtoB.ForwardForTraining(realA);
+        var fakeA = GeneratorBtoA.ForwardForTraining(realB);
+        var fakeBDetached = new Tensor<T>(fakeB.Shape.ToArray());
+        fakeB.AsSpan().CopyTo(fakeBDetached.AsWritableSpan());
+        var fakeADetached = new Tensor<T>(fakeA.Shape.ToArray());
+        fakeA.AsSpan().CopyTo(fakeADetached.AsWritableSpan());
 
-        // Train DiscriminatorA: real A vs fake A
-        // Process real first: predict, compute grad, backward (preserves forward cache)
-        var realAPred = DiscriminatorA.Predict(realA);
-        var realALabels = CreateLabelTensor(batchSize, NumOps.One);
-        var realAGrad = CalculateBinaryGradients(realAPred, realALabels, batchSize);
+        // ----- Discriminators: least squares, halved (Zhu et al. 2017, section 4) -----
+        // Both on one tape: the two losses share no parameters, so each network's gradient is its own
+        // term's, and StepOnTape steps each with its own optimizer. They used to be "updated" from
+        // gradients no backward had produced.
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
+        {
+            var halfA = Engine.TensorAdd(
+                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(realA), target: 1.0),
+                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(fakeADetached), target: 0.0));
+            var halfB = Engine.TensorAdd(
+                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(realB), target: 1.0),
+                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(fakeBDetached), target: 0.0));
+            var discriminatorObjective = Engine.TensorMultiplyScalar(Engine.TensorAdd(halfA, halfB), NumOps.FromDouble(0.5));
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, new[]
+            {
+                (DiscriminatorA, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_discriminatorAOptimizer),
+                (DiscriminatorB, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_discriminatorBOptimizer),
+            });
+        }
 
-        // Process fake second: predict, compute grad, backward (uses correct forward cache)
-        var fakeAPred = DiscriminatorA.Predict(fakeA);
-        var fakeALabels = CreateLabelTensor(batchSize, NumOps.Zero);
-        var fakeAGrad = CalculateBinaryGradients(fakeAPred, fakeALabels, batchSize);
-
-        T discALoss = CalculateDiscriminatorLoss(realAPred, fakeAPred, batchSize);
-        UpdateDiscriminatorAParameters();
-
-        // Train DiscriminatorB: real B vs fake B
-        // Process real first: predict, compute grad, backward (preserves forward cache)
-        var realBPred = DiscriminatorB.Predict(realB);
-        var realBLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var realBGrad = CalculateBinaryGradients(realBPred, realBLabels, batchSize);
-
-        // Process fake second: predict, compute grad, backward (uses correct forward cache)
-        var fakeBPred = DiscriminatorB.Predict(fakeB);
-        var fakeBLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-        var fakeBGrad = CalculateBinaryGradients(fakeBPred, fakeBLabels, batchSize);
-
-        T discBLoss = CalculateDiscriminatorLoss(realBPred, fakeBPred, batchSize);
-        UpdateDiscriminatorBParameters();
-
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(discALoss, discBLoss), NumOps.FromDouble(2.0));
-
-        // ----- Train Generators -----
-
-        // Adversarial loss for GeneratorAtoB (fool DiscriminatorB)
-        fakeB = GeneratorAtoB.Predict(realA);
-        var fakeBPred2 = DiscriminatorB.Predict(fakeB);
-        T advLossB = CalculateAdversarialLoss(fakeBPred2, batchSize);
-
-        // Adversarial loss for GeneratorBtoA (fool DiscriminatorA)
-        fakeA = GeneratorBtoA.Predict(realB);
-        var fakeAPred2 = DiscriminatorA.Predict(fakeA);
-        T advLossA = CalculateAdversarialLoss(fakeAPred2, batchSize);
-        T advLoss = NumOps.Add(advLossB, advLossA);
-
-        // Cycle consistency losses
-        var reconstructedA = GeneratorBtoA.Predict(fakeB);
-        var reconstructedB = GeneratorAtoB.Predict(fakeA);
-        T cycleA = CalculateL1Loss(reconstructedA, realA);
-        T cycleB = CalculateL1Loss(reconstructedB, realB);
-        T cycleLoss = NumOps.Add(cycleA, cycleB);
-
-        // Identity losses
-        T idLossA = CalculateL1Loss(GeneratorBtoA.Predict(realA), realA);
-        T idLossB = CalculateL1Loss(GeneratorAtoB.Predict(realB), realB);
-        T identityLoss = NumOps.Add(idLossA, idLossB);
-
-        // Train generators with tape-based autodiff
-        GeneratorAtoB.Train(realA, realB);
-        GeneratorBtoA.Train(realB, realA);
-
-        // Total generator loss
-        T cycleCoeff = _cycleConsistencyLambda;
-        T idCoeff = _identityLambda;
-
-        T generatorLoss = NumOps.Add(advLoss,
-            NumOps.Add(
-                NumOps.Multiply(cycleCoeff, cycleLoss),
-                NumOps.Multiply(idCoeff, identityLoss)
-            )
-        );
+        // ----- Generators: adversarial + lambda * cycle + 0.5 * lambda * identity (eq. 3) -----
+        // One loss trains both generators, since the cycle term runs through each of them. They used
+        // to be trained by Train(realA, realB): a paired regression, which unpaired data cannot supply.
+        var adversarial = Engine.TensorAdd(
+            LeastSquaresLoss(DiscriminatorB.ForwardFrozenOnTape(fakeB), target: 1.0),
+            LeastSquaresLoss(DiscriminatorA.ForwardFrozenOnTape(fakeA), target: 1.0));
+        var cycleTensor = Engine.TensorAdd(
+            MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(fakeB), realA),
+            MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(fakeA), realB));
+        var identityTensor = Engine.TensorAdd(
+            MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(realA), realA),
+            MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(realB), realB));
+        var generatorObjective = Engine.TensorAdd(
+            adversarial,
+            Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(cycleTensor, _cycleConsistencyLambda),
+                Engine.TensorMultiplyScalar(identityTensor, _identityLambda)));
+        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
+        {
+            (GeneratorAtoB, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorAtoBOptimizer),
+            (GeneratorBtoA, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorBtoAOptimizer),
+        });
+        T cycleLoss = cycleTensor.Length > 0 ? cycleTensor[0] : NumOps.Zero;
 
         return (discriminatorLoss, generatorLoss, cycleLoss);
     }
@@ -504,256 +489,27 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         return result;
     }
 
-    private T CalculateDiscriminatorLoss(Tensor<T> realPred, Tensor<T> fakePred, int batchSize)
-    {
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        T realLoss = CalculateBinaryLoss(realPred, realLabels, batchSize);
-        T fakeLoss = CalculateBinaryLoss(fakePred, fakeLabels, batchSize);
-
-        return NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-    }
-
-    private T CalculateAdversarialLoss(Tensor<T> predictions, int batchSize)
-    {
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        return CalculateBinaryLoss(predictions, realLabels, batchSize);
-    }
-
-    private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
-    {
-        T totalLoss = NumOps.Zero;
-        int count = predictions.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
-            T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
-            totalLoss = NumOps.Add(totalLoss, absDiff);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(count));
-    }
-
-    private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        // Discriminator outputs may be rank-1 [batch] or rank-2 [batch, 1]; index by
-        // flat span so this works for any rank. Same fix as CalculateBinaryGradients.
-        T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        int perSample = predictions.Length / Math.Max(1, batchSize);
-        var predFlat = predictions.AsSpan();
-        var targetFlat = targets.AsSpan();
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            int idx = i * perSample;
-            T prediction = predFlat[idx];
-            T target = targetFlat[idx];
-
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-
-            T loss = NumOps.Negate(NumOps.Add(
-                NumOps.Multiply(target, logP),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP)
-            ));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    private Tensor<T> CreateLabelTensor(int batchSize, T value)
-    {
-        var tensor = new Tensor<T>(new int[] { batchSize, 1 });
-        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
-        Engine.TensorFill(tensor, value);
-        return tensor;
-    }
-
-    private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
-    {
-        // Discriminator outputs may be rank-1 [batch] or rank-2 [batch, 1] depending
-        // on the architecture. Indexing predictions[i, 0] crashes on rank-1 with
-        // "Number of indices must match the tensor's rank." Walk the underlying
-        // flat data instead so we work for any rank that flattens to one scalar
-        // per sample.
-        var gradients = new Tensor<T>(predictions._shape);
-        T epsilon = NumOps.FromDouble(1e-10);
-        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
-        int perSample = predictions.Length / Math.Max(1, batchSize);
-        var predFlat = predictions.AsSpan();
-        var targetFlat = targets.AsSpan();
-        var gradFlat = gradients.AsWritableSpan();
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            int idx = i * perSample;
-            T p = predFlat[idx];
-            T t = targetFlat[idx];
-
-            // Clamp predictions to avoid numerical instability
-            if (NumOps.LessThan(p, epsilon))
-                p = epsilon;
-            else if (NumOps.GreaterThan(p, oneMinusEpsilon))
-                p = oneMinusEpsilon;
-
-            // BCE gradient w.r.t. probability: dL/dp = (p - t) / (p * (1 - p))
-            T oneMinusP = NumOps.Subtract(NumOps.One, p);
-            T pTimesOneMinusP = NumOps.Multiply(p, oneMinusP);
-            T gradient = NumOps.Divide(
-                NumOps.Subtract(p, t),
-                NumOps.Add(pTimesOneMinusP, epsilon)
-            );
-            gradFlat[idx] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
-        }
-
-        return gradients;
-    }
-
-    private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
-    {
-        var gradients = new Tensor<T>(predictions._shape);
-        int count = predictions.Length;
-        T coeff = NumOps.FromDouble(coefficient / count);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
-            // Sign of difference: 1 if positive, -1 if negative
-            T sign = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
-            gradients.SetFlat(i, NumOps.Multiply(coeff, sign));
-        }
-
-        return gradients;
-    }
-
     /// <summary>
-    /// Updates the parameters of the generator A→B network using its optimizer.
+    /// The mean squared distance of discriminator scores from a real (1) or fake (0) target, recorded on
+    /// the active tape: the least-squares GAN loss CycleGAN uses in place of the log-likelihood.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the generator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the A→B generator's weights
-    /// based on how well it fooled the discriminator and maintained cycle consistency.
-    /// </para>
-    /// </remarks>
-    private void UpdateGeneratorAtoBParameters()
+    private Tensor<T> LeastSquaresLoss(Tensor<T> scores, double target)
     {
-        var parameters = GeneratorAtoB.GetParameters();
-        var gradients = GeneratorAtoB.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _generatorAtoBOptimizer.UpdateParameters(parameters, gradients);
-        GeneratorAtoB.UpdateParameters(updatedParams);
+        var targets = new Tensor<T>(scores.Shape.ToArray());
+        Engine.TensorFill(targets, NumOps.FromDouble(target));
+        var difference = Engine.TensorSubtract(scores, targets);
+        return Engine.ReduceMean(
+            Engine.TensorMultiply(difference, difference),
+            Enumerable.Range(0, difference.Shape.Length).ToArray(),
+            keepDims: false);
     }
 
-    /// <summary>
-    /// Updates the parameters of the generator B→A network using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the generator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the B→A generator's weights
-    /// based on how well it fooled the discriminator and maintained cycle consistency.
-    /// </para>
-    /// </remarks>
-    private void UpdateGeneratorBtoAParameters()
-    {
-        var parameters = GeneratorBtoA.GetParameters();
-        var gradients = GeneratorBtoA.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _generatorBtoAOptimizer.UpdateParameters(parameters, gradients);
-        GeneratorBtoA.UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameters of discriminator A using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the discriminator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts discriminator A's weights
-    /// based on how well it distinguished real images from generated ones in domain A.
-    /// </para>
-    /// </remarks>
-    private void UpdateDiscriminatorAParameters()
-    {
-        var parameters = DiscriminatorA.GetParameters();
-        var gradients = DiscriminatorA.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _discriminatorAOptimizer.UpdateParameters(parameters, gradients);
-        DiscriminatorA.UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameters of discriminator B using its optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves the current parameters and gradients from the discriminator,
-    /// applies gradient clipping for training stability, and uses the configured optimizer
-    /// to compute parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts discriminator B's weights
-    /// based on how well it distinguished real images from generated ones in domain B.
-    /// </para>
-    /// </remarks>
-    private void UpdateDiscriminatorBParameters()
-    {
-        var parameters = DiscriminatorB.GetParameters();
-        var gradients = DiscriminatorB.GetParameterGradients();
-
-        // Gradient clipping for training stability
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradients.L2Norm();
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParams = _discriminatorBOptimizer.UpdateParameters(parameters, gradients);
-        DiscriminatorB.UpdateParameters(updatedParams);
-    }
+    /// <summary>The mean absolute error between two images, recorded on the active tape.</summary>
+    private Tensor<T> MeanAbsoluteError(Tensor<T> predicted, Tensor<T> target)
+        => Engine.ReduceMean(
+            Engine.TensorAbs(Engine.TensorSubtract(predicted, target)),
+            Enumerable.Range(0, predicted.Shape.Length).ToArray(),
+            keepDims: false);
 
     /// <summary>
     /// Resets the state of all optimizers to their initial values.
@@ -839,7 +595,9 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainStep(input, expectedOutput);
+        TrainStep(
+            WithBatchAxis(input, GeneratorAtoB.Architecture.InputType),
+            WithBatchAxis(expectedOutput, GeneratorBtoA.Architecture.InputType));
     }
 
     /// <inheritdoc/>

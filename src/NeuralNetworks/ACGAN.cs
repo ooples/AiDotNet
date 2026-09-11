@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 
 using System.Linq;
@@ -96,7 +97,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <summary>
     /// Gets the generator network that creates class-conditional synthetic data.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the discriminator network that predicts both authenticity and class.
@@ -116,17 +117,23 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// This dual purpose makes it a better feature learner.
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     private readonly ILossFunction<T> _lossFunction;
+
+    // Stored under the constructor's own parameter names so the clone plan replays the constructor
+    // with them. Without these it fell back to the model's outer Architecture for every sub-network.
+    private readonly NeuralNetworkArchitecture<T> _generatorArchitecture;
+    private readonly NeuralNetworkArchitecture<T> _discriminatorArchitecture;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ACGAN{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
     /// <param name="discriminatorArchitecture">The neural network architecture for the discriminator.
-    /// Note: Output size should be 1 + numClasses (authenticity probability + class probabilities).
-    /// All outputs must be in range (0, 1) - use sigmoid/softmax activations in the final layer.</param>
+    /// Its output size must be 1 + numClasses: one source (real/fake) score followed by one score per
+    /// class. The final layer may emit logits (no activation) or probabilities (sigmoid or softmax); the
+    /// training losses read which from the layer itself, not from the values it produces.</param>
     /// <param name="numClasses">The number of classes.</param>
     /// <param name="inputType">The type of input.</param>
     /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, Adam optimizer is used.</param>
@@ -141,13 +148,18 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         ILossFunction<T>? lossFunction = null,
         ACGANOptions? options = null)
+        // The model's public contract is its generator's: Predict hands the caller's input -- noise
+        // followed by the class conditioning, which the generator's input size already counts -- to the
+        // generator and returns what it generates. Declaring InputSize + numClasses counted the classes
+        // twice, and declaring the discriminator's 1 + numClasses as the output described a score, not a
+        // sample.
         : base(new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Medium,
-            generatorArchitecture.InputSize + numClasses,
+            generatorArchitecture.InputSize,
             0, 0, 1,
-            discriminatorArchitecture.OutputSize,
+            generatorArchitecture.OutputSize,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _options = options ?? new ACGANOptions();
@@ -177,8 +189,10 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         _numClasses = numClasses;
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
+        _generatorArchitecture = generatorArchitecture;
+        _discriminatorArchitecture = discriminatorArchitecture;
+        Generator = CreateSubNetworkForInputType(generatorArchitecture, inputType);
+        Discriminator = CreateSubNetworkForInputType(discriminatorArchitecture, inputType);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to GAN-standard Adam if not provided).
@@ -260,63 +274,72 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
                 nameof(fakeLabels));
         }
 
+        return TrainStepCore(realImages, realLabels, noise, fakeLabels);
+    }
+
+    /// <summary>
+    /// One AC-GAN step. <paramref name="realLabels"/> may be null when the real images' classes are
+    /// unknown: the real batch then trains the source term only, instead of the classifier learning
+    /// labels that were never observed.
+    /// </summary>
+    private (T discriminatorLoss, T generatorLoss) TrainStepCore(
+        Tensor<T> realImages,
+        Tensor<T>? realLabels,
+        Tensor<T> noise,
+        Tensor<T> fakeLabels)
+    {
+        // ONE generator forward, recorded on the generator's tape: the pattern the base GAN uses (#1390).
+        // The discriminator step trains on a detached copy of it, so that step cannot reach the
+        // generator. The generator step then scores the tracked original through the frozen
+        // discriminator, so the adversarial and class gradients do reach it.
+        //
+        // The previous step computed both losses as detached scalars and then called
+        // Update*WithOptimizer, which read GetParameterGradients() -- gradients no backward had produced,
+        // because the Backward calls were commented out when manual backprop was removed. Neither
+        // network ever trained (#2155).
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
-        // ----- Train Discriminator -----
-
-        // Concatenate noise with class labels for generator
         var generatorInput = ConcatenateTensors(noise, fakeLabels);
+        using var generatorTape = new GradientTape<T>();
+        var fakeTracked = Generator.ForwardForTraining(generatorInput);
+        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
+        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
 
-        // Generate fake images
-        var fakeImages = Generator.Predict(generatorInput);
+        bool emitsProbabilities = Discriminator.FinalLayerEmitsProbabilities();
 
-        // Train discriminator on real images
-        var realDiscOutputRaw = Discriminator.Predict(realImages);
-        var realDiscOutput = NormalizeToProbabilities(realDiscOutputRaw);
-        T realAuthLoss = CalculateAuthenticityLoss(realDiscOutput, isReal: true, batchSize);
-        T realClassLoss = CalculateClassificationLoss(realDiscOutput, realLabels, batchSize);
-        T realLoss = NumOps.Add(realAuthLoss, realClassLoss);
+        // ----- Discriminator: maximise L_S + L_C (Odena et al. 2017, eqs. 2 and 3) -----
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
+        {
+            var realOutput = Discriminator.ForwardForTraining(realImages);
+            var fakeOutput = Discriminator.ForwardForTraining(fakeImages);
+            var discriminatorObjective = Engine.TensorAdd(
+                SourceNegativeLogLikelihood(realOutput, isReal: true),
+                Engine.TensorAdd(
+                    SourceNegativeLogLikelihood(fakeOutput, isReal: false),
+                    ClassNegativeLogLikelihood(fakeOutput, fakeLabels, emitsProbabilities)));
+            if (realLabels is not null)
+            {
+                discriminatorObjective = Engine.TensorAdd(
+                    discriminatorObjective,
+                    ClassNegativeLogLikelihood(realOutput, realLabels, emitsProbabilities));
+            }
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
+                _discriminatorOptimizer);
+        }
 
-        // Backpropagate for real images
-        var realGradients = CalculateDiscriminatorGradients(realDiscOutput, realLabels, isReal: true, batchSize);
-        UpdateDiscriminatorWithOptimizer();
-
-        // Train discriminator on fake images
-        var fakeDiscOutputRaw = Discriminator.Predict(fakeImages);
-        var fakeDiscOutput = NormalizeToProbabilities(fakeDiscOutputRaw);
-        T fakeAuthLoss = CalculateAuthenticityLoss(fakeDiscOutput, isReal: false, batchSize);
-        T fakeClassLoss = CalculateClassificationLoss(fakeDiscOutput, fakeLabels, batchSize);
-        T fakeLoss = NumOps.Add(fakeAuthLoss, fakeClassLoss);
-
-        // Backpropagate for fake images
-        var fakeGradients = CalculateDiscriminatorGradients(fakeDiscOutput, fakeLabels, isReal: false, batchSize);
-        UpdateDiscriminatorWithOptimizer();
-
-        // Total discriminator loss
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-
-        // ----- Train Generator -----
-
-        Generator.SetTrainingMode(true);
-
-        // Generate new fake images
-        var newGeneratorInput = ConcatenateTensors(noise, fakeLabels);
-        var newFakeImages = Generator.Predict(newGeneratorInput);
-
-        // Get discriminator output
-        var genDiscOutputRaw = Discriminator.Predict(newFakeImages);
-        var genDiscOutput = NormalizeToProbabilities(genDiscOutputRaw);
-
-        // For generator, we want discriminator to think images are real AND match the class
-        T genAuthLoss = CalculateAuthenticityLoss(genDiscOutput, isReal: true, batchSize);
-        T genClassLoss = CalculateClassificationLoss(genDiscOutput, fakeLabels, batchSize);
-        T generatorLoss = NumOps.Add(genAuthLoss, genClassLoss);
-
-        // Backpropagate through discriminator to get input gradients, then through generator
-        var genGradients = CalculateDiscriminatorGradients(genDiscOutput, fakeLabels, isReal: true, batchSize);
-        /* Generator.Backward(discInputGradients) removed — tape-based */ ;
-        UpdateGeneratorWithOptimizer();
+        // ----- Generator: maximise L_C - L_S -----
+        // The source term is taken in its non-saturating form (Goodfellow et al. 2014, section 3): the
+        // generator minimises -log P(S = real | X_fake) instead of log P(S = fake | X_fake). Both have the
+        // same fixed point, but the non-saturating one does not vanish while the discriminator still
+        // rejects every sample. The class term is the paper's: a generated image must be classified as
+        // the class it was asked for.
+        var generatorOutput = Discriminator.ForwardFrozenOnTape(fakeTracked);
+        var generatorObjective = Engine.TensorAdd(
+            SourceNegativeLogLikelihood(generatorOutput, isReal: true),
+            ClassNegativeLogLikelihood(generatorOutput, fakeLabels, emitsProbabilities));
+        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);
@@ -332,159 +355,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Updates generator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateGeneratorWithOptimizer()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates discriminator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateDiscriminatorWithOptimizer()
-    {
-        var parameters = Discriminator.GetParameters();
-        var gradients = Discriminator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
-        Discriminator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Calculates the authenticity loss (real vs fake).
-    /// </summary>
-    private T CalculateAuthenticityLoss(Tensor<T> discOutput, bool isReal, int batchSize)
-    {
-        T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        T target = isReal ? NumOps.One : NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T prediction = MathHelper.Clamp(discOutput[i, 0], epsilon, NumOps.Subtract(NumOps.One, epsilon));
-
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-
-            T loss = NumOps.Negate(NumOps.Add(
-                NumOps.Multiply(target, logP),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP)
-            ));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Calculates the classification loss for the class predictions using binary cross-entropy.
-    /// Uses full BCE formula: -[target*log(p) + (1-target)*log(1-p)]
-    /// This is consistent with the gradient formula: (p - target) / (p * (1 - p))
-    /// </summary>
-    private T CalculateClassificationLoss(Tensor<T> discOutput, Tensor<T> labels, int batchSize)
-    {
-        T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        T one = NumOps.One;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                T prediction = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(one, epsilon));
-                T target = labels[i, c];
-
-                // Full BCE loss: -[target*log(p) + (1-target)*log(1-p)]
-                T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-                T oneMinusP = NumOps.Subtract(one, prediction);
-                T logOneMinusP = NumOps.Log(NumOps.Add(oneMinusP, epsilon));
-                T oneMinusTarget = NumOps.Subtract(one, target);
-
-                T loss = NumOps.Negate(NumOps.Add(
-                    NumOps.Multiply(target, logP),
-                    NumOps.Multiply(oneMinusTarget, logOneMinusP)
-                ));
-                totalLoss = NumOps.Add(totalLoss, loss);
-            }
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Calculates gradients for discriminator backpropagation.
-    /// Uses the correct gradient formula for probability-based BCE:
-    /// dL/dp = (p - target) / (p * (1 - p))
-    /// </summary>
-    private Tensor<T> CalculateDiscriminatorGradients(
-        Tensor<T> discOutput,
-        Tensor<T> labels,
-        bool isReal,
-        int batchSize)
-    {
-        var gradients = new Tensor<T>(discOutput._shape);
-        T authTarget = isReal ? NumOps.One : NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        T batchSizeT = NumOps.FromDouble(batchSize);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Clamp prediction to avoid division by zero
-            T p = MathHelper.Clamp(discOutput[i, 0], epsilon, NumOps.Subtract(NumOps.One, epsilon));
-
-            // Gradient for probability-based BCE: (p - target) / (p * (1 - p)) / batchSize
-            T pTimesOneMinusP = NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p));
-            T authGrad = NumOps.Divide(
-                NumOps.Divide(NumOps.Subtract(p, authTarget), pTimesOneMinusP),
-                batchSizeT
-            );
-            gradients[i, 0] = authGrad;
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                // Clamp class prediction to avoid division by zero
-                T classP = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(NumOps.One, epsilon));
-                T classPTimesOneMinusP = NumOps.Multiply(classP, NumOps.Subtract(NumOps.One, classP));
-
-                // Gradient for probability-based BCE
-                T classGrad = NumOps.Divide(
-                    NumOps.Divide(NumOps.Subtract(classP, labels[i, c]), classPTimesOneMinusP),
-                    batchSizeT
-                );
-                gradients[i, 1 + c] = classGrad;
-            }
-        }
-
-        return gradients;
-    }
-
-    /// <summary>
     /// Concatenates noise and class labels for generator input.
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> labels)
@@ -493,38 +363,44 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Normalizes discriminator output to valid probability range [0, 1].
-    /// If values appear to be logits (outside [0,1]), applies sigmoid transformation.
+    /// The batch-mean negative log-likelihood of the source label, -log P(S = real) or -log P(S = fake),
+    /// recorded on the active tape.
     /// </summary>
-    private Tensor<T> NormalizeToProbabilities(Tensor<T> discOutput)
+    private Tensor<T> SourceNegativeLogLikelihood(Tensor<T> discriminatorOutput, bool isReal)
     {
-        int batchSize = discOutput.Shape[0];
-        int outputSize = discOutput.Shape[1];
-        bool hasLogits = false;
-        T zero = NumOps.Zero;
-        T one = NumOps.One;
-
-        // Check if any values are outside [0, 1] range (indicating logits)
-        for (int i = 0; i < batchSize && !hasLogits; i++)
-        {
-            for (int j = 0; j < outputSize && !hasLogits; j++)
-            {
-                T val = discOutput[i, j];
-                if (NumOps.LessThan(val, zero) || NumOps.GreaterThan(val, one))
-                {
-                    hasLogits = true;
-                }
-            }
-        }
-
-        if (!hasLogits)
-        {
-            return discOutput;
-        }
-
-        // === Vectorized sigmoid using IEngine (Phase B: US-GPU-015) ===
-        return Engine.Sigmoid(discOutput);
+        int batchSize = discriminatorOutput.Shape[0];
+        var source = Engine.TensorSlice(discriminatorOutput, new[] { 0, 0 }, new[] { batchSize, 1 });
+        return Discriminator.BinaryCrossEntropyOnTape(source, isReal);
     }
+
+    /// <summary>
+    /// The batch-mean negative log-likelihood of the labelled class, -log P(C = c), under the
+    /// discriminator's class posterior, recorded on the active tape.
+    /// </summary>
+    /// <remarks>
+    /// The paper's L_C is the log-likelihood of the correct class under one categorical distribution. It
+    /// replaces a per-class binary cross-entropy that scored every class as an independent yes-or-no
+    /// question. When the head emits probabilities their logarithms serve as logits: the log-softmax
+    /// renormalises over the class outputs alone, so a sigmoid head yields a proper distribution and a
+    /// joint softmax over the source and class outputs yields the exact class posterior, because the
+    /// shared normaliser cancels.
+    /// </remarks>
+    private Tensor<T> ClassNegativeLogLikelihood(
+        Tensor<T> discriminatorOutput, Tensor<T> oneHotLabels, bool emitsProbabilities)
+    {
+        int batchSize = discriminatorOutput.Shape[0];
+        var classScores = Engine.TensorSlice(discriminatorOutput, new[] { 0, 1 }, new[] { batchSize, _numClasses });
+        var logits = emitsProbabilities
+            ? Engine.TensorLog(Engine.TensorClamp(classScores, NumOps.FromDouble(ProbabilityFloor), NumOps.One))
+            : classScores;
+
+        var logPosterior = Engine.TensorLogSoftmax(logits, 1);
+        var labelled = Engine.ReduceSum(Engine.TensorMultiply(logPosterior, oneHotLabels), new[] { 1 }, keepDims: false);
+        return Engine.TensorNegate(Engine.ReduceMean(labelled, new[] { 0 }, keepDims: false));
+    }
+
+    /// <summary>Lower bound applied to a probability before its logarithm is taken.</summary>
+    private const double ProbabilityFloor = 1e-7;
 
     /// <summary>
     /// Generates class-conditional images.
@@ -604,6 +480,22 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         // AC-GAN doesn't use layers directly
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The model's own Layers list is empty: its layers live in the generator and the discriminator. The
+    /// generator is read on the Predict input and the discriminator on what the generator produced from it.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var result = new Dictionary<string, Tensor<T>>();
+        foreach (var kv in Generator.GetNamedLayerActivations(input))
+            result["Generator/" + kv.Key] = kv.Value;
+        var generated = Generator.Predict(input);
+        foreach (var kv in Discriminator.GetNamedLayerActivations(generated))
+            result["Discriminator/" + kv.Key] = kv.Value;
+        return result;
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -670,22 +562,57 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Real images tensor cannot be null.");
         }
 
-        int batchSize = expectedOutput.Shape[0];
+        var generatorInput = WithBatchAxis(input, Generator.Architecture.InputType);
+        var realImages = WithBatchAxis(expectedOutput, Discriminator.Architecture.InputType);
+        int batchSize = realImages.Shape[0];
 
-        // Use thread-safe random for cryptographically secure, thread-safe label generation
-        var random = RandomHelper.ThreadSafeRandom;
-        var realLabelIndices = new int[batchSize];
-        var fakeLabelIndices = new int[batchSize];
-        for (int i = 0; i < batchSize; i++)
+        Tensor<T> noise;
+        Tensor<T> fakeLabels;
+        int width = generatorInput.Rank == 2 ? generatorInput.Shape[1] : -1;
+        if (width == Generator.Architecture.InputSize && width > _numClasses)
         {
-            realLabelIndices[i] = random.Next(_numClasses);
-            fakeLabelIndices[i] = random.Next(_numClasses);
+            // The input Predict takes: noise followed by the class conditioning. The class to generate is
+            // the conditioning's largest entry, which recovers a one-hot input exactly.
+            noise = Engine.TensorSlice(generatorInput, new[] { 0, 0 }, new[] { batchSize, width - _numClasses });
+            fakeLabels = OneHotOfLargest(
+                Engine.TensorSlice(generatorInput, new[] { 0, width - _numClasses }, new[] { batchSize, _numClasses }));
+        }
+        else
+        {
+            // Bare noise: draw the classes to generate.
+            var random = RandomHelper.ThreadSafeRandom;
+            var fakeLabelIndices = new int[batchSize];
+            for (int i = 0; i < batchSize; i++)
+            {
+                fakeLabelIndices[i] = random.Next(_numClasses);
+            }
+
+            noise = generatorInput;
+            fakeLabels = CreateOneHotLabelsFromIndices(batchSize, fakeLabelIndices);
         }
 
-        var realLabels = CreateOneHotLabelsFromIndices(batchSize, realLabelIndices);
-        var fakeLabels = CreateOneHotLabelsFromIndices(batchSize, fakeLabelIndices);
+        // Train carries no labels for the real images, so they train the source term only. The previous
+        // version labelled them at random, which trained the auxiliary classifier on noise.
+        TrainStepCore(realImages, realLabels: null, noise, fakeLabels);
+    }
 
-        TrainStep(expectedOutput, realLabels, input, fakeLabels);
+    /// <summary>One-hot labels naming each row's largest entry.</summary>
+    private Tensor<T> OneHotOfLargest(Tensor<T> scores)
+    {
+        int batchSize = scores.Shape[0];
+        var indices = new int[batchSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            int best = 0;
+            for (int c = 1; c < _numClasses; c++)
+            {
+                if (NumOps.GreaterThan(scores[b, c], scores[b, best])) best = c;
+            }
+
+            indices[b] = best;
+        }
+
+        return CreateOneHotLabelsFromIndices(batchSize, indices);
     }
 
     /// <summary>
