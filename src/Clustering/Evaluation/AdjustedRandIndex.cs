@@ -139,7 +139,7 @@ public class AdjustedRandIndex<T> : IExternalClusterMetric<T>
         }
 
         // Expected index
-        double expectedIndex = (double)(sumA * sumB) / totalPairs;
+        double expectedIndex = (double)sumA * sumB / totalPairs;
 
         // Max index
         double maxIndex = 0.5 * (sumA + sumB);
