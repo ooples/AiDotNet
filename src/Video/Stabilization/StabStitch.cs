@@ -162,7 +162,7 @@ public partial class StabStitch<T> : VideoStabilizationBase<T>
                 { "MeshGridRows", _options.MeshGridRows },
                 { "MeshGridCols", _options.MeshGridCols }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

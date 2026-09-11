@@ -1,4 +1,4 @@
-﻿global using AiDotNet.NeuralNetworks.Layers;
+global using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -673,7 +673,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
                 { "TotalParameters", GetParameterCount() },
                 { "InputShape", string.Join(",", Architecture.GetInputShape()) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

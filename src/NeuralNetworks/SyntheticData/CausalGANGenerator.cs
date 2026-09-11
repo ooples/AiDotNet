@@ -1389,7 +1389,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

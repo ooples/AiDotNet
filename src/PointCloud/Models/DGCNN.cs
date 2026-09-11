@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
@@ -523,7 +523,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

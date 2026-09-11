@@ -1184,7 +1184,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
                 { "use_native_mode", _useNativeMode },
                 { "ocr_free", IsOCRFree }
             },
-            ModelData = SafeSerializeMaterializedModel()
+            ModelDataProvider = () => SafeSerializeMaterializedModel()
         };
     }
 

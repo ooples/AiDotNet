@@ -603,7 +603,7 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
                 { "DropoutRate", _options.DropoutRate },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

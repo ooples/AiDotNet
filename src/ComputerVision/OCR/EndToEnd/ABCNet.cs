@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using AiDotNet.Attributes;
@@ -820,7 +820,7 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
             { "BezierSampleWidth", _options.BezierSampleWidth },
             { "NumCharacterClasses", _options.NumCharacterClasses },
         },
-        ModelData = this.Serialize(),
+        ModelDataProvider = () => this.Serialize(),
     };
 
     /// <inheritdoc />

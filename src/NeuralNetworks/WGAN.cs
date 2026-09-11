@@ -641,7 +641,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "WeightClipValue", _weightClipValue },
                 { "CriticIterations", _criticIterations }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1197,7 +1197,7 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

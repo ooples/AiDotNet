@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -1828,7 +1828,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             },
             // License-safe metadata bytes — see NeRF.GetModelMetadata for the
             // same rationale. Fixes #1826.
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

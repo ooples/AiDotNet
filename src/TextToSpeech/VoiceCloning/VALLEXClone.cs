@@ -314,7 +314,7 @@ public partial class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
                 ["MaxTextLength"] = _options.MaxTextLength,
                 ["LayerCount"] = Layers.Count,
             },
-            ModelData = SerializeForMetadata(),
+            ModelDataProvider = () => SerializeForMetadata(),
         };
     }
 

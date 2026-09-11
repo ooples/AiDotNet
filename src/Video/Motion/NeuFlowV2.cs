@@ -210,7 +210,7 @@ public partial class NeuFlowV2<T> : OpticalFlowBase<T>
                 { "NumFeatures", _numFeatures },
                 { "NumLayers", _numLayers }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

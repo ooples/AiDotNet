@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -740,7 +740,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumClasses", _numClasses }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

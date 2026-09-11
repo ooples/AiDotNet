@@ -416,7 +416,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

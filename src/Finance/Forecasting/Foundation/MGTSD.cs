@@ -589,7 +589,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "MGTSD" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "NumGranularities", _numGranularities }, { "GuidanceWeight", _guidanceWeight }, { "UseNativeMode", _useNativeMode } },
-        ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
 

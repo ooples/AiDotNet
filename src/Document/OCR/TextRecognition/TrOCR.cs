@@ -742,7 +742,7 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

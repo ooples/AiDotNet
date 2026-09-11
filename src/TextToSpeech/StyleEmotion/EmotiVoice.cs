@@ -267,7 +267,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
                 ["MaxTextLength"] = _options.MaxTextLength,
                 ["ParameterCount"] = ParameterCount,
             },
-            ModelData = SerializeForMetadata(),
+            ModelDataProvider = () => SerializeForMetadata(),
         };
     }
 

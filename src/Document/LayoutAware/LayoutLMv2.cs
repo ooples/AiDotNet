@@ -821,7 +821,7 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

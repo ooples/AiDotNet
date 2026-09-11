@@ -481,7 +481,7 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

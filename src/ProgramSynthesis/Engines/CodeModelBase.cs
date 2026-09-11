@@ -130,7 +130,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = info,
-            ModelData = Serialize()
+            ModelDataProvider = () => Serialize()
         };
     }
 

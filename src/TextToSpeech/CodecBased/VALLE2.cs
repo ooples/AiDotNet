@@ -219,7 +219,7 @@ public partial class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
                 ["MaxTextLength"] = _options.MaxTextLength,
                 ["LayerCount"] = Layers.Count,
             },
-            ModelData = SerializeForMetadata(),
+            ModelDataProvider = () => SerializeForMetadata(),
         };
     }
 

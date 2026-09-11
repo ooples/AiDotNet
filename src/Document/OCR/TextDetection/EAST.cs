@@ -550,7 +550,7 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

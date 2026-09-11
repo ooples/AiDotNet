@@ -503,7 +503,7 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
                 { "vocab_size", _vocabSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerializeMaterializedModel()
+            ModelDataProvider = () => SafeSerializeMaterializedModel()
         };
     }
 

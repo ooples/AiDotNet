@@ -1570,7 +1570,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
                 { "SupportedModalities", _supportedModalities.Select(m => m.ToString()).ToList() },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

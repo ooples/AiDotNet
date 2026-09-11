@@ -446,7 +446,7 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
                 { "InputShape", new[] { _sequenceLength, _embeddingSize } },
                 { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

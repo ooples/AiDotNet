@@ -205,7 +205,7 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 
