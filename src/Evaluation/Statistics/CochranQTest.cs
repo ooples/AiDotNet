@@ -85,7 +85,7 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         double sumRowSquares = rowTotals.Sum(r => (double)r * r);
         double sumRowTotals = rowTotals.Sum();
 
-        double numerator = (k - 1) * (k * sumColSquares - grandTotal * grandTotal);
+        double numerator = (k - 1) * (k * sumColSquares - (double)grandTotal * grandTotal);
         double denominator = k * sumRowTotals - sumRowSquares;
 
         if (Math.Abs(denominator) < 1e-10)

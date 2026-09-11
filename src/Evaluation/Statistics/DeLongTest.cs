@@ -142,7 +142,7 @@ public class DeLongTest<T> : IStatisticalTest<T>
                 else if (Math.Abs(posProb - negProb) < 1e-10) sum += 0.5;
             }
         }
-        return sum / (posIndices.Count * negIndices.Count);
+        return sum / ((double)posIndices.Count * negIndices.Count);
     }
 
     private double[] ComputeV10(T[] predictions, List<int> posIndices, List<int> negIndices)

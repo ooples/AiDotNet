@@ -100,13 +100,13 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
             sumRankSquaredOverN += (rankSums[g] * rankSums[g]) / groupSizes[g];
         }
 
-        double H = (12.0 / (N * (N + 1))) * sumRankSquaredOverN - 3 * (N + 1);
+        double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3 * (N + 1);
 
         // Tie correction
         var tieGroups = sorted.GroupBy(x => x.value).Where(g => g.Count() > 1).Select(g => g.Count()).ToList();
         if (tieGroups.Count > 0)
         {
-            double tieCorrection = 1 - tieGroups.Sum(t => (double)t * t * t - t) / (N * N * N - N);
+            double tieCorrection = 1 - tieGroups.Sum(t => (double)t * t * t - t) / ((double)N * N * N - N);
             if (tieCorrection > 1e-10)
                 H /= tieCorrection;
         }
@@ -183,7 +183,7 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
             for (int j = i + 1; j < k; j++)
             {
                 double z = Math.Abs(meanRanks[i] - meanRanks[j]) /
-                          Math.Sqrt((N * (N + 1) / 12.0) * (1.0 / groupSizes[i] + 1.0 / groupSizes[j]));
+                          Math.Sqrt(((double)N * (N + 1) / 12.0) * (1.0 / groupSizes[i] + 1.0 / groupSizes[j]));
                 double pValue = 2 * (1 - NormalCDF(z));
                 results[(i, j)] = pValue;
             }
