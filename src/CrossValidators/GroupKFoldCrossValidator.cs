@@ -125,7 +125,6 @@ public class GroupKFoldCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T
         var groupIndices = uniqueGroups.Select(g => groups.Select((v, i) => (v, i)).Where(t => t.v == g).Select(t => t.i).ToArray()).ToArray();
 
         int numberOfFolds = Options.NumberOfFolds;
-        var folds = new List<int[]>();
 
         for (int i = 0; i < numberOfFolds; i++)
         {

@@ -100,7 +100,7 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
 
                 // Spectral power at this frequency
-                double power = (cosSum * cosSum + sinSum * sinSum) / (n * n);
+                double power = (cosSum * cosSum + sinSum * sinSum) / ((double)n * n);
                 maxPower = Math.Max(maxPower, power);
             }
 

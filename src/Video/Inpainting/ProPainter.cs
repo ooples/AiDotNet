@@ -449,12 +449,10 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         var encodedInput = ConcatenateChannelsDim1(maskedFrame, SingleChannelMask(mask));
 
         var imageFeatures = encodedInput;
-        var encoderOutputs = new List<Tensor<T>>();
         foreach (var encoder in _imageEncoder)
         {
             imageFeatures = encoder.Forward(imageFeatures);
             imageFeatures = ApplyReLU(imageFeatures);
-            encoderOutputs.Add(imageFeatures);
         }
 
         // Step 4: Apply transformer blocks for global context (Multi-Head Self-Attention)

@@ -158,7 +158,7 @@ public static class SSMQuantizationHelper<T>
 
         int paramCount = checked((int)layer.ParameterCount);
         long originalBytes = paramCount * (long)Unsafe.SizeOf<T>();
-        long quantizedBytes = (long)Math.Ceiling(paramCount * targetBitWidth / 8.0);
+        long quantizedBytes = (long)Math.Ceiling((double)paramCount * targetBitWidth / 8.0);
 
         // Add overhead for scale/zero-point per group (if per-channel)
         int numGroups = Math.Max(1, paramCount / 128); // Assume group size 128

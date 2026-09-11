@@ -1470,15 +1470,29 @@ internal static class YamlParamsHelper
         };
     }
 
+    // Both walks below start at a non-null symbol and null-test only the ContainingType links
+    // (do/while). In the previous `for (current = symbol; current is not null; ...)` / `while` form,
+    // the `return true` was reached only by leaving the loop with `current` null, and CodeQL's
+    // nullness analysis does not separate the first iteration (where `current` IS `symbol`) from
+    // later ones: it inferred "returns true => symbol is null" and treated each helper as a
+    // null-check method. The caller's `if (!A(symbol) || !B(symbol)) return ...;` fall-through then
+    // read as "symbol is null", and `symbol.Constructors` in GetSelfImplementationIfRegisterable was
+    // reported as an always-null dereference (cs/dereferenced-value-is-always-null; either helper
+    // alone reproduces it). The symbol is never null: the only caller passes a type it has already
+    // dereferenced.
     private static bool IsEffectivelyPublicForGeneratedCode(INamedTypeSymbol symbol)
     {
-        for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+        INamedTypeSymbol? current = symbol;
+        do
         {
             if (current.DeclaredAccessibility != Accessibility.Public)
             {
                 return false;
             }
+
+            current = current.ContainingType;
         }
+        while (current is not null);
 
         return true;
     }
@@ -1487,12 +1501,13 @@ internal static class YamlParamsHelper
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal) { "T", "TInput", "TOutput" };
         var allTypeParams = new List<ITypeParameterSymbol>();
-        var current = symbol;
-        while (current is not null)
+        INamedTypeSymbol? current = symbol;
+        do
         {
             allTypeParams.AddRange(current.TypeParameters);
             current = current.ContainingType;
         }
+        while (current is not null);
 
         foreach (var tp in allTypeParams)
         {

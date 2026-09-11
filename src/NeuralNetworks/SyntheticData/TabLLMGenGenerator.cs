@@ -504,7 +504,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int schemaTokens = _options.SchemaTokensPerColumn;
         var result = new Vector<T>(_columns.Count);
 
-        var generatedTokens = new List<int>();
         var generatedEmbeddings = new List<Vector<T>>();
 
         int valueTokenBase = _specialTokenOffset + _columns.Count * schemaTokens;
@@ -516,7 +515,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
             for (int s = 0; s < schemaTokens; s++)
             {
                 int token = schemaBase + s;
-                generatedTokens.Add(token);
                 generatedEmbeddings.Add(EmbedToken(token));
             }
 
@@ -532,7 +530,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 int valueToken = SampleFromLogits(logits, valueTokenBase, _colVocabSizes[c]);
                 int relativeToken = valueToken - valueTokenBase;
 
-                generatedTokens.Add(valueToken);
                 generatedEmbeddings.Add(EmbedToken(valueToken));
 
                 result[c] = NumOps.FromDouble(DetokenizeValue(relativeToken, c));

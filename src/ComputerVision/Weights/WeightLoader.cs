@@ -61,8 +61,6 @@ public class WeightLoader
     /// </remarks>
     private Dictionary<string, Tensor<float>> LoadPyTorchWeights(string filePath)
     {
-        var weights = new Dictionary<string, Tensor<float>>();
-
         using var stream = File.OpenRead(filePath);
         using var reader = new BinaryReader(stream);
 

@@ -97,7 +97,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             for (int i1 = 0; i1 < n; i1++)
                 for (int i2 = 0; i2 < n; i2++)
                     dcov += xCentered[i1, i2] * yCentered[i1, i2];
-            dcov = Math.Sqrt(dcov / (n * n));
+            dcov = Math.Sqrt(dcov / ((double)n * n));
 
             // Distance correlation
             _dcorValues[j] = dcov / Math.Sqrt(Math.Sqrt(xVar * yVar));
@@ -144,7 +144,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         }
         for (int j = 0; j < n; j++)
             colMeans[j] /= n;
-        grandMean /= (n * n);
+        grandMean /= ((double)n * n);
 
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
@@ -160,7 +160,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
                 sum += centered[i, j] * centered[i, j];
-        return sum / (n * n);
+        return sum / ((double)n * n);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

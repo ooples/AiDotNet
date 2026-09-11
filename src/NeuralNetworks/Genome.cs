@@ -309,7 +309,28 @@ public class Genome<T>
 
         var nodeValues = new Dictionary<int, T>();
         var nodeActivations = new Dictionary<int, IActivationFunction<T>>();
+        var activatedNodes = new HashSet<int>();
         var processedNodes = new HashSet<int>();
+
+        // Every non-input node that receives weighted input (hidden or output) is squashed with the
+        // logistic sigmoid, the activation NEAT uses for those nodes. Input nodes pass their values
+        // through unchanged, as do source-only nodes the genome gives no incoming connection.
+        IActivationFunction<T> sigmoid = new AiDotNet.ActivationFunctions.SigmoidActivation<T>();
+        foreach (var conn in Connections)
+        {
+            if (conn.IsEnabled && conn.ToNode >= InputSize) nodeActivations[conn.ToNode] = sigmoid;
+        }
+
+        // Applies a node's activation exactly once. In topological order a node's weighted input
+        // is complete the first time it is used as a source, so hidden nodes are activated BEFORE
+        // their value propagates downstream (otherwise the non-linearity never reaches the outputs).
+        void ApplyActivation(int node)
+        {
+            if (nodeActivations.TryGetValue(node, out var activation) && activatedNodes.Add(node))
+            {
+                nodeValues[node] = activation.Activate(nodeValues[node]);
+            }
+        }
 
         // Initialize input nodes
         for (int i = 0; i < InputSize; i++)
@@ -338,19 +359,18 @@ public class Genome<T>
             if (!nodeValues.ContainsKey(conn.ToNode))
                 nodeValues[conn.ToNode] = NumOps.Zero;
 
+            ApplyActivation(conn.FromNode);
+
             var value = NumOps.Multiply(nodeValues[conn.FromNode], conn.Weight);
             nodeValues[conn.ToNode] = NumOps.Add(nodeValues[conn.ToNode], value);
 
             processedNodes.Add(conn.ToNode);
         }
 
-        // Apply activation functions to all processed nodes
+        // Apply activation functions to the remaining processed nodes (outputs and other sinks)
         foreach (var node in processedNodes)
         {
-            if (nodeActivations.TryGetValue(node, out var activation))
-            {
-                nodeValues[node] = activation.Activate(nodeValues[node]);
-            }
+            ApplyActivation(node);
         }
 
         // Collect output values

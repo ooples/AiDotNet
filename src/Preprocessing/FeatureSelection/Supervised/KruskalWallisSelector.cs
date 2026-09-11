@@ -118,7 +118,7 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 if (classCounts[c] > 0)
                     H += rankSums[c] * rankSums[c] / classCounts[c];
             }
-            H = 12.0 / (n * (n + 1)) * H - 3 * (n + 1);
+            H = 12.0 / ((double)n * (n + 1)) * H - 3 * (n + 1);
 
             // Tie correction (simplified)
             _hStatistics[j] = H;

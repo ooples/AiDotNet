@@ -43,7 +43,6 @@ namespace AiDotNet.AutoML.NAS
         private readonly HardwarePlatform _platform;
         private readonly PlatformCharacteristics _characteristics;
         private readonly Dictionary<string, double> _calibrationFactors;
-        private readonly HashSet<string> _unknownOperations;
 
         /// <summary>
         /// Gets the target hardware platform.
@@ -61,7 +60,6 @@ namespace AiDotNet.AutoML.NAS
             _platform = platform;
             _characteristics = GetPlatformCharacteristics(platform);
             _calibrationFactors = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            _unknownOperations = new HashSet<string>(StringComparer.Ordinal);
         }
 
         /// <summary>

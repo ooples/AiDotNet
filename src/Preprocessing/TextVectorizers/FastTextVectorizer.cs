@@ -46,7 +46,6 @@ public class FastTextVectorizer<T> : TextVectorizerBase<T>
 
     private Dictionary<string, double[]>? _wordVectors;
     private double[,]? _subwordVectors; // Hash bucket vectors
-    private HashSet<string>? _knownWords;
 
     /// <summary>
     /// Gets the learned word vectors for known words.
@@ -188,7 +187,6 @@ public class FastTextVectorizer<T> : TextVectorizerBase<T>
 
         _vocabulary = vocabArray.Select((k, i) => (k, i)).ToDictionary(x => x.k, x => x.i);
         _featureNames = Enumerable.Range(0, _vectorSize).Select(i => $"fasttext_dim_{i}").ToArray();
-        _knownWords = new HashSet<string>(vocabArray);
 
         if (vocabSize == 0)
         {

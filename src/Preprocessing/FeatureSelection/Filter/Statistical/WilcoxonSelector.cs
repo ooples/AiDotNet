@@ -89,10 +89,10 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double r0 = class0.Sum(i => ranked[i]);
 
             // U statistic for class 0
-            double u0 = r0 - (n0 * (n0 + 1)) / 2.0;
+            double u0 = r0 - ((double)n0 * (n0 + 1)) / 2.0;
 
             // Normalize U to [0, 1]
-            double maxU = n0 * n1;
+            double maxU = (double)n0 * n1;
             _uStatistics[j] = maxU > 0 ? Math.Abs(u0 - maxU / 2) / (maxU / 2) : 0;
         }
 

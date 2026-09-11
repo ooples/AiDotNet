@@ -314,7 +314,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
             for (int j = 0; j < n; j++)
             {
                 T distance = NumOps.Abs(NumOps.Subtract(data[j].x, data[i].x));
-                T weight = TriCube(NumOps.Divide(distance, NumOps.FromDouble(windowSize / 2)));
+                T weight = TriCube(NumOps.Divide(distance, NumOps.FromDouble(windowSize / 2.0)));
                 weightedPoints.Add((distance, weight, data[j].y));
             }
 

@@ -302,7 +302,7 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
 
         for (int s = 0; s < sampleCount; s++)
         {
-            int i = (int)(s * parameters.Length / (double)sampleCount);
+            int i = (int)((double)s * parameters.Length / sampleCount);
 
             // Perturb parameter
             T original = parameters[i];

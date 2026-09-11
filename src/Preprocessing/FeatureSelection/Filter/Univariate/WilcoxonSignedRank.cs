@@ -117,8 +117,8 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Normal approximation for p-value
             int nPairs = ranked.Count;
-            double mu = nPairs * (nPairs + 1) / 4.0;
-            double sigma = Math.Sqrt(nPairs * (nPairs + 1) * (2 * nPairs + 1) / 24.0);
+            double mu = (double)nPairs * (nPairs + 1) / 4.0;
+            double sigma = Math.Sqrt((double)nPairs * (nPairs + 1) * (2 * nPairs + 1) / 24.0);
 
             if (sigma > 1e-10)
             {

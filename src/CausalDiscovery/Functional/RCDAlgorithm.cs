@@ -134,7 +134,6 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
 
         var W = new Matrix<T>(d, d);
         var remaining = new List<int>(Enumerable.Range(0, d));
-        var ordering = new List<int>();
 
         // Iteratively identify exogenous variables
         int maxRounds = d;
@@ -219,7 +218,6 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             }
 
             // Record causal coefficients from the identified exogenous variable to remaining ones
-            ordering.Add(bestVar);
             remaining.Remove(bestVar);
 
             foreach (int target in remaining)

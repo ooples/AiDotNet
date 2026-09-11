@@ -5842,8 +5842,8 @@ public static class StatisticsHelper<T>
         int n = x.Length;
         T numerator = _numOps.Subtract(_numOps.FromDouble(concordantPairs), _numOps.FromDouble(discordantPairs));
         T denominator = _numOps.Sqrt(_numOps.Multiply(
-            _numOps.FromDouble(n * (n - 1) / 2),
-            _numOps.FromDouble(n * (n - 1) / 2)
+            _numOps.FromDouble((double)n * (n - 1) / 2),
+            _numOps.FromDouble((double)n * (n - 1) / 2)
         ));
 
         return _numOps.Divide(numerator, denominator);

@@ -100,7 +100,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             for (int i = 0; i < n; i++)
                 for (int k = 0; k < n; k++)
                     hsic += KxC[i, k] * KyC[k, i];
-            hsic /= (n * n);
+            hsic /= ((double)n * n);
 
             _hsicValues[j] = Math.Max(0, hsic);
         }
@@ -172,7 +172,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             }
             rowMeans[i] /= n;
         }
-        grandMean /= (n * n);
+        grandMean /= ((double)n * n);
 
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)

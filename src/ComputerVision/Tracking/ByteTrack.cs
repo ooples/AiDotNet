@@ -40,7 +40,6 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
 {
     private readonly List<STrack<T>> _trackedTracks;
     private readonly List<STrack<T>> _lostTracks;
-    private readonly List<STrack<T>> _removedTracks;
     private readonly double _trackHighThresh;
     private readonly double _trackLowThresh;
     private readonly double _newTrackThresh;
@@ -57,7 +56,6 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
     {
         _trackedTracks = new List<STrack<T>>();
         _lostTracks = new List<STrack<T>>();
-        _removedTracks = new List<STrack<T>>();
 
         // ByteTrack specific thresholds
         _trackHighThresh = NumOps.ToDouble(options.ConfidenceThreshold);
@@ -290,7 +288,6 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
             if (FrameCount - track.EndFrame > _trackBuffer)
             {
                 track.MarkRemoved();
-                _removedTracks.Add(track);
             }
             else
             {
@@ -340,7 +337,6 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         base.Reset();
         _trackedTracks.Clear();
         _lostTracks.Clear();
-        _removedTracks.Clear();
     }
 }
 

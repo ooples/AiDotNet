@@ -197,7 +197,6 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         var lossHistory = new List<T>();
         var regLossHistory = new List<T>();
-        var validationLossHistory = new List<T>();
 
         var useReplay = _options.UseExperienceReplay ?? true;
         var replayLrFactor = _options.ReplayLearningRateFactor ?? 0.5;
@@ -335,7 +334,6 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             {
                 var valResult = EvaluateOnDataset(validationData);
                 validationLoss = valResult.Loss;
-                validationLossHistory.Add(valResult.Loss);
 
                 // Early stopping check
                 if (NumOps.Compare(valResult.Loss, bestValidationLoss) < 0)
