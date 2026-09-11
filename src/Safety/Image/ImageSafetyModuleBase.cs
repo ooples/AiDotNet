@@ -38,7 +38,8 @@ public abstract class ImageSafetyModuleBase<T> : SafetyModuleBase<T>, IImageSafe
         // Without this, a null reaches content.ToArray() and the caller gets a
         // NullReferenceException - which says nothing about which argument was wrong and is not an
         // ArgumentException, so a caller cannot catch it as a bad-input condition.
-        ArgumentNullException.ThrowIfNull(content);
+        if (content is null)
+            throw new ArgumentNullException(nameof(content));
 
         // Wrap the flat vector as a 1D tensor
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
