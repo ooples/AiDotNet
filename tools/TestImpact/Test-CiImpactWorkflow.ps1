@@ -23,7 +23,8 @@ param(
     [string] $ValidationReuseResolver = 'tools/TestImpact/Resolve-CiValidationReuse.ps1',
     [string] $ValidationCertificateWriter = 'tools/TestImpact/New-CiValidationCertificate.ps1',
     [string] $MapCertificateWriter = 'tools/TestImpact/New-ShardMapCertificate.ps1',
-    [string] $CiGatePolicy = 'tools/TestImpact/Assert-CiGate.ps1'
+    [string] $CiGatePolicy = 'tools/TestImpact/Assert-CiGate.ps1',
+    [string] $ShardManifest = '.github/test-shards.yml'
 )
 
 Set-StrictMode -Version Latest
@@ -173,8 +174,6 @@ $validationJobs = @(
     'build',
     'build-compat',
     'test-net10-sharded',
-    'parameter-enumeration-sweep',
-    'model-shape-conformance-windows',
     'test-regression-analysis',
     'size-check',
     'ci-test-analysis'
@@ -461,7 +460,7 @@ Assert-Contract (-not $collectStateStep.Contains('Invoke-WebRequest')) `
 Assert-Contract (([Regex]::Matches($collectStateStep, 'Invoke-GitHubApiWithRetry')).Count -eq 5) `
     'not every aggregate GitHub API read is routed through retry policy'
 
-$artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
+$artifactConsumers = @('test-net10-sharded')
 foreach ($job in $artifactConsumers) {
     $consumer = Get-JobBlock -WorkflowText $validation -Job $job
     $header = Get-JobHeader -JobBlock $consumer
@@ -570,10 +569,80 @@ foreach ($stepName in @(
     Assert-Contract ($upload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
         "'$stepName' can amplify an artifact-service failure after the required download failed"
 }
-$shapeConsumer = Get-JobBlock -WorkflowText $validation -Job 'model-shape-conformance-windows'
-$shapeUpload = Get-StepBlock -JobBlock $shapeConsumer -Step 'Upload window report'
-Assert-Contract ($shapeUpload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
-    'shape-conformance can upload after its required build artifact was unavailable'
+# THE MODEL-INVENTORY SWEEPS AND CONFORMANCE WINDOWS ARE SHARDS. As two bespoke jobs they ran all
+# 45 workloads on every validating run whatever the change touched, and nothing about them could
+# be selected, reused or imported. Keeping them in .github/test-shards.yml is what lets the map,
+# the delta planner and the audit treat them like every other shard, so their return as separate
+# jobs - or an entry losing the configuration that bounds it - is a regression.
+foreach ($retired in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
+    Assert-Contract (-not [Regex]::IsMatch($validation, "(?m)^  $([Regex]::Escape($retired)):\s*\r?$")) `
+        "'$retired' is back as a job that runs outside shard selection"
+}
+$shardList = Get-Content -LiteralPath $ShardManifest -Raw
+$shardEntries = [Regex]::Split($shardList, '(?m)^  - name: ') | Select-Object -Skip 1
+function Get-ShardEntry([string] $Name) {
+    $shardEntries | Where-Object { $_.StartsWith($Name + "`n") -or $_.StartsWith($Name + "`r`n") } | Select-Object -First 1
+}
+$expectedInventoryShards = [System.Collections.Generic.List[object]]::new()
+foreach ($k in 0..7) {
+    [void] $expectedInventoryShards.Add(@{ Name = "Sweep - ParameterCountContractTests $k/8"; Filter = 'FullyQualifiedName~ParameterCountContractTests'; Env = @("AIDOTNET_PARAMETER_COUNT_SHARD: '$k'"); MustCover = 'src/NeuralNetworks/Layers/*' })
+}
+[void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
+[void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
+foreach ($offset in (0..34 | ForEach-Object { $_ * 5 })) {
+    [void] $expectedInventoryShards.Add(@{
+        Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
+        MustCover = '*/VisionLanguage/*'
+        Env = @("ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'", "ADNSHAPE_CONF_OFFSET: '$offset'", "ADNSHAPE_CONF_BUDGET: '5'") })
+}
+foreach ($expected in $expectedInventoryShards) {
+    $entry = Get-ShardEntry $expected.Name
+    Assert-Contract ([bool] $entry) "inventory shard '$($expected.Name)' is missing from test-shards.yml"
+    if (-not $entry) { continue }
+    Assert-Contract ($entry.Contains("filter: '$($expected.Filter)'")) "inventory shard '$($expected.Name)' has the wrong filter"
+    Assert-Contract ($entry -match '(?m)^    heavy: true\s*$') "inventory shard '$($expected.Name)' is not on the heavy path"
+    Assert-Contract ($entry -match '(?m)^    hangTimeout: [1-9][0-9]*min\s*$') "inventory shard '$($expected.Name)' keeps the 5-minute hang limit"
+    if ($expected.ContainsKey('MustCover')) {
+        Assert-Contract ($entry.Contains("    mustCover: ['$($expected.MustCover)']")) `
+            "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
+        Assert-Contract ($entry.Contains('    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0')) `
+            "inventory shard '$($expected.Name)' does not instrument the worker its models run in"
+    }
+    foreach ($pair in $expected.Env) {
+        Assert-Contract ($entry.Contains("      $pair")) "inventory shard '$($expected.Name)' lost its env '$pair'"
+    }
+}
+
+Assert-Contract ($map.Contains('-CoverageRequirementsFile $requirements')) `
+    'the map build ignores mustCover, so a shard whose subject coverage never reached can become selectable'
+
+# The four Sweep-category surveys no job ran (every shard excludes Category=Sweep; the old sweep job named
+# only its own three classes). They run in one gating heavy shard now; losing any of them silently
+# returns it to never running.
+$surveys = Get-ShardEntry 'Sweep - Layer and Model Contract Surveys'
+Assert-Contract ([bool] $surveys) 'the contract-survey sweeps have no shard and would never run'
+foreach ($survey in @('LayerOverrideRedundancyTests', 'LayerParameterSurfaceTests', 'ContractShadowSweepTests', 'ModelBaseCoverageTests')) {
+    Assert-Contract ($surveys -and $surveys.Contains("FullyQualifiedName~$survey")) "the survey sweep '$survey' is no longer selected by any shard"
+}
+
+$shardRun = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+Assert-Contract ($shardRun.Contains('SHARD_ENV: ${{ toJSON(matrix.shard.env) }}')) `
+    'the shard step does not receive the entry env as data'
+Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
+    'the shard step does not apply the entry env through the validated helper'
+Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
+    'a shard declaring heavy: true does not get the heavy path'
+Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
+        $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
+    'a shard whose models run in the worker never instruments the worker'
+Assert-Contract ($shardRun.Contains("'--blame-hang-timeout', `$hangTimeout,")) `
+    'a shard hangTimeout is not passed to the blame-hang collector'
+$shardRetry = Get-StepBlock -JobBlock $testConsumer -Step 'Rerun PR-new failures once'
+Assert-Contract ($shardRetry.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
+    'a targeted retry runs without the shard env and would walk the whole inventory'
+$selectStep = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Select'
+Assert-Contract ($selectStep.Contains("`$declared.PSObject.Properties['heavy'] -and `$declared.heavy -eq `$true")) `
+    'a map-feeding run does not treat heavy: true entries as no-coverage shards'
 
 $promotion = Get-JobBlock -WorkflowText $validation -Job 'promote-ci-test-analysis'
 Assert-Contract ($promotion.Contains("needs.validation-source.outputs.reuse == 'true'")) `

@@ -11,7 +11,9 @@
     shard-map.json from New-ShardMap.ps1.
 
 .PARAMETER ExpectedShards
-    The complete current shard manifest. A map for a different shard universe is never trusted.
+    The complete current shard manifest. A map naming a shard the manifest no longer has is never
+    trusted. A manifest shard the map has not seen yet - one added since the map was built - is
+    run on every selection until a map includes it, exactly as if it were an always-run shard.
 
 .PARAMETER AuditUnchangedMap
     Allows the nightly selection-miss audit to evaluate an unchanged map tree by selecting only
@@ -240,10 +242,12 @@ function Assert-ShardMap {
         }
     }
 
-    $missing = @($expectedSet | Where-Object { -not $mapSet.Contains($_) } | Sort-Object)
+    # A map shard the manifest no longer has is a removal or a rename: the map's coverage describes
+    # a matrix that no longer exists, and selecting from it could name a job that cannot run.
+    # The opposite direction is not a contradiction, only a gap: see Add-UnmappedShardsAsAlwaysRun.
     $extra = @($mapSet | Where-Object { -not $expectedSet.Contains($_) } | Sort-Object)
-    if ($missing.Count -gt 0 -or $extra.Count -gt 0) {
-        throw "map shard universe differs from the manifest (missing: $($missing -join ', '); extra: $($extra -join ', '))"
+    if ($extra.Count -gt 0) {
+        throw "map names shard(s) the manifest does not have: $($extra -join ', ')"
     }
 
     $fileProperties = @($Map.files.PSObject.Properties)
@@ -573,6 +577,35 @@ function Format-LineRanges {
     return (@($Ranges | ForEach-Object { "$($_[0])-$($_[1])" }) -join ', ')
 }
 
+function Add-UnmappedShardsAsAlwaysRun {
+    <#
+    .SYNOPSIS
+        Runs every manifest shard the map has not seen on every selection, until a map includes it.
+    .DESCRIPTION
+        A shard added to the manifest after the map was built has no coverage in it, so nothing can
+        say which changes reach it. Refusing the whole map for that reason used to send every pull
+        request back to the full matrix from the moment a shard was added until a new map was
+        generated and certified - hours of full runs to learn about one shard. Running just the
+        unmapped shard every time is the honest reading of "no evidence": it costs what that shard
+        cost before it could be selected, and every mapped shard stays selective.
+    .OUTPUTS
+        The unmapped shard names, sorted. The map is updated in place.
+    #>
+    param(
+        [Parameter(Mandatory)] $Map,
+        [Parameter(Mandatory)] [string[]] $Expected
+    )
+
+    $mapSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in @($Map.knownShards) + @($Map.alwaysRun)) { [void] $mapSet.Add([string] $name) }
+    $unmapped = @($Expected | Where-Object { -not $mapSet.Contains([string] $_) } | Sort-Object -Unique)
+    if ($unmapped.Count -gt 0) {
+        $Map.alwaysRun = @(@($Map.alwaysRun) + $unmapped)
+        $Map | Add-Member -NotePropertyName unmappedShards -NotePropertyValue $unmapped -Force
+    }
+    return $unmapped
+}
+
 function Select-ImpactedShards {
     <#
         CurrentPaths is the change being validated. With -ScopeToCurrentPaths, only those paths are
@@ -711,9 +744,15 @@ function Select-ImpactedShards {
         }
     }
 
+    $unmappedShards = if ($Map.PSObject.Properties['unmappedShards']) { @($Map.unmappedShards) } else { @() }
     foreach ($shard in @($Map.alwaysRun)) {
         [void] $selected.Add([string] $shard)
-        [void] $routes.Add("$shard <= is always run")
+        if ($unmappedShards -contains $shard) {
+            [void] $routes.Add("$shard <= is not in the coverage map yet, so it runs until a map includes it")
+        }
+        else {
+            [void] $routes.Add("$shard <= is always run")
+        }
     }
 
     foreach ($path in $mappedPaths) {
@@ -2001,8 +2040,27 @@ class Current { }
     $badLine.files.'src/Covered.cs'[0].r = @(0, 10)
     Assert-Throws { Assert-ShardMap -Map $badLine -Expected $expected } 'non-positive map lines must be rejected'
 
-    Assert-Throws { Assert-ShardMap -Map $map -Expected @('Alpha', 'Beta', 'HeavyNoCoverage', 'NewShard') } `
-        'a stale shard universe must be rejected'
+    # A map naming a shard the manifest dropped (a removal or rename) is still refused.
+    Assert-Throws { Assert-ShardMap -Map $map -Expected @('Alpha', 'HeavyNoCoverage') } `
+        'a map naming a shard the manifest no longer has must be rejected'
+
+    # A shard added after the map was built is not a reason to distrust the map: it runs on every
+    # selection until a map includes it, and every mapped shard stays selective.
+    $grown = $map | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $grownExpected = @('Alpha', 'Beta', 'HeavyNoCoverage', 'NewShard')
+    try { Assert-ShardMap -Map $grown -Expected $grownExpected } catch { [void] $failures.Add("a map missing only a newly added shard was rejected: $_") }
+    $added = @(Add-UnmappedShardsAsAlwaysRun -Map $grown -Expected $grownExpected)
+    Assert-True (($added -join ',') -ceq 'NewShard') "the unmapped shard was not identified (got '$($added -join ',')')"
+    $r = Select-ImpactedShards -Map $grown -Changed @{ 'src/Covered.cs' = @(12, 14) }
+    Assert-True ($r.Shards -contains 'NewShard') 'an unmapped shard was not run'
+    Assert-True ($r.Shards -contains 'Alpha') 'a mapped shard reached by the change was not selected'
+    Assert-True (-not ($r.Shards -contains 'Beta')) 'an unmapped shard made the mapped selection unselective'
+    Assert-True (@($r.Routes | Where-Object { $_ -like 'NewShard <= is not in the coverage map yet*' }).Count -eq 1) `
+        'the unmapped shard is not reported as unmapped'
+    $r = Select-ImpactedShards -Map $grown -Changed @{ 'docs/readme.md' = @(1, 1) }
+    Assert-True (-not ($r.Shards -contains 'NewShard')) 'an unmapped shard ran for a change that needs no validation'
+    $again = @(Add-UnmappedShardsAsAlwaysRun -Map $grown -Expected $grownExpected)
+    Assert-True ($again.Count -eq 0) 'a second pass re-added an unmapped shard'
 
     $commaMap = @{
         schemaVersion = 1; sha = 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'; knownShards = @('Comma, Shard'); alwaysRun = @()
@@ -2135,6 +2193,10 @@ $map = $null
 try {
     $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
     Assert-ShardMap -Map $map -Expected $ExpectedShards
+    $unmapped = @(Add-UnmappedShardsAsAlwaysRun -Map $map -Expected $ExpectedShards)
+    if ($unmapped.Count -gt 0) {
+        Write-Host "$($unmapped.Count) shard(s) are not in the coverage map yet and will run until a map includes them: $($unmapped -join ', ')"
+    }
 }
 catch {
     Exit-Escalated -Reason 'map-unreadable' `
