@@ -363,12 +363,20 @@ Assert-Contract ($sourceJob.Contains("fetch-depth: `${{ github.event_name == 'pu
         -not $sourceJob.Contains("== 'push' && 0 ||")) `
     'validation-source lacks the history to rebuild the validated tree and diff it in map coordinates'
 $deltaMapStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve certified shard map for delta reuse'
-Assert-Contract ($deltaMapStep -match '(?m)^\s+id:\s*delta-map\s*$' -and $deltaMapStep.Contains('timeout-minutes: 10')) `
-    'the delta-map step lost the id its outputs are read through, or its duration bound'
+Assert-Contract ([regex]::Matches($deltaMapStep, '(?m)^        id: delta-map[ \t]*(?:#[^\r\n]*)?\r?$').Count -eq 1 -and
+        [regex]::Matches($deltaMapStep, '(?m)^        id:').Count -eq 1) `
+    'the delta-map step lacks the exact unique identity consumed by the reuse resolver'
 Assert-Contract ([bool] $deltaMapStep -and $deltaMapStep.Contains('continue-on-error: true') -and
         $deltaMapStep.Contains('Resolve-CertifiedShardMap.ps1') -and $deltaMapStep.Contains('Test-CertifiedShardMap.ps1')) `
     'delta reuse does not select with an audited map, or a map failure can fail the push instead of disabling delta reuse'
 $resolveStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve exact-tree PR run'
+$mapTimeout = [regex]::Match($deltaMapStep, '(?m)^        timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
+$jobTimeout = [regex]::Match($sourceHeader, '(?m)^    timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
+$evidenceWait = [regex]::Match($resolveStep, '(?m)^            -WaitMinutes (?<minutes>[0-9]+)[ \t]*\r?$')
+Assert-Contract ($mapTimeout.Success -and $jobTimeout.Success -and $evidenceWait.Success -and
+        [int] $mapTimeout.Groups['minutes'].Value + [int] $evidenceWait.Groups['minutes'].Value + 5 -le
+            [int] $jobTimeout.Groups['minutes'].Value) `
+    'delta-map resolution is not bounded within the job budget with resolver-wait and setup headroom'
 Assert-Contract ($resolveStep.Contains("-MapFile '`${{ steps.delta-map.outputs.map_file }}'") -and
         $resolveStep.Contains("-ShardManifestFile '`${{ steps.delta-map.outputs.manifest_file }}'")) `
     'the reuse resolver is not given the delta-reuse map and manifest'

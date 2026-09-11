@@ -175,7 +175,8 @@ jobs:
         continue-on-error: true
         # continue-on-error bounds the OUTCOME, not the duration: a stalled gh call here would eat
         # the job's margin before the resolver's own 40-minute wait even starts.
-        timeout-minutes: 10
+        # Leave 40 minutes for evidence and 5 minutes for checkout/setup and fallback reporting.
+        timeout-minutes: 5
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

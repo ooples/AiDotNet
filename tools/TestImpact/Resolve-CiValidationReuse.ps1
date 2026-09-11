@@ -63,6 +63,12 @@ enum CiValidationReuseScope {
     Complete
 }
 
+enum CiDeltaReuseMode {
+    None
+    Reuse
+    Partial
+}
+
 function ConvertTo-RequiredBooleanProperty {
     param($Object, [string] $Name)
     if (-not $Object.PSObject.Properties[$Name] -or $Object.$Name -isnot [bool]) {
@@ -203,11 +209,11 @@ function Get-DeltaReuseDecision {
     foreach ($shard in $PullRequestShards) { if ($shard) { [void] $pullRequest.Add([string] $shard) } }
 
     if ($SelectionEscalated) {
-        return [pscustomobject]@{ Mode = 'None'; Rerun = @(); Import = @()
+        return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::None; Rerun = @(); Import = @()
             Why = 'the change since the validated tree needs the full matrix' }
     }
     if (-not $SelectionRequiresValidation) {
-        return [pscustomobject]@{ Mode = 'Reuse'; Rerun = @(); Import = @($pullRequest)
+        return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::Reuse; Rerun = @(); Import = @($pullRequest)
             Why = 'the change since the validated tree is non-runtime' }
     }
 
@@ -215,17 +221,17 @@ function Get-DeltaReuseDecision {
     foreach ($shard in $DeltaShards) { if ($shard) { [void] $delta.Add([string] $shard) } }
     # An empty selection for a runtime delta is a selector anomaly, never permission to skip.
     if ($delta.Count -eq 0) {
-        return [pscustomobject]@{ Mode = 'None'; Rerun = @(); Import = @()
+        return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::None; Rerun = @(); Import = @()
             Why = 'the selector returned no shards for a runtime change' }
     }
 
     $rerun = @($pullRequest | Where-Object { $delta.Contains($_) })
     $import = @($pullRequest | Where-Object { -not $delta.Contains($_) })
     if ($rerun.Count -eq 0) {
-        return [pscustomobject]@{ Mode = 'Reuse'; Rerun = @(); Import = $import
+        return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::Reuse; Rerun = @(); Import = $import
             Why = 'the change since the validated tree reaches none of the shards the pull request ran' }
     }
-    return [pscustomobject]@{ Mode = 'Partial'; Rerun = $rerun; Import = $import
+    return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::Partial; Rerun = $rerun; Import = $import
         Why = "the change since the validated tree reaches $($rerun.Count) of the $($pullRequest.Count) shard(s) the pull request ran" }
 }
 
@@ -287,6 +293,19 @@ function Invoke-DeltaPlan {
     return [pscustomobject]@{ Decision = $decision; Tree = $tree; Selection = $selection }
 }
 
+function Get-UnexpiredArtifactNames {
+    <# Keep the API metadata boundary testable: only positively nonexpired, named artifacts
+       can satisfy an import. Missing or malformed metadata is never proof of availability. #>
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Artifacts)
+    foreach ($artifact in $Artifacts) {
+        if ($null -ne $artifact -and $artifact.PSObject.Properties['name'] -and
+            $artifact.name -is [string] -and $artifact.PSObject.Properties['expired'] -and
+            $artifact.expired -is [bool] -and -not $artifact.expired) {
+            $artifact.name
+        }
+    }
+}
+
 function Get-MissingImportArtifacts {
     <#
         Pure: which per-shard artifacts a partial re-run would import but the pull request run does
@@ -337,7 +356,7 @@ function Write-ReuseDecision {
         [string] $TestedSha = '',
         [bool] $RequiresValidation = $true,
         [string] $Summary = '',
-        [string] $DeltaMode = '',
+        [Nullable[CiDeltaReuseMode]] $DeltaMode = $null,
         [string[]] $PartialShards = @(),
         [long] $ImportRunId = 0,
         [string] $ImportSha = '',
@@ -456,27 +475,27 @@ if ($SelfTest) {
     # ---- Delta reuse decisions. ----------------------------------------------------------------
     $pr = @('Integration D', 'Integration E-G', 'Unit - 10 RL')
     $d = Get-DeltaReuseDecision -SelectionEscalated $true -SelectionRequiresValidation $true -DeltaShards @() -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'None') 'a delta that needs the full matrix was reused'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::None) 'a delta that needs the full matrix was reused'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $false -DeltaShards @() -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'Reuse' -and @($d.Rerun).Count -eq 0) 'a non-runtime delta was not reused outright'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse -and @($d.Rerun).Count -eq 0) 'a non-runtime delta was not reused outright'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('Unit - 02 Data', 'ModelFamily - Audio') -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'Reuse') 'a delta reaching none of the pull request''s shards was not reused'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse) 'a delta reaching none of the pull request''s shards was not reused'
     Assert-True (((@($d.Import) | Sort-Object) -join ',') -eq ((@($pr) | Sort-Object) -join ',')) `
         'a full delta reuse did not account for every pull-request shard'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('Integration D', 'Unit - 02 Data') -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'Partial') 'an overlapping delta did not produce a partial re-run'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Partial) 'an overlapping delta did not produce a partial re-run'
     Assert-True ((@($d.Rerun) -join ',') -ceq 'Integration D') 'a partial re-run included shards outside the overlap'
     Assert-True ((@($d.Import) -join ',') -ceq 'Integration E-G,Unit - 10 RL') `
         'a partial re-run did not import exactly the pull request''s other shards'
     Assert-True (-not (@($d.Rerun) -contains 'Unit - 02 Data')) `
         'a shard only the base branch''s own commits reach was re-run for this pull request'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true -DeltaShards @() -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'None') 'an empty selection for a runtime delta was treated as permission to skip'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::None) 'an empty selection for a runtime delta was treated as permission to skip'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('integration d') -PullRequestShards $pr
-    Assert-True ($d.Mode -ceq 'Reuse') 'shard names were matched ignoring case'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse) 'shard names were matched ignoring case'
 
     Assert-True ((Get-ShardFromJobName 'Tests (net10.0) - Unit - 01 Activation/Attention') -ceq 'Unit - 01 Activation/Attention') `
         'a test job name did not yield its shard'
@@ -523,7 +542,7 @@ if ($PlanDelta) {
     }
     else {
         [pscustomobject]@{
-            mode = $plan.Decision.Mode; why = $plan.Decision.Why
+            mode = $plan.Decision.Mode.ToString(); why = $plan.Decision.Why
             rerun = @($plan.Decision.Rerun); import = @($plan.Decision.Import)
             tree = $plan.Tree; routes = @(Get-OptionalArray $plan.Selection 'routes')
         }
@@ -668,7 +687,7 @@ do {
                 CreatedAt = $createdAt
                 TestedSha = $parsed.TestedSha
                 TestedTree = $testedTree
-                ArtifactNames = @($artifacts | ForEach-Object { [string] $_.name })
+                ArtifactNames = @(Get-UnexpiredArtifactNames -Artifacts $artifacts)
                 Event = [string] $run.event
                 HeadSha = [string] $run.head_sha
                 TreeMatches = $treeMatches
@@ -753,32 +772,32 @@ if ($deltaCandidates.Count -gt 0 -and $MapFile -and $ShardManifestFile -and
         foreach ($route in @(Get-OptionalArray $plan.Selection 'routes')) { Write-Host "  delta route: $route" }
         foreach ($reason in @(Get-OptionalArray $plan.Selection 'reasons')) { Write-Host "  delta reason: $reason" }
 
-        if ($decision.Mode -ceq 'Reuse') {
+        if ($decision.Mode -eq [CiDeltaReuseMode]::Reuse) {
             # Never Complete: CodeQL and Sonar analysed a different tree.
             $summary = "Reusing Validation evidence from PR #$prNumber run $($candidate.RunId) across the base branch's later commits: $($decision.Why)."
             Write-ReuseDecision -DecisionScope Validation -RunId $candidate.RunId -PrNumber $prNumber `
                 -TestedSha $candidate.TestedSha -RequiresValidation $candidate.RequiresValidation `
-                -DeltaMode 'Reuse' -ImportShards @($decision.Import) -Summary $summary
+                -DeltaMode ([CiDeltaReuseMode]::Reuse) -ImportShards @($decision.Import) -Summary $summary
             exit 0
         }
         $missingImports = @()
-        if ($decision.Mode -ceq 'Partial') {
+        if ($decision.Mode -eq [CiDeltaReuseMode]::Partial) {
             $missingImports = @(Get-MissingImportArtifacts -ArtifactNames @($candidate.ArtifactNames) `
                 -TestedSha $candidate.TestedSha -Shards @($decision.Import))
         }
-        if ($decision.Mode -ceq 'Partial' -and $missingImports.Count -gt 0) {
+        if ($decision.Mode -eq [CiDeltaReuseMode]::Partial -and $missingImports.Count -gt 0) {
             # Every consumer imports these by exact name and fails on a missing one, so relying on
             # them would turn a reuse decision into a red landed commit. Validate in full instead.
             Write-Host "::notice::delta reuse declined: PR #$prNumber run $($candidate.RunId) lacks $($missingImports.Count) artifact(s) a partial re-run would import: $($missingImports -join ', ')"
         }
-        elseif ($decision.Mode -ceq 'Partial') {
+        elseif ($decision.Mode -eq [CiDeltaReuseMode]::Partial) {
             $summary = "Re-running $($decision.Rerun.Count) shard(s) and importing $($decision.Import.Count) from PR #$prNumber run $($candidate.RunId): $($decision.Why).`n`nRe-run: $($decision.Rerun -join ', ')"
-            Write-ReuseDecision -DecisionScope None -PrNumber $prNumber -DeltaMode 'Partial' `
+            Write-ReuseDecision -DecisionScope None -PrNumber $prNumber -DeltaMode ([CiDeltaReuseMode]::Partial) `
                 -PartialShards @($decision.Rerun) -ImportRunId $candidate.RunId `
                 -ImportSha $candidate.TestedSha -ImportShards @($decision.Import) -Summary $summary
             exit 0
         }
-        if ($decision.Mode -ceq 'None') {
+        if ($decision.Mode -eq [CiDeltaReuseMode]::None) {
             Write-Host "::notice::delta reuse declined: $($decision.Why)"
         }
     }

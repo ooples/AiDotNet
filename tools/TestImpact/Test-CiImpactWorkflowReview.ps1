@@ -19,15 +19,45 @@ if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
 $cases = @(
     [pscustomobject]@{
         Name = 'map-head-removed'
+        Reason = 'map-backed selector.*pull.request'
         Content = [regex]::Replace($workflow, $mapHeadLine, '')
     },
     [pscustomobject]@{
         Name = 'map-head-wrong-variable'
+        Reason = 'map-backed selector.*pull.request'
         Content = [regex]::Replace($workflow, $mapHeadLine, '                    -PullRequestHeadSha $env:WRONG_HEAD_SHA `')
     },
     [pscustomobject]@{
         Name = 'map-head-only-in-comment'
+        Reason = 'map-backed selector.*pull.request'
         Content = [regex]::Replace($workflow, $mapHeadLine, '                    # -PullRequestHeadSha $env:PR_HEAD_SHA `')
+    },
+    [pscustomobject]@{
+        Name = 'delta-map-id-renamed'
+        Reason = 'delta.map step.*identity'
+        Content = $workflow.Replace('        id: delta-map', '        id: wrong-delta-map')
+    },
+    [pscustomobject]@{
+        Name = 'delta-map-id-only-in-comment'
+        Reason = 'delta.map step.*identity'
+        Content = $workflow.Replace('        id: delta-map', '        # id: delta-map')
+    }
+)
+$deltaMapPattern = '(?ms)^      - name: Resolve certified shard map for delta reuse\r?\n.*?(?=^      - name:|\z)'
+$deltaMapMatch = [regex]::Match($workflow, $deltaMapPattern)
+if (-not $deltaMapMatch.Success) { throw 'The fixture must identify the delta-map step.' }
+$unboundedMapStep = [regex]::Replace($deltaMapMatch.Value, '(?m)^        timeout-minutes:[^\r\n]*\r?\n', '')
+$cases += @(
+    [pscustomobject]@{
+        Name = 'delta-map-timeout-removed'
+        Reason = 'delta.map.*bounded|delta.map.*budget'
+        Content = $workflow.Replace($deltaMapMatch.Value, $unboundedMapStep)
+    },
+    [pscustomobject]@{
+        Name = 'delta-map-timeout-consumes-job'
+        Reason = 'delta.map.*bounded|delta.map.*budget'
+        Content = $workflow.Replace($deltaMapMatch.Value, $unboundedMapStep.Replace(
+            '        id: delta-map', "        id: delta-map`n        timeout-minutes: 50"))
     }
 )
 
@@ -48,9 +78,9 @@ try {
             Set-Content -LiteralPath $path -Value $case.Content -Encoding utf8
             $output = @(& pwsh -NoProfile -File $contractPath -ValidationWorkflow $path 2>&1)
             if ($LASTEXITCODE -eq 0) {
-                [void] $failures.Add("$($case.Name): unsafe map-backed PR scoping passed the workflow contract")
+                [void] $failures.Add("$($case.Name): unsafe workflow wiring passed the contract")
             }
-            elseif (($output -join [Environment]::NewLine) -notmatch 'map-backed selector.*pull.request') {
+            elseif (($output -join [Environment]::NewLine) -notmatch $case.Reason) {
                 [void] $failures.Add("$($case.Name): rejected for an unrelated reason: $($output -join [Environment]::NewLine)")
             }
             else {

@@ -1770,6 +1770,26 @@ file class Private { }
     Assert-True (($topLevel -join ',') -eq 'Helper,TradingTests') `
         "referenceable top-level types were misread: $($topLevel -join ',')"
 
+    foreach ($kind in @('class', 'record', 'record class')) {
+        $shape = Get-CSharpTestShape -Text "namespace N; [Obsolete] public abstract`n$kind Base { }"
+        Assert-True (@($shape.Types | Where-Object IsAbstract).Count -eq 1 -and $shape.Hazard -like '*abstract class*') `
+            "multiline abstract $kind lost the generated-base hazard"
+        $shape = Get-CSharpTestShape -Text "namespace N; file`n$kind Local { }"
+        Assert-True (@($shape.Types | Where-Object FileLocal).Count -eq 1) `
+            "multiline file $kind was considered externally referenceable"
+    }
+    $shape = Get-CSharpTestShape -Text @'
+namespace N;
+public abstract class Earlier { }
+file class EarlierLocal { }
+[Trait("abstract", "file")]
+public /* abstract file */
+class Current { }
+'@
+    $current = @($shape.Types | Where-Object Name -EQ 'Current')
+    Assert-True ($current.Count -eq 1 -and -not $current[0].IsAbstract -and -not $current[0].FileLocal) `
+        'a declaration inherited modifiers from earlier types, an attribute, or a comment'
+
     $shape = Get-CSharpTestShape -Text "namespace N { public class D : ModelContractBase<int> { } }"
     Assert-True (@($shape.Tests | Where-Object { $_.PrefixOnly -and $_.Fqn -eq 'N.D.' }).Count -eq 1) `
         'a class with a class base did not expose its inherited tests as open-ended'
@@ -1801,6 +1821,7 @@ file class Private { }
         'tests/P/Alpha/ATests.cs' = 'namespace P.Alpha; public class ATests { [Fact] public void A() { } }'
         'tests/P/Shared/Base.cs'  = 'namespace P.Shared; public class Base { [Fact] public void Common() { } }'
         'tests/P/Shared/Abstract.cs' = 'namespace P.Shared; public abstract class ShapeBase { [Fact] public void Common() { } }'
+        'tests/P/Alpha/MultilineAbstract.cs' = "namespace P.Alpha; public abstract`nclass MultilineBase { [Fact] public void Common() { } }"
         'tests/P/Shared/GenBase.cs' = 'namespace P.Shared; public class LayerHarness { }'
         'tests/P/Beta/BTests.cs'  = 'namespace P.Beta; public class BTests : Base { }'
         'tests/P/Shared/Ext.cs'   = 'namespace P.Shared; public static class Ext { public static int X(this int v) => v; }'
@@ -1812,7 +1833,8 @@ file class Private { }
     $generatorNames = @('LayerHarness')
     $findGenerated = { param($names) @($names | Where-Object { $generatorNames -contains $_ }) }
     $routed = Get-TestFileRoutes -Paths @('tests/P/Alpha/ATests.cs', 'tests/P/Shared/Base.cs', 'tests/P/Shared/Ext.cs',
-        'tests/P/Shared/Unused.cs', 'tests/Z/Stray.cs', 'tests/P/Shared/Abstract.cs', 'tests/P/Shared/GenBase.cs') `
+        'tests/P/Shared/Unused.cs', 'tests/Z/Stray.cs', 'tests/P/Shared/Abstract.cs', 'tests/P/Shared/GenBase.cs',
+        'tests/P/Alpha/MultilineAbstract.cs') `
         -Manifest $manifest -ReadFile $read -FindReferrers $find -FindBuildTimeReferences $findGenerated
     Assert-True ($routed['tests/P/Alpha/ATests.cs'].Routable -and
         (@($routed['tests/P/Alpha/ATests.cs'].Shards) -join ',') -eq 'Alpha') `
@@ -1825,6 +1847,9 @@ file class Private { }
     Assert-True (-not $routed['tests/Z/Stray.cs'].Routable) 'a test file outside every shard project was routed'
     Assert-True (-not $routed['tests/P/Shared/Abstract.cs'].Routable) `
         'an abstract test base was routed although build-time generated classes may derive from it'
+    Assert-True (-not $routed['tests/P/Alpha/MultilineAbstract.cs'].Routable -and
+        $routed['tests/P/Alpha/MultilineAbstract.cs'].Why -like '*abstract class*') `
+        'a multiline abstract base was restricted to its namespace instead of escalating for generated descendants'
     Assert-True (-not $routed['tests/P/Shared/GenBase.cs'].Routable -and
         $routed['tests/P/Shared/GenBase.cs'].Why -like '*source generator references*') `
         'a test type a source generator references was routed by reading only the tree'

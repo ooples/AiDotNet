@@ -8,8 +8,17 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+enum InvalidMapFixture {
+    Missing
+    Malformed
+    Unresolvable
+}
+
 & (Join-Path $PSScriptRoot 'Test-CiImpactWorkflowReview.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Workflow review negative controls failed.' }
+
+& (Join-Path $PSScriptRoot 'Test-CiValidationReuseReview.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Delta reuse artifact review controls failed.' }
 
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
 $coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
@@ -484,9 +493,9 @@ try {
         # reuse must rebuild the validated tree from its parents and decide from what master added.
         $testedTree = ((Invoke-Git rev-parse "$testedMergeSha^{tree}") | Out-String).Trim()
         $pullRequestShards = '["Alpha","Always"]'
-        function Invoke-DeltaPlanFixture([string] $Name, [string] $Tree = $testedTree) {
+        function Invoke-DeltaPlanFixture([string] $Name, [string] $Tree = $testedTree, [string] $MapPath = 'certified/shard-map.json') {
             & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $Tree `
-                -PullRequestShardsJson $pullRequestShards -MapFile certified/shard-map.json `
+                -PullRequestShardsJson $pullRequestShards -MapFile $MapPath `
                 -ShardManifestFile shard-manifest.json -SelectorPath $selector -OutFile "$Name.json" 6>$null
             return Get-Content "$Name.json" -Raw | ConvertFrom-Json
         }
@@ -505,6 +514,48 @@ try {
         Assert-True ((@($plan.import) -join ',') -ceq 'Alpha') `
             "the partial re-run did not import the untouched pull-request shard: import=$(@($plan.import) -join ',')"
         Assert-True ($plan.tree -ceq $testedTree) 'the validated tree was not rebuilt exactly from its parents'
+        Write-Host "Post-merge runtime delta: mode=$($plan.mode); rerun=$(@($plan.rerun) -join ','); import=$(@($plan.import) -join ',')"
+
+        # Every fail-closed selector result has the same JSON shape. The delta resolver uses
+        # StrictMode and must return an explicit full-matrix plan, not throw on missing routes.
+        foreach ($invalidMapKind in [Enum]::GetValues[InvalidMapFixture]()) {
+            $invalidMap = $invalidMapKind.ToString().ToLowerInvariant() + '-map.json'
+            if ($invalidMapKind -eq [InvalidMapFixture]::Malformed) {
+                '{ not valid JSON' | Set-Content -LiteralPath $invalidMap -Encoding utf8
+            }
+            elseif ($invalidMapKind -eq [InvalidMapFixture]::Unresolvable) {
+                $unresolvableMap = Get-Content certified/shard-map.json -Raw | ConvertFrom-Json
+                $unresolvableMap.sha = '1111111111111111111111111111111111111111'
+                $unresolvableMap | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $invalidMap -Encoding utf8
+            }
+            $invalidName = 'delta-' + $invalidMap.Replace('.json', '')
+            $invalidPlan = $null
+            try { $invalidPlan = Invoke-DeltaPlanFixture $invalidName $testedTree $invalidMap }
+            catch { [void] $failures.Add("${invalidMap}: selector fallback threw instead of planning full validation: $($_.Exception.Message)") }
+            if ($null -ne $invalidPlan) {
+                Assert-True ($invalidPlan.mode -ceq 'None' -and @($invalidPlan.routes).Count -eq 0 -and
+                    @($invalidPlan.rerun).Count -eq 0 -and @($invalidPlan.import).Count -eq 0) `
+                    "$invalidMap did not produce the explicit empty-route, full-validation plan"
+            }
+        }
+
+        # A deleted test has no remaining HEAD referrers. git grep legitimately returns 1, but the
+        # selector has successfully routed the deleted source from its tested revision. That
+        # native status must not leak into the selector's process-level success contract.
+        Invoke-Git checkout --quiet --detach $testedMergeSha
+        Invoke-Git rm --quiet -- tests/Proj/UnitTests/Alpha/NewAlphaTests.cs
+        Invoke-Git commit --quiet -m delete-tested-alpha-test
+        & git grep -l -w -F -e NewAlphaTests HEAD -- ':(glob)tests/Proj/**/*.cs' 2>$null
+        Assert-True ($LASTEXITCODE -eq 1) 'the deleted-test fixture did not exercise a real no-match git grep'
+        & $selector -MapFile certified/shard-map.json -BaseSha $testedMergeSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile deleted-test-selection.json 6>$null
+        Assert-True ($LASTEXITCODE -eq 0) 'a successful deleted-test selection leaked the no-match git grep exit code'
+        $deleted = Get-Content deleted-test-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $deleted.escalate -and (@($deleted.shards) -join ',') -ceq 'Alpha,Always') `
+            'the deleted test did not keep its original Alpha route and always-run shard'
+        $plan = Invoke-DeltaPlanFixture 'delta-deleted-test'
+        Assert-True ($plan.mode -ceq 'Partial' -and (@($plan.rerun) -join ',') -ceq 'Alpha,Always') `
+            "a valid deleted-test delta failed planning after git grep found no referrers: $($plan.why)"
 
         # (b) Master adds only documentation: nothing the pull request certified can have changed.
         Invoke-Git checkout --quiet --detach $masterSha
@@ -515,6 +566,7 @@ try {
         Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
         $plan = Invoke-DeltaPlanFixture 'delta-reuse'
         Assert-True ($plan.mode -ceq 'Reuse') "a documentation-only master delta was not reused outright: $($plan.mode) - $($plan.why)"
+        Write-Host "Post-merge documentation delta: mode=$($plan.mode); rerun count=$(@($plan.rerun).Count)"
 
         # (c) Master changes CI control: the full matrix, whatever the pull request ran.
         Invoke-Git checkout --quiet --detach $masterSha
@@ -571,5 +623,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Test-impact end-to-end proof passed: covered edit selected 2/3; #2118 selected none; CI control edit escalated; behind-master PR with a new test selected 2/3 instead of escalating.'
+Write-Host 'Test-impact end-to-end proof passed: covered edit and behind-master PR selected 2/3; #2118 selected none; post-merge runtime delta reran Always and imported Alpha; documentation delta reused; control/invalid-map deltas required full validation; deleted-test delta retained its route and succeeded.'
 exit 0
