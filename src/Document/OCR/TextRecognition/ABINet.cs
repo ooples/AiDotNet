@@ -167,15 +167,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     public ABINet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageWidth = 128,
-        int imageHeight = 32,
-        int maxSequenceLength = 26,
-        int visionDim = 512,
-        int languageDim = 512,
-        int visionLayers = 3,
-        int languageLayers = 4,
-        int numIterations = 3,
-        string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ABINetOptions? options = null)
@@ -190,13 +181,13 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _visionDim = visionDim;
-        _languageDim = languageDim;
-        _visionLayers = visionLayers;
-        _languageLayers = languageLayers;
-        _numIterations = numIterations;
-        _imageHeight = imageHeight;
-        _charset = charset ?? GetDefaultCharset();
+        _visionDim = _options.VisionDim;
+        _languageDim = _options.LanguageDim;
+        _visionLayers = _options.VisionLayers;
+        _languageLayers = _options.LanguageLayers;
+        _numIterations = _options.NumIterations;
+        _imageHeight = _options.ImageHeight;
+        _charset = _options.Charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -207,8 +198,8 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
                 SchedulerStepMode = SchedulerStepMode.StepPerEpoch
             });
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageWidth;
+        base.MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -229,37 +220,46 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     /// </remarks>
     public ABINet(
         NeuralNetworkArchitecture<T> architecture,
-        int imageWidth = 128,
-        int imageHeight = 32,
-        int maxSequenceLength = 26,
-        int visionDim = 512,
-        int languageDim = 512,
-        int visionLayers = 3,
-        int languageLayers = 4,
-        int numIterations = 3,
-        string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        ABINetOptions? options = null,
-        double? visionLossWeight = null,
-        double? languageLossWeight = null)
-        : base(architecture, BuildMultiTaskObjective(lossFunction, options, visionLossWeight, languageLossWeight), 1.0)
+        ABINetOptions? options = null)
+        : this(options ?? new ABINetOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new ABINetOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer builds the multi-task objective from the options and runs before the
+    /// body, so the options must be resolved first. Options come first in the parameter list
+    /// because a nullable and a non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// <para>
+    /// The separate visionLossWeight / languageLossWeight parameters are gone: they existed only
+    /// to override ABINetOptions.VisionLossWeight and LanguageLossWeight, which callers can now
+    /// set directly.
+    /// </para>
+    /// </remarks>
+    private ABINet(
+        ABINetOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, BuildMultiTaskObjective(lossFunction, options, null, null), 1.0)
+    {
+        _options = options;
         Options = _options;
 
-        // Record the resolved weights so GetOptions() reports what training actually used.
-        if (visionLossWeight.HasValue) _options.VisionLossWeight = visionLossWeight.Value;
-        if (languageLossWeight.HasValue) _options.LanguageLossWeight = languageLossWeight.Value;
-
         _useNativeMode = true;
-        _visionDim = visionDim;
-        _languageDim = languageDim;
-        _visionLayers = visionLayers;
-        _languageLayers = languageLayers;
-        _numIterations = numIterations;
-        _imageHeight = imageHeight;
-        _charset = charset ?? GetDefaultCharset();
+        _visionDim = _options.VisionDim;
+        _languageDim = _options.LanguageDim;
+        _visionLayers = _options.VisionLayers;
+        _languageLayers = _options.LanguageLayers;
+        _numIterations = _options.NumIterations;
+        _imageHeight = _options.ImageHeight;
+        _charset = _options.Charset ?? GetDefaultCharset();
 
         // Adam at the paper's initial learning rate (Fang et al., CVPR 2021 §4.2: 1e-4, decayed
         // to 1e-5). Constructing AdamOptimizer with no options left it at the optimizer's own
@@ -270,8 +270,8 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
                 InitialLearningRate = _options.LearningRate
             });
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageWidth;
+        base.MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
         InitializeEmbeddings();

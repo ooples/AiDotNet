@@ -5510,8 +5510,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 97), " +
-                    "imageWidth: 32, imageHeight: 32, maxSequenceLength: 8, visionDim: 64, " +
-                    "languageDim: 64, visionLayers: 1, languageLayers: 1, numIterations: 1)";
+                    "options: new AiDotNet.Document.Options.ABINetOptions { ImageWidth = 32, " +
+                    "ImageHeight = 32, MaxSequenceLength = 8, VisionDim = 64, LanguageDim = 64, " +
+                    "VisionLayers = 1, LanguageLayers = 1, NumIterations = 1 })";
             }
             else if (model.ClassName == "FinancialBERT" && model.TypeParameterCount == 1)
             {

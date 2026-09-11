@@ -83,7 +83,7 @@ public class OptionsSurfaceRatchetTests
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 364;
+    private const int ConstructorBaseline = 353;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

@@ -164,7 +164,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -172,7 +172,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<double>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -184,7 +184,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("ABINet", meta.Name);
     }
@@ -203,7 +203,7 @@ public class OCRTextRecognitionTests
             new CRNN<double>(arch, imageWidth: 128),
             CreateSmallTrOCR(arch),
             new SVTR<double>(arch),
-            new ABINet<double>(arch, imageWidth: 128, imageHeight: 32),
+            new ABINet<double>(arch),
         };
 
         foreach (var model in models)
