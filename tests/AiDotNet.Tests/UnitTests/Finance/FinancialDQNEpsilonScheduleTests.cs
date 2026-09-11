@@ -77,6 +77,23 @@ public sealed class FinancialDQNEpsilonScheduleTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Epsilon_schedule_survives_serialization()
+    {
+        using var trained = TrainWithSchedule(start: 1.0, end: 0.0, decay: 0.5, updates: 3, out _);
+        Assert.Equal(0.125, trained.CurrentEpsilon, 12);
+
+        var options = Options(Dqn, StateSize, ActionSize, seed: 21);
+        options.EpsilonStart = 1.0;
+        options.EpsilonEnd = 0.0;
+        options.EpsilonDecay = 0.5;
+        using var restored = (FinancialDQNAgent<double>)Create(Dqn, options);
+        restored.Deserialize(trained.Serialize());
+
+        Assert.Equal(0.125, restored.CurrentEpsilon, 12);
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Epsilon_does_not_decay_before_any_update()
     {
         using var agent = TrainWithSchedule(start: 1.0, end: 0.0, decay: 0.5, updates: 0, out var state);
