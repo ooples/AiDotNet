@@ -49,7 +49,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
+        using var model = new DocGCN<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -57,9 +57,9 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DocGCN<double>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -69,7 +69,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
+        using var model = new DocGCN<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocGCN", meta.Name);
     }
@@ -78,13 +78,13 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_FusedMultimodal_CombinesHeterogeneousNodes()
     {
         await Task.Yield();
-        var model = new DocGCN<double>(CreateArchitecture());
-        var textNodes = CreateNodeFeatures(6, 128);
-        var visualNodes = CreateNodeFeatures(10, 128);
+        using var model = new DocGCN<double>(CreateArchitecture());
+        using var textNodes = CreateNodeFeatures(6, 128);
+        using var visualNodes = CreateNodeFeatures(10, 128);
 
-        var textOnly = model.PredictMultimodal(textNodes, null);        // graceful degradation
-        var visualOnly = model.PredictMultimodal(null, visualNodes);    // graceful degradation
-        var fused = model.PredictMultimodal(textNodes, visualNodes);    // heterogeneous joint graph
+        using var textOnly = model.PredictMultimodal(textNodes, null);        // graceful degradation
+        using var visualOnly = model.PredictMultimodal(null, visualNodes);    // graceful degradation
+        using var fused = model.PredictMultimodal(textNodes, visualNodes);    // heterogeneous joint graph
 
         AssertAllFinite(textOnly, "DocGCN text-only");
         AssertAllFinite(visualOnly, "DocGCN visual-only");
@@ -104,7 +104,7 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
+        using var model = new PICK<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -113,9 +113,9 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
-        var input = CreateTokenIds(10);
-        var output = model.Predict(input);
+        using var model = new PICK<double>(arch);
+        using var input = CreateTokenIds(10);
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -126,7 +126,7 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
+        using var model = new PICK<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("PICK", meta.Name);
     }
@@ -143,13 +143,13 @@ public class GraphBasedDocumentTests
     public async Task PICK_FusedMultimodal_CombinesTextAndVisualSegments()
     {
         await Task.Yield();
-        var model = new PICK<double>(CreateArchitecture());
-        var tokens = CreateTokenIds(6);
-        var visualNodes = CreateNodeFeatures(10, 256);
+        using var model = new PICK<double>(CreateArchitecture());
+        using var tokens = CreateTokenIds(6);
+        using var visualNodes = CreateNodeFeatures(10, 256);
 
-        var textOnly = model.PredictMultimodal(tokens, null);
-        var visualOnly = model.PredictMultimodal(null, visualNodes);
-        var fused = model.PredictMultimodal(tokens, visualNodes);
+        using var textOnly = model.PredictMultimodal(tokens, null);
+        using var visualOnly = model.PredictMultimodal(null, visualNodes);
+        using var fused = model.PredictMultimodal(tokens, visualNodes);
 
         AssertAllFinite(textOnly, "PICK text-only");
         AssertAllFinite(visualOnly, "PICK visual-only");
@@ -167,7 +167,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
+        using var model = new TRIE<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -175,9 +175,9 @@ public class GraphBasedDocumentTests
     public async Task TRIE_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new TRIE<double>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -187,7 +187,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
+        using var model = new TRIE<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("TRIE", meta.Name);
     }
@@ -215,8 +215,9 @@ public class GraphBasedDocumentTests
     public async Task TRIE_TextOnly_ProducesFiniteOutput()
     {
         await Task.Yield();
-        var model = new TRIE<double>(CreateArchitecture());
-        var output = model.Predict(CreateTextTokens());   // rank-2 -> text stream (graceful single-modality)
+        using var model = new TRIE<double>(CreateArchitecture());
+        using var tokens = CreateTextTokens();
+        using var output = model.Predict(tokens);   // rank-2 -> text stream (graceful single-modality)
         Assert.True(output.Length > 0);
         AssertAllFinite(output, "TRIE text-only");
     }
@@ -225,13 +226,13 @@ public class GraphBasedDocumentTests
     public async Task TRIE_FusedMultimodal_CombinesTextAndVisualNodes()
     {
         await Task.Yield();
-        var model = new TRIE<double>(CreateArchitecture());
-        var tokens = CreateTextTokens();
-        var image = CreateSmallImage();
+        using var model = new TRIE<double>(CreateArchitecture());
+        using var tokens = CreateTextTokens();
+        using var image = CreateSmallImage();
 
-        var textOnly = model.PredictMultimodal(tokens, null);   // graceful degradation
-        var imageOnly = model.PredictMultimodal(null, image);   // graceful degradation
-        var fused = model.PredictMultimodal(tokens, image);     // joint reasoning
+        using var textOnly = model.PredictMultimodal(tokens, null);   // graceful degradation
+        using var imageOnly = model.PredictMultimodal(null, image);   // graceful degradation
+        using var fused = model.PredictMultimodal(tokens, image);     // joint reasoning
 
         AssertAllFinite(textOnly, "TRIE fused-text-only");
         AssertAllFinite(imageOnly, "TRIE fused-image-only");
@@ -253,7 +254,7 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
+        using var model = new LayoutGraph<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -261,9 +262,9 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new LayoutGraph<double>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -273,7 +274,7 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
+        using var model = new LayoutGraph<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutGraph", meta.Name);
     }
@@ -285,14 +286,15 @@ public class GraphBasedDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllGraphBasedModels_SupportsTraining_InNativeMode()
     {
-        var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new DocGCN<double>(arch),
-            new PICK<double>(arch),
-            new TRIE<double>(arch),
-            new LayoutGraph<double>(arch),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var docGcn = new DocGCN<double>(CreateArchitecture());
+        using var pick = new PICK<double>(CreateArchitecture());
+        using var trie = new TRIE<double>(CreateArchitecture());
+        using var layoutGraph = new LayoutGraph<double>(CreateArchitecture());
+
+        var models = new DocumentNeuralNetworkBase<double>[] { docGcn, pick, trie, layoutGraph };
 
         foreach (var model in models)
         {

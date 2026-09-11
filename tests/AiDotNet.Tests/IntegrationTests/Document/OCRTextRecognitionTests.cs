@@ -61,7 +61,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        using var model = new CRNN<double>(arch, imageWidth: 128);
         Assert.NotNull(model);
     }
 
@@ -69,9 +69,9 @@ public class OCRTextRecognitionTests
     public async Task CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new CRNN<double>(arch, imageWidth: 128);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -81,7 +81,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        using var model = new CRNN<double>(arch, imageWidth: 128);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRNN", meta.Name);
     }
@@ -94,7 +94,7 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = CreateSmallTrOCR(arch);
+        using var model = CreateSmallTrOCR(arch);
         Assert.NotNull(model);
     }
 
@@ -102,9 +102,9 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = CreateSmallTrOCR(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = CreateSmallTrOCR(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -114,7 +114,7 @@ public class OCRTextRecognitionTests
     public async Task TrOCR_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = CreateSmallTrOCR(arch);
+        using var model = CreateSmallTrOCR(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("TrOCR", meta.Name);
     }
@@ -128,7 +128,7 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
+        using var model = new SVTR<double>(arch);
         Assert.True(model.ParameterCount > 0,
             "SVTR construction must create a trainable architecture.");
     }
@@ -138,9 +138,9 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new SVTR<double>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -151,7 +151,7 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
+        using var model = new SVTR<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("SVTR", meta.Name);
     }
@@ -164,7 +164,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
         Assert.NotNull(model);
     }
 
@@ -172,9 +172,9 @@ public class OCRTextRecognitionTests
     public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -184,7 +184,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
         var meta = model.GetModelMetadata();
         Assert.Equal("ABINet", meta.Name);
     }
@@ -197,14 +197,15 @@ public class OCRTextRecognitionTests
     public async Task AllTextRecognizers_RequiresOCR_IsFalse()
     {
         await Task.Yield();
-        var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new CRNN<double>(arch, imageWidth: 128),
-            CreateSmallTrOCR(arch),
-            new SVTR<double>(arch),
-            new ABINet<double>(arch, imageWidth: 128, imageHeight: 32),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var crnn = new CRNN<double>(CreateArchitecture(), imageWidth: 128);
+        using var trOcr = CreateSmallTrOCR(CreateArchitecture());
+        using var svtr = new SVTR<double>(CreateArchitecture());
+        using var abiNet = new ABINet<double>(CreateArchitecture(), imageWidth: 128, imageHeight: 32);
+
+        var models = new DocumentNeuralNetworkBase<double>[] { crnn, trOcr, svtr, abiNet };
 
         foreach (var model in models)
         {

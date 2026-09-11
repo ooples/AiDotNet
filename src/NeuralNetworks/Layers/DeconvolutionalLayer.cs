@@ -639,37 +639,22 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();
 
-        Tensor<T> result;
-
-        if (fusedActivation != FusedActivationType.None)
-        {
-            // Use FusedConvTranspose2D for optimal GPU kernel fusion (conv transpose + bias + activation)
-            result = Engine.FusedConvTranspose2D(
-                input, _kernels, _biases,
-                Stride, Stride,
-                Padding, Padding,
-                0, 0,  // output padding
-                fusedActivation);
-        }
-        else
-        {
-            // Fallback for unsupported activations: use separate operations
-            var stride = new int[] { Stride, Stride };
-            var padding = new int[] { Padding, Padding };
-            var outputPadding = new int[] { 0, 0 };
-
-            var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
-
-            // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format.
-            // Reshape via Engine.Reshape every call so the gradient tape records a
-            // fresh GradFn chain back to _biases on each training step. Caching the
-            // reshape across calls would reuse a handle primed during inference
-            // (no GradFn), causing backward to dead-end before reaching _biases.
-            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            var biasedOutput = Engine.TensorAdd(output, biasReshaped);
-
-            result = ApplyActivation(biasedOutput);
-        }
+        // Route every activation through the fused convolution+bias primitive, including identity
+        // and activations without a native fused epilogue. The old identity/unsupported fallback
+        // created a parameter-derived bias view in the layer. Compiled inference retained that view,
+        // increasing the bias storage's alias count and forcing warmed model clones to deep-copy the
+        // parameter instead of sharing it COW. FusedConvTranspose2D accepts None as a bias-only
+        // epilogue and preserves the native GPU dispatch; unsupported activations are then applied by
+        // the regular tape-aware activation path.
+        var fused = Engine.FusedConvTranspose2D(
+            input, _kernels, _biases,
+            Stride, Stride,
+            Padding, Padding,
+            0, 0,  // output padding
+            fusedActivation);
+        Tensor<T> result = fusedActivation == FusedActivationType.None
+            ? ApplyActivation(fused)
+            : fused;
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
