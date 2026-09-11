@@ -276,35 +276,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>
         return DETRHelpers.FlattenMultiScale(features, _hiddenDim);
     }
 
-    private Tensor<T> ProjectFeatures(Tensor<T> features)
-    {
-        // Apply linear projection using Dense layer
-        int batch = features.Shape[0];
-        int seqLen = features.Shape[1];
-
-        var result = new Tensor<T>(features._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = features[b, s, d];
-                }
-
-                // Apply projection
-                var projected = _inputProj.Forward(feat);
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = projected[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> ProjectFeatures(Tensor<T> features) => _inputProj.ForwardTokens(features);
 
     private Tensor<T> GenerateMultiScalePositionalEncoding(int[] shape, int[][] spatialShapes, int[] levelStarts)
     {
@@ -361,7 +333,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>
 /// <summary>
 /// DINO encoder with deformable attention.
 /// </summary>
-internal class DINOEncoder<T>
+internal class DINOEncoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -387,12 +359,7 @@ internal class DINOEncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding, int[][] spatialShapes, int[] levelStarts)
     {
-        var output = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = _numOps.Add(x[i], posEncoding[i]);
-        }
-
+        var output = AiDotNetEngine.Current.TensorAdd(x, posEncoding);
         foreach (var layer in _layers)
         {
             output = layer.Forward(output, spatialShapes, levelStarts);
@@ -450,12 +417,18 @@ internal class DINOEncoder<T>
             layer.ReadParameters(reader);
         }
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+    }
 }
 
 /// <summary>
 /// Single DINO encoder layer with deformable attention.
 /// </summary>
-internal class DINOEncoderLayer<T>
+internal class DINOEncoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly MultiHeadSelfAttention<T> _selfAttn;
@@ -536,41 +509,7 @@ internal class DINOEncoderLayer<T>
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int ffnDim = _ffn1.OutputSize;
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                var output = _ffn2.Forward(h);
-
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
@@ -582,12 +521,22 @@ internal class DINOEncoderLayer<T>
         double c = Math.Sqrt(2.0 / Math.PI);
         return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _selfAttn;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
+    }
 }
 
 /// <summary>
 /// DINO decoder with contrastive denoising and mixed query selection.
 /// </summary>
-internal class DINODecoder<T>
+internal class DINODecoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numLayers;
@@ -829,56 +778,31 @@ internal class DINODecoder<T>
 
     private Tensor<T> CombineQueries(int batch)
     {
+        // content + position, broadcast over the batch. Both query tensors are learnable.
         int numQueries = _contentQueries.Shape[0];
-
-        var combined = new Tensor<T>(new[] { batch, numQueries, _hiddenDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    combined[b, q, d] = _numOps.Add(_contentQueries[q, d], _positionQueries[q, d]);
-                }
-            }
-        }
-
-        return combined;
+        var combined = AiDotNetEngine.Current.TensorAdd(_contentQueries, _positionQueries);
+        return AiDotNetEngine.Current.TensorBroadcastTo(AiDotNetEngine.Current.Reshape(combined, new[] { 1, numQueries, _hiddenDim }), new[] { batch, numQueries, _hiddenDim });
     }
 
-    private Tensor<T> ApplyHead(Tensor<T> output, Dense<T> head)
-    {
-        int batch = output.Shape[0];
-        int numQueries = output.Shape[1];
-        int outDim = head.OutputSize;
-
-        var result = new Tensor<T>(new[] { batch, numQueries, outDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = output[b, q, d];
-                }
-
-                var headOut = head.Forward(feat);
-
-                for (int i = 0; i < outDim; i++)
-                {
-                    result[b, q, i] = headOut[0, i];
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> ApplyHead(Tensor<T> output, Dense<T> head) => head.ForwardTokens(output);
 
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+        yield return _classHead;
+        yield return _boxHead;
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _contentQueries;
+        yield return _positionQueries;
     }
 }

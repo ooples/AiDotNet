@@ -411,19 +411,12 @@ internal class SqueezeExcitation<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        // Global average pool → [batch, channels]
-        var squeezed = new Tensor<T>(new[] { batch, channels });
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double sum = 0;
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        sum += _numOps.ToDouble(input[n, c, h, w]);
-                squeezed[n, c] = _numOps.FromDouble(sum / (height * width));
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+
+        // Global average pool -> [batch, channels]. Engine ops throughout: the pooled loop and the
+        // per-channel rescale loop below each severed the tape, so neither the SE block nor anything
+        // upstream of it in the MBConv block trained.
+        var squeezed = engine.ReduceMean(input, new[] { 2, 3 }, false);
 
         var excited = _fc1.Forward(squeezed);
         excited = _activation.Activate(excited);
@@ -433,19 +426,11 @@ internal class SqueezeExcitation<T>
         // be in [0,1] to act as a multiplicative attention mask.
         excited = ApplySigmoid(excited);
 
-        var output = new Tensor<T>(input._shape);
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T scale = excited[n, c];
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[n, c, h, w] = _numOps.Multiply(input[n, c, h, w], scale);
-            }
-        }
-
-        return output;
+        // Per-channel gate: broadcast [batch, channels] over the spatial axes.
+        var gate = engine.TensorBroadcastTo(
+            engine.Reshape(excited, new[] { batch, channels, 1, 1 }),
+            new[] { batch, channels, height, width });
+        return engine.TensorMultiply(input, gate);
     }
 
     public long GetParameterCount() => _fc1.ParameterCount + _fc2.ParameterCount;

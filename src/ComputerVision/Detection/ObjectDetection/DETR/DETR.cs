@@ -287,33 +287,7 @@ public partial class DETR<T> : ObjectDetectorBase<T>
         _decoder.WriteParameters(writer);
     }
 
-    private Tensor<T> FlattenForTransformer(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-        int seqLen = height * width;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, channels });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int seqIdx = h * width + w;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        result[b, seqIdx, c] = x[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> FlattenForTransformer(Tensor<T> x) => CvTensorOps<T>.FlattenSpatial(x);
 
     private Tensor<T> GeneratePositionalEncoding(int[] shape)
     {
@@ -343,7 +317,7 @@ public partial class DETR<T> : ObjectDetectorBase<T>
 /// <summary>
 /// Transformer encoder for DETR.
 /// </summary>
-internal class DETREncoder<T>
+internal class DETREncoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -372,19 +346,7 @@ internal class DETREncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding)
     {
-        // Create a copy of input to avoid mutating the original tensor
-        var output = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = x[i];
-        }
-
-        // Add positional encoding
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = _numOps.Add(output[i], posEncoding[i]);
-        }
-
+        var output = AiDotNetEngine.Current.TensorAdd(x, posEncoding);
         foreach (var layer in _layers)
         {
             output = layer.Forward(output);
@@ -438,12 +400,18 @@ internal class DETREncoder<T>
             layer.ReadParameters(reader);
         }
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+    }
 }
 
 /// <summary>
 /// Single encoder layer in DETR.
 /// </summary>
-internal class EncoderLayer<T>
+internal class EncoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly MultiHeadSelfAttention<T> _selfAttn;
@@ -531,53 +499,21 @@ internal class EncoderLayer<T>
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int ffnDim = _ffn1.OutputSize;
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                // FFN1 with GELU
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                // FFN2
-                var output = _ffn2.Forward(h);
-
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private static double GELU(double x)
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+        yield return _selfAttn;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
     }
 }
 
@@ -585,7 +521,7 @@ internal class EncoderLayer<T>
 /// Layer normalization with learnable affine parameters (gamma and beta).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class LayerNorm<T>
+internal class LayerNorm<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -620,49 +556,7 @@ internal class LayerNorm<T>
         }
     }
 
-    public Tensor<T> Forward(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Compute mean
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                // Normalize and apply affine transformation: gamma * (x - mean) / std + beta
-                double std = Math.Sqrt(variance + _eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    double gamma = _numOps.ToDouble(_gamma[d]);
-                    double beta = _numOps.ToDouble(_beta[d]);
-                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
-                }
-            }
-        }
-
-        return result;
-    }
+    public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);
 
     public long GetParameterCount()
     {
@@ -719,6 +613,16 @@ internal class LayerNorm<T>
         {
             _beta[i] = _numOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _gamma;
+        yield return _beta;
     }
 }
 

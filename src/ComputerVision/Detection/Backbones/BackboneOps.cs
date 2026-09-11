@@ -63,10 +63,9 @@ internal static class BackboneOps<T>
                     $"BackboneOps.AddResidual shape mismatch at axis {axis}: " +
                     $"[{string.Join(",", a._shape)}] vs [{string.Join(",", b._shape)}].");
         }
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < a.Length; i++)
-            result[i] = Ops.Add(a[i], b[i]);
-        return result;
+        // Engine add, not an element loop: a residual skip that drops to scalars severs the gradient
+        // for every layer before it, which in a deep backbone is nearly all of them.
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     // ApplyReLU / ApplySiLU / ApplySwish removed — backbones (ResNet, CSPDarknet,

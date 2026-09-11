@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2304.08069",
     Year = 2024,
     Authors = "Yian Zhao, Wenyu Lv, Shangliang Xu, Jinman Wei, Guanzhong Wang, Qingqing Dang, Yi Liu, Jie Chen")]
-public class RTDETR<T> : ObjectDetectorBase<T>
+public partial class RTDETR<T> : ObjectDetectorBase<T>
 {
     private readonly RTDETREncoder<T> _encoder;
     private readonly RTDETRDecoder<T> _decoder;
@@ -282,7 +282,7 @@ public class RTDETR<T> : ObjectDetectorBase<T>
 /// <summary>
 /// RT-DETR hybrid encoder with intra-scale and cross-scale attention.
 /// </summary>
-internal class RTDETREncoder<T>
+internal class RTDETREncoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -381,12 +381,19 @@ internal class RTDETREncoder<T>
 
         _crossScaleModule.ReadParameters(reader);
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _intrascaleLayers) yield return child;
+        yield return _crossScaleModule;
+    }
 }
 
 /// <summary>
 /// RT-DETR intra-scale encoder layer.
 /// </summary>
-internal class RTDETREncoderLayer<T>
+internal class RTDETREncoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly MultiHeadSelfAttention<T> _selfAttn;
@@ -467,41 +474,7 @@ internal class RTDETREncoderLayer<T>
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int ffnDim = _ffn1.OutputSize;
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                var output = _ffn2.Forward(h);
-
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
@@ -513,12 +486,22 @@ internal class RTDETREncoderLayer<T>
         double c = Math.Sqrt(2.0 / Math.PI);
         return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _selfAttn;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
+    }
 }
 
 /// <summary>
 /// Cross-scale feature fusion module for RT-DETR.
 /// </summary>
-internal class CrossScaleModule<T>
+internal class CrossScaleModule<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -540,77 +523,33 @@ internal class CrossScaleModule<T>
 
     public Tensor<T> Forward(Tensor<T> x, int[][] spatialShapes, int[] levelStarts)
     {
+        var engine = AiDotNetEngine.Current;
         int batch = x.Shape[0];
-        int totalTokens = x.Shape[1];
 
-        // Compute global representation for each level
-        var levelRepresentations = new List<Tensor<T>>();
-
+        // Summarise each level by its token mean, concatenate the summaries, and add each level's
+        // fused projection back onto that level's tokens.
+        var levelTokens = new Tensor<T>[_numLevels];
+        var summaries = new Tensor<T>[_numLevels];
         for (int level = 0; level < _numLevels; level++)
         {
-            int start = levelStarts[level];
             int numTokens = spatialShapes[level][0] * spatialShapes[level][1];
-
-            var levelRep = new Tensor<T>(new[] { batch, _hiddenDim });
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double sum = 0;
-                    for (int t = 0; t < numTokens; t++)
-                    {
-                        sum += _numOps.ToDouble(x[b, start + t, d]);
-                    }
-                    levelRep[b, d] = _numOps.FromDouble(sum / numTokens);
-                }
-            }
-
-            levelRepresentations.Add(levelRep);
+            levelTokens[level] = engine.TensorNarrow(x, 1, levelStarts[level], numTokens);
+            summaries[level] = engine.ReduceMean(levelTokens[level], new[] { 1 }, false);       // [B, D]
         }
 
-        // Concatenate level representations
-        var concat = new Tensor<T>(new[] { batch, _hiddenDim * _numLevels });
-        for (int b = 0; b < batch; b++)
-        {
-            int offset = 0;
-            for (int level = 0; level < _numLevels; level++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    concat[b, offset + d] = levelRepresentations[level][b, d];
-                }
-                offset += _hiddenDim;
-            }
-        }
+        var concat = _numLevels == 1 ? summaries[0] : engine.TensorConcatenate(summaries, 1);   // [B, D*L]
 
-        // Fuse and add back to each level
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            result[i] = x[i];
-        }
-
+        var updated = new Tensor<T>[_numLevels];
         for (int level = 0; level < _numLevels; level++)
         {
-            int start = levelStarts[level];
-            int numTokens = spatialShapes[level][0] * spatialShapes[level][1];
-
-            for (int b = 0; b < batch; b++)
-            {
-                var fused = _fusionLayers[level].Forward(ExtractRow(concat, b));
-
-                for (int t = 0; t < numTokens; t++)
-                {
-                    for (int d = 0; d < _hiddenDim; d++)
-                    {
-                        result[b, start + t, d] = _numOps.Add(result[b, start + t, d], fused[0, d]);
-                    }
-                }
-            }
+            int numTokens = levelTokens[level].Shape[1];
+            var fused = _fusionLayers[level].Forward(concat);                                     // [B, D]
+            var broadcast = engine.TensorBroadcastTo(
+                engine.Reshape(fused, new[] { batch, 1, _hiddenDim }), new[] { batch, numTokens, _hiddenDim });
+            updated[level] = engine.TensorAdd(levelTokens[level], broadcast);
         }
 
-        return result;
+        return _numLevels == 1 ? updated[0] : engine.TensorConcatenate(updated, 1);
     }
 
     public long GetParameterCount()
@@ -657,22 +596,17 @@ internal class CrossScaleModule<T>
         }
     }
 
-    private Tensor<T> ExtractRow(Tensor<T> x, int row)
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        int cols = x.Shape[1];
-        var result = new Tensor<T>(new[] { 1, cols });
-        for (int c = 0; c < cols; c++)
-        {
-            result[0, c] = x[row, c];
-        }
-        return result;
+        foreach (var child in _fusionLayers) yield return child;
     }
 }
 
 /// <summary>
 /// RT-DETR decoder with uncertainty-minimal query selection.
 /// </summary>
-internal class RTDETRDecoder<T>
+internal class RTDETRDecoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -889,59 +823,26 @@ internal class RTDETRDecoder<T>
     }
 
     private Tensor<T> SelectQueries(Tensor<T> memory, int batch)
-    {
-        // TODO: Implement uncertainty-minimal query selection as described in RT-DETR paper.
-        // Current simplified implementation uses fixed learnable queries.
-        // Full implementation should compute uncertainty scores from encoder output
-        // and select top-K positions with minimal uncertainty.
-        var queries = new Tensor<T>(new[] { batch, _numQueries, _hiddenDim });
+        => AiDotNetEngine.Current.TensorBroadcastTo(AiDotNetEngine.Current.Reshape(_queryEmbed, new[] { 1, _numQueries, _hiddenDim }), new[] { batch, _numQueries, _hiddenDim });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < _numQueries; q++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    queries[b, q, d] = _queryEmbed[q, d];
-                }
-            }
-        }
-
-        return queries;
-    }
-
-    private Tensor<T> ApplyHead(Tensor<T> output, Dense<T> head)
-    {
-        int batch = output.Shape[0];
-        int numQueries = output.Shape[1];
-        int outDim = head.OutputSize;
-
-        var result = new Tensor<T>(new[] { batch, numQueries, outDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = output[b, q, d];
-                }
-
-                var headOut = head.Forward(feat);
-
-                for (int i = 0; i < outDim; i++)
-                {
-                    result[b, q, i] = headOut[0, i];
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> ApplyHead(Tensor<T> output, Dense<T> head) => head.ForwardTokens(output);
 
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+        yield return _classHead;
+        yield return _boxHead;
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _queryEmbed;
     }
 }

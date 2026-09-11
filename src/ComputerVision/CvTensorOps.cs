@@ -210,9 +210,12 @@ internal static class CvTensorOps<T>
     /// <param name="numHeads">Number of heads; must divide <c>D</c>.</param>
     /// <param name="scale">Score scale, normally <c>1 / sqrt(D / numHeads)</c>.</param>
     /// <param name="causal">When true, query <c>i</c> attends only to keys <c>j &lt;= i</c>.</param>
+    /// <param name="scoreBias">Optional additive bias on the scaled scores, broadcastable to
+    /// <c>[N, H, Lq, Lk]</c> - for example <see cref="RelativePositionBias"/>.</param>
     /// <returns>The attended values <c>[N, Lq, D]</c>.</returns>
     public static Tensor<T> MultiHeadAttention(
-        Tensor<T> query, Tensor<T> key, Tensor<T> value, int numHeads, double scale, bool causal = false)
+        Tensor<T> query, Tensor<T> key, Tensor<T> value, int numHeads, double scale, bool causal = false,
+        Tensor<T>? scoreBias = null)
     {
         int n = query.Shape[0], lq = query.Shape[1], d = query.Shape[2], lk = key.Shape[1];
         int headDim = d / numHeads;
@@ -223,6 +226,11 @@ internal static class CvTensorOps<T>
 
         var scores = Engine.TensorMultiplyScalar(
             Engine.TensorMatMul(q, Engine.TensorPermute(k, new[] { 0, 1, 3, 2 })), NumOps.FromDouble(scale));
+
+        if (scoreBias is not null)
+        {
+            scores = Engine.TensorAdd(scores, Engine.TensorBroadcastTo(scoreBias, Dims(scores)));
+        }
 
         if (causal)
         {
@@ -277,6 +285,140 @@ internal static class CvTensorOps<T>
         }
 
         return Engine.TensorConcatenate(flat, 1);
+    }
+
+    /// <summary>
+    /// Builds a Swin relative-position bias <c>[1, H, L, L]</c> from a learnable table
+    /// <c>[R, H]</c> and an index map <c>index[i, j]</c> into its rows. The lookup is a gather, so the
+    /// table receives gradients.
+    /// </summary>
+    public static Tensor<T> RelativePositionBias(Tensor<T> table, int[,] index)
+    {
+        int lq = index.GetLength(0), lk = index.GetLength(1), heads = table.Shape[1];
+        var flat = new int[lq * lk];
+        for (int i = 0; i < lq; i++)
+        {
+            for (int j = 0; j < lk; j++)
+            {
+                flat[(i * lk) + j] = index[i, j];
+            }
+        }
+
+        var gathered = Select(table, flat, 0);                                     // [L*L, H]
+        return Engine.Reshape(Engine.TensorPermute(gathered, new[] { 1, 0 }), new[] { 1, heads, lq, lk });
+    }
+
+    /// <summary>
+    /// Rolls a <c>[N, H, W, C]</c> map by <paramref name="shift"/> along both spatial axes with
+    /// wrap-around: <c>out[i, j] = x[(i - shift) mod H, (j - shift) mod W]</c> (Swin's cyclic shift).
+    /// </summary>
+    public static Tensor<T> CyclicShift(Tensor<T> x, int shift)
+        => Engine.TensorRoll(x, new[] { shift, shift }, new[] { 1, 2 });
+
+    /// <summary>
+    /// Partitions a <c>[N, H, W, C]</c> map into non-overlapping <paramref name="windowSize"/>
+    /// squares, zero-padding the bottom and right edges up to a multiple of the window size.
+    /// Returns <c>[N * nH * nW, windowSize^2, C]</c> with windows in row-major order per image and
+    /// tokens in row-major order per window.
+    /// </summary>
+    public static (Tensor<T> Windows, int WindowsH, int WindowsW) WindowPartition(Tensor<T> x, int windowSize)
+    {
+        int n = x.Shape[0], h = x.Shape[1], w = x.Shape[2], c = x.Shape[3];
+        int padH = (windowSize - (h % windowSize)) % windowSize;
+        int padW = (windowSize - (w % windowSize)) % windowSize;
+
+        var padded = ZeroPadBottomRight(x, padH, padW);
+
+        int wh = (h + padH) / windowSize, ww = (w + padW) / windowSize;
+        var blocks = Engine.Reshape(padded, new[] { n, wh, windowSize, ww, windowSize, c });
+        var ordered = Engine.TensorPermute(blocks, new[] { 0, 1, 3, 2, 4, 5 });   // [N, wh, ww, ws, ws, C]
+        return (Engine.Reshape(ordered, new[] { n * wh * ww, windowSize * windowSize, c }), wh, ww);
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="WindowPartition"/>: reassembles windows into a <c>[N, H, W, C]</c> map
+    /// and drops the padding.
+    /// </summary>
+    public static Tensor<T> WindowReverse(
+        Tensor<T> windows, int windowsH, int windowsW, int batch, int height, int width, int windowSize)
+    {
+        int c = windows.Shape[2];
+        var blocks = Engine.Reshape(windows, new[] { batch, windowsH, windowsW, windowSize, windowSize, c });
+        var ordered = Engine.TensorPermute(blocks, new[] { 0, 1, 3, 2, 4, 5 });   // [N, wh, ws, ww, ws, C]
+        var full = Engine.Reshape(ordered, new[] { batch, windowsH * windowSize, windowsW * windowSize, c });
+        if (full.Shape[1] == height && full.Shape[2] == width)
+        {
+            return full;
+        }
+
+        return Engine.TensorSlice(full, new[] { 0, 0, 0, 0 }, new[] { batch, height, width, c });
+    }
+
+    /// <summary>
+    /// Applies a row-wise layer (a linear map, typically) independently to every position of a
+    /// <c>[..., features]</c> tensor by folding the leading axes into one batch axis and unfolding the
+    /// result. Replaces the copy-one-row, forward, copy-back loops, which were slow and severed the tape.
+    /// </summary>
+    public static Tensor<T> Tokenwise(Tensor<T> x, Func<Tensor<T>, Tensor<T>> rowwise)
+    {
+        int rank = x.Shape.Length;
+        if (rank <= 2)
+        {
+            return rowwise(x);
+        }
+
+        int rows = 1;
+        for (int d = 0; d < rank - 1; d++)
+        {
+            rows *= x.Shape[d];
+        }
+
+        var result = rowwise(Engine.Reshape(x, new[] { rows, x.Shape[rank - 1] }));
+        var outShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+        {
+            outShape[d] = x.Shape[d];
+        }
+
+        outShape[rank - 1] = result.Shape[1];
+        return Engine.Reshape(result, outShape);
+    }
+
+    /// <summary>
+    /// Swin patch merging on a <c>[N, H, W, C]</c> map: zero-pads odd sides to even, then
+    /// concatenates each 2x2 quad's tokens along channels in the order (r0,c0), (r0,c1), (r1,c0),
+    /// (r1,c1), giving <c>[N, (H/2)*(W/2), 4C]</c> with quads in row-major order.
+    /// </summary>
+    public static Tensor<T> PatchMerge2x2(Tensor<T> x)
+    {
+        int n = x.Shape[0], h = x.Shape[1], w = x.Shape[2], c = x.Shape[3];
+        var padded = ZeroPadBottomRight(x, h & 1, w & 1);
+        int newH = (h + (h & 1)) / 2, newW = (w + (w & 1)) / 2;
+        var quads = Engine.Reshape(padded, new[] { n, newH, 2, newW, 2, c });
+        var ordered = Engine.TensorPermute(quads, new[] { 0, 1, 3, 2, 4, 5 });    // [N, newH, newW, 2, 2, C]
+        return Engine.Reshape(ordered, new[] { n, newH * newW, 4 * c });
+    }
+
+    /// <summary>
+    /// Zero-pads a <c>[N, H, W, C]</c> map with <paramref name="padH"/> rows at the bottom and
+    /// <paramref name="padW"/> columns at the right, by concatenating constant zero blocks (which the
+    /// tape treats as constants, so the gradient passes straight through to the original cells).
+    /// </summary>
+    public static Tensor<T> ZeroPadBottomRight(Tensor<T> x, int padH, int padW)
+    {
+        int n = x.Shape[0], h = x.Shape[1], w = x.Shape[2], c = x.Shape[3];
+        var padded = x;
+        if (padH > 0)
+        {
+            padded = Engine.TensorConcatenate(new[] { padded, new Tensor<T>(new[] { n, padH, w, c }) }, 1);
+        }
+
+        if (padW > 0)
+        {
+            padded = Engine.TensorConcatenate(new[] { padded, new Tensor<T>(new[] { n, h + padH, padW, c }) }, 2);
+        }
+
+        return padded;
     }
 
     /// <summary>

@@ -1,4 +1,9 @@
+using System.Collections;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -306,5 +311,182 @@ public abstract class DetectionModelTestBase<T>
             Assert.False(double.IsNaN(value), $"Output[{i}] is NaN after training.");
             Assert.False(double.IsInfinity(value), $"Output[{i}] is Infinity after training.");
         }
+    }
+
+    // =====================================================
+    // REGISTRATION AUDIT
+    // The parameter registry is the single source of truth for GetParameters, Serialize, DeepCopy
+    // AND training: the trainer updates exactly the registry's live trainable chunks. So a weight the
+    // registry cannot see is silently never saved, cloned or trained. These two invariants close
+    // that loop from both sides.
+    // =====================================================
+
+    /// <summary>
+    /// Stable ids of registered trainable tensors that legitimately receive no gradient from the
+    /// model's forward pass (for example a training-only auxiliary head). Empty by default: an
+    /// unexplained untouched weight is a defect.
+    /// </summary>
+    protected virtual IReadOnlyCollection<string> ParametersUnusedByForward => System.Array.Empty<string>();
+
+    [Fact(Timeout = 180000)]
+    public async Task EveryTrainableLayerTensor_ShouldBeRegisteredLive()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        WarmUp(model, rng);
+
+        var registered = new HashSet<Tensor<T>>(ReferenceComparer.Instance);
+        foreach (var chunk in ((ModelBase<T, Tensor<T>, Tensor<T>>)model).GetParameterStateChunks())
+        {
+            if (chunk.Role == ParameterSlotRole.Trainable && chunk.IsWritableInPlace)
+            {
+                registered.Add(chunk.Tensor);
+            }
+        }
+
+        var missing = new List<string>();
+        foreach (var (path, layer) in ReachableTrainableLayers(model))
+        {
+            var tensors = layer.GetTrainableParameters();
+            for (int i = 0; i < tensors.Count; i++)
+            {
+                if (tensors[i] is not null && tensors[i].Length > 0 && !registered.Contains(tensors[i]))
+                {
+                    missing.Add($"{path} ({layer.GetType().Name}) tensor #{i} [{string.Join(",", tensors[i].Shape.ToArray())}]");
+                }
+            }
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            $"{missing.Count} trainable layer tensor(s) are reachable from the model but are not live, "
+            + "trainable chunks of its parameter registry, so they are never saved, cloned or trained:\n  "
+            + string.Join("\n  ", missing.Take(25)));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task Train_ShouldUpdateEveryRegisteredTrainableTensor()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+
+        var image = CreateRandomImage(rng);
+        var target = CreateTargetLike(model.Predict(image), rng);
+
+        var chunks = ((ModelBase<T, Tensor<T>, Tensor<T>>)model).GetParameterStateChunks()
+            .Where(c => c.Role == ParameterSlotRole.Trainable && c.IsWritableInPlace && c.Tensor.Length > 0)
+            .ToList();
+        Assert.NotEmpty(chunks);
+
+        var before = chunks.Select(c => { var snap = new double[c.Tensor.Length]; for (int i = 0; i < snap.Length; i++) snap[i] = ToD(c.Tensor[i]); return snap; }).ToList();
+        model.Train(image, target);
+
+        var untouched = new List<string>();
+        for (int k = 0; k < chunks.Count; k++)
+        {
+            if (ParametersUnusedByForward.Contains(chunks[k].StableId))
+            {
+                continue;
+            }
+
+            var after = chunks[k].Tensor;
+            bool moved = false;
+            for (int i = 0; i < after.Length && !moved; i++)
+            {
+                moved = ToD(after[i]) != before[k][i];
+            }
+
+            if (!moved)
+            {
+                untouched.Add($"{chunks[k].StableId} [{string.Join(",", after.Shape.ToArray())}]");
+            }
+        }
+
+        Assert.True(
+            untouched.Count == 0,
+            $"{untouched.Count} of {chunks.Count} registered trainable tensors did not move after a "
+            + "training step. Either no gradient reaches them (the forward pass severs the autodiff tape "
+            + "upstream of them) or they are dead weights the forward never reads:\n  "
+            + string.Join("\n  ", untouched.Take(25)));
+    }
+
+    private static IEnumerable<(string Path, ITrainableLayer<T> Layer)> ReachableTrainableLayers(object root)
+    {
+        var seen = new HashSet<object>(ReferenceComparer.Instance);
+        var found = new List<(string, ITrainableLayer<T>)>();
+        Walk(root, root.GetType().Name, found, seen, 0);
+        return found;
+    }
+
+    private static void Walk(object? node, string path, List<(string, ITrainableLayer<T>)> found, HashSet<object> seen, int depth)
+    {
+        if (node is null || depth > 14 || !seen.Add(node))
+        {
+            return;
+        }
+
+        if (node is ITrainableLayer<T> layer)
+        {
+            // Composite layers own their sub-layers' tensors through their own
+            // GetTrainableParameters, so the walk stops at the first layer it meets.
+            found.Add((path, layer));
+            return;
+        }
+
+        if (node is IEnumerable sequence and not string)
+        {
+            int index = 0;
+            foreach (var element in sequence)
+            {
+                if (element is not null && !IsLeaf(element.GetType()))
+                {
+                    Walk(element, $"{path}[{index}]", found, seen, depth + 1);
+                }
+
+                index++;
+            }
+
+            return;
+        }
+
+        for (var type = node.GetType(); type is not null && IsAiDotNetType(type); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (IsLeaf(field.FieldType))
+                {
+                    continue;
+                }
+
+                Walk(field.GetValue(node), $"{path}.{field.Name}", found, seen, depth + 1);
+            }
+        }
+    }
+
+    private static bool IsAiDotNetType(Type type)
+        => type.Namespace is not null
+        && type.Namespace.StartsWith("AiDotNet", StringComparison.Ordinal)
+        && !type.Namespace.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal);
+
+    private static bool IsLeaf(Type type)
+        => type.IsPrimitive || type.IsEnum || type == typeof(string) || typeof(Delegate).IsAssignableFrom(type)
+        || (type.Namespace is not null && type.Namespace.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)
+            && !typeof(ITrainableLayer<T>).IsAssignableFrom(type));
+
+    private sealed class ReferenceComparer : IEqualityComparer<object>, IEqualityComparer<Tensor<T>>
+    {
+        public static readonly ReferenceComparer Instance = new();
+
+        bool IEqualityComparer<object>.Equals(object? x, object? y) => ReferenceEquals(x, y);
+
+        int IEqualityComparer<object>.GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
+
+        public bool Equals(Tensor<T>? x, Tensor<T>? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(Tensor<T> obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }

@@ -53,7 +53,11 @@ public class BiFPN<T> : NeckBase<T>
             () => _topDownConvWeights,
             () => _topDownConvBiases,
             () => _bottomUpConvWeights,
-            () => _bottomUpConvBiases));
+            () => _bottomUpConvBiases,
+            // The learnable fast-normalized-fusion weights. They sit in nested lists, and used to be
+            // left out of this declaration entirely - so they were never saved, cloned or trained.
+            () => _topDownFusionWeights.SelectMany(level => level).ToList(),
+            () => _bottomUpFusionWeights.SelectMany(level => level).ToList()));
     private readonly int _outputChannels;
     private readonly int[] _inputChannels;
     private readonly int _numLevels;
@@ -298,36 +302,46 @@ public class BiFPN<T> : NeckBase<T>
             throw new ArgumentException("Number of inputs must match number of weights");
         }
 
-        // Calculate normalized weights using ReLU
-        var normalizedWeights = new double[weights.Count];
-        double weightSum = _epsilon;
-
-        for (int i = 0; i < weights.Count; i++)
+        // Fast normalized fusion (EfficientDet): out = sum_i relu(w_i) / (eps + sum_j relu(w_j)) * x_i.
+        // The fusion weights are LEARNABLE; this used to read them out as doubles, so they received
+        // no gradient and never moved from their initial values. Every step is an engine op now.
+        var relu = new Tensor<T>[weights.Count];
+        relu[0] = Engine.ReLU(weights[0]);
+        var denominator = Engine.TensorAddScalar(relu[0], NumOps.FromDouble(_epsilon));
+        for (int i = 1; i < weights.Count; i++)
         {
-            double w = Math.Max(0, NumOps.ToDouble(weights[i][0])); // ReLU
-            normalizedWeights[i] = w;
-            weightSum += w;
+            relu[i] = Engine.ReLU(weights[i]);
+            denominator = Engine.TensorAdd(denominator, relu[i]);
         }
 
-        // Normalize
-        for (int i = 0; i < normalizedWeights.Length; i++)
+        var dims = new int[inputs[0].Shape.Length];
+        for (int d = 0; d < dims.Length; d++)
         {
-            normalizedWeights[i] /= weightSum;
+            dims[d] = inputs[0].Shape[d];
         }
 
-        // Weighted sum
-        var result = new Tensor<T>(inputs[0].Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
+        Tensor<T>? result = null;
+        for (int i = 0; i < inputs.Count; i++)
         {
-            double sum = 0;
-            for (int j = 0; j < inputs.Count; j++)
-            {
-                sum += normalizedWeights[j] * NumOps.ToDouble(inputs[j][i]);
-            }
-            result[i] = NumOps.FromDouble(sum);
+            var coefficient = Engine.TensorDivide(relu[i], denominator);
+            var scaled = Engine.TensorMultiply(
+                inputs[i],
+                Engine.TensorBroadcastTo(Engine.Reshape(coefficient, OnesShape(dims.Length)), dims));
+            result = result is null ? scaled : Engine.TensorAdd(result, scaled);
         }
 
-        return result;
+        return result ?? throw new ArgumentException("At least one input is required.", nameof(inputs));
+    }
+
+    private static int[] OnesShape(int rank)
+    {
+        var shape = new int[rank];
+        for (int d = 0; d < rank; d++)
+        {
+            shape[d] = 1;
+        }
+
+        return shape;
     }
 
     /// <inheritdoc/>
@@ -507,34 +521,8 @@ public class BiFPN<T> : NeckBase<T>
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
-    {
-        int batch = source.Shape[0];
-        int channels = source.Shape[1];
-        int targetH = target.Shape[2];
-        int targetW = target.Shape[3];
-        int sourceH = source.Shape[2];
-        int sourceW = source.Shape[3];
-
-        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        int srcH = Math.Min(h * sourceH / targetH, sourceH - 1);
-                        int srcW = Math.Min(w * sourceW / targetW, sourceW - 1);
-                        result[n, c, h, w] = source[n, c, srcH, srcW];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Nearest neighbour, src = min(dst * in / out, in - 1), through tape-visible index gathers.
+        => CvTensorOps<T>.ResizeNearest(source, target.Shape[2], target.Shape[3]);
 
     /// <summary>
     /// Elementwise Swish, delegated to the engine.
