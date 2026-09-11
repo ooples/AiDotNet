@@ -128,6 +128,14 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _targetCritic1Network = CreateCriticNetwork();
         _targetCritic2Network = CreateCriticNetwork();
 
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_actorNetwork);
+        Networks.Add(_targetActorNetwork);
+        Networks.Add(_critic1Network);
+        Networks.Add(_critic2Network);
+        Networks.Add(_targetCritic1Network);
+        Networks.Add(_targetCritic2Network);
+
         CopyNetworkWeights(_critic1Network, _targetCritic1Network);
         CopyNetworkWeights(_critic2Network, _targetCritic2Network);
 
