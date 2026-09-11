@@ -251,27 +251,36 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Adaptation runs on a private clone of the meta-model. It used to write the task initialisation and every
+    /// inner step into the shared meta-model and never restore it, and the returned model kept that shared model
+    /// and wrote its parameters back into it on every Predict - so adapting to one task, or predicting with an
+    /// adapted model, silently moved the meta-learned initialisation.
+    /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var sharedInit = ParamModel.GetParameters();
+        if (task is null)
+            throw new ArgumentNullException(nameof(task));
+
+        var taskModel = CloneModel();
+        var taskParameters = InterfaceGuard.Parameterizable(taskModel);
+        var sharedInit = taskParameters.GetParameters();
 
         // Generate task-specific initialization from support features
-        ParamModel.SetParameters(sharedInit);
-        var supportPred = MetaModel.Predict(task.SupportInput);
-        var supportFeatures = ConvertToVector(supportPred);
+        var supportFeatures = ConvertToVector(taskModel.Predict(task.SupportInput));
         var taskInit = GenerateTaskInit(sharedInit, supportFeatures);
-        ParamModel.SetParameters(taskInit);
+        taskParameters.SetParameters(taskInit);
 
         // Inner loop adaptation from task-specific init
         var adaptedParams = taskInit;
         for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
         {
-            var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(ParamModel.GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
-            ParamModel.SetParameters(adaptedParams);
+            var grad = ComputeGradients(taskModel, task.SupportInput, task.SupportOutput);
+            adaptedParams = ApplyGradients(taskParameters.GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
+            taskParameters.SetParameters(adaptedParams);
         }
 
-        return new HyperMAMLModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return new HyperMAMLModel<T, TInput, TOutput>(taskModel, adaptedParams);
     }
 
 }
