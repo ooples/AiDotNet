@@ -10,6 +10,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
@@ -82,6 +83,8 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
     private InferenceSession? _languageModel;
     private readonly string? _visionEncoderPath;
     private readonly string? _languageModelPath;
+    private string _visionOutputName = string.Empty;
+    private string _textOutputName = string.Empty;
 
     #endregion
 
@@ -183,7 +186,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
@@ -208,14 +211,14 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _maxImagesPerRequest = _options.MaxImagesPerRequest;
         _maxImageResolution = (2048, 2048);
         _supportedDetailLevels = new List<string> { "low", "high", "auto" };
-        _vocabularySize = 128256;
-        _hiddenDim = _options.EmbeddingDimension;
-        _numVisionLayers = 24;
-        _numLanguageLayers = 32;
-        _numHeads = 32;
-        _patchSize = 14;
+        _vocabularySize = _options.VocabSize;
+        _hiddenDim = _options.HiddenDim;
+        _numVisionLayers = _options.VisionLayers;
+        _numLanguageLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
 
-        InitializeLayers();
+        InitializeOnnxSessions();
     }
 
     /// <summary>
@@ -261,22 +264,46 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
     {
         if (!_useNativeMode)
         {
-            // ONNX mode initialization
-            if (!string.IsNullOrEmpty(_visionEncoderPath) && File.Exists(_visionEncoderPath))
-            {
-                var sessionOptions = new SessionOptions();
-                _visionEncoder = new InferenceSession(_visionEncoderPath, sessionOptions);
-            }
-
-            if (!string.IsNullOrEmpty(_languageModelPath) && File.Exists(_languageModelPath))
-            {
-                var sessionOptions = new SessionOptions();
-                _languageModel = new InferenceSession(_languageModelPath, sessionOptions);
-            }
+            InitializeOnnxSessions();
         }
         else
         {
             InitializeNativeLayers();
+        }
+    }
+
+    private void InitializeOnnxSessions()
+    {
+        if (_visionEncoderPath is null || _languageModelPath is null)
+            throw new InvalidOperationException("ONNX graph paths have not been configured.");
+        InferenceSession? visionSession = null;
+        InferenceSession? textSession = null;
+        using var sessionOptions = new SessionOptions();
+        try
+        {
+            visionSession = new InferenceSession(_visionEncoderPath, sessionOptions);
+            textSession = new InferenceSession(_languageModelPath, sessionOptions);
+            var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionSession);
+            var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textSession);
+            visionGraph.RequireInputSet("pixel_values");
+            visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            textGraph.RequireInputSet("input_ids");
+            textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            string visionOutput = visionGraph.RequireEmbeddingOutput(_visionEmbeddingDim, OnnxEmbeddingLayouts.TokenFeatures);
+            string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, OnnxEmbeddingLayouts.TokenFeatures);
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, textGraph);
+            _visionEncoder = visionSession;
+            _languageModel = textSession;
+            _visionOutputName = visionOutput;
+            _textOutputName = textOutput;
+            OnnxConfiguration = configuration;
+        }
+        catch
+        {
+            try { textSession?.Dispose(); }
+            finally { visionSession?.Dispose(); }
+            throw;
         }
     }
 
@@ -1019,19 +1046,17 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Matrix<T> EncodeImageOnnx(Tensor<T> image)
     {
-        if (_visionEncoder is null)
-        {
-            // Return dummy encoding
-            return Matrix<T>.CreateDefault((_imageSize / _patchSize) * (_imageSize / _patchSize) + 1, _visionEmbeddingDim, NumOps.Zero);
-        }
+        var session = _visionEncoder ?? throw new InvalidOperationException("ONNX vision encoder is not initialized.");
+        if (image.Rank != 3 || image.Shape[0] != 3 || image.Shape[1] != _imageSize || image.Shape[2] != _imageSize)
+            throw new ArgumentException($"ONNX image input must have shape [3, {_imageSize}, {_imageSize}].", nameof(image));
 
         // Prepare input
         var inputData = new float[1 * 3 * _imageSize * _imageSize];
-        for (int c = 0; c < 3 && c < image.Shape[0]; c++)
+        for (int c = 0; c < 3; c++)
         {
-            for (int h = 0; h < _imageSize && h < image.Shape[1]; h++)
+            for (int h = 0; h < _imageSize; h++)
             {
-                for (int w = 0; w < _imageSize && w < image.Shape[2]; w++)
+                for (int w = 0; w < _imageSize; w++)
                 {
                     int idx = c * _imageSize * _imageSize + h * _imageSize + w;
                     inputData[idx] = (float)NumOps.ToDouble(image[c, h, w]);
@@ -1045,22 +1070,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             NamedOnnxValue.CreateFromTensor("pixel_values", inputTensor)
         };
 
-        using var results = _visionEncoder.Run(inputs);
+        using var results = session.Run(inputs, new[] { _visionOutputName });
         var output = results.First().AsTensor<float>();
-
-        int seqLen = output.Dimensions[1];
-        int hiddenDim = output.Dimensions[2];
-        var matrix = Matrix<T>.CreateDefault(seqLen, hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(output[0, i, j]);
-            }
-        }
-
-        return matrix;
+        return OnnxEmbeddingContract.ReadTokenFeatures<T>(output, _visionEmbeddingDim, OnnxModelRole.ImageEncoder);
     }
 
     private Matrix<T> ProjectVisionFeatures(Matrix<T> visionFeatures)
@@ -1129,10 +1141,11 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Matrix<T> EncodeTextOnnx(Tensor<T> tokens)
     {
-        if (_languageModel is null)
-        {
-            return Matrix<T>.CreateDefault(tokens.Length, _embeddingDimension, NumOps.Zero);
-        }
+        var session = _languageModel ?? throw new InvalidOperationException("ONNX text encoder is not initialized.");
+        if (tokens.Length == 0 || tokens.Length > _maxSequenceLength)
+            throw new ArgumentException($"ONNX token count must be between 1 and {_maxSequenceLength}.", nameof(tokens));
+        var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        configuration.Graphs[OnnxModelRole.TextEncoder].RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, tokens.Length);
 
         var inputData = new long[tokens.Length];
         for (int i = 0; i < tokens.Length; i++)
@@ -1146,22 +1159,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
         };
 
-        using var results = _languageModel.Run(inputs);
+        using var results = session.Run(inputs, new[] { _textOutputName });
         var output = results.First().AsTensor<float>();
-
-        int seqLen = output.Dimensions[1];
-        int hiddenDim = output.Dimensions[2];
-        var matrix = Matrix<T>.CreateDefault(seqLen, hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(output[0, i, j]);
-            }
-        }
-
-        return matrix;
+        return OnnxEmbeddingContract.ReadTokenFeatures<T>(output, _embeddingDimension, OnnxModelRole.TextEncoder);
     }
 
     private Matrix<T> CombineImageTextFeatures(List<Matrix<T>> imageFeatures, Tensor<T> tokens)
@@ -1527,6 +1527,28 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+            return new ModelMetadata<T>
+            {
+                Name = "Gpt4VisionNeuralNetwork",
+                FeatureCount = _embeddingDimension,
+                Description = "ONNX vision and text feature encoders; native topology is not inferred from graph I/O",
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    [nameof(OnnxConfiguration)] = configuration,
+                    ["input_shape"] = new[] { 3, _imageSize, _imageSize },
+                    ["output_shape"] = new[] { _embeddingDimension },
+                    ["embedding_dimension"] = _embeddingDimension,
+                    ["vision_embedding_dim"] = _visionEmbeddingDim,
+                    ["max_sequence_length"] = _maxSequenceLength,
+                    ["context_window_size"] = _contextWindowSize,
+                    ["image_size"] = _imageSize,
+                    ["use_native_mode"] = false
+                }
+            };
+        }
         return new ModelMetadata<T>
         {
             Name = "Gpt4VisionNeuralNetwork",
