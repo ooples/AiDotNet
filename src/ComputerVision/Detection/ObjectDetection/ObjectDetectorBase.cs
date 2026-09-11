@@ -669,4 +669,38 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// see it.
     /// </remarks>
     public virtual double EffectiveNmsThreshold(double requested) => requested;
+
+    /// <summary>
+    /// Gets the number of channels in the images this model reads.
+    /// </summary>
+    /// <remarks>RGB unless a model overrides it; every backbone here is built for three channels.</remarks>
+    protected virtual int InputChannels => 3;
+
+    /// <summary>
+    /// Gives a model that has never run a concrete parameter topology, so its state can be captured.
+    /// </summary>
+    /// <remarks>
+    /// Several layers size their weights on their first forward pass. Until then the model reports
+    /// its parameters as shape-deferred, which is correct for a parameter query but made
+    /// <see cref="Serialize"/> - and therefore <c>Clone</c> - throw on a freshly constructed model.
+    /// Running the network once on a zero image of the configured input size resolves exactly the
+    /// shapes the first real image would, because every image is resized to that size first.
+    /// </remarks>
+    private void ResolveDeferredParameters()
+    {
+        if (_resolvedInputShape is not null)
+        {
+            return;
+        }
+
+        Predict(new Tensor<T>(new[] { 1, InputChannels, Options.InputSize[0], Options.InputSize[1] }));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Resolves shape-deferred layers first; see <see cref="ResolveDeferredParameters"/>.</remarks>
+    public override byte[] Serialize()
+    {
+        ResolveDeferredParameters();
+        return base.Serialize();
+    }
 }

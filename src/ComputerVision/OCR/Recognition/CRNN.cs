@@ -260,38 +260,33 @@ public partial class CRNN<T> : OCRBase<T>
     }
 
     /// <summary>
-    /// Runs one LSTM direction over the sequence a timestep at a time (the layer is stateful), and
-    /// stacks the per-step outputs back in time order. Engine narrow/reshape/concatenate throughout:
-    /// the old per-step copy into a preallocated tensor severed the tape, so neither the LSTMs nor the
-    /// CNN below them could train.
+    /// Runs one LSTM direction over the whole sequence <c>[batch, seqLen, features]</c> and returns
+    /// its outputs <c>[batch, seqLen, hidden]</c> in the original time order.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sequence goes to the layer in ONE call, which carries the hidden and cell state from step
+    /// to step inside it. This used to feed the layer one timestep at a time as a
+    /// <c>[batch, features]</c> tensor - which the layer reads as a <c>[timeSteps, features]</c>
+    /// sequence of batch one, starting from zero state on every call. Each "step" was therefore an
+    /// independent one-step LSTM: nothing was carried across time, the recurrent weights and the
+    /// forget gate multiplied zero state and never received a gradient (24 of the model's 64
+    /// trainable tensors), and a batch larger than one was misread as time.
+    /// </para>
+    /// <para>
+    /// The backward direction reverses time with an engine gather before and after the layer, so the
+    /// flip stays on the gradient tape.
+    /// </para>
+    /// </remarks>
     private Tensor<T> RunDirection(LSTMLayer<T> lstm, Tensor<T> x, bool reverse)
     {
-        var engine = AiDotNetEngine.Current;
-        int batch = x.Shape[0], seqLen = x.Shape[1], features = x.Shape[2];
+        int seqLen = x.Shape[1];
+        var reversed = reverse ? Enumerable.Range(0, seqLen).Reverse().ToArray() : null;
 
         lstm.ResetState();
-        var steps = new Tensor<T>[seqLen];
-        for (int s = 0; s < seqLen; s++)
-        {
-            int t = reverse ? seqLen - 1 - s : s;
-            var input = engine.Reshape(engine.TensorNarrow(x, 1, t, 1), new[] { batch, features });
-            var output = lstm.Forward(input);
-            steps[t] = engine.Reshape(output, new[] { batch, 1, _hiddenDim });
-        }
-
-        return seqLen == 1 ? steps[0] : engine.TensorConcatenate(steps, 1);
+        var output = lstm.Forward(reversed is null ? x : CvTensorOps<T>.Select(x, reversed, 1));
+        return reversed is null ? output : CvTensorOps<T>.Select(output, reversed, 1);
     }
-
-    /// <summary>
-    /// Extracts a single timestep from the sequence tensor.
-    /// </summary>
-
-
-    /// <summary>
-    /// Stores LSTM output into the sequence tensor at a specific timestep.
-    /// </summary>
-
 
     /// <summary>
     /// Concatenates forward and backward LSTM outputs.

@@ -65,10 +65,15 @@ public partial class EAST<T> : TextDetectorBase<T>
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
 
         // Feature merging branch (U-Net style)
-        int backboneChannels = Backbone.OutputChannels[^1];
-        _mergeConv1 = new Conv2D<T>(backboneChannels, _hiddenDim, kernelSize: 1);
-        _mergeConv2 = new Conv2D<T>(_hiddenDim * 2, _hiddenDim, kernelSize: 3, padding: 1);
-        _mergeConv3 = new Conv2D<T>(_hiddenDim * 2, _hiddenDim, kernelSize: 3, padding: 1);
+        var stageChannels = Backbone.OutputChannels;
+        _mergeConv1 = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 1);
+        // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
+        // stage, so its input width is the decoder width plus that stage's channel count. These were
+        // declared as twice the decoder width, which matches no backbone stage, so the first merge
+        // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
+        // built for 512) and the model could not run a forward pass at all.
+        _mergeConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
+        _mergeConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
         _mergeConv4 = new Conv2D<T>(_hiddenDim, _hiddenDim / 2, kernelSize: 3, padding: 1);
 
         // Output heads

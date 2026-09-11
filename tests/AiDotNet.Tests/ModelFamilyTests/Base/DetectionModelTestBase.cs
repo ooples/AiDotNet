@@ -295,6 +295,69 @@ public abstract class DetectionModelTestBase<T>
             + "step is a no-op or no gradient reaches the parameters.");
     }
 
+    /// <summary>
+    /// Training must lower the loss it optimises, not merely move the weights.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Train_ShouldChangeParameters"/> passes the moment ANY parameter moves - including
+    /// when a severed tape leaves everything but the output head untrained, or when the step goes
+    /// the wrong way. This asserts the step actually descends.
+    /// </para>
+    /// <para>
+    /// The target is all zeros, so the loss is the mean squared output. That is the one target whose
+    /// loss means the same thing at every output length: a two-stage detector's output grows and
+    /// shrinks with its proposal count as training moves the weights, and a random target would be
+    /// redrawn each step. The same image is used throughout.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 300000)]
+    public async Task Train_ShouldReduceLoss()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        var image = CreateRandomImage(rng);
+
+        double before = MeanSquare(model.Predict(image));
+        for (int step = 0; step < LossReductionIterations; step++)
+        {
+            model.Train(image, new Tensor<T>(model.Predict(image)._shape));
+        }
+
+        double after = MeanSquare(model.Predict(image));
+
+        Assert.False(double.IsNaN(after) || double.IsInfinity(after), $"Loss is {after} after training.");
+        Assert.True(
+            after < before,
+            $"{LossReductionIterations} training steps toward a zero target did not lower the mean squared "
+            + $"output: {before:G6} before, {after:G6} after. The step is not descending the loss - a "
+            + "sign error, a learning rate that overshoots, or gradients reaching the wrong tensors.");
+    }
+
+    /// <summary>
+    /// Number of steps <see cref="Train_ShouldReduceLoss"/> takes.
+    /// </summary>
+    protected virtual int LossReductionIterations => 3;
+
+    private double MeanSquare(Tensor<T> output)
+    {
+        if (output.Length == 0)
+        {
+            return 0;
+        }
+
+        double sum = 0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            double value = ToD(output[i]);
+            sum += value * value;
+        }
+
+        return sum / output.Length;
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Train_ShouldProduceFinitePredictions()
     {

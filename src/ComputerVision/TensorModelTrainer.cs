@@ -73,24 +73,59 @@ internal static class TensorModelTrainer<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        Tensor<T> loss;
-        Dictionary<Tensor<T>, Tensor<T>> gradients;
         using (var tape = new GradientTape<T>())
         {
             var predicted = forward(input);
-            loss = MeanSquaredError(predicted, target);
-            gradients = tape.ComputeGradients(loss, parameters);
+            var loss = MeanSquaredError(predicted, target);
+            var gradients = tape.ComputeGradients(loss, parameters);
+
+            // The update runs INSIDE the tape's scope. Disposing the outermost tape rewinds the
+            // active TensorArena (the per-step recycling of AiDotNet #1804), and the gradients and
+            // the loss live in that arena: consumed after the dispose, their storage is already
+            // being reissued to the update's own temporaries. Every model trained inside an arena
+            // then applied a mix of its gradients and unrelated scratch - and threw only when a
+            // reissued buffer happened to have a different shape (a [256, 1024] weight receiving
+            // [1024, 256]). The no-grad scope keeps the update itself off the tape.
+            using (new NoGradScope<T>())
+            {
+                foreach (var parameter in parameters)
+                {
+                    if (gradients.TryGetValue(parameter, out var gradient))
+                    {
+                        if (!SameShape(parameter, gradient))
+                        {
+                            throw new InvalidOperationException(
+                                $"{model.GetType().Name}: the gradient for a trainable tensor of shape "
+                                + $"[{string.Join(", ", parameter._shape)}] has shape [{string.Join(", ", gradient._shape)}]. "
+                                + "The forward pass must use this tensor exactly as registered - a reshaped copy or "
+                                + "a view created outside the engine records the wrong tensor on the tape.");
+                        }
+
+                        engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradient, learningRate));
+                    }
+                }
+
+                return loss.Length > 0 ? loss[0] : numOps.Zero;
+            }
+        }
+    }
+
+    private static bool SameShape(Tensor<T> a, Tensor<T> b)
+    {
+        if (a._shape.Length != b._shape.Length)
+        {
+            return false;
         }
 
-        foreach (var parameter in parameters)
+        for (int i = 0; i < a._shape.Length; i++)
         {
-            if (gradients.TryGetValue(parameter, out var gradient))
+            if (a._shape[i] != b._shape[i])
             {
-                engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradient, learningRate));
+                return false;
             }
         }
 
-        return loss.Length > 0 ? loss[0] : numOps.Zero;
+        return true;
     }
 
     /// <summary>
