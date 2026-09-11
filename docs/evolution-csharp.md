@@ -4,6 +4,9 @@ Roadmap slices: US-17 syntax edits/compiler repair, US-05 shared resource accoun
 `AiDotNet.Evolution.CSharp` (net8.0 and net10.0). Compiler dependencies are not added to the main AiDotNet package.
 This feature is not a claim that US-17, the full roadmap, or competitor superiority is complete.
 
+For an executable, no-provider development workflow using the real worker and custom runtime fitness, see the
+[authored C# runtime pilot](evolution-runtime-benchmark.md). Its timing includes process startup and compilation.
+
 ## Facade configuration
 
 Use `ConfigureCSharpProgramEvolution(chatClient, programOptions, compilerOptions, resourceOptions)` on the existing
@@ -31,7 +34,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 ```
 
 These identifiers are application-supplied values, not automatically discovered pins. `programOptions` needs seed
-source and fitness cases/script as usual. `MaxProposals` includes seeds. The reference paths should name a coherent,
+source and fitness cases/script or `CustomFitnessEvaluator`. `MaxProposals` includes seeds. The reference paths should name a coherent,
 pinned reference bundle for the actual execution target; a compiler cannot prove the caller chose the right target.
 Cost limits in this snippet are illustrative synthetic units, not dollars or measured CPU time.
 

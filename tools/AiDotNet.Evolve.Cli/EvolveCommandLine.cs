@@ -45,6 +45,7 @@ internal static class EvolveCommandLine
                 "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best" },
                 "validate" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume" },
                 "schema" or "docs" => new[] { "out" },
+                "benchmark-program" => new[] { "worker", "output", "runs", "measurements" },
                 _ => Array.Empty<string>()
             };
 
@@ -53,6 +54,10 @@ internal static class EvolveCommandLine
             {
                 "run" => await RunAsync(rest, output, error, cancellationToken).ConfigureAwait(false),
                 "validate" => Validate(rest, output, error),
+                "benchmark-program" => await ProgramBenchmark.RunAsync(rest.Require("worker"), rest.Require("output"),
+                    rest.TryGet("runs", out string runs) ? ParseInt32(runs, "runs") : 4,
+                    rest.TryGet("measurements", out string measurements) ? ParseInt32(measurements, "measurements") : 3,
+                    output, cancellationToken).ConfigureAwait(false),
                 "schema" => WriteText(rest, output, YamlJsonSchema.Generate(), "aidotnet-config.schema.json"),
                 "docs" => WriteText(rest, output, YamlDocsGenerator.Generate(), "yaml-config-reference.md"),
                 _ => Fail(error, $"Unknown command '{args[0]}'. Run with --help for usage.")
@@ -271,6 +276,8 @@ internal static class EvolveCommandLine
         output.WriteLine("  validate  --config <file>   load the file, validate it, and print what it resolved to");
         output.WriteLine("  schema    [--out <path>]    write the JSON schema an editor validates the file against");
         output.WriteLine("  docs      [--out <path>]    write the markdown reference for every setting");
+        output.WriteLine("  benchmark-program --worker <absolute worker.dll> --output <new directory>");
+        output.WriteLine("            [--runs <1..12>] [--measurements <1..9>] authored C# end-to-end timing pilot; no model calls");
         output.WriteLine();
         output.WriteLine("Any ${NAME} in the file is replaced by that environment variable, and ${NAME:-value}");
         output.WriteLine("supplies a default, so an API key stays out of a file you commit.");

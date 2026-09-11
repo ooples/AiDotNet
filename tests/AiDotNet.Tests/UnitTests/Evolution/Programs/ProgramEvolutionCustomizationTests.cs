@@ -45,6 +45,146 @@ public sealed class ProgramEvolutionCustomizationTests
         Assert.ThrowsAny<ArgumentException>(() => new ProgramEvolutionResourceOptions(ledger, 1, "unit" + '\ud800'));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Custom_fitness_needs_no_script_cases_or_execution_engine_and_preserves_minimization(int gatePass)
+    {
+        var fitness = new MutableFitness();
+        var options = Options(new CustomVariation());
+        options.TestCases.Clear();
+        options.CustomFitnessEvaluator = fitness;
+        var ledger = new EvolutionResourceLedger("custom-fitness", EvolutionResources.Of("cost_units", 10));
+        options.ResourceAccounting = new ProgramEvolutionResourceOptions(ledger, 2, Unit);
+        Assert.Same(fitness, options.Clone().CustomFitnessEvaluator);
+        var search = EvolutionOptions.FromEngineOptions(options.Engine);
+        search.ArchiveDirection = EvolutionOptimizationDirection.Minimize;
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureEvolution(search)
+            .ConfigureProgramEvolution(options)
+            .ConfigureProgramCorrectness(new DelegateProgramFitnessEvaluator((_, _, _) => new ValueTask<EvolutionTaskResult>(
+                new EvolutionTaskResult(EvolutionEvaluationStatus.Completed, gatePass, costUnits: 0.25))))
+            .BuildAsync();
+        Assert.Equal(gatePass == 1 ? 2 : 0, fitness.Calls);
+        Assert.Equal(gatePass == 1 ? "return 2" : null, result.ProgramEvolution?.BestProgram?.Source);
+        if (gatePass == 1) Assert.Equal(0.5, result.ProgramEvolution?.BestQuality);
+        Assert.Equal(gatePass == 1 ? 1.5m : 0.25m, ledger.Snapshot().Spent["cost_units"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Custom_fitness_cannot_silently_replace_another_fitness_configuration(bool script)
+    {
+        var options = Options(new CustomVariation());
+        options.CustomFitnessEvaluator = new MutableFitness();
+        if (script)
+        {
+            options.TestCases.Clear();
+            options.EvaluatorScript = "def evaluate(source): return 1";
+        }
+        Assert.Equal(nameof(ProgramEvolutionOptions.CustomFitnessEvaluator), Assert.Throws<ArgumentException>(options.Validate).ParamName);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Custom_fitness_identity_changes_fail_before_or_after_dispatch(bool duringCall, bool changeId)
+    {
+        var inner = new MutableFitness();
+        var pinned = new VersionPinnedProgramFitnessEvaluator(inner);
+        inner.ChangeId = changeId;
+        if (duringCall) inner.ChangeIdentityDuringCall = true;
+        else if (changeId) inner.Id = "changed";
+        else inner.VersionHash = "changed";
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await pinned.EvaluateAsync(
+            new ProgramGenome("return 1", ProgramLanguage.Python), new EvolutionEvaluationContext(0, 1, 1, 1)));
+        Assert.Equal(duringCall ? 1 : 0, inner.Calls);
+    }
+
+    [Fact]
+    public async Task Custom_fitness_identity_change_cannot_promote_or_create_a_known_receipt()
+    {
+        var ledger = new EvolutionResourceLedger("changed-fitness", EvolutionResources.Of("cost_units", 10));
+        var options = Options(new CustomVariation());
+        options.TestCases.Clear();
+        options.CustomFitnessEvaluator = new MutableFitness { ChangeIdentityDuringCall = true };
+        options.ResourceAccounting = new ProgramEvolutionResourceOptions(ledger, 3, Unit);
+        options.Engine.MaxEvaluationAttempts = 1;
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureProgramEvolution(options).BuildAsync();
+        Assert.False(result.ProgramEvolution?.HasBestProgram);
+        Assert.Equal(1, ledger.Snapshot().Unknown);
+        Assert.Equal(3m, ledger.Snapshot().Spent["cost_units"]);
+    }
+
+    [Fact]
+    public async Task Custom_fitness_pre_dispatch_cancellation_does_not_call_the_backend()
+    {
+        var inner = new MutableFitness();
+        var pinned = new VersionPinnedProgramFitnessEvaluator(inner);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pinned.EvaluateAsync(
+            new ProgramGenome("return 1", ProgramLanguage.Python), new EvolutionEvaluationContext(0, 1, 1, 1), cancellation.Token));
+        Assert.Equal(0, inner.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Custom_fitness_identity_is_bounded_printable_and_unicode_safe(bool version)
+    {
+        foreach (string value in new[] { "", " ", "bad\nidentity", new string('x', 257), "bad" + '\ud800' })
+        {
+            var inner = new MutableFitness();
+            if (version) inner.VersionHash = value;
+            else inner.Id = value;
+            var options = new ProgramEvolutionOptions { CustomFitnessEvaluator = inner };
+            Assert.ThrowsAny<ArgumentException>(options.Validate);
+            Assert.ThrowsAny<ArgumentException>(() => new VersionPinnedProgramFitnessEvaluator(inner));
+        }
+        Assert.Throws<ArgumentNullException>(() => new VersionPinnedProgramFitnessEvaluator(null!));
+    }
+
+    [Fact]
+    public void Custom_fitness_identity_and_version_enter_distinct_compatibility_keys()
+    {
+        var first = new VersionPinnedProgramFitnessEvaluator(new MutableFitness());
+        var same = new VersionPinnedProgramFitnessEvaluator(new MutableFitness());
+        var otherId = new VersionPinnedProgramFitnessEvaluator(new MutableFitness { Id = "other" });
+        var otherVersion = new VersionPinnedProgramFitnessEvaluator(new MutableFitness { VersionHash = "other" });
+        Assert.Equal(first.VersionHash, same.VersionHash);
+        Assert.NotEqual(first.VersionHash, otherId.VersionHash);
+        Assert.NotEqual(first.VersionHash, otherVersion.VersionHash);
+        Assert.NotEqual(new ProgramEvolutionTask(first).VersionHash, new ProgramEvolutionTask(otherId).VersionHash);
+        Assert.NotEqual(new ProgramEvolutionTask(first).EvaluatorVersionHash, new ProgramEvolutionTask(otherVersion).EvaluatorVersionHash);
+    }
+
+    private sealed class MutableFitness : IProgramFitnessEvaluator
+    {
+        public string Id { get; set; } = "trusted-runtime-fixture";
+        public string VersionHash { get; set; } = "synthetic-runtime-v1";
+        public int Calls { get; private set; }
+        public bool ChangeIdentityDuringCall { get; set; }
+        public bool ChangeId { get; set; }
+        public ValueTask<EvolutionTaskResult> EvaluateAsync(ProgramGenome candidate, EvolutionEvaluationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            if (ChangeIdentityDuringCall)
+            {
+                if (ChangeId) Id = "changed";
+                else VersionHash = "changed";
+            }
+            return new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(EvolutionEvaluationStatus.Completed,
+                candidate.Source.EndsWith("2", StringComparison.Ordinal) ? 0.5 : 2,
+                EvolutionOptimizationDirection.Minimize, costUnits: 0.5));
+        }
+    }
+
     private static ProgramEvolutionOptions Options(IProgramVariationOperator variation, ProgramEvolutionResourceOptions? accounting = null)
     {
         var options = new ProgramEvolutionOptions { Language = ProgramLanguage.Python, CustomVariation = variation, ResourceAccounting = accounting };

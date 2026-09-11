@@ -45,7 +45,14 @@ The migration PR's old publication-waiting note is therefore stale. That publish
 resource ledger and costed-proposal APIs; consumers of those APIs require a subsequently published version,
 not merely this already-available preview.
 
-## Integration evidence
+The compiler-guided source validation workflow uses sibling `consumer/` and `evolution/` checkouts. Nesting core
+under the consumer inherited `Directory.Packages.props` and failed NU1008 before tests in hosted run
+[`34548224747`](https://github.com/ooples/AiDotNet/actions/runs/34548224747). The normal package-path wiki check
+also failed to resolve `EvolutionResourceLedger` in run
+[`34548224654`](https://github.com/ooples/AiDotNet/actions/runs/34548224654), confirming the dependency gap.
+Fixing source-checkout layout does not repair or replace that release requirement.
+
+## Migration-stage evidence (historical)
 
 With core revision `6d9aeb2dd44f5020469c81ad2cb4046f9f3495bb`, the merged consumer library builds on .NET 10
 and .NET 8, and 857 selected authored tests pass on each. The selection includes program evolution, facade,

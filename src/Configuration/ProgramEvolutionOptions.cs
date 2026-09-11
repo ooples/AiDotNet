@@ -173,6 +173,18 @@ public sealed class ProgramEvolutionOptions
     /// configure it. Use a fresh operator for an independent run. Correctness and fitness still run through the facade.</remarks>
     public IProgramVariationOperator? CustomVariation { get; set; }
 
+    /// <summary>Gets or sets a caller-owned fitness backend, such as a trusted runtime-measurement service.</summary>
+    /// <remarks>
+    /// Configure this through the program-evolution facade instead of TestCases or EvaluatorScript. The existing
+    /// correctness gate, descriptors and resource accounting still apply. The backend owns execution isolation,
+    /// timeouts, honest same-unit cost receipts and immutable Id/VersionHash identities covering its workload,
+    /// runtime, measurement and scoring policy. Configuration clones share it; it is neither cloned, serialized
+    /// nor disposed by the builder. Use a fresh instance for independent runs. For minimization, also configure
+    /// EvolutionOptions.ArchiveDirection through ConfigureEvolution; the archive defaults to maximization and
+    /// rejects results in a different direction. This does not implement a benchmark.
+    /// </remarks>
+    public IProgramFitnessEvaluator? CustomFitnessEvaluator { get; set; }
+
     /// <summary>Gets or sets evaluation accounting on a caller-owned shared resource ledger.</summary>
     public ProgramEvolutionResourceOptions? ResourceAccounting { get; set; }
 
@@ -400,6 +412,7 @@ public sealed class ProgramEvolutionOptions
             // instance is a value and sharing the reference is safe. The mutable subsystems below are deep-copied.
             Novelty = Novelty,
             CustomVariation = CustomVariation,
+            CustomFitnessEvaluator = CustomFitnessEvaluator,
             ResourceAccounting = ResourceAccounting
         };
 
@@ -466,6 +479,14 @@ public sealed class ProgramEvolutionOptions
         if (CustomVariation is IEvolutionProposalCostProvider costed && ResourceAccounting is { } resources &&
             !string.Equals(costed.CostUnitVersionHash, resources.CostUnitVersionHash, StringComparison.Ordinal))
             throw new ArgumentException("Proposal and evaluator cost-unit semantics must match.", nameof(ResourceAccounting));
+
+        if (CustomFitnessEvaluator is { } customFitness)
+        {
+            if (_testCases?.Count > 0 || !string.IsNullOrWhiteSpace(_script?.EvaluatorScript))
+                throw new ArgumentException("CustomFitnessEvaluator cannot be combined with TestCases or EvaluatorScript; configure independent correctness checks through the facade.", nameof(CustomFitnessEvaluator));
+            VersionPinnedProgramFitnessEvaluator.ValidateIdentity(customFitness.Id, nameof(customFitness.Id));
+            VersionPinnedProgramFitnessEvaluator.ValidateIdentity(customFitness.VersionHash, nameof(customFitness.VersionHash));
+        }
 
         // Both of these write files, so they need somewhere to write. Refuse at configuration time rather than
         // after the first evaluation has already been paid for.

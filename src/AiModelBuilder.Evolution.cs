@@ -335,7 +335,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// with zero constraint violations permits the configured fitness evaluator to run.</param>
     /// <returns>This builder for fluent configuration.</returns>
     /// <remarks>
-    /// Pair with ConfigureProgramEvolution; its test cases or evaluator script still supply fitness. Checks must
+    /// Pair with ConfigureProgramEvolution; its test cases, evaluator script or custom evaluator still supply fitness. Checks must
     /// use deterministic reference tests, not an LLM judge, and provide their own sandbox and timeouts. Keep final
     /// held-out checks outside search. Costs from both stages must use the same units. Changing check data or
     /// semantics requires changing the evaluator's VersionHash. This setting may be supplied before or after
@@ -959,12 +959,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         out ProcessProgramExecutionEngine? ownedEngine)
     {
         ownedEngine = null;
+        if (programOptions.CustomFitnessEvaluator is { } customFitness)
+            return new VersionPinnedProgramFitnessEvaluator(customFitness);
         bool hasScript = !string.IsNullOrWhiteSpace(programOptions.EvaluatorScript);
         if (programOptions.TestCases.Count == 0 && !hasScript)
         {
             throw new InvalidOperationException(
                 "Program evolution needs a way to score a candidate. Add input/output examples to " +
-                "ProgramEvolutionOptions.TestCases, or set ProgramEvolutionOptions.EvaluatorScript.");
+                "ProgramEvolutionOptions.TestCases, or set ProgramEvolutionOptions.EvaluatorScript or CustomFitnessEvaluator.");
         }
 
         IProgramExecutionEngine? executionEngine = _programExecutionEngine;
