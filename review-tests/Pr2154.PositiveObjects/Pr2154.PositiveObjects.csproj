@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net471;net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <CopyLocalRuntimeTargetAssets>false</CopyLocalRuntimeTargetAssets>
+    <_GetChildProjectCopyToOutputDirectoryItems>false</_GetChildProjectCopyToOutputDirectoryItems>
+    <GenerateRuntimeConfigDevFile>true</GenerateRuntimeConfigDevFile>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <GeneratorAssemblyPath Condition="'$(GeneratorAssemblyPath)' == ''">$(MSBuildThisFileDirectory)../../src/AiDotNet.Generators/bin/Release/netstandard2.0/AiDotNet.Generators.dll</GeneratorAssemblyPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <Reference Include="AiDotNet.Generators" HintPath="$(GeneratorAssemblyPath)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModuleInitializer.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/GlobalUsings.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Helpers/LicenseTestSupport.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Helpers/GeneratedTestTrace.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/DetectionModelTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ObjectDetectionTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ObjectDetectionPositiveFixture.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ModelTestHelpers.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/GeneratedObjectDetectionPositiveFixtureTests.cs" />
+    <None Include="../../tests/AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="../Pr2154.ManagedTestClosure.targets" />
+</Project>

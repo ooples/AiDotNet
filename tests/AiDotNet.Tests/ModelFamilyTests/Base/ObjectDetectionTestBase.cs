@@ -1,4 +1,5 @@
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -29,6 +30,19 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
     /// deriving from <c>ObjectDetectorBase</c> are assigned this test family.
     /// </summary>
     protected ObjectDetectorBase<T> CreateDetector() => (ObjectDetectorBase<T>)CreateModel();
+
+    /// <summary>Generated options factory for a bounded positive fixture; normal defaults stay unchanged.</summary>
+    protected abstract ObjectDetectorBase<T> CreatePositiveObjectDetector(ObjectDetectionOptions<T> options);
+
+    /// <summary>Checks real forward, decode, confidence ordering, and suppression with known live heads.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task Detect_ControlledPositiveHead_ShouldDecodeRankAndSuppressKnownCandidates()
+    {
+        await Task.Yield();
+        using var arena = TensorArena.Create();
+        using var detector = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
+        ObjectDetectionPositiveFixture<T>.Verify(detector);
+    }
 
     /// <summary>Confidence threshold used when the test does not vary it.</summary>
     protected virtual double DetectConfidenceThreshold => 0.05;
