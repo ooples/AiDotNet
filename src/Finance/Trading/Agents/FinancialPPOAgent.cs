@@ -166,11 +166,19 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         if (architecture.Layers.Count == 0)
         {
-            AddSeededDefaultLayers(architecture, () => new ILayer<T>[]
+            // Tanh MLP sized by TradingAgentOptions.HiddenLayers (default [64, 64]) with a linear head:
+            // the actor emits logits / action means and the critic a state value, whatever the task type.
+            var hiddenSizes = GetHiddenLayerSizes();
+            AddSeededDefaultLayers(architecture, () =>
             {
-                new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()),
-                new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()),
-                new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()),
+                var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+                foreach (int width in hiddenSizes)
+                {
+                    layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>()));
+                }
+
+                layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+                return layers;
             });
         }
     }

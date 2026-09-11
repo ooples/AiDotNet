@@ -244,6 +244,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             : TradingOptions.BatchSize;
         if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
 
+        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
+
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;

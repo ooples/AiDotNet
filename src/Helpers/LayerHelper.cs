@@ -565,7 +565,20 @@ public static partial class LayerHelper<T>
         // market data). Pick by task type, and never apply softmax to a
         // single-logit output (use identity for regression, sigmoid for a
         // single binary logit).
-        IActivationFunction<T> outputActivation = architecture.TaskType switch
+        IActivationFunction<T> outputActivation = DefaultOutputActivation(architecture.TaskType, outputSize);
+        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
+    }
+
+    /// <summary>
+    /// Output activation matching the task, shared by the feed-forward builders: identity for regression and
+    /// embeddings, sigmoid for binary / multi-label (or a single-logit multi-class) output, softmax for a
+    /// multi-class output.
+    /// </summary>
+    private static IActivationFunction<T> DefaultOutputActivation(NeuralNetworkTaskType taskType, int outputSize) =>
+        taskType switch
         {
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
             NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
@@ -578,10 +591,58 @@ public static partial class LayerHelper<T>
                 ? new SoftmaxActivation<T>()
                 : new IdentityActivation<T>(),
         };
-        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
 
-        ChainResolveLazyLayers(layers, new[] { inputSize });
-        foreach (var layer in layers) yield return layer;
+    /// <summary>
+    /// Creates a feed-forward network with one dense hidden layer per entry of
+    /// <paramref name="hiddenLayerSizes"/> (so widths may differ layer to layer), followed by a dense output
+    /// layer, with shapes chain-resolved from the architecture's input size.
+    /// </summary>
+    /// <param name="architecture">The architecture supplying the input size and task type.</param>
+    /// <param name="hiddenLayerSizes">Width of each hidden layer, in order. Empty yields a single linear/output layer.</param>
+    /// <param name="outputSize">Number of output neurons.</param>
+    /// <param name="hiddenActivationFactory">Creates each hidden layer's activation (one instance per layer); ReLU when null.</param>
+    /// <param name="outputActivation">Output activation; chosen from the task type (as
+    /// <see cref="CreateDefaultLayers(NeuralNetworkArchitecture{T}, int, int, int)"/> does) when null.</param>
+    /// <remarks>
+    /// With <c>hiddenLayerSizes = [s, s, ...]</c> and default activations this builds exactly the same layer
+    /// chain as the uniform-width <see cref="CreateDefaultLayers(NeuralNetworkArchitecture{T}, int, int, int)"/>.
+    /// </remarks>
+    internal static List<ILayer<T>> CreateFeedForwardLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int> hiddenLayerSizes,
+        int outputSize,
+        Func<IActivationFunction<T>>? hiddenActivationFactory = null,
+        IActivationFunction<T>? outputActivation = null)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null) throw new ArgumentNullException(nameof(hiddenLayerSizes));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
+        {
+            if (hiddenLayerSizes[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"Hidden layer {i} has non-positive width {hiddenLayerSizes[i]}.", nameof(hiddenLayerSizes));
+            }
+        }
+
+        var layers = new List<ILayer<T>>(hiddenLayerSizes.Count + 1);
+        foreach (int width in hiddenLayerSizes)
+        {
+            // One activation instance per layer, never shared across layers.
+            IActivationFunction<T> activation = hiddenActivationFactory is null
+                ? new ReLUActivation<T>()
+                : hiddenActivationFactory();
+            layers.Add(new DenseLayer<T>(width, activation));
+        }
+
+        layers.Add(new DenseLayer<T>(
+            outputSize,
+            outputActivation ?? DefaultOutputActivation(architecture.TaskType, outputSize)));
+
+        ChainResolveLazyLayers(layers, new[] { architecture.CalculatedInputSize });
+        return layers;
     }
 
     /// <summary>

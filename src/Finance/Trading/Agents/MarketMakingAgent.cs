@@ -164,9 +164,12 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
         if (architecture.Layers.Count == 0)
         {
-            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateDefaultMarketMakingLayers(
+            // ReLU MLP sized by TradingAgentOptions.HiddenLayers (default [64, 64], the same network
+            // LayerHelper.CreateDefaultMarketMakingLayers builds).
+            var hiddenSizes = GetHiddenLayerSizes();
+            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateFeedForwardLayers(
                 architecture,
-                stateSize,
+                hiddenSizes,
                 actionSize));
         }
     }
@@ -260,6 +263,9 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
             : TradingOptions.BatchSize;
         if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
+
+        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
         if (batch.Count == 0) return NumOps.Zero;

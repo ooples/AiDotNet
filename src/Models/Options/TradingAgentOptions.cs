@@ -96,8 +96,22 @@ public class TradingAgentOptions<T> : ModelOptions
     public int TargetUpdateFrequency { get; set; } = 1000;
 
     /// <summary>
-    /// Number of steps before training begins.
+    /// Number of environment steps (stored transitions) before training begins.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Replay-based agents (DQN, A2C, SAC, market-making) apply no gradient update until their replay buffer
+    /// holds at least this many transitions (capped at <see cref="ReplayBufferSize"/>), in addition to
+    /// needing one full <see cref="BatchSize"/>. During warmup they still act with their initial exploration
+    /// (for DQN, epsilon stays at <see cref="EpsilonStart"/> because it only decays per update), so the
+    /// first updates sample from a diverse buffer. A one-shot supervised <c>Train(state, target)</c> call is
+    /// not gated. Set 0 to start updating as soon as a minibatch is available.
+    /// </para>
+    /// <para>
+    /// The on-policy PPO agent learns only from the rollout it just collected and has no replay buffer to
+    /// warm up, so it does not use this option.
+    /// </para>
+    /// </remarks>
     public int WarmupSteps { get; set; } = 1000;
 
     /// <summary>
@@ -161,9 +175,21 @@ public class TradingAgentOptions<T> : ModelOptions
     public bool ContinuousActions { get; set; } = false;
 
     /// <summary>
-    /// Hidden layer sizes for the neural network.
+    /// Hidden layer sizes for the networks an agent builds itself.
     /// </summary>
-    public int[] HiddenLayers { get; set; } = new[] { 256, 128, 64 };
+    /// <remarks>
+    /// <para>
+    /// When an actor / critic / Q-network architecture is passed with no layers, the agent builds a
+    /// multilayer perceptron with one hidden layer per entry (ReLU; Tanh for PPO) and a linear output layer.
+    /// Architectures that already contain layers are used as-is and this option does not change them.
+    /// An empty array builds a single linear layer. Every entry must be positive.
+    /// </para>
+    /// <para>
+    /// The default <c>[64, 64]</c> is the network the agents have always built by default; before this option
+    /// was honoured its documented default of <c>[256, 128, 64]</c> was never applied.
+    /// </para>
+    /// </remarks>
+    public int[] HiddenLayers { get; set; } = new[] { 64, 64 };
 
     #endregion
 
@@ -329,6 +355,10 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("EpsilonStart must be >= EpsilonEnd.", nameof(EpsilonStart));
         if (!(EpsilonDecay > 0.0 && EpsilonDecay <= 1.0))
             throw new ArgumentException("EpsilonDecay must be in (0, 1].", nameof(EpsilonDecay));
+        if (WarmupSteps < 0)
+            throw new ArgumentException("WarmupSteps cannot be negative.", nameof(WarmupSteps));
+        if (HiddenLayers is null || Array.Exists(HiddenLayers, size => size <= 0))
+            throw new ArgumentException("HiddenLayers must be non-null with positive widths.", nameof(HiddenLayers));
         if (TransactionCost < 0)
             throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
     }
