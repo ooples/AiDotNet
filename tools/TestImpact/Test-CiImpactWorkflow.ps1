@@ -251,8 +251,23 @@ Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
     'ordinary PR selection was given the audit-only unchanged-map capability'
 Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
-Assert-Contract ($selectStep.Contains('-BaseSha $env:PR_BASE_SHA')) `
+Assert-Contract ($selectStep.Contains('-ClassifyOnly `') -and
+        $selectStep.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) `
     'non-runtime classification does not use the exact PR base-to-head path set'
+Assert-Contract ($selectStep.Contains('PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}')) `
+    'the selector is not given the pull request head it must verify as the merge commit''s second parent'
+# The event base.sha is the base branch as it was when the pull request was opened. For a pull
+# request behind master it made every commit master gained since look like part of the pull
+# request: on #2100 it attributed 16 merged CI-control files to a 4-file change, escalating 116 shards.
+Assert-Contract (-not $selectStep.Contains('pull_request.base.sha') -and -not $selectStep.Contains('-BaseSha')) `
+    'pull-request selection reads the stale event base.sha instead of the merge commit''s first parent'
+Assert-Contract ($selectorText.Contains('function Resolve-PullRequestBase') -and
+        $selectorText.Contains('$parents.Count -ne 3') -and
+        $selectorText.Contains('$parents[2].Equals($PullRequestHeadSha')) `
+    'the selector does not verify the checkout is the two-parent merge of the pull request head'
+Assert-Contract ($selectStep.Contains('-ShardManifestFile shard-manifest.json') -and
+        $selectStep.Contains('Set-Content -LiteralPath shard-manifest.json')) `
+    'test sources are not routed through the shard manifest, so every test edit escalates'
 Assert-Contract ($selectStep.Contains('$pathRequiresValidation = Read-RequiredJsonBoolean')) `
     'the selector does not validate and consume the path classifier boolean'
 Assert-Contract ($selectStep.Contains('$selectionEscalated = Read-RequiredJsonBoolean')) `
@@ -612,6 +627,9 @@ Assert-Contract ($auditStep.Contains('-MapFile shard-map.json')) `
     'fresh coverage certification does not audit the candidate map that was just measured'
 Assert-Contract ($auditStep.Contains('-CurrentChangeBaseSha $sourceSha')) `
     'historically merged selector-control changes still wedge every later selection audit'
+Assert-Contract ($auditStep.Contains('-ShardManifestFile $auditManifest') -and
+        $auditStep.Contains("yq -o=json -I=0 '.shard' .github/test-shards.yml")) `
+    'the nightly audit does not replay test-source routing, so its misses are never measured'
 Assert-Contract ($auditStep.Contains('if ([int] $historicalDecision.missCount -gt 0)')) `
     'a historical selection miss can be hidden by fresh-coverage fallback'
 Assert-Contract ($auditStep.Contains('(-not $certified -and $auditExit -eq 0)')) `

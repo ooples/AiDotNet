@@ -18,6 +18,23 @@
     always-run shards. Ordinary PR selection must not pass this switch: an unexpectedly empty PR
     diff remains a fail-closed full-matrix decision.
 
+.PARAMETER PullRequestHeadSha
+    The pull request's head commit. The checkout must be GitHub's merge of that head onto the base
+    branch; its first parent is then the exact base this run validates against, and only the
+    paths the merge changes relative to it are this pull request's change. Mutually exclusive
+    with BaseSha.
+
+.PARAMETER BaseSha
+    An explicit base for the current change. The nightly audit passes the audited commit itself,
+    so every map-to-HEAD path is replayed as one change and only selection-control edits are
+    treated as historical. Pull requests must use PullRequestHeadSha instead: the event's
+    base.sha is stale whenever the pull request is behind its base branch.
+
+.PARAMETER ShardManifestFile
+    JSON array of { name, project, filter } for every shard (the converted test-shards.yml).
+    Test sources are never in the coverage map, so without this every test-file change escalates;
+    with it they are routed to the shards whose filters select their tests.
+
 .PARAMETER SelfTest
     Runs the built-in adversarial checks and exits.
 #>
@@ -26,8 +43,11 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $MapFile,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $ExpectedShards,
     [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
+    [Parameter(ParameterSetName = 'Select')] [string] $ShardManifestFile,
     [Parameter(ParameterSetName = 'Select')]
-    [Parameter(Mandatory, ParameterSetName = 'Classify')] [string] $BaseSha,
+    [Parameter(ParameterSetName = 'Classify')] [string] $BaseSha,
+    [Parameter(ParameterSetName = 'Select')]
+    [Parameter(ParameterSetName = 'Classify')] [string] $PullRequestHeadSha,
     [Parameter(ParameterSetName = 'Select')]
     [Parameter(ParameterSetName = 'Classify')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'Classify')] [switch] $ClassifyOnly,
@@ -57,7 +77,11 @@ $script:SelectionControlPaths = @(
     '.github/workflows/test-impact-map.yml',
     '.github/workflows/ci-shard-closure-policy.yml'
 )
-$script:FullValidationDirectories = @('.github/actions/', '.github/scripts/')
+# Build-time code: the source generators the test project loads as an analyzer. It runs inside the
+# compiler, so runtime coverage never records it, yet one edit can rewrite thousands of generated
+# test classes across every ModelFamily shard. No coverage-derived routing can bound that.
+$script:BuildTimeDirectories = @('src/AiDotNet.Generators/')
+$script:FullValidationDirectories = @('.github/actions/', '.github/scripts/') + $script:BuildTimeDirectories
 $script:SelectionControlDirectories = @('tools/TestImpact/')
 $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/azure-functions-deploy.yml',
@@ -322,17 +346,64 @@ function Get-ChangedRanges {
     return ConvertTo-ChangedRanges -DiffLines $diff -ChangedFiles $changedFiles
 }
 
+function Get-DirectoryOwners {
+    <#
+        The shards that execute any mapped file in the nearest directory of Path that has one, never
+        climbing above a two-segment root such as 'src/Finance'. A brand-new source file has no
+        coverage of its own, but the code beside it does; climbing to 'src/' itself would stop
+        meaning anything, so an orphan with no mapped neighbour below that depth still escalates.
+    #>
+    param([Parameter(Mandatory)] $Map, [Parameter(Mandatory)] [string] $Path)
+
+    $segments = @(([string] $Path).Replace('\', '/').Split('/'))
+    for ($depth = $segments.Count - 1; $depth -ge 2; $depth--) {
+        $directory = ($segments[0..($depth - 1)] -join '/') + '/'
+        $owners = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($property in $Map.files.PSObject.Properties) {
+            if (-not $property.Name.StartsWith($directory, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            foreach ($occurrence in @($property.Value)) {
+                [void] $owners.Add([string] $Map.knownShards[[int] $occurrence.s])
+            }
+        }
+        if ($owners.Count -gt 0) {
+            return [pscustomobject]@{ Directory = $directory.TrimEnd('/'); Shards = @($owners) }
+        }
+    }
+    return $null
+}
+
+function Format-LineRanges {
+    param([AllowEmptyCollection()] [object[]] $Ranges)
+    return (@($Ranges | ForEach-Object { "$($_[0])-$($_[1])" }) -join ', ')
+}
+
 function Select-ImpactedShards {
+    <#
+        CurrentPaths is the change being validated. With -ScopeToCurrentPaths, only those paths are
+        selected for: Changed still supplies their line ranges in the MAP's coordinates, but a file
+        that differs from the map only because master moved on since the map was built belongs to
+        commits that were validated when they landed, not to this pull request.
+
+        Without the switch (the nightly audit, which replays everything since the map as one
+        change) CurrentPaths only decides whether a selection-control edit is current.
+
+        TestRoutes carries the precomputed routing for test sources the coverage map cannot index;
+        see Get-TestFileRoutes. Every selected shard is recorded in Routes with the reason it was
+        selected, so a log reader can see why a shard runs without re-deriving it.
+    #>
     param(
         [Parameter(Mandatory)] $Map,
         [Parameter(Mandatory)] [hashtable] $Changed,
         [AllowEmptyCollection()] [string[]] $CurrentPaths = @(),
+        [switch] $ScopeToCurrentPaths,
+        [hashtable] $TestRoutes = @{},
         [switch] $AuditUnchangedMap
     )
 
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
+    $routes = [System.Collections.Generic.List[string]]::new()
     $escalate = $false
     $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
@@ -342,10 +413,42 @@ function Select-ImpactedShards {
         @($Changed.Keys)
     }
     foreach ($currentPath in $effectiveCurrentPaths) {
-        [void] $currentPathSet.Add(([string] $currentPath).Replace('\', '/'))
+        if (-not [string]::IsNullOrWhiteSpace([string] $currentPath)) {
+            [void] $currentPathSet.Add(([string] $currentPath).Replace('\', '/'))
+        }
+    }
+
+    if ($ScopeToCurrentPaths) {
+        # Scoping discards every path outside the pull request, so an empty pull-request path set
+        # would otherwise discard everything and read as a deliberate non-runtime result.
+        if ($currentPathSet.Count -eq 0) {
+            return [pscustomobject]@{
+                Escalate           = $true
+                RequiresValidation = $true
+                Reasons            = @("the pull request's own changed path set was empty")
+                Shards             = @()
+                Routes             = @()
+            }
+        }
+
+        # A pull-request path whose content equals the map's own copy has no map-to-HEAD hunks, yet
+        # it still differs from the merge base (master changed it after the map and this pull
+        # request reverted that). Its effect cannot be expressed in the map's line numbers.
+        $changedPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($key in $Changed.Keys) { [void] $changedPathSet.Add(([string] $key).Replace('\', '/')) }
+        foreach ($currentPath in ($currentPathSet | Sort-Object)) {
+            if ((Get-ChangedPathImpact -Path $currentPath) -eq [ChangedPathImpact]::NonRuntime) { continue }
+            if (-not $changedPathSet.Contains($currentPath)) {
+                $escalate = $true
+                [void] $reasons.Add("changed by this pull request but identical to the map's copy, so its effect has no map line numbers: $currentPath")
+            }
+        }
     }
 
     foreach ($path in ($Changed.Keys | Sort-Object)) {
+        if ($ScopeToCurrentPaths -and -not $currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
+            continue
+        }
         $impact = Get-ChangedPathImpact -Path $path
         switch ($impact) {
             ([ChangedPathImpact]::NonRuntime) { continue }
@@ -383,6 +486,7 @@ function Select-ImpactedShards {
                     RequiresValidation = $true
                     Reasons            = @('map and audited tree are unchanged')
                     Shards             = @($selected | Sort-Object)
+                    Routes             = @($selected | Sort-Object | ForEach-Object { "$_ <= is always run" })
                 }
             }
         }
@@ -392,6 +496,7 @@ function Select-ImpactedShards {
             RequiresValidation = $true
             Reasons             = @('changed path set was empty')
             Shards              = @()
+            Routes              = @()
         }
     }
 
@@ -403,17 +508,53 @@ function Select-ImpactedShards {
             RequiresValidation = $escalate
             Reasons           = $reasons
             Shards            = @()
+            Routes            = @()
         }
     }
 
-    foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+    foreach ($shard in @($Map.alwaysRun)) {
+        [void] $selected.Add([string] $shard)
+        [void] $routes.Add("$shard <= is always run")
+    }
 
     foreach ($path in $mappedPaths) {
 
         $entry = $Map.files.PSObject.Properties[$path]
         if (-not $entry) {
-            $escalate = $true
-            [void] $reasons.Add("not executed by any mapped shard: $path")
+            if ($TestRoutes.ContainsKey($path)) {
+                # Test sources are never instrumented, so the map can never index them. Their owning
+                # shards come from the manifest's own filters instead; see Get-TestFileRoutes.
+                $route = $TestRoutes[$path]
+                if ($route.Routable) {
+                    foreach ($shard in @($route.Shards)) {
+                        [void] $selected.Add([string] $shard)
+                        [void] $routes.Add("$shard <= runs tests affected by $path ($($route.Why))")
+                    }
+                }
+                else {
+                    $escalate = $true
+                    [void] $reasons.Add("$($route.Why): $path")
+                }
+                continue
+            }
+
+            # An unmapped source file - normally one this pull request adds - has no coverage of its
+            # own. Only C# is routed to its directory's owners: an unmapped project, props or data
+            # file can change how everything builds or loads, which no neighbour's coverage bounds.
+            $directoryOwners = $null
+            if ($path.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase) -and
+                -not $path.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase)) {
+                $directoryOwners = Get-DirectoryOwners -Map $Map -Path $path
+            }
+            if ($null -eq $directoryOwners) {
+                $escalate = $true
+                [void] $reasons.Add("not executed by any mapped shard: $path")
+                continue
+            }
+            foreach ($shard in @($directoryOwners.Shards)) {
+                [void] $selected.Add([string] $shard)
+                [void] $routes.Add("$shard <= executes mapped files in $($directoryOwners.Directory), beside the unmapped source $path")
+            }
             continue
         }
 
@@ -425,9 +566,12 @@ function Select-ImpactedShards {
         }
 
         $covered = [bool[]]::new([int] ($hunks.Count / 2))
+        $fileOwners = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+        $hitsByShard = [ordered]@{}
         foreach ($occurrence in @($entry.Value)) {
             $ranges = @($occurrence.r)
             $shardName = [string] $Map.knownShards[[int] $occurrence.s]
+            [void] $fileOwners.Add($shardName)
             for ($h = 0; $h + 1 -lt $hunks.Count; $h += 2) {
                 $hit = $false
                 for ($i = 0; $i + 1 -lt $ranges.Count; $i += 2) {
@@ -440,14 +584,30 @@ function Select-ImpactedShards {
                 if ($hit) {
                     $covered[[int] ($h / 2)] = $true
                     [void] $selected.Add($shardName)
+                    if (-not $hitsByShard.Contains($shardName)) {
+                        $hitsByShard[$shardName] = [System.Collections.Generic.List[object]]::new()
+                    }
+                    [void] $hitsByShard[$shardName].Add(@($hunks[$h], $hunks[$h + 1]))
                 }
             }
         }
+        foreach ($shardName in $hitsByShard.Keys) {
+            [void] $routes.Add("$shardName <= executes changed lines $(Format-LineRanges $hitsByShard[$shardName]) of $path")
+        }
 
+        # A changed range no shard executes is routed to every shard that executes ANY line of the
+        # same file. Most such ranges are not dead code: they are declarations coverage never
+        # records (fields, attributes, braces between methods) or the insertion point of new code,
+        # whose effect reaches tests only through the file's executed members. This is the
+        # heuristic the nightly miss audit exists to check.
+        $uncovered = [System.Collections.Generic.List[object]]::new()
         for ($h = 0; $h + 1 -lt $hunks.Count; $h += 2) {
-            if (-not $covered[[int] ($h / 2)]) {
-                $escalate = $true
-                [void] $reasons.Add("changed range $($hunks[$h])-$($hunks[$h + 1]) is not executed by any mapped shard: $path")
+            if (-not $covered[[int] ($h / 2)]) { [void] $uncovered.Add(@($hunks[$h], $hunks[$h + 1])) }
+        }
+        if ($uncovered.Count -gt 0) {
+            foreach ($shardName in $fileOwners) {
+                [void] $selected.Add($shardName)
+                [void] $routes.Add("$shardName <= executes $path, whose changed lines $(Format-LineRanges $uncovered) no shard executes")
             }
         }
     }
@@ -462,7 +622,631 @@ function Select-ImpactedShards {
         RequiresValidation = $true
         Reasons            = $reasons
         Shards             = @($selected | Sort-Object)
+        Routes             = @($routes)
     }
+}
+
+# ------------------------------------------------------------- test routing
+
+function ConvertTo-TestFilter {
+    <#
+        Parses a VSTest filter into an expression tree. VSTest's grammar: conditions
+        Property(=|!=|~|!~)Value joined by '&' and '|', '&' binding tighter, with parentheses.
+        Whitespace around tokens is insignificant (folded YAML inserts it at line breaks).
+        Anything outside that grammar throws, and the caller then routes nothing - it escalates.
+    #>
+    param([Parameter(Mandatory)] [string] $Text)
+
+    if ($Text.Contains('\')) { throw 'escaped filter characters are not supported' }
+    $tokens = [System.Collections.Generic.List[string]]::new()
+    foreach ($match in [regex]::Matches($Text, '[()&|]|[^()&|]+')) {
+        $value = $match.Value.Trim()
+        if ($value.Length -gt 0) { [void] $tokens.Add($value) }
+    }
+
+    function Read-Or {
+        $items = [System.Collections.Generic.List[object]]::new()
+        [void] $items.Add((Read-And))
+        while ($script:filterPosition -lt $tokens.Count -and $tokens[$script:filterPosition] -eq '|') {
+            $script:filterPosition++
+            [void] $items.Add((Read-And))
+        }
+        if ($items.Count -eq 1) { return $items[0] }
+        return [pscustomobject]@{ Kind = 'Or'; Items = @($items) }
+    }
+    function Read-And {
+        $items = [System.Collections.Generic.List[object]]::new()
+        [void] $items.Add((Read-Factor))
+        while ($script:filterPosition -lt $tokens.Count -and $tokens[$script:filterPosition] -eq '&') {
+            $script:filterPosition++
+            [void] $items.Add((Read-Factor))
+        }
+        if ($items.Count -eq 1) { return $items[0] }
+        return [pscustomobject]@{ Kind = 'And'; Items = @($items) }
+    }
+    function Read-Factor {
+        if ($script:filterPosition -ge $tokens.Count) { throw 'filter ended where a condition was expected' }
+        $token = $tokens[$script:filterPosition]
+        if ($token -eq '(') {
+            $script:filterPosition++
+            $inner = Read-Or
+            if ($script:filterPosition -ge $tokens.Count -or $tokens[$script:filterPosition] -ne ')') {
+                throw 'unbalanced parenthesis in filter'
+            }
+            $script:filterPosition++
+            return $inner
+        }
+        if ($token -in @(')', '&', '|')) { throw "unexpected '$token' in filter" }
+        if ($token -notmatch '^(?<p>[A-Za-z][\w.]*)\s*(?<op>!=|!~|=|~)\s*(?<v>\S(?:.*\S)?)$') {
+            throw "unparseable filter condition '$token'"
+        }
+        $script:filterPosition++
+        return [pscustomobject]@{ Kind = 'Condition'; Property = $Matches.p; Operator = $Matches.op; Value = $Matches.v }
+    }
+
+    $script:filterPosition = 0
+    $tree = Read-Or
+    if ($script:filterPosition -ne $tokens.Count) { throw "unexpected '$($tokens[$script:filterPosition])' in filter" }
+    return $tree
+}
+
+# Three-valued results. Unknown means "this test might match", so a shard is skipped only when its
+# filter is definitely false for every test the changed file can contain.
+$script:FilterFalse = 0
+$script:FilterTrue = 1
+$script:FilterUnknown = 2
+
+function Invert-FilterResult {
+    param([int] $Value)
+    if ($Value -eq $script:FilterUnknown) { return $script:FilterUnknown }
+    return 1 - $Value
+}
+
+function Test-OpenSuffixCanComplete {
+    <#
+        Whether Prefix followed by some unknown suffix can contain (or, with -Exact, equal) Value.
+        AnySuffix admits any text; otherwise the suffix is one method identifier, which contains no
+        '.' or '+', so a namespace or class term that is not already in the prefix cannot appear.
+    #>
+    param([string] $Prefix, [string] $Value, [bool] $AnySuffix, [switch] $Exact)
+
+    for ($k = 0; $k -le $Value.Length; $k++) {
+        $head = $Value.Substring(0, $k)
+        $tail = $Value.Substring($k)
+        $headFits = if ($Exact) { $Prefix.Equals($head, [StringComparison]::OrdinalIgnoreCase) }
+                    else { $Prefix.EndsWith($head, [StringComparison]::OrdinalIgnoreCase) }
+        if (-not $headFits) { continue }
+        if ($AnySuffix -or $tail -match '^\w*$') { return $true }
+    }
+    return $false
+}
+
+function Test-FilterStringCondition {
+    <#
+        Actual is either a test's complete fully qualified name, or - when PrefixOnly - the known
+        start of names whose remainder cannot be read from this file (inherited tests, or a test
+        whose declaration could not be read). Each comparison is made both ordinally and ignoring
+        case; if the two disagree the result is Unknown, so neither VSTest casing behaviour can
+        make a matching test look excluded.
+    #>
+    param([string] $Actual, [bool] $PrefixOnly, [bool] $AnySuffix, [string] $Operator, [string] $Value)
+
+    $negated = $Operator.StartsWith('!')
+    if ($Operator.EndsWith('~')) {
+        $ordinal = $Actual.Contains($Value, [StringComparison]::Ordinal)
+        $ignoreCase = $Actual.Contains($Value, [StringComparison]::OrdinalIgnoreCase)
+        $result = if ($ordinal) { $script:FilterTrue }
+                  elseif ($ignoreCase) { $script:FilterUnknown }
+                  elseif ($PrefixOnly -and (Test-OpenSuffixCanComplete -Prefix $Actual -Value $Value -AnySuffix $AnySuffix)) {
+                      $script:FilterUnknown
+                  }
+                  else { $script:FilterFalse }
+    }
+    else {
+        if ($PrefixOnly) {
+            $result = if (Test-OpenSuffixCanComplete -Prefix $Actual -Value $Value -AnySuffix $AnySuffix -Exact) {
+                          $script:FilterUnknown
+                      }
+                      else { $script:FilterFalse }
+        }
+        else {
+            $ordinal = $Actual.Equals($Value, [StringComparison]::Ordinal)
+            $ignoreCase = $Actual.Equals($Value, [StringComparison]::OrdinalIgnoreCase)
+            $result = if ($ordinal) { $script:FilterTrue }
+                      elseif ($ignoreCase) { $script:FilterUnknown }
+                      else { $script:FilterFalse }
+        }
+    }
+    if ($negated) { return Invert-FilterResult $result }
+    return $result
+}
+
+function Test-TestFilter {
+    param([Parameter(Mandatory)] $Node, [Parameter(Mandatory)] $Candidate)
+
+    switch ($Node.Kind) {
+        'And' {
+            $sawUnknown = $false
+            foreach ($item in $Node.Items) {
+                $value = Test-TestFilter -Node $item -Candidate $Candidate
+                if ($value -eq $script:FilterFalse) { return $script:FilterFalse }
+                if ($value -eq $script:FilterUnknown) { $sawUnknown = $true }
+            }
+            if ($sawUnknown) { return $script:FilterUnknown }
+            return $script:FilterTrue
+        }
+        'Or' {
+            $sawUnknown = $false
+            foreach ($item in $Node.Items) {
+                $value = Test-TestFilter -Node $item -Candidate $Candidate
+                if ($value -eq $script:FilterTrue) { return $script:FilterTrue }
+                if ($value -eq $script:FilterUnknown) { $sawUnknown = $true }
+            }
+            if ($sawUnknown) { return $script:FilterUnknown }
+            return $script:FilterFalse
+        }
+        'Condition' {
+            if ($Node.Property -ieq 'FullyQualifiedName') {
+                return Test-FilterStringCondition -Actual $Candidate.Fqn -PrefixOnly $Candidate.PrefixOnly -AnySuffix $Candidate.AnySuffix `
+                    -Operator $Node.Operator -Value $Node.Value
+            }
+            if ($Node.Property -ieq 'Category') {
+                # Categories are known only as the union over the whole file, so a category that
+                # appears somewhere in the file may or may not be on this particular test.
+                if ($null -eq $Candidate.Categories) { return $script:FilterUnknown }
+                $present = $false
+                foreach ($category in $Candidate.Categories) {
+                    $hit = if ($Node.Operator.EndsWith('~')) {
+                        $category.Contains($Node.Value, [StringComparison]::OrdinalIgnoreCase)
+                    } else {
+                        $category.Equals($Node.Value, [StringComparison]::OrdinalIgnoreCase)
+                    }
+                    if ($hit) { $present = $true; break }
+                }
+                if ($present) { return $script:FilterUnknown }
+                if ($Node.Operator.StartsWith('!')) { return $script:FilterTrue }
+                return $script:FilterFalse
+            }
+            # Any other property is not modelled, so it can never be what excludes a test.
+            return $script:FilterUnknown
+        }
+        default { throw "unknown filter node '$($Node.Kind)'" }
+    }
+}
+
+function ConvertTo-CodeOnlyCSharp {
+    <#
+        Blanks the CONTENT of comments, strings and character literals (newlines are kept, so
+        offsets and line numbers survive), leaving only code. Brace matching and declaration
+        matching then cannot be fooled by '{' in a string or 'class X' in a comment.
+    #>
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+
+    $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
+    $builder = [System.Text.StringBuilder]::new($Text.Length)
+    $last = 0
+    foreach ($match in [regex]::Matches($Text, $pattern)) {
+        [void] $builder.Append($Text, $last, $match.Index - $last)
+        [void] $builder.Append(($match.Value -replace '[^\r\n]', ' '))
+        $last = $match.Index + $match.Length
+    }
+    [void] $builder.Append($Text, $last, $Text.Length - $last)
+    return $builder.ToString()
+}
+
+function Get-CSharpTestShape {
+    <#
+        Reads, from one C# test source, what VSTest filters can see: every test's fully qualified
+        name, the Category traits the file can carry, and the top-level types other files could
+        reference. Returns ParseError instead of guessing when the braces do not balance.
+    #>
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+
+    $code = ConvertTo-CodeOnlyCSharp -Text $Text
+    $shape = [pscustomobject]@{
+        Types          = [System.Collections.Generic.List[object]]::new()
+        Tests          = [System.Collections.Generic.List[object]]::new()
+        Categories     = $null
+        Hazard         = $null
+        ParseError     = $null
+    }
+
+    # Brace pairs by position.
+    $open = [System.Collections.Generic.Stack[int]]::new()
+    $closeOf = @{}
+    foreach ($brace in [regex]::Matches($code, '[{}]')) {
+        if ($brace.Value -eq '{') { $open.Push($brace.Index); continue }
+        if ($open.Count -eq 0) { $shape.ParseError = 'unbalanced braces'; return $shape }
+        $closeOf[$open.Pop()] = $brace.Index
+    }
+    if ($open.Count -ne 0) { $shape.ParseError = 'unbalanced braces'; return $shape }
+
+    function Get-BodyRange([int] $From) {
+        # The first '{' after a declaration opens its body, unless a ';' ends the declaration first.
+        for ($k = $From; $k -lt $code.Length; $k++) {
+            if ($code[$k] -eq ';') { return $null }
+            if ($code[$k] -eq '{') { return @($k, [int] $closeOf[$k]) }
+        }
+        return $null
+    }
+
+    $namespaces = [System.Collections.Generic.List[object]]::new()
+    $fileNamespace = ''
+    foreach ($match in [regex]::Matches($code, '(?m)^[ \t]*namespace\s+(?<n>[A-Za-z_][\w.]*)\s*(?<t>[;{])')) {
+        if ($match.Groups['t'].Value -eq ';') { $fileNamespace = $match.Groups['n'].Value; continue }
+        $start = $match.Groups['t'].Index
+        [void] $namespaces.Add([pscustomobject]@{ Name = $match.Groups['n'].Value; Start = $start; End = [int] $closeOf[$start] })
+    }
+
+    $typePattern = '\b(?<kind>class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+(?<name>[A-Za-z_]\w*)'
+    foreach ($match in [regex]::Matches($code, $typePattern)) {
+        # 'where T : class where U : new()' puts a keyword where a type name would be.
+        if ($match.Groups['name'].Value -cin @('where', 'new', 'class', 'struct', 'unmanaged', 'notnull')) { continue }
+        $body = Get-BodyRange ($match.Index + $match.Length)
+        $header = if ($null -ne $body) { $code.Substring($match.Index + $match.Length, $body[0] - $match.Index - $match.Length) } else { '' }
+        $lineStart = $code.LastIndexOf("`n", [Math]::Max(0, $match.Index - 1)) + 1
+        $modifiers = $code.Substring($lineStart, $match.Index - $lineStart)
+
+        # The base list follows the name, after any type parameters and primary constructor, and
+        # before any constraint clause. Interfaces are recognised by the I-prefix convention; any
+        # other base is a class whose tests and traits this type inherits from elsewhere.
+        $baseText = [regex]::Replace($header, '<[^<>]*>', '')
+        while ($baseText -match '\([^()]*\)') { $baseText = [regex]::Replace($baseText, '\([^()]*\)', '') }
+        $baseText = ($baseText -split '\bwhere\b')[0]
+        $hasClassBase = $false
+        $colon = $baseText.IndexOf(':')
+        if ($colon -ge 0) {
+            foreach ($base in $baseText.Substring($colon + 1).Split(',')) {
+                $baseName = ($base.Trim() -split '\.')[-1]
+                if ($baseName -and $baseName -cnotmatch '^I[A-Z]') { $hasClassBase = $true }
+            }
+        }
+
+        [void] $shape.Types.Add([pscustomobject]@{
+            Name         = $match.Groups['name'].Value
+            Kind         = ($match.Groups['kind'].Value -split '\s+')[0]
+            Start        = $match.Index
+            BodyStart    = if ($null -ne $body) { $body[0] } else { -1 }
+            BodyEnd      = if ($null -ne $body) { $body[1] } else { -1 }
+            FileLocal    = $modifiers -match '\bfile\b'
+            IsAbstract   = $modifiers -match '\babstract\b'
+            HasClassBase = $hasClassBase
+            Parent       = $null
+            Namespace    = $fileNamespace
+        })
+    }
+
+    # Nesting and namespaces by containment.
+    foreach ($type in $shape.Types) {
+        $innermost = $null
+        foreach ($candidate in $shape.Types) {
+            if ($candidate -eq $type -or $candidate.BodyStart -lt 0) { continue }
+            if ($type.Start -gt $candidate.BodyStart -and $type.Start -lt $candidate.BodyEnd) {
+                if ($null -eq $innermost -or $candidate.BodyStart -gt $innermost.BodyStart) { $innermost = $candidate }
+            }
+        }
+        $type.Parent = $innermost
+        foreach ($namespace in $namespaces) {
+            if ($type.Start -gt $namespace.Start -and $type.Start -lt $namespace.End) { $type.Namespace = $namespace.Name }
+        }
+    }
+
+    function Get-TypeChain($Type) {
+        $names = [System.Collections.Generic.List[string]]::new()
+        for ($t = $Type; $null -ne $t; $t = $t.Parent) { $names.Insert(0, $t.Name) }
+        return ($names -join '+')
+    }
+    function Get-TypePrefix($Type) {
+        $chain = Get-TypeChain $Type
+        if ($Type.Namespace) { return "$($Type.Namespace).$chain" }
+        return $chain
+    }
+
+    # Test methods: an attribute list naming a *Fact or *Theory attribute, then the method whose
+    # parameter list is the next '(' - its name is the last identifier before it. An attribute
+    # list only starts a declaration, so it must follow a line start, '{', '}', ';' or ']'.
+    foreach ($attribute in [regex]::Matches($code, '\[(?<body>[^\[\]]*)\]')) {
+        $isTest = $false
+        foreach ($part in $attribute.Groups['body'].Value.Split(',')) {
+            if ($part.Trim() -match '^(?:[\w.]+\.)?\w*(?:Fact|Theory)(?:Attribute)?\s*(?:\(|$)') { $isTest = $true }
+        }
+        if (-not $isTest) { continue }
+        $before = $code.Substring(0, $attribute.Index).TrimEnd(' ', "`t")
+        if ($before.Length -gt 0 -and $before[-1] -notin @("`n", "`r", '{', '}', ';', ']')) { continue }
+
+        $after = $attribute.Index + $attribute.Length
+        $owner = $null
+        foreach ($type in $shape.Types) {
+            if ($type.BodyStart -lt 0) { continue }
+            if ($after -gt $type.BodyStart -and $after -lt $type.BodyEnd) {
+                if ($null -eq $owner -or $type.BodyStart -gt $owner.BodyStart) { $owner = $type }
+            }
+        }
+
+        # Skip any further attribute lists (bracket depth counted, so '[InlineData(new[] { 1 })]'
+        # is one list), then read the name before the parameter list.
+        $position = $after
+        while ($true) {
+            while ($position -lt $code.Length -and [char]::IsWhiteSpace($code[$position])) { $position++ }
+            if ($position -ge $code.Length -or $code[$position] -ne '[') { break }
+            $depth = 0
+            do {
+                if ($code[$position] -eq '[') { $depth++ } elseif ($code[$position] -eq ']') { $depth-- }
+                $position++
+            } while ($depth -gt 0 -and $position -lt $code.Length)
+        }
+        $method = $null
+        $paren = $code.IndexOf('(', $position)
+        if ($paren -ge 0) {
+            $signature = [regex]::Replace($code.Substring($position, $paren - $position), '<[^<>]*>\s*$', '')
+            if ($signature -notmatch '[;{}=\[\]]' -and $signature -match '(?<m>[A-Za-z_]\w*)\s*$') { $method = $Matches.m }
+        }
+
+        # A test whose name cannot be read still exists. It is kept as an open-ended candidate so a
+        # filter naming its method can never be what makes its shard look unaffected.
+        if ($null -eq $owner) {
+            [void] $shape.Tests.Add([pscustomobject]@{ Fqn = $(if ($fileNamespace) { "$fileNamespace." } else { '' }); PrefixOnly = $true; AnySuffix = $true })
+        }
+        elseif ($null -eq $method) {
+            [void] $shape.Tests.Add([pscustomobject]@{ Fqn = "$(Get-TypePrefix $owner)."; PrefixOnly = $true; AnySuffix = $false })
+        }
+        else {
+            [void] $shape.Tests.Add([pscustomobject]@{ Fqn = "$(Get-TypePrefix $owner).$method"; PrefixOnly = $false; AnySuffix = $false })
+        }
+    }
+
+    # A class with a class base can inherit tests whose method names live in another file.
+    foreach ($type in $shape.Types) {
+        if ($type.Kind -in @('class', 'record') -and $type.HasClassBase) {
+            [void] $shape.Tests.Add([pscustomobject]@{ Fqn = "$(Get-TypePrefix $type)."; PrefixOnly = $true; AnySuffix = $false })
+        }
+    }
+
+    # Categories are knowable only when every Category trait is a literal and no class inherits
+    # traits from a base declared elsewhere.
+    $categories = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $categoriesKnown = -not @($shape.Types | Where-Object { $_.HasClassBase }).Count
+    foreach ($trait in [regex]::Matches($Text, '\bTrait(?:Attribute)?\s*\(\s*"(?i:category)"\s*,\s*(?<v>[^)]*)\)')) {
+        $value = $trait.Groups['v'].Value.Trim()
+        if ($value -match '^"(?<c>[^"]*)"$') { [void] $categories.Add($Matches.c) }
+        else { $categoriesKnown = $false }
+    }
+    if ($categoriesKnown) { $shape.Categories = @($categories) }
+
+    # Constructs that reach tests without naming this file's types, which reference search cannot
+    # follow: extension methods, global usings, assembly-level attributes, module initializers, and
+    # xUnit collection definitions (bound by string name).
+    $hazards = [ordered]@{
+        'declares extension methods'           = '\(\s*this\s+[A-Za-z_]'
+        'declares global usings'               = '(?m)^\s*global\s+using\b'
+        'declares assembly-level attributes'   = '\[\s*assembly\s*:'
+        'declares a module initializer'        = '\bModuleInitializer\b'
+        'declares an xUnit collection definition' = '\bCollectionDefinition\b'
+    }
+    foreach ($hazard in $hazards.Keys) {
+        if ($code -match $hazards[$hazard]) { $shape.Hazard = $hazard; break }
+    }
+    # An abstract class is a base by construction, and the scaffold generator derives test classes
+    # from bases whose names it can compose at build time. Those derived classes are not in the
+    # tree, so reference search cannot find them.
+    if (-not $shape.Hazard -and @($shape.Types | Where-Object { $_.IsAbstract }).Count -gt 0) {
+        $shape.Hazard = 'declares an abstract class, which build-time generated test classes may derive from'
+    }
+    return $shape
+}
+
+function Get-ShardProjectDirectory {
+    param([Parameter(Mandatory)] $Shard)
+    $project = ([string] $Shard.project).Replace('\', '/')
+    $slash = $project.LastIndexOf('/')
+    if ($slash -lt 0) { return '' }
+    return $project.Substring(0, $slash + 1)
+}
+
+function Get-TestProjectDirectory {
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Manifest)
+
+    $best = $null
+    foreach ($shard in $Manifest) {
+        $directory = Get-ShardProjectDirectory -Shard $shard
+        if ($directory -and $Path.StartsWith($directory, [StringComparison]::OrdinalIgnoreCase) -and
+            ($null -eq $best -or $directory.Length -gt $best.Length)) {
+            $best = $directory
+        }
+    }
+    return $best
+}
+
+function Get-TestFileRoutes {
+    <#
+        Routes changed test sources to the shards whose manifest filters select their tests.
+
+        A test file affects the tests it declares and, through its types, every test file that uses
+        them: a base class, fixture or helper changes the behaviour of its consumers. So routing
+        follows the transitive closure of files that name this file's top-level types, and unions
+        the shards that select any test in that closure. Constructs whose consumers cannot be found
+        by name (see Get-CSharpTestShape hazards), a closure too wide to be selective, a file whose
+        text cannot be parsed, and tests no shard filter selects all return Routable = $false,
+        which the selector turns into an escalation.
+
+        FindBuildTimeReferences reports which of a file's type names build-time code (the source
+        generators) mentions: tests the generator emits exist only inside the compiler, so a type
+        they depend on cannot be routed by reading the tree.
+
+        ReadFile, FindReferrers and FindBuildTimeReferences are injected so the self-test can
+        exercise routing without a repository; in production they read HEAD and use git grep.
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Manifest,
+        [Parameter(Mandatory)] [scriptblock] $ReadFile,
+        [Parameter(Mandatory)] [scriptblock] $FindReferrers,
+        [Parameter(Mandatory)] [scriptblock] $FindBuildTimeReferences,
+        [int] $MaximumClosure = 200
+    )
+
+    $filters = @{}
+    foreach ($shard in $Manifest) {
+        try { $filters[[string] $shard.name] = ConvertTo-TestFilter -Text ([string] $shard.filter) }
+        catch { $filters[[string] $shard.name] = $null }
+    }
+
+    $routes = @{}
+    foreach ($path in $Paths) {
+        $normalized = $path.Replace('\', '/')
+        $projectDirectory = Get-TestProjectDirectory -Path $normalized -Manifest $Manifest
+        if ($null -eq $projectDirectory) {
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'test source belongs to no project any shard runs' }
+            continue
+        }
+        $projectShards = @($Manifest | Where-Object { (Get-ShardProjectDirectory -Shard $_) -ieq $projectDirectory })
+
+        $visited = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $queue = [System.Collections.Generic.Queue[string]]::new()
+        [void] $visited.Add($normalized)
+        $queue.Enqueue($normalized)
+        $candidates = [System.Collections.Generic.List[object]]::new()
+        $failure = $null
+        $ownTests = 0
+        $ownReferrers = 0
+
+        while ($queue.Count -gt 0 -and $null -eq $failure) {
+            $file = $queue.Dequeue()
+            $text = & $ReadFile $file
+            if ($null -eq $text) { $failure = "cannot read test source $file"; break }
+            $shape = Get-CSharpTestShape -Text $text
+            if ($shape.ParseError) { $failure = "cannot parse test source $file ($($shape.ParseError))"; break }
+            if ($shape.Hazard) { $failure = "test source $file $($shape.Hazard), whose consumers cannot be found by name"; break }
+
+            foreach ($test in $shape.Tests) {
+                [void] $candidates.Add([pscustomobject]@{ Fqn = $test.Fqn; PrefixOnly = $test.PrefixOnly; AnySuffix = $test.AnySuffix; Categories = $shape.Categories })
+            }
+            if ($file -ieq $normalized) { $ownTests = $shape.Tests.Count }
+
+            $names = @($shape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } |
+                ForEach-Object { $_.Name } | Sort-Object -Unique)
+            if ($names.Count -eq 0) { continue }
+            $generated = @(& $FindBuildTimeReferences $names)
+            if ($generated.Count -gt 0) {
+                $failure = "test source $file declares $($generated -join ', '), which a source generator references, so tests generated at build time may depend on it"
+                break
+            }
+            foreach ($referrer in @(& $FindReferrers $names $projectDirectory)) {
+                $referrerPath = ([string] $referrer).Replace('\', '/')
+                if ($referrerPath -ieq $file) { continue }
+                if ($file -ieq $normalized) { $ownReferrers++ }
+                if ($visited.Add($referrerPath)) {
+                    if ($visited.Count -gt $MaximumClosure) {
+                        $failure = "test source is shared by more than $MaximumClosure test files"
+                        break
+                    }
+                    $queue.Enqueue($referrerPath)
+                }
+            }
+        }
+
+        if ($null -ne $failure) {
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = $failure }
+            continue
+        }
+        if ($ownTests -eq 0 -and $ownReferrers -eq 0) {
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'test support source declares no tests and no test file names its types' }
+            continue
+        }
+
+        $shards = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+        $unparsed = $false
+        foreach ($shard in $projectShards) {
+            $filter = $filters[[string] $shard.name]
+            if ($null -eq $filter) { $unparsed = $true; break }
+            foreach ($candidate in $candidates) {
+                if ((Test-TestFilter -Node $filter -Candidate $candidate) -ne $script:FilterFalse) {
+                    [void] $shards.Add([string] $shard.name)
+                    break
+                }
+            }
+        }
+        if ($unparsed) {
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'a shard filter for this test project cannot be parsed' }
+        }
+        elseif ($shards.Count -eq 0) {
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'no shard filter selects any test this source affects' }
+        }
+        else {
+            $closure = $visited.Count - 1
+            $why = if ($closure -gt 0) { "its filter selects tests in this file or in $closure test file(s) that use it" }
+                   else { 'its filter selects tests in this file' }
+            $routes[$path] = [pscustomobject]@{ Routable = $true; Shards = @($shards); Why = $why }
+        }
+    }
+    return $routes
+}
+
+function Get-GitFileText {
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Revisions)
+    foreach ($revision in $Revisions) {
+        if ([string]::IsNullOrWhiteSpace($revision)) { continue }
+        $lines = @(& git -c core.quotepath=false show "${revision}:$Path" 2>$null)
+        if ($LASTEXITCODE -eq 0) { return ($lines -join "`n") }
+    }
+    return $null
+}
+
+function Find-GitReferrers {
+    param([Parameter(Mandatory)] [string[]] $Names, [Parameter(Mandatory)] [string] $Directory)
+    $arguments = @('-c', 'core.quotepath=false', 'grep', '-l', '-w', '-F')
+    foreach ($name in $Names) { $arguments += @('-e', $name) }
+    $arguments += @('HEAD', '--', ":(glob)$Directory**/*.cs")
+    $output = @(& git @arguments 2>$null)
+    # git grep exits 1 when nothing matches, which is an answer, not a failure.
+    if ($LASTEXITCODE -gt 1) { throw "git grep for test-type references failed with exit code $LASTEXITCODE" }
+    return @($output | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
+}
+
+function Find-GitBuildTimeReferences {
+    <#
+        Which of Names build-time code mentions. One search per name keeps the answer exact; the
+        lists are short (a file's top-level types) and git grep over the generator tree is fast.
+    #>
+    param([Parameter(Mandatory)] [string[]] $Names)
+    # An empty pathspec would search the whole repository and implicate every type there is.
+    $directories = @($script:BuildTimeDirectories | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($directories.Count -eq 0) { throw 'no build-time directories are configured' }
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in $Names) {
+        $arguments = @('-c', 'core.quotepath=false', 'grep', '-q', '-w', '-F', '-e', $name, 'HEAD', '--')
+        $arguments += $directories
+        & git @arguments 2>$null
+        if ($LASTEXITCODE -eq 0) { [void] $found.Add($name) }
+        elseif ($LASTEXITCODE -gt 1) { throw "git grep for build-time references failed with exit code $LASTEXITCODE" }
+    }
+    return @($found)
+}
+
+function Resolve-PullRequestBase {
+    <#
+        The pull_request event's base.sha is the base branch as it was when the pull request was
+        opened or last retargeted - not what GitHub merged it onto for this run. For a pull request
+        behind master it attributes every commit master has gained since to the pull request.
+
+        The checked-out merge ref is authoritative: its first parent IS the base this run tests
+        against, and its second parent is the pull request head. Both are verified, so a checkout
+        that is not the expected two-parent merge fails closed rather than guessing.
+    #>
+    param([Parameter(Mandatory)] [string] $PullRequestHeadSha)
+
+    if ($PullRequestHeadSha -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+        throw "pull request head '$PullRequestHeadSha' is not a complete Git object id"
+    }
+    $parents = @((& git rev-list --parents -n 1 HEAD) -split '\s+' | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) { throw 'cannot read the checked-out commit' }
+    if ($parents.Count -ne 3) {
+        throw "the checkout is not a two-parent pull-request merge commit ($($parents.Count - 1) parent(s))"
+    }
+    if (-not $parents[2].Equals($PullRequestHeadSha, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "the merge commit's second parent $($parents[2]) is not the pull request head $PullRequestHeadSha"
+    }
+    return $parents[1]
 }
 
 # ---------------------------------------------------------------- self-test
@@ -503,9 +1287,17 @@ if ($SelfTest) {
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change outside Beta lines must not select Beta'
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'always-run shards must always be selected'
 
+    # An unexecuted range in a mapped file routes to every shard that executes the file. Before this
+    # it escalated, and #2100's field declarations and between-method insertions - lines coverage
+    # never records - sent a four-file pull request to all 116 shards.
     $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14, 50, 60) }
-    Assert-True $r.Escalate 'mixed covered and uncovered hunks must escalate'
-    Assert-True ($r.Shards -contains 'Alpha') 'covered hunks are still reported before escalation'
+    Assert-True (-not $r.Escalate) 'an unexecuted range in a mapped file escalated instead of routing to its owners'
+    Assert-True ($r.Shards -contains 'Alpha' -and $r.Shards -contains 'Beta') `
+        'an unexecuted range was not routed to every shard executing the file'
+    Assert-True (@($r.Routes | Where-Object { $_ -like 'Beta <= executes src/Covered.cs, whose changed lines 50-60*' }).Count -eq 1) `
+        'the owner route did not record which lines no shard executes'
+    Assert-True (@($r.Routes | Where-Object { $_ -like 'Alpha <= executes changed lines 12-14 of src/Covered.cs' }).Count -eq 1) `
+        'a covered hit did not record the lines that selected it'
 
     foreach ($change in @(
         @{ Path = 'src/Unmapped.cs'; Why = 'an unmapped file must escalate' },
@@ -518,6 +1310,7 @@ if ($SelfTest) {
         @{ Path = '.github/scripts/analyze-test-results.ps1'; Why = 'CI analysis scripts must escalate' },
         @{ Path = '.github/actions/local/action.yml'; Why = 'local actions must escalate' },
         @{ Path = 'tools/TestImpact/Select-Shards.ps1'; Why = 'impact tooling must escalate' },
+        @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
         @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
         @{ Path = '.github/workflows/new-unknown.yml'; Why = 'unknown workflows must escalate' }
@@ -586,8 +1379,220 @@ if ($SelfTest) {
     }
     foreach ($edge in @(9, 21)) {
         $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
-        Assert-True $r.Escalate "unexecuted boundary line $edge must escalate"
+        Assert-True (-not $r.Escalate -and $r.Shards -contains 'Alpha' -and $r.Shards -contains 'Beta') `
+            "unexecuted boundary line $edge was not routed to the file's owners"
+        Assert-True (@($r.Routes | Where-Object { $_ -like 'Alpha <= executes changed lines*' }).Count -eq 0) `
+            "unexecuted boundary line $edge was reported as executed"
     }
+
+    # ---- A pull request BEHIND its base branch (the #2100 shape). -------------------------------
+    # The map-to-HEAD delta holds master's own later commits (a selector-control edit and an
+    # unmapped source file) as well as the pull request's one covered edit.
+    $behind = @{
+        'src/Covered.cs' = @(12, 14)
+        'tools/TestImpact/Select-Shards.ps1' = @(1, 2)
+        'src/Finance/MasterOnly.cs' = @(1, 5)
+        '.github/workflows/sonarcloud.yml' = @(1, 2)
+    }
+    # Reproduction: the stale event base.sha made every path current, and it escalated.
+    $r = Select-ImpactedShards -Map $map -Changed $behind -CurrentPaths @($behind.Keys)
+    Assert-True $r.Escalate 'fixture error: the stale-base reproduction did not escalate'
+    # Fixed: the merge commit's first parent limits the change to the pull request's own path.
+    $r = Select-ImpactedShards -Map $map -Changed $behind -CurrentPaths @('src/Covered.cs') -ScopeToCurrentPaths
+    Assert-True (-not $r.Escalate) 'a pull request behind master escalated on master''s own later commits'
+    Assert-True ((@($r.Shards) -join ',') -eq 'Alpha,HeavyNoCoverage') `
+        'a pull request behind master did not select exactly its own covering shard plus always-run'
+    Assert-True (-not (@($r.Routes) -match 'MasterOnly')) 'master''s later source file influenced the pull request'
+
+    # Scoping must still escalate a control edit that IS in the pull request.
+    $r = Select-ImpactedShards -Map $map -Changed $behind `
+        -CurrentPaths @('src/Covered.cs', 'tools/TestImpact/Select-Shards.ps1') -ScopeToCurrentPaths
+    Assert-True $r.Escalate 'a selector edit inside a behind pull request did not escalate'
+
+    # An empty pull-request path set must never read as a non-runtime change.
+    $r = Select-ImpactedShards -Map $map -Changed $behind -CurrentPaths @() -ScopeToCurrentPaths
+    Assert-True ($r.Escalate -and $r.RequiresValidation) 'an empty pull-request path set suppressed validation'
+
+    # A pull-request path with no map-to-HEAD hunks cannot be placed in map coordinates.
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) } `
+        -CurrentPaths @('src/Covered.cs', 'src/SingleRange.cs') -ScopeToCurrentPaths
+    Assert-True $r.Escalate 'a pull-request path absent from the map delta did not escalate'
+
+    # ---- Unmapped sources. ------------------------------------------------------------------------
+    $deepMap = @{
+        schemaVersion = 1; sha = '0123456789abcdef0123456789abcdef01234567'
+        knownShards = @('Alpha', 'Beta', 'Gamma'); alwaysRun = @()
+        files = @{
+            'src/Finance/Agents/Dqn.cs' = @( @{ s = 0; r = @(1, 9) } )
+            'src/Finance/Agents/Sac.cs' = @( @{ s = 1; r = @(1, 9) } )
+            'src/Finance/Data/Feed.cs' = @( @{ s = 2; r = @(1, 9) } )
+        }
+    } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Agents/NewAgent.cs' = @(1, 40) }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -eq 'Alpha,Beta') `
+        'a new source file was not routed to exactly the owners of its own directory'
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Brand/New/Deep.cs' = @(1, 4) }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -eq 'Alpha,Beta,Gamma') `
+        'a new source file with no mapped sibling did not climb to its nearest mapped ancestor'
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Orphan/Thing.cs' = @(1, 4) }
+    Assert-True $r.Escalate 'a new source file with no mapped neighbour below the root escalated nothing'
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Agents/agents.json' = @(1, 4) }
+    Assert-True $r.Escalate 'an unmapped non-C# file inside a mapped directory was routed instead of escalating'
+    $r = Select-ImpactedShards -Map $deepMap -Changed @{ 'src/Finance/Agents/Finance.csproj' = @(1, 4) }
+    Assert-True $r.Escalate 'an unmapped project file was routed instead of escalating'
+
+    # ---- Test sources, routed through precomputed manifest routes. --------------------------------
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/FooTests.cs' = @(1, 30) } -TestRoutes @{
+        'tests/P/FooTests.cs' = [pscustomobject]@{ Routable = $true; Shards = @('Beta'); Why = 'filter selects tests in this source' }
+    }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -eq 'Beta,HeavyNoCoverage') `
+        'a routable test source did not select exactly its owning shard plus always-run'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/Helpers.cs' = @(1, 30) } -TestRoutes @{
+        'tests/P/Helpers.cs' = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'declares extension methods' }
+    }
+    Assert-True ($r.Escalate -and ($r.Reasons -join ';') -like '*declares extension methods*') `
+        'an unroutable test source did not escalate with its reason'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/FooTests.cs' = @(1, 30) }
+    Assert-True $r.Escalate 'a test source with no route (no manifest) did not fail closed'
+
+    # ---- VSTest filter grammar and three-valued evaluation. ---------------------------------------
+    function New-Candidate([string] $Fqn, [bool] $PrefixOnly = $false, $Categories = @(), [bool] $AnySuffix = $false) {
+        [pscustomobject]@{ Fqn = $Fqn; PrefixOnly = $PrefixOnly; AnySuffix = $AnySuffix; Categories = $Categories }
+    }
+    $f = ConvertTo-TestFilter "Category!=GPU&Category!=Stress& `n (FullyQualifiedName~UnitTests.Alpha|`n FullyQualifiedName~UnitTests.Beta)"
+    Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Beta.C.M')) -eq $script:FilterTrue) `
+        'a folded multi-line filter did not match its second alternative'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Gamma.C.M')) -eq $script:FilterFalse) `
+        'a filter matched a test outside every alternative'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Alpha.C.M' $false @('GPU'))) -eq $script:FilterUnknown) `
+        'a category present somewhere in the file was treated as definitely on this test'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Alpha.C.M' $false $null)) -eq $script:FilterUnknown) `
+        'unknown categories were treated as known'
+    $f = ConvertTo-TestFilter 'A=1|B=2&FullyQualifiedName~Nope'
+    Assert-True ($f.Kind -eq 'Or' -and $f.Items[1].Kind -eq 'And') "'&' did not bind tighter than '|'"
+    $f = ConvertTo-TestFilter 'FullyQualifiedName~Contracts.A&FullyQualifiedName!~Skip'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'N.Contracts.' $true)) -eq $script:FilterUnknown) `
+        'an inherited test with an unknown method name was excluded by a method-level filter'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'N.Contracts.Skip' $true)) -eq $script:FilterFalse) `
+        'a known prefix containing an excluded term was not excluded'
+    # The unknown part of an inherited test is ONE method identifier, so it cannot supply a
+    # namespace term the prefix lacks - but it can finish a term the prefix ends in.
+    $f = ConvertTo-TestFilter 'FullyQualifiedName~P.Alpha'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'P.Beta.BTests.' $true)) -eq $script:FilterFalse) `
+        'an inherited test was treated as able to acquire a namespace from its method name'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'X.P.' $true)) -eq $script:FilterUnknown) `
+        'a method name completing a term the prefix ends in was ruled out'
+    Assert-True ((Test-TestFilter $f (New-Candidate 'N.' $true @() $true)) -eq $script:FilterUnknown) `
+        'a test whose class could not be read was ruled out by a namespace term'
+    Assert-True ((Test-TestFilter (ConvertTo-TestFilter 'FullyQualifiedName~alpha') (New-Candidate 'X.Alpha.M')) -eq $script:FilterUnknown) `
+        'a case-only match was decided instead of left unknown'
+    Assert-True ((Test-TestFilter (ConvertTo-TestFilter 'Category=Playground') (New-Candidate 'X.Y.M')) -eq $script:FilterFalse) `
+        'a positive category filter matched a file with no categories'
+    foreach ($bad in @('FullyQualifiedName~A&', '(FullyQualifiedName~A', 'FullyQualifiedName', 'A=\(x\)')) {
+        Assert-Throws { ConvertTo-TestFilter $bad } "malformed filter '$bad' was accepted"
+    }
+
+    # ---- C# test-shape parsing. -------------------------------------------------------------------
+    $source = @'
+using Xunit;
+namespace AiDotNet.Tests.IntegrationTests.Finance;
+
+// public class CommentedOut { [Fact] public void Ghost() {} }
+[Trait("Category", "Slow")]
+public class TradingTests : IClassFixture<Fixture>
+{
+    private const string Braces = "{ class Fake { ";
+    private readonly char _brace = '}';
+
+    [Fact]
+    public void Learns() { var s = $"{1}"; }
+
+    [Theory]
+    [InlineData(new[] { 1, 2 })]
+    public async Task Converges<T>(int[] x) { await Task.Yield(); }
+
+    public class Nested
+    {
+        [Fact, Trait("Category", "Nested")]
+        public void Inner() { }
+    }
+}
+
+internal sealed class Helper { }
+file class Private { }
+'@
+    $shape = Get-CSharpTestShape -Text $source
+    Assert-True ($null -eq $shape.ParseError) "valid C# was reported unparseable: $($shape.ParseError)"
+    $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
+    $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
+        'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
+        'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Learns') | Sort-Object
+    Assert-True (($fqns -join ',') -eq ($expectedFqns -join ',')) "test names were misread: $($fqns -join ',')"
+    Assert-True (@($shape.Tests | Where-Object PrefixOnly).Count -eq 0) 'an interface base was treated as an inherited class'
+    Assert-True ((@($shape.Categories | Sort-Object) -join ',') -eq 'Nested,Slow') 'literal categories were not collected'
+    $topLevel = @($shape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } | ForEach-Object Name | Sort-Object)
+    Assert-True (($topLevel -join ',') -eq 'Helper,TradingTests') `
+        "referenceable top-level types were misread: $($topLevel -join ',')"
+
+    $shape = Get-CSharpTestShape -Text "namespace N { public class D : ModelContractBase<int> { } }"
+    Assert-True (@($shape.Tests | Where-Object { $_.PrefixOnly -and $_.Fqn -eq 'N.D.' }).Count -eq 1) `
+        'a class with a class base did not expose its inherited tests as open-ended'
+    Assert-True ($null -eq $shape.Categories) 'categories inherited from a base class were treated as known'
+
+    $shape = Get-CSharpTestShape -Text "namespace N { public static class X { public static int Twice(this int v) => v * 2; } }"
+    Assert-True ($shape.Hazard -eq 'declares extension methods') 'extension methods were not flagged'
+    $shape = Get-CSharpTestShape -Text "namespace N { public class X { "
+    Assert-True ([bool] $shape.ParseError) 'unbalanced braces were not reported'
+
+    # ---- Routing with injected file reads and reference search. -----------------------------------
+    $manifest = @(
+        [pscustomobject]@{ name = 'Alpha'; project = 'tests/P/P.csproj'; filter = 'FullyQualifiedName~P.Alpha' },
+        [pscustomobject]@{ name = 'Beta'; project = 'tests/P/P.csproj'; filter = 'FullyQualifiedName~P.Beta' },
+        [pscustomobject]@{ name = 'Other'; project = 'tests/Q/Q.csproj'; filter = 'FullyQualifiedName~P' }
+    )
+    $files = @{
+        'tests/P/Alpha/ATests.cs' = 'namespace P.Alpha; public class ATests { [Fact] public void A() { } }'
+        'tests/P/Shared/Base.cs'  = 'namespace P.Shared; public class Base { [Fact] public void Common() { } }'
+        'tests/P/Shared/Abstract.cs' = 'namespace P.Shared; public abstract class ShapeBase { [Fact] public void Common() { } }'
+        'tests/P/Shared/GenBase.cs' = 'namespace P.Shared; public class LayerHarness { }'
+        'tests/P/Beta/BTests.cs'  = 'namespace P.Beta; public class BTests : Base { }'
+        'tests/P/Shared/Ext.cs'   = 'namespace P.Shared; public static class Ext { public static int X(this int v) => v; }'
+        'tests/P/Shared/Unused.cs' = 'namespace P.Shared; public class Unused { }'
+    }
+    $referrers = @{ 'Base' = @('tests/P/Beta/BTests.cs'); 'ATests' = @(); 'BTests' = @(); 'Unused' = @() }
+    $read = { param($path) $files[$path] }
+    $find = { param($names, $directory) @($names | ForEach-Object { $referrers[$_] } | Where-Object { $_ }) }
+    $generatorNames = @('LayerHarness')
+    $findGenerated = { param($names) @($names | Where-Object { $generatorNames -contains $_ }) }
+    $routed = Get-TestFileRoutes -Paths @('tests/P/Alpha/ATests.cs', 'tests/P/Shared/Base.cs', 'tests/P/Shared/Ext.cs',
+        'tests/P/Shared/Unused.cs', 'tests/Z/Stray.cs', 'tests/P/Shared/Abstract.cs', 'tests/P/Shared/GenBase.cs') `
+        -Manifest $manifest -ReadFile $read -FindReferrers $find -FindBuildTimeReferences $findGenerated
+    Assert-True ($routed['tests/P/Alpha/ATests.cs'].Routable -and
+        (@($routed['tests/P/Alpha/ATests.cs'].Shards) -join ',') -eq 'Alpha') `
+        'a self-contained test file was not routed to exactly its own shard'
+    Assert-True ($routed['tests/P/Shared/Base.cs'].Routable -and
+        (@($routed['tests/P/Shared/Base.cs'].Shards) -join ',') -eq 'Beta') `
+        'a base class was not routed to the shard running its derived tests (and not its own namespace)'
+    Assert-True (-not $routed['tests/P/Shared/Ext.cs'].Routable) 'an extension-method helper was routed'
+    Assert-True (-not $routed['tests/P/Shared/Unused.cs'].Routable) 'a support file with no tests and no consumers was routed'
+    Assert-True (-not $routed['tests/Z/Stray.cs'].Routable) 'a test file outside every shard project was routed'
+    Assert-True (-not $routed['tests/P/Shared/Abstract.cs'].Routable) `
+        'an abstract test base was routed although build-time generated classes may derive from it'
+    Assert-True (-not $routed['tests/P/Shared/GenBase.cs'].Routable -and
+        $routed['tests/P/Shared/GenBase.cs'].Why -like '*source generator references*') `
+        'a test type a source generator references was routed by reading only the tree'
+    $wide = Get-TestFileRoutes -Paths @('tests/P/Shared/Base.cs') -Manifest $manifest -ReadFile $read `
+        -FindReferrers $find -FindBuildTimeReferences $findGenerated -MaximumClosure 1
+    Assert-True (-not $wide['tests/P/Shared/Base.cs'].Routable) 'a closure wider than the limit was routed'
+
+    # An empty build-time pathspec would make git grep search the whole repository.
+    $configuredBuildTime = $script:BuildTimeDirectories
+    try {
+        $script:BuildTimeDirectories = @()
+        Assert-Throws { Find-GitBuildTimeReferences -Names @('Anything') } `
+            'an empty build-time directory list searched the whole repository instead of failing'
+    }
+    finally { $script:BuildTimeDirectories = $configuredBuildTime }
 
     # Faithful to real git: every hunk header is followed by its body lines. An earlier revision
     # used header-only fixtures, which real git never emits - and which masked the forged-header
@@ -712,6 +1717,9 @@ if ($ClassifyOnly) {
     $reason = 'classification-failed'
     $changedFiles = @()
     try {
+        if ($PullRequestHeadSha -and $BaseSha) { throw 'pass PullRequestHeadSha or BaseSha, not both' }
+        if ($PullRequestHeadSha) { $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha }
+        if (-not $BaseSha) { throw 'classification needs PullRequestHeadSha or BaseSha' }
         & git cat-file -e "$BaseSha^{commit}" 2>$null
         if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
         # A source-to-Markdown rename must report both the deleted source path and added Markdown
@@ -738,6 +1746,7 @@ if ($ClassifyOnly) {
     $result = [pscustomobject]@{
         requiresValidation = $requiresValidation
         reason = $reason
+        baseSha = [string] $BaseSha
         changedPaths = @($changedFiles)
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
@@ -779,14 +1788,48 @@ if ($LASTEXITCODE -ne 0) {
 try {
     $changed = Get-ChangedRanges -MapSha $mapSha
     $currentPaths = @($changed.Keys)
+    $scopeToPullRequest = $false
+    if ($PullRequestHeadSha -and $BaseSha) { throw 'pass PullRequestHeadSha or BaseSha, not both' }
+    if ($PullRequestHeadSha) {
+        $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha
+        $scopeToPullRequest = $true
+        Write-Host "pull request base (merge commit's first parent): $BaseSha"
+    }
     if ($BaseSha) {
         & git cat-file -e "$BaseSha^{commit}"
         if ($LASTEXITCODE -ne 0) { throw "base commit '$BaseSha' is not present in this checkout" }
         $currentPaths = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
         if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from current base '$BaseSha' failed" }
+        $currentPaths = @($currentPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
-    Write-Host "changed files: $($changed.Count)"
+    Write-Host "changed files since the map: $($changed.Count); changed by the current change: $($currentPaths.Count)"
+
+    # Test sources the map cannot index, among the paths selection will actually consider.
+    $testRoutes = @{}
+    if ($ShardManifestFile) {
+        $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+        $manifestNames = @($manifest | ForEach-Object { [string] $_.name } | Sort-Object)
+        if (($manifestNames -join "`n") -cne (@($ExpectedShards | Sort-Object) -join "`n")) {
+            throw 'the shard manifest does not describe exactly the expected shards'
+        }
+        $currentSet = [System.Collections.Generic.HashSet[string]]::new([string[]] $currentPaths, [StringComparer]::OrdinalIgnoreCase)
+        $testPaths = @($changed.Keys | Where-Object {
+            $candidate = [string] $_
+            (-not $scopeToPullRequest -or $currentSet.Contains($candidate)) -and
+            $candidate.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase) -and
+            $candidate.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase) -and
+            (Get-ChangedPathImpact -Path $candidate) -eq [ChangedPathImpact]::MapCandidate -and
+            -not $map.files.PSObject.Properties[$candidate]
+        })
+        $revisions = @('HEAD', $BaseSha, $mapSha)
+        $testRoutes = Get-TestFileRoutes -Paths $testPaths -Manifest $manifest `
+            -ReadFile { param($path) Get-GitFileText -Path $path -Revisions $revisions } `
+            -FindReferrers { param($names, $directory) Find-GitReferrers -Names $names -Directory $directory } `
+            -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names }
+    }
+
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
+        -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
         -AuditUnchangedMap:$AuditUnchangedMap
 
     if ($selection.Escalate) {
@@ -795,7 +1838,13 @@ try {
     }
     else {
         Write-Host "selected $($selection.Shards.Count) of $($ExpectedShards.Count) shard(s)"
-        foreach ($shard in $selection.Shards) { Write-Host "  $shard" }
+        foreach ($shard in $selection.Shards) {
+            Write-Host "  $shard"
+            $why = @($selection.Routes | Where-Object { $_.StartsWith("$shard <= ", [StringComparison]::Ordinal) } |
+                ForEach-Object { $_.Substring($shard.Length + 4) })
+            foreach ($line in @($why | Select-Object -First 5)) { Write-Host "      because it $line" }
+            if ($why.Count -gt 5) { Write-Host "      ... and $($why.Count - 5) more reason(s)" }
+        }
     }
 
     $result = [pscustomobject]@{
@@ -805,6 +1854,7 @@ try {
                               elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
                               else { 'selected' })
         reasons           = $selection.Reasons
+        routes            = @($selection.Routes)
         shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }

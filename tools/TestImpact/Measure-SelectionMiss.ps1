@@ -48,6 +48,11 @@
     from the map SHA; this second boundary prevents already-merged selector-control edits from
     being mistaken for edits in every later pull request.
 
+.PARAMETER ShardManifestFile
+    Optional { name, project, filter } manifest passed through to the selector, so the audit replays
+    the same test-source routing pull requests receive. Without it test-source changes escalate
+    and the routing heuristic would never be measured.
+
 .PARAMETER OutFile
     Optional path for the JSON report.
 #>
@@ -57,6 +62,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Measure')] [string] $OutcomesFile,
     [Parameter(ParameterSetName = 'Measure')] [string] $SelectorPath = "$PSScriptRoot/Select-Shards.ps1",
     [Parameter(ParameterSetName = 'Measure')] [string] $CurrentChangeBaseSha,
+    [Parameter(ParameterSetName = 'Measure')] [string] $ShardManifestFile,
     [Parameter(ParameterSetName = 'Measure')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
@@ -195,6 +201,9 @@ $selectorArguments = @{
 }
 if ($CurrentChangeBaseSha) {
     $selectorArguments.BaseSha = $CurrentChangeBaseSha
+}
+if ($ShardManifestFile) {
+    $selectorArguments.ShardManifestFile = $ShardManifestFile
 }
 & $SelectorPath @selectorArguments | Out-Null
 $selection = Get-Content -LiteralPath $selectionFile -Raw | ConvertFrom-Json
