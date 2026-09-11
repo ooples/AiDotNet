@@ -273,6 +273,17 @@
 	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
 	</ItemGroup>
 
+	<!-- Generic quality-diversity engine extracted to the AiDotNet.Evolution package. -->
+	<PropertyGroup>
+	  <EvolutionProjectPath Condition="'$(EvolutionProjectPath)' == ''">$(MSBuildThisFileDirectory)..\..\AiDotNet.Evolution\src\AiDotNet.Evolution\AiDotNet.Evolution.csproj</EvolutionProjectPath>
+	</PropertyGroup>
+	<ItemGroup Condition="'$(UseLocalEvolution)' != 'true'">
+	  <PackageReference Include="AiDotNet.Evolution" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(UseLocalEvolution)' == 'true'">
+	  <ProjectReference Include="$(EvolutionProjectPath)" />
+	</ItemGroup>
+
 	<!--
 	  Optional native acceleration packages.
 	  These provide pre-built native binaries for hardware acceleration.
