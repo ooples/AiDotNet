@@ -118,8 +118,8 @@ public class StripeWebhook
         }
 
         _logger.LogInformation(
-            "Checkout completed for customer {CustomerId}, email {EmailDomain}, subscription {SubscriptionId}",
-            customerId, MaskEmail(customerEmail), session.SubscriptionId);
+            "Checkout completed for customer {CustomerId}, session {SessionId}, subscription {SubscriptionId}",
+            customerId, session.Id, session.SubscriptionId);
 
         // Determine tier from the subscription
         var tier = "pro"; // Default to pro since that's our only paid tier currently
@@ -157,8 +157,8 @@ public class StripeWebhook
         var tier = status == "canceled" ? "free" : "pro";
 
         _logger.LogInformation(
-            "Subscription updated for {EmailDomain}: status={Status}, tier={Tier}",
-            MaskEmail(customerEmail), status, tier);
+            "Subscription updated for customer {CustomerId}: status={Status}, tier={Tier}",
+            subscription.CustomerId, status, tier);
 
         await UpdateSupabaseProfile(customerEmail, tier, status, subscription.CustomerId);
     }
@@ -179,7 +179,7 @@ public class StripeWebhook
             return;
         }
 
-        _logger.LogInformation("Subscription deleted for {EmailDomain}, reverting to free tier", MaskEmail(customerEmail));
+        _logger.LogInformation("Subscription deleted for customer {CustomerId}, reverting to free tier", subscription.CustomerId);
 
         await UpdateSupabaseProfile(customerEmail, "free", "canceled", subscription.CustomerId);
     }
@@ -214,29 +214,16 @@ public class StripeWebhook
     }
 
     /// <summary>
-    /// Masks an email address for safe logging (e.g., "j***@example.com").
-    /// </summary>
-    private static string MaskEmail(string? email)
-    {
-        if (string.IsNullOrEmpty(email))
-        {
-            return "[no-email]";
-        }
-
-        var atIndex = email.IndexOf('@');
-        if (atIndex <= 0)
-        {
-            return "***";
-        }
-
-        return $"{email[0]}***@{email[(atIndex + 1)..]}";
-    }
-
-    /// <summary>
     /// Updates the user's subscription profile in Supabase.
     /// Throws on configuration or HTTP failures so the webhook can return 500
     /// and Stripe will retry the event.
     /// </summary>
+    /// <remarks>
+    /// The customer's email is used only to find the Supabase user; it is never logged, not even
+    /// partially (a masked "j***@domain" still leaks the domain, which identifies people on
+    /// personal or small-company domains). Logs correlate through the Stripe customer ID and the
+    /// Supabase user ID instead.
+    /// </remarks>
     private async Task UpdateSupabaseProfile(string email, string tier, string status, string? stripeCustomerId)
     {
         var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
@@ -299,7 +286,7 @@ public class StripeWebhook
 
         if (string.IsNullOrEmpty(userId))
         {
-            _logger.LogWarning("No Supabase user found with email {EmailDomain}", MaskEmail(email));
+            _logger.LogWarning("No Supabase user found for Stripe customer {CustomerId}", stripeCustomerId);
             return;
         }
 
@@ -337,8 +324,8 @@ public class StripeWebhook
         if (patchResponse.IsSuccessStatusCode)
         {
             _logger.LogInformation(
-                "Updated profile for user {UserId} ({EmailDomain}): tier={Tier}, status={Status}, stripe_customer={CustomerId}",
-                userId, MaskEmail(email), tier, status, stripeCustomerId);
+                "Updated profile for user {UserId}: tier={Tier}, status={Status}, stripe_customer={CustomerId}",
+                userId, tier, status, stripeCustomerId);
         }
         else
         {
