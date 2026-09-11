@@ -11066,12 +11066,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && model.OptionsOnlyParamTypeName is not null)
             {
                 // The model's one required argument is its own options object, and that object is
-                // constructible with no arguments, so the fixture builds the model at its documented
-                // defaults (#2137). Nothing is invented here: the same expression a caller would
-                // write. Twelve models reach their invariants through this branch -- the seven
-                // ObjectDetectionOptions detectors, the three TextDetectionOptions detectors and the
-                // two OCROptions readers -- none of which needed a source change.
-                constructorExpr = $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
+                // constructible with no arguments, so the fixture builds the model from it (#2137).
+                // The detection families additionally pin InputSize to the fixture's 64x64 image:
+                // Detect resizes every image to InputSize, and at the 640x640 default a CPU fixture
+                // spends minutes per call - and DINO/RT-DETR run dense attention over every pyramid
+                // token, which does not fit at all (tracked separately). Only the working resolution
+                // changes; architecture and widths stay at their defaults.
+                bool pinInputSize = family == TestFamily.ObjectDetection || family == TestFamily.TextDetection;
+                constructorExpr = pinInputSize
+                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }} }})"
+                    : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
             }
             else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
             {

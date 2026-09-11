@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1712.00726",
     Year = 2018,
     Authors = "Zhaowei Cai, Nuno Vasconcelos")]
-public class CascadeRCNN<T> : ObjectDetectorBase<T>
+public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
 {
     private readonly RPN<T> _rpn;
     private readonly RoIAlign<T> _roiAlign;
@@ -150,7 +150,9 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             {
                 new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
                 new Tensor<T>(new[] { 0, (Options.NumClasses + 1) * 4 }),
-                new Tensor<T>(new[] { 0, 4 })
+                new Tensor<T>(new[] { 0, 4 }),
+                objectness,
+                bboxDeltas
             };
         }
 
@@ -162,6 +164,7 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         var currentBoxes = initialProposals[0].boxes;
         Tensor<T>? classLogits = null;
         Tensor<T>? boxDeltas = null;
+        var intermediate = new List<Tensor<T>>();
 
         // Cascade through stages
         for (int stageIdx = 0; stageIdx < _numStages; stageIdx++)
@@ -184,6 +187,11 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             // Refine boxes for next stage (except for last stage)
             if (stageIdx < _numStages - 1)
             {
+                // Refinement is box-coordinate arithmetic (the boxes are constants to RoIAlign), so it
+                // carries no gradient. That is why every stage's raw outputs are returned below:
+                // without them, only the LAST stage could ever train.
+                intermediate.Add(classLogits);
+                intermediate.Add(boxDeltas);
                 currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight);
             }
         }
@@ -193,7 +201,13 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             throw new InvalidOperationException("Cascade RCNN requires at least one stage to produce outputs.");
         }
 
-        return new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
+        // PostProcess reads the first three entries; the earlier stages' outputs and the RPN's follow
+        // so each of them feeds the training objective.
+        var outputs = new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
+        outputs.AddRange(intermediate);
+        outputs.Add(objectness);
+        outputs.Add(bboxDeltas);
+        return outputs;
     }
 
     /// <inheritdoc/>
@@ -277,10 +291,13 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             double predW = pw * Math.Exp(Math.Min(dw, 4.0));
             double predH = ph * Math.Exp(Math.Min(dh, 4.0));
 
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
+            // Decoded in network-input coordinates; map to the source image before clipping.
+            // (RefineBoxes does NOT do this: it works on proposals in the input frame on purpose.)
+            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
+            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
+            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
+            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
 
             if (x2 <= x1 || y2 <= y1) continue;
 
@@ -403,32 +420,8 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)
-    {
-        int numRois = roiFeatures.Shape[0];
-        int channels = roiFeatures.Shape[1];
-        int h = roiFeatures.Shape[2];
-        int w = roiFeatures.Shape[3];
-        int flattenedSize = channels * h * w;
-
-        var result = new Tensor<T>(new[] { numRois, flattenedSize });
-
-        for (int roi = 0; roi < numRois; roi++)
-        {
-            int idx = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        result[roi, idx++] = roiFeatures[roi, c, y, x];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        => AiDotNetEngine.Current.Reshape(
+            roiFeatures, new[] { roiFeatures.Shape[0], roiFeatures.Shape[1] * roiFeatures.Shape[2] * roiFeatures.Shape[3] });
 
     private Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
     {
@@ -480,7 +473,7 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
 /// <summary>
 /// A single stage in the Cascade R-CNN pipeline.
 /// </summary>
-internal class CascadeStage<T>
+internal class CascadeStage<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Dense<T> _fc1;
@@ -570,4 +563,13 @@ internal class CascadeStage<T>
     /// silently never trained. The engine op records itself on the tape.
     /// </remarks>
     private Tensor<T> ApplyReLU(Tensor<T> x) => AiDotNetEngine.Current.ReLU(x);
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _fc1;
+        yield return _fc2;
+        yield return _clsHead;
+        yield return _regHead;
+    }
 }

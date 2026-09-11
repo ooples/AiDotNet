@@ -261,9 +261,10 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
-    /// Flattens each per-image output to <c>[N, -1]</c> and concatenates them along axis 1, giving
-    /// one <c>[N, total]</c> tensor that carries every head's raw output. A single output is
-    /// returned unchanged.
+    /// Concatenates every head's raw output into one tensor. When all outputs share a leading
+    /// (per-image) dimension N, each is flattened to <c>[N, -1]</c> and the result is
+    /// <c>[N, total]</c>; when they do not - a two-stage detector's per-RoI heads beside its per-image
+    /// RPN maps - everything is flattened into <c>[1, total]</c>. A single output is returned unchanged.
     /// </summary>
     public static Tensor<T> ConcatenateOutputs(IReadOnlyList<Tensor<T>> outputs)
     {
@@ -277,11 +278,17 @@ internal static class CvTensorOps<T>
             return outputs[0];
         }
 
+        bool sharedLeading = true;
+        for (int i = 1; i < outputs.Count && sharedLeading; i++)
+        {
+            sharedLeading = outputs[i].Shape[0] == outputs[0].Shape[0] && outputs[i].Shape[0] > 0;
+        }
+
         var flat = new Tensor<T>[outputs.Count];
         for (int i = 0; i < outputs.Count; i++)
         {
-            int batch = outputs[i].Shape[0];
-            flat[i] = Engine.Reshape(outputs[i], new[] { batch, outputs[i].Length / batch });
+            int leading = sharedLeading ? outputs[i].Shape[0] : 1;
+            flat[i] = Engine.Reshape(outputs[i], new[] { leading, outputs[i].Length / leading });
         }
 
         return Engine.TensorConcatenate(flat, 1);
@@ -419,6 +426,118 @@ internal static class CvTensorOps<T>
         }
 
         return padded;
+    }
+
+    /// <summary>
+    /// RoIAlign: pools each region of interest into an <c>outputSize x outputSize</c> grid by
+    /// averaging <c>samplingRatio^2</c> bilinear samples per bin, over an NCHW feature map.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The boxes are treated as constants - as in standard RoIAlign, the gradient flows into the
+    /// FEATURES, not the box coordinates - so the whole operation is a fixed sparse linear map of the
+    /// feature map. It is built as one gather of the four bilinear corners of every sample, a
+    /// multiply by the precomputed corner weights (each already divided by the bin's in-bounds sample
+    /// count), and a sum. Samples that fall outside the map contribute nothing and are not counted; a
+    /// bin with no in-bounds samples is zero.
+    /// </para>
+    /// </remarks>
+    /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
+    /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
+    /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
+    /// <param name="spatialScale">Image-to-feature-map scale.</param>
+    /// <param name="outputSize">Pooled grid side.</param>
+    /// <param name="samplingRatio">Samples per bin side.</param>
+    /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
+    public static Tensor<T> RoIAlign(
+        Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio)
+    {
+        int n = features.Shape[0], c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
+        int rois = batchIndices.Length;
+        int bins = rois * outputSize * outputSize;
+        int taps = samplingRatio * samplingRatio * 4;
+
+        var index = new int[bins * taps];
+        var weight = new T[bins * taps];
+        var zero = NumOps.Zero;
+        for (int i = 0; i < weight.Length; i++)
+        {
+            weight[i] = zero;
+        }
+
+        for (int r = 0; r < rois; r++)
+        {
+            int b = batchIndices[r];
+            double x1 = boxes[(4 * r) + 0] * spatialScale, y1 = boxes[(4 * r) + 1] * spatialScale;
+            double x2 = boxes[(4 * r) + 2] * spatialScale, y2 = boxes[(4 * r) + 3] * spatialScale;
+            double binW = (x2 - x1) / outputSize, binH = (y2 - y1) / outputSize;
+
+            for (int ph = 0; ph < outputSize; ph++)
+            {
+                for (int pw = 0; pw < outputSize; pw++)
+                {
+                    int bin = ((r * outputSize) + ph) * outputSize + pw;
+                    double startY = y1 + (ph * binH), startX = x1 + (pw * binW);
+
+                    int count = 0;
+                    for (int iy = 0; iy < samplingRatio; iy++)
+                    {
+                        for (int ix = 0; ix < samplingRatio; ix++)
+                        {
+                            double y = startY + ((iy + 0.5) * binH / samplingRatio);
+                            double x = startX + ((ix + 0.5) * binW / samplingRatio);
+                            if (y >= 0 && y < h && x >= 0 && x < w)
+                            {
+                                count++;
+                            }
+                        }
+                    }
+
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    int tap = bin * taps;
+                    for (int iy = 0; iy < samplingRatio; iy++)
+                    {
+                        for (int ix = 0; ix < samplingRatio; ix++)
+                        {
+                            double y = startY + ((iy + 0.5) * binH / samplingRatio);
+                            double x = startX + ((ix + 0.5) * binW / samplingRatio);
+                            if (!(y >= 0 && y < h && x >= 0 && x < w))
+                            {
+                                tap += 4;
+                                continue;
+                            }
+
+                            int y0 = (int)Math.Floor(y), x0 = (int)Math.Floor(x);
+                            int yy1 = Math.Min(y0 + 1, h - 1), xx1 = Math.Min(x0 + 1, w - 1);
+                            double wy1 = y - y0, wy0 = 1.0 - wy1, wx1 = x - x0, wx0 = 1.0 - wx1;
+                            int rowBase = b * h;
+
+                            index[tap] = ((rowBase + y0) * w) + x0;
+                            weight[tap++] = NumOps.FromDouble(wy0 * wx0 / count);
+                            index[tap] = ((rowBase + y0) * w) + xx1;
+                            weight[tap++] = NumOps.FromDouble(wy0 * wx1 / count);
+                            index[tap] = ((rowBase + yy1) * w) + x0;
+                            weight[tap++] = NumOps.FromDouble(wy1 * wx0 / count);
+                            index[tap] = ((rowBase + yy1) * w) + xx1;
+                            weight[tap++] = NumOps.FromDouble(wy1 * wx1 / count);
+                        }
+                    }
+                }
+            }
+        }
+
+        var positions = Engine.Reshape(Engine.TensorPermute(features, new[] { 0, 2, 3, 1 }), new[] { n * h * w, c });
+        var gathered = Select(positions, index, 0);                                        // [bins*taps, C]
+        var weights = Engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { bins * taps, 1 }, new Vector<T>(weight)), new[] { bins * taps, c });
+        var weighted = Engine.Reshape(Engine.TensorMultiply(gathered, weights), new[] { bins, taps, c });
+        var pooled = Engine.ReduceSum(weighted, new[] { 1 }, false);                       // [bins, C]
+        return Engine.TensorPermute(
+            Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
     }
 
     /// <summary>

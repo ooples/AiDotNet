@@ -53,6 +53,10 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    // An accessor over the Backbone property, not separate storage. Without the alias the generator
+    // registered BOTH, so these weights were counted twice in the flat parameter vector, and for a
+    // detector without a neck (DETR) reading parameters threw from the accessor's null check.
+    [AiDotNet.Attributes.ParameterAlias(nameof(Backbone))]
     protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
@@ -61,6 +65,10 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Gets the neck module, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when neck has not been initialized.</exception>
+    // An accessor over the Neck property, not separate storage. Without the alias the generator
+    // registered BOTH, so these weights were counted twice in the flat parameter vector, and for a
+    // detector without a neck (DETR) reading parameters threw from the accessor's null check.
+    [AiDotNet.Attributes.ParameterAlias(nameof(Neck))]
     protected NeckBase<T> EnsureNeck =>
         Neck ?? throw new InvalidOperationException(
             $"{GetType().Name}: Neck not initialized. Ensure the model is properly constructed.");
@@ -185,8 +193,11 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         int imageHeight = images.Shape[2];
         int imageWidth = images.Shape[3];
 
-        // Perform batch forward pass (single GPU call for all images)
-        var batchOutputs = Forward(images);
+        // Preprocess exactly as Detect does, then one forward pass for the whole batch. This used to
+        // feed the RAW images straight to Forward, so a batch and a single Detect of the same image
+        // ran the network on different inputs and disagreed; PostProcess then also mapped
+        // coordinates from a frame the network never saw.
+        var batchOutputs = Forward(Preprocess(images));
 
         // Post-process outputs for each image in the batch
         for (int i = 0; i < batchSize; i++)
@@ -355,6 +366,13 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// <returns>Preprocessed tensor ready for the network.</returns>
     protected virtual Tensor<T> Preprocess(Tensor<T> image)
     {
+        var prepared = PreprocessCore(image);
+        NoteResolvedInput(prepared);
+        return prepared;
+    }
+
+    private Tensor<T> PreprocessCore(Tensor<T> image)
+    {
         // Default preprocessing: resize to input size and normalize
         int targetHeight = Options.InputSize[0];
         int targetWidth = Options.InputSize[1];
@@ -509,7 +527,10 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// unchanged.
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
-        => CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+    {
+        NoteResolvedInput(input);
+        return CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+    }
 
     /// <summary>
     /// Gets the step size used by <see cref="Train"/>.
@@ -583,4 +604,69 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     // recorded on NeckBase.
 
     #endregion
+
+    /// <summary>
+    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
+    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
+    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _resolvedInputShape;
+
+    /// <summary>Records the input shape on the first forward pass.</summary>
+    private void NoteResolvedInput(Tensor<T> input)
+    {
+        if (_resolvedInputShape is not null || input is null)
+        {
+            return;
+        }
+
+        var shape = new int[input.Shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            shape[i] = input.Shape[i];
+        }
+
+        _resolvedInputShape = shape;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs the copy once on a zero input of the shape this model has already processed, so its
+    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
+    /// size their weights exactly as this model's did before its state is loaded into them.
+    /// </remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (_resolvedInputShape is not null && copy is ObjectDetectorBase<T> rebuilt)
+        {
+            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+        }
+    }
+
+    /// <summary>
+    /// Scale factors from the network-input frame (the <see cref="ObjectDetectionOptions{T}.InputSize"/>
+    /// that <see cref="Preprocess"/> resizes to) to the source image's frame.
+    /// </summary>
+    /// <remarks>
+    /// Boxes decode in network-input coordinates. Clipping them to the source image's size without
+    /// this mapping produced inverted boxes (x1 beyond x2) whenever the source image was smaller than
+    /// the input size, and silently dropped the boxes a two-stage detector's degenerate-box check
+    /// then rejected.
+    /// </remarks>
+    protected (double ScaleX, double ScaleY) InputToImageScale(int imageWidth, int imageHeight)
+        => (imageWidth / (double)Options.InputSize[1], imageHeight / (double)Options.InputSize[0]);
+
+    /// <summary>
+    /// Gets the IoU threshold non-maximum suppression actually applies for a requested threshold.
+    /// </summary>
+    /// <param name="requested">The threshold passed to <c>Detect</c>.</param>
+    /// <returns>The requested threshold, unless the model deliberately suppresses less aggressively.</returns>
+    /// <remarks>
+    /// Set-prediction detectors (DETR, RT-DETR) are trained so that each object gets one query, and
+    /// apply NMS only as a safety net at a high threshold rather than at the caller's value. That
+    /// used to happen silently inside their post-processing; it is now declared here so callers can
+    /// see it.
+    /// </remarks>
+    public virtual double EffectiveNmsThreshold(double requested) => requested;
 }

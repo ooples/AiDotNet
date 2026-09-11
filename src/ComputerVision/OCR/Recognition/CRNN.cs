@@ -175,15 +175,26 @@ public partial class CRNN<T> : OCRBase<T>
     /// <inheritdoc/>
     public override (string text, T confidence) RecognizeText(Tensor<T> croppedImage)
     {
-        int batch = croppedImage.Shape[0];
+        var probs = ApplySoftmax(ComputeLogits(croppedImage));
+        string text = DecodeCTC(probs);
+        T confidence = ComputeConfidence(probs, text);
+        return (text, confidence);
+    }
 
-        // Reset LSTM states for new sequence
+    /// <inheritdoc />
+    /// <remarks>Per-timestep character logits <c>[batch, width, vocabulary]</c>, before the softmax.</remarks>
+    protected override Tensor<T> ForwardLogits(Tensor<T> image) => ComputeLogits(PreprocessCrop(image));
+
+    /// <summary>
+    /// CNN backbone, bidirectional LSTM and output projection: the differentiable part of CRNN.
+    /// </summary>
+    private Tensor<T> ComputeLogits(Tensor<T> croppedImage)
+    {
+        int batch = croppedImage.Shape[0];
         ResetLSTMStates(batch);
 
-        // Convert to grayscale if needed
         var grayImage = ConvertToGrayscale(croppedImage);
 
-        // Forward pass through CNN backbone
         var x = _conv1.Forward(grayImage);
         x = ApplyReLU(x);
         x = MaxPool2D(x, 2, 2);
@@ -211,23 +222,9 @@ public partial class CRNN<T> : OCRBase<T>
         x = _conv7.Forward(x);
         x = ApplyReLU(x);
 
-        // Squeeze height dimension and transpose to (batch, width, channels)
         var seqFeatures = SqueezeAndPermute(x);
-
-        // Bidirectional LSTM processing
         var lstmOut = ApplyBidirectionalLSTM(seqFeatures, batch);
-
-        // Output projection
-        var logits = ApplyOutputLayer(lstmOut);
-
-        // Apply softmax for probabilities
-        var probs = ApplySoftmax(logits);
-
-        // CTC decoding
-        string text = DecodeCTC(probs);
-        T confidence = ComputeConfidence(probs, text);
-
-        return (text, confidence);
+        return ApplyOutputLayer(lstmOut);
     }
 
     /// <summary>
@@ -235,36 +232,20 @@ public partial class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> ConvertToGrayscale(Tensor<T> image)
     {
-        int batch = image.Shape[0];
         int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
         if (channels == 1)
         {
             return image;
         }
 
-        var gray = new Tensor<T>(new[] { batch, 1, height, width });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Standard grayscale conversion: 0.299*R + 0.587*G + 0.114*B
-                    double r = NumOps.ToDouble(image[b, 0, h, w]);
-                    double g = channels > 1 ? NumOps.ToDouble(image[b, 1, h, w]) : r;
-                    double bl = channels > 2 ? NumOps.ToDouble(image[b, 2, h, w]) : r;
-
-                    double grayVal = 0.299 * r + 0.587 * g + 0.114 * bl;
-                    gray[b, 0, h, w] = NumOps.FromDouble(grayVal);
-                }
-            }
-        }
-
-        return gray;
+        // gray = 0.299 R + 0.587 G + 0.114 B, with a missing G or B channel standing in as R.
+        var engine = AiDotNetEngine.Current;
+        var r = engine.TensorNarrow(image, 1, 0, 1);
+        var g = channels > 1 ? engine.TensorNarrow(image, 1, 1, 1) : r;
+        var b = channels > 2 ? engine.TensorNarrow(image, 1, 2, 1) : r;
+        return engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, NumOps.FromDouble(0.114)));
     }
 
     /// <summary>
@@ -272,114 +253,51 @@ public partial class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> ApplyBidirectionalLSTM(Tensor<T> x, int batch)
     {
-        // x: [batch, seq_len, features]
-        int seqLen = x.Shape[1];
-        int features = x.Shape[2];
+        var layer1 = ConcatenateBidirectional(
+            RunDirection(_lstm1Forward, x, reverse: false), RunDirection(_lstm1Backward, x, reverse: true), batch, x.Shape[1], _hiddenDim);
+        return ConcatenateBidirectional(
+            RunDirection(_lstm2Forward, layer1, reverse: false), RunDirection(_lstm2Backward, layer1, reverse: true), batch, x.Shape[1], _hiddenDim);
+    }
 
-        // First bidirectional layer
-        var fw1Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-        var bw1Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
+    /// <summary>
+    /// Runs one LSTM direction over the sequence a timestep at a time (the layer is stateful), and
+    /// stacks the per-step outputs back in time order. Engine narrow/reshape/concatenate throughout:
+    /// the old per-step copy into a preallocated tensor severed the tape, so neither the LSTMs nor the
+    /// CNN below them could train.
+    /// </summary>
+    private Tensor<T> RunDirection(LSTMLayer<T> lstm, Tensor<T> x, bool reverse)
+    {
+        var engine = AiDotNetEngine.Current;
+        int batch = x.Shape[0], seqLen = x.Shape[1], features = x.Shape[2];
 
-        // Forward direction
-        _lstm1Forward.ResetState();
-        for (int t = 0; t < seqLen; t++)
+        lstm.ResetState();
+        var steps = new Tensor<T>[seqLen];
+        for (int s = 0; s < seqLen; s++)
         {
-            var input = ExtractTimestep(x, t, batch, features);
-            var output = _lstm1Forward.Forward(input);
-            StoreTimestep(fw1Outputs, output, t, batch, _hiddenDim);
+            int t = reverse ? seqLen - 1 - s : s;
+            var input = engine.Reshape(engine.TensorNarrow(x, 1, t, 1), new[] { batch, features });
+            var output = lstm.Forward(input);
+            steps[t] = engine.Reshape(output, new[] { batch, 1, _hiddenDim });
         }
 
-        // Backward direction
-        _lstm1Backward.ResetState();
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            var input = ExtractTimestep(x, t, batch, features);
-            var output = _lstm1Backward.Forward(input);
-            StoreTimestep(bw1Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Concatenate forward and backward outputs
-        var concat1 = ConcatenateBidirectional(fw1Outputs, bw1Outputs, batch, seqLen, _hiddenDim);
-
-        // Second bidirectional layer
-        var fw2Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-        var bw2Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-
-        // Forward direction
-        _lstm2Forward.ResetState();
-        for (int t = 0; t < seqLen; t++)
-        {
-            var input = ExtractTimestep(concat1, t, batch, _hiddenDim * 2);
-            var output = _lstm2Forward.Forward(input);
-            StoreTimestep(fw2Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Backward direction
-        _lstm2Backward.ResetState();
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            var input = ExtractTimestep(concat1, t, batch, _hiddenDim * 2);
-            var output = _lstm2Backward.Forward(input);
-            StoreTimestep(bw2Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Final concatenation
-        return ConcatenateBidirectional(fw2Outputs, bw2Outputs, batch, seqLen, _hiddenDim);
+        return seqLen == 1 ? steps[0] : engine.TensorConcatenate(steps, 1);
     }
 
     /// <summary>
     /// Extracts a single timestep from the sequence tensor.
     /// </summary>
-    private Tensor<T> ExtractTimestep(Tensor<T> x, int t, int batch, int features)
-    {
-        var timestep = new Tensor<T>(new[] { batch, features });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                timestep[b, f] = x[b, t, f];
-            }
-        }
-
-        return timestep;
-    }
 
     /// <summary>
     /// Stores LSTM output into the sequence tensor at a specific timestep.
     /// </summary>
-    private void StoreTimestep(Tensor<T> output, Tensor<T> lstmOut, int t, int batch, int hiddenDim)
-    {
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < hiddenDim; h++)
-            {
-                output[b, t, h] = lstmOut[b, h];
-            }
-        }
-    }
+
 
     /// <summary>
     /// Concatenates forward and backward LSTM outputs.
     /// </summary>
     private Tensor<T> ConcatenateBidirectional(Tensor<T> forward, Tensor<T> backward, int batch, int seqLen, int hiddenDim)
-    {
-        var concat = new Tensor<T>(new[] { batch, seqLen, hiddenDim * 2 });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < hiddenDim; h++)
-                {
-                    concat[b, t, h] = forward[b, t, h];
-                    concat[b, t, hiddenDim + h] = backward[b, t, h];
-                }
-            }
-        }
-
-        return concat;
-    }
+        => AiDotNetEngine.Current.TensorConcatenate(new[] { forward, backward }, 2);
 
     /// <summary>
     /// Applies softmax normalization across the vocabulary dimension.
@@ -393,56 +311,10 @@ public partial class CRNN<T> : OCRBase<T>
     /// Applies simple batch normalization.
     /// </summary>
     private Tensor<T> ApplyBatchNorm(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        var result = new Tensor<T>(x._shape);
-        double epsilon = 1e-5;
-
-        for (int c = 0; c < channels; c++)
-        {
-            // Compute mean and variance for this channel
-            double sum = 0;
-            double sumSq = 0;
-            int count = batch * height * width;
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = NumOps.ToDouble(x[b, c, h, w]);
-                        sum += val;
-                        sumSq += val * val;
-                    }
-                }
-            }
-
-            double mean = sum / count;
-            double variance = (sumSq / count) - (mean * mean);
-            double stdDev = Math.Sqrt(variance + epsilon);
-
-            // Normalize
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = NumOps.ToDouble(x[b, c, h, w]);
-                        double normalized = (val - mean) / stdDev;
-                        result[b, c, h, w] = NumOps.FromDouble(normalized);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Normalises with the CURRENT batch's statistics (biased variance, no affine parameters),
+        // exactly as the loop it replaces. Note that this makes one image's output depend on what else
+        // is in its batch; it is preserved here and not silently changed.
+        => CvTensorOps<T>.BatchStatisticsNorm(x, 1e-5);
 
     /// <inheritdoc/>
     public override long GetParameterCount()
@@ -749,107 +621,14 @@ public partial class CRNN<T> : OCRBase<T>
     private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
     private Tensor<T> MaxPool2D(Tensor<T> x, int kernelH, int kernelW)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        int outH = height / kernelH;
-        int outW = width / kernelW;
-
-        var result = new Tensor<T>(new[] { batch, channels, outH, outW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outH; h++)
-                {
-                    for (int w = 0; w < outW; w++)
-                    {
-                        double maxVal = double.NegativeInfinity;
-
-                        for (int kh = 0; kh < kernelH; kh++)
-                        {
-                            for (int kw = 0; kw < kernelW; kw++)
-                            {
-                                int srcH = h * kernelH + kh;
-                                int srcW = w * kernelW + kw;
-
-                                if (srcH < height && srcW < width)
-                                {
-                                    maxVal = Math.Max(maxVal, NumOps.ToDouble(x[b, c, srcH, srcW]));
-                                }
-                            }
-                        }
-
-                        result[b, c, h, w] = NumOps.FromDouble(maxVal);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        => CvTensorOps<T>.MaxPoolFloor(x, kernelH, kernelW);
 
     private Tensor<T> SqueezeAndPermute(Tensor<T> x)
     {
-        // x: [batch, channels, height, width]
-        // Output: [batch, width, channels*height]
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        int featureDim = channels * height;
-
-        var result = new Tensor<T>(new[] { batch, width, featureDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                int idx = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        result[b, w, idx++] = x[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        // [batch, channels, height, width] -> [batch, width, channels * height], channel-major.
+        int batch = x.Shape[0], channels = x.Shape[1], height = x.Shape[2], width = x.Shape[3];
+        return AiDotNetEngine.Current.Reshape(AiDotNetEngine.Current.TensorPermute(x, new[] { 0, 3, 1, 2 }), new[] { batch, width, channels * height });
     }
 
-    private Tensor<T> ApplyOutputLayer(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int features = x.Shape[2];
-
-        var result = new Tensor<T>(new[] { batch, seqLen, VocabularySize });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                var feat = new Tensor<T>(new[] { 1, features });
-                for (int f = 0; f < features; f++)
-                {
-                    feat[0, f] = x[b, t, f];
-                }
-
-                var output = _outputLayer.Forward(feat);
-                for (int v = 0; v < VocabularySize; v++)
-                {
-                    result[b, t, v] = output[0, v];
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> ApplyOutputLayer(Tensor<T> x) => _outputLayer.ForwardTokens(x);
 }

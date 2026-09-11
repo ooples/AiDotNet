@@ -219,6 +219,10 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    // An accessor over the Backbone field, not separate storage. Without the alias the generator
+    // registered BOTH, so these weights were counted twice in the flat parameter vector, and for a
+    // detector without a neck (DETR) reading parameters threw from the accessor's null check.
+    [AiDotNet.Attributes.ParameterAlias(nameof(Backbone))]
     protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
@@ -262,6 +266,13 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// Preprocesses the input image.
     /// </summary>
     protected virtual Tensor<T> Preprocess(Tensor<T> image)
+    {
+        var prepared = PreprocessCore(image);
+        NoteResolvedInput(prepared);
+        return prepared;
+    }
+
+    private Tensor<T> PreprocessCore(Tensor<T> image)
     {
         // Standard preprocessing: resize to input size, normalize
         int targetH = Options.InputSize[0];
@@ -452,7 +463,10 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// (EAST) exposes both, and training against the prediction reaches both heads.
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
-        => CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+    {
+        NoteResolvedInput(input);
+        return CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+    }
 
     /// <inheritdoc />
     /// <summary>
@@ -505,4 +519,43 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
+
+    /// <summary>
+    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
+    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
+    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _resolvedInputShape;
+
+    /// <summary>Records the input shape on the first forward pass.</summary>
+    private void NoteResolvedInput(Tensor<T> input)
+    {
+        if (_resolvedInputShape is not null || input is null)
+        {
+            return;
+        }
+
+        var shape = new int[input.Shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            shape[i] = input.Shape[i];
+        }
+
+        _resolvedInputShape = shape;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs the copy once on a zero input of the shape this model has already processed, so its
+    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
+    /// size their weights exactly as this model's did before its state is loaded into them.
+    /// </remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (_resolvedInputShape is not null && copy is TextDetectorBase<T> rebuilt)
+        {
+            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+        }
+    }
 }

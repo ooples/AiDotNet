@@ -247,21 +247,9 @@ public partial class DBNet<T> : TextDetectorBase<T>
     }
 
     private Tensor<T> ApplyDifferentiableBinarization(Tensor<T> prob, Tensor<T> thresh)
-    {
-        var result = new Tensor<T>(prob._shape);
-
-        for (int i = 0; i < prob.Length; i++)
-        {
-            double p = NumOps.ToDouble(prob[i]);
-            double t = NumOps.ToDouble(thresh[i]);
-
-            // DB formula: 1 / (1 + exp(-k * (P - T)))
-            double db = 1.0 / (1.0 + Math.Exp(-_k * (p - t)));
-            result[i] = NumOps.FromDouble(db);
-        }
-
-        return result;
-    }
+        // DB (Liao et al. 2020): B = 1 / (1 + exp(-k (P - T))). Engine ops, so the binarization step -
+        // the whole point of DBNet - passes gradient to both the probability and threshold heads.
+        => Engine.Sigmoid(Engine.TensorMultiplyScalar(Engine.TensorSubtract(prob, thresh), NumOps.FromDouble(_k)));
 
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()
@@ -386,88 +374,13 @@ public partial class DBNet<T> : TextDetectorBase<T>
     private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
 
     private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
-    {
-        int batch = x.Shape[0];
-        int xChannels = x.Shape[1];
-        int skipChannels = skip.Shape[1];
-        int targetH = skip.Shape[2];
-        int targetW = skip.Shape[3];
-
-        var upsampled = BilinearUpsample(x, targetH, targetW);
-        var result = new Tensor<T>(new[] { batch, xChannels + skipChannels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < xChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, c, h, w] = upsampled[b, c, h, w];
-                    }
-                }
-            }
-
-            for (int c = 0; c < skipChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, xChannels + c, h, w] = skip[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Upsample to the skip connection's resolution, then stack along channels. Tape-visible, so
+        // the decoder's gradient reaches the backbone through every skip.
+        => CvTensorOps<T>.ConcatChannels(BilinearUpsample(x, skip.Shape[2], skip.Shape[3]), skip);
 
     private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int srcH = x.Shape[2];
-        int srcW = x.Shape[3];
-
-        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * srcH;
-                        double srcX = (double)w / targetW * srcW;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = NumOps.ToDouble(x[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(x[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(x[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(x[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        result[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
+        => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
 
     private List<List<(int H, int W)>> FindConnectedComponents(bool[,] mask, int height, int width)
     {

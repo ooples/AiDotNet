@@ -124,24 +124,24 @@ public partial class EAST<T> : TextDetectorBase<T>
 
         // Feature merging (U-Net style)
         var x = _mergeConv1.Forward(features[^1]);
-        x = ApplyBatchNormReLU(x);
+        x = ApplyMergeActivation(x);
 
         if (features.Count > 1)
         {
             x = UpsampleAndConcat(x, features[^2]);
             x = _mergeConv2.Forward(x);
-            x = ApplyBatchNormReLU(x);
+            x = ApplyMergeActivation(x);
         }
 
         if (features.Count > 2)
         {
             x = UpsampleAndConcat(x, features[^3]);
             x = _mergeConv3.Forward(x);
-            x = ApplyBatchNormReLU(x);
+            x = ApplyMergeActivation(x);
         }
 
         x = _mergeConv4.Forward(x);
-        x = ApplyBatchNormReLU(x);
+        x = ApplyMergeActivation(x);
 
         // Predict score and geometry
         var score = _scoreHead.Forward(x);
@@ -370,16 +370,11 @@ public partial class EAST<T> : TextDetectorBase<T>
         _geometryHead.WriteParameters(writer);
     }
 
-    private Tensor<T> ApplyBatchNormReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
-    }
+    /// <summary>
+    /// ReLU. (This was named ApplyBatchNormReLU, but it never normalised anything: EAST's merge branch
+    /// here has no batch-norm parameters, so the name described a step the model does not take.)
+    /// </summary>
+    private Tensor<T> ApplyMergeActivation(Tensor<T> x) => Engine.ReLU(x);
 
     /// <summary>
     /// Elementwise Sigmoid, delegated to the engine.
@@ -393,88 +388,13 @@ public partial class EAST<T> : TextDetectorBase<T>
     private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
 
     private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
-    {
-        int batch = x.Shape[0];
-        int xChannels = x.Shape[1];
-        int skipChannels = skip.Shape[1];
-        int targetH = skip.Shape[2];
-        int targetW = skip.Shape[3];
-
-        var upsampled = BilinearUpsample(x, targetH, targetW);
-        var result = new Tensor<T>(new[] { batch, xChannels + skipChannels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < xChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, c, h, w] = upsampled[b, c, h, w];
-                    }
-                }
-            }
-
-            for (int c = 0; c < skipChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, xChannels + c, h, w] = skip[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Upsample to the skip connection's resolution, then stack along channels. Tape-visible, so
+        // the decoder's gradient reaches the backbone through every skip.
+        => CvTensorOps<T>.ConcatChannels(BilinearUpsample(x, skip.Shape[2], skip.Shape[3]), skip);
 
     private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int srcH = x.Shape[2];
-        int srcW = x.Shape[3];
-
-        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * srcH;
-                        double srcX = (double)w / targetW * srcW;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = NumOps.ToDouble(x[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(x[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(x[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(x[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        result[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
+        => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
 
     private List<TextRegion<T>> ApplyTextNMS(List<TextRegion<T>> regions, double iouThreshold)
     {

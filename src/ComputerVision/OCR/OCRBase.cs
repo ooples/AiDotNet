@@ -286,6 +286,13 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     protected virtual Tensor<T> PreprocessCrop(Tensor<T> crop)
     {
+        var prepared = PreprocessCropCore(crop);
+        NoteResolvedInput(prepared);
+        return prepared;
+    }
+
+    private Tensor<T> PreprocessCropCore(Tensor<T> crop)
+    {
         int targetH = Options.RecognitionHeight;
         int srcH = crop.Shape[2];
         int srcW = crop.Shape[3];
@@ -508,32 +515,63 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// Runs OCR and returns region info as a tensor [numRegions, 6].
     /// Columns: confidence, textLength, x1, y1, x2, y2.
     /// </summary>
+    /// <summary>
+    /// Returns the model's raw, differentiable recognition output (see <see cref="ForwardLogits"/>).
+    /// </summary>
+    /// <remarks>
+    /// Use <see cref="Recognize"/> to read text. <see cref="Predict"/> used to run
+    /// <see cref="Recognize"/> and pack its decoded regions into a <c>[regions, 6]</c> tensor of
+    /// confidence, text length and box - a decoded summary that has no gradient, so nothing trained
+    /// against it could ever learn. It now returns the network output that
+    /// <see cref="Train"/> fits, matching the detection bases.
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var result = Recognize(input);
-        int regions = result.TextRegions.Count;
-        if (regions == 0)
-            return new Tensor<T>([0, 6]);
-
-        var output = new Tensor<T>([regions, 6]);
-        for (int i = 0; i < regions; i++)
-        {
-            var region = result.TextRegions[i];
-            output[i, 0] = region.Confidence;
-            output[i, 1] = NumOps.FromDouble(region.Text.Length);
-            if (region.Box is not null)
-            {
-                output[i, 2] = region.Box.X1;
-                output[i, 3] = region.Box.Y1;
-                output[i, 4] = region.Box.X2;
-                output[i, 5] = region.Box.Y2;
-            }
-        }
-        return output;
+        NoteResolvedInput(input);
+        return ForwardLogits(input);
     }
 
+    /// <summary>
+    /// Runs the differentiable recognition forward pass on an image and returns its raw output:
+    /// per-timestep character logits for a CTC recognizer, the encoder output and first decoding step
+    /// for an encoder-decoder recognizer. Every trainable weight must be reachable from it.
+    /// </summary>
+    /// <param name="image">The image or cropped text line, NCHW.</param>
+    /// <returns>The raw recognition output that <see cref="Train"/> fits.</returns>
+    protected abstract Tensor<T> ForwardLogits(Tensor<T> image);
+
+    /// <summary>
+    /// Gets the step size used by <see cref="Train"/>. Override it to match a paper recipe.
+    /// </summary>
+    protected virtual double TrainingLearningRate => 0.001;
+
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Runs one training step against the model's raw recognition output.
+    /// </summary>
+    /// <param name="input">The training image.</param>
+    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
+    /// <remarks>
+    /// This was an empty method, so CRNN and TrOCR ignored training entirely. The step records
+    /// <see cref="ForwardLogits"/> on a gradient tape, takes mean squared error against
+    /// <paramref name="expectedOutput"/> and updates every live trainable weight. A recognition loss
+    /// (CTC, or teacher-forced cross-entropy on target text) is the right objective for a full
+    /// training recipe and belongs in an override; this base step is what makes the models trainable.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        TensorModelTrainer<T>.Step(this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), ForwardLogits);
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
@@ -551,4 +589,43 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
+
+    /// <summary>
+    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
+    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
+    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _resolvedInputShape;
+
+    /// <summary>Records the input shape on the first forward pass.</summary>
+    private void NoteResolvedInput(Tensor<T> input)
+    {
+        if (_resolvedInputShape is not null || input is null)
+        {
+            return;
+        }
+
+        var shape = new int[input.Shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            shape[i] = input.Shape[i];
+        }
+
+        _resolvedInputShape = shape;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs the copy once on a zero input of the shape this model has already processed, so its
+    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
+    /// size their weights exactly as this model's did before its state is loaded into them.
+    /// </remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (_resolvedInputShape is not null && copy is OCRBase<T> rebuilt)
+        {
+            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+        }
+    }
 }

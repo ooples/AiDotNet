@@ -165,7 +165,9 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
             {
                 new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
                 new Tensor<T>(new[] { 0, (Options.NumClasses + 1) * 4 }),
-                new Tensor<T>(new[] { 0, 4 })
+                new Tensor<T>(new[] { 0, 4 }),
+                objectness,
+                bboxDeltas
             };
         }
 
@@ -185,7 +187,10 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
         var classLogits = _fcClassifier.Forward(flattenedFeatures);
         var boxDeltas = _fcBoxRegressor.Forward(flattenedFeatures);
 
-        return new List<Tensor<T>> { classLogits, boxDeltas, proposalBoxes };
+        // The RPN's raw objectness and box deltas are outputs too. They drive proposal selection, a
+        // non-differentiable top-k, so if they were not exposed nothing trained the RPN at all.
+        // PostProcess reads only the first three entries.
+        return new List<Tensor<T>> { classLogits, boxDeltas, proposalBoxes, objectness, bboxDeltas };
     }
 
     /// <inheritdoc/>
@@ -271,10 +276,12 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
             double predH = ph * Math.Exp(Math.Min(dh, 4.0));
 
             // Convert to (x1, y1, x2, y2) and clip
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
+            // Decoded in network-input coordinates; map to the source image before clipping.
+            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
+            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
+            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
+            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
 
             if (x2 <= x1 || y2 <= y1) continue;
 
@@ -386,30 +393,6 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)
-    {
-        int numRois = roiFeatures.Shape[0];
-        int channels = roiFeatures.Shape[1];
-        int h = roiFeatures.Shape[2];
-        int w = roiFeatures.Shape[3];
-        int flattenedSize = channels * h * w;
-
-        var result = new Tensor<T>(new[] { numRois, flattenedSize });
-
-        for (int roi = 0; roi < numRois; roi++)
-        {
-            int idx = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        result[roi, idx++] = roiFeatures[roi, c, y, x];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        => AiDotNetEngine.Current.Reshape(
+            roiFeatures, new[] { roiFeatures.Shape[0], roiFeatures.Shape[1] * roiFeatures.Shape[2] * roiFeatures.Shape[3] });
 }

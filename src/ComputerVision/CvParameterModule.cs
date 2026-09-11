@@ -155,7 +155,7 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
             foreach (var chunk in chunked.GetParameterStateChunks())
             {
                 string id = chunk.StableId == "$" ? $"{index}" : $"{index}/{chunk.StableId}";
-                yield return new ParameterChunk<T>(id, chunk.Role, chunk.Tensor, chunk.SourceTensor);
+                yield return new ParameterChunk<T>(id, chunk.Role, chunk.Tensor, chunk.SourceTensor, chunk.IsWritableInPlace);
             }
 
             index++;
@@ -172,4 +172,34 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
             }
         }
     }
+}
+
+/// <summary>
+/// A <see cref="CvParameterModule{T}"/> whose children and own tensors are supplied by delegates.
+/// </summary>
+/// <remarks>
+/// For public building blocks (the region proposal network, for one) that cannot derive from the
+/// internal <see cref="CvParameterModule{T}"/>: they hold one of these and forward
+/// <see cref="IParameterSource{T}"/> and <see cref="IParameterChunkSource{T}"/> to it.
+/// </remarks>
+/// <typeparam name="T">The numeric type of the weights.</typeparam>
+internal sealed class DelegatingCvParameterModule<T> : CvParameterModule<T>
+{
+    private readonly Func<IEnumerable<IParameterSource<T>?>> _children;
+    private readonly Func<IEnumerable<Tensor<T>>>? _own;
+
+    /// <summary>Creates a module over the given children and, optionally, raw tensors.</summary>
+    public DelegatingCvParameterModule(
+        Func<IEnumerable<IParameterSource<T>?>> children,
+        Func<IEnumerable<Tensor<T>>>? own = null)
+    {
+        _children = children ?? throw new ArgumentNullException(nameof(children));
+        _own = own;
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => _children();
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors() => _own?.Invoke() ?? Array.Empty<Tensor<T>>();
 }

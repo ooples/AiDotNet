@@ -169,7 +169,7 @@ public partial class RTDETR<T> : ObjectDetectorBase<T>
         }
 
         // RT-DETR is designed to be NMS-free, but apply with high threshold for safety
-        var nmsResults = _nms.Apply(candidateDetections, Math.Max(0.9, nmsThreshold));
+        var nmsResults = _nms.Apply(candidateDetections, EffectiveNmsThreshold(nmsThreshold));
 
         if (nmsResults.Count > Options.MaxDetections)
         {
@@ -277,6 +277,13 @@ public partial class RTDETR<T> : ObjectDetectorBase<T>
     {
         return DETRHelpers.FlattenMultiScale(features, _hiddenDim);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One query per object means duplicates are rare, so NMS runs only as a safety net at IoU 0.9
+    /// (or the requested value, if that is higher) instead of the caller's threshold.
+    /// </remarks>
+    public override double EffectiveNmsThreshold(double requested) => Math.Max(0.9, requested);
 }
 
 /// <summary>

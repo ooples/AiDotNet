@@ -187,7 +187,7 @@ public partial class DETR<T> : ObjectDetectorBase<T>
 
         // Note: DETR is designed to not need NMS, but we apply it for safety
         // with a very high IoU threshold
-        var nmsResults = _nms.Apply(candidateDetections, Math.Max(0.9, nmsThreshold));
+        var nmsResults = _nms.Apply(candidateDetections, EffectiveNmsThreshold(nmsThreshold));
 
         // Limit to max detections
         if (nmsResults.Count > Options.MaxDetections)
@@ -312,6 +312,13 @@ public partial class DETR<T> : ObjectDetectorBase<T>
 
         return encoding;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One query per object means duplicates are rare, so NMS runs only as a safety net at IoU 0.9
+    /// (or the requested value, if that is higher) instead of the caller's threshold.
+    /// </remarks>
+    public override double EffectiveNmsThreshold(double requested) => Math.Max(0.9, requested);
 }
 
 /// <summary>

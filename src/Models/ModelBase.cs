@@ -347,6 +347,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         {
             byte[] state = Serialize();
             var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            PrepareCopyForStateRestore(copy);
             AiDotNet.Models.CloneEngine.PrepareParameterTopology(
                 this,
                 copy,
@@ -356,6 +357,22 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
             AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
             return copy;
         }
+    }
+
+    /// <summary>
+    /// Called by <see cref="DeepCopy"/> after the copy has been rebuilt from its recorded
+    /// constructor and before this model's state is loaded into it.
+    /// </summary>
+    /// <param name="copy">The freshly rebuilt copy.</param>
+    /// <remarks>
+    /// A model built from lazily-shaped layers - layers that size their weights on their first
+    /// forward pass - has, once used, more parameters than the freshly rebuilt copy, so loading the
+    /// state fails on a parameter-count mismatch. Override this to bring the copy to the same
+    /// parameter topology first, typically by running it once on an input of the shape this model
+    /// has already seen. The default does nothing.
+    /// </remarks>
+    protected virtual void PrepareCopyForStateRestore(ModelBase<T, TInput, TOutput> copy)
+    {
     }
 
     /// <inheritdoc/>

@@ -38,7 +38,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://arxiv.org/abs/2405.14458",
     Year = 2024,
     Authors = "Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
-public class YOLOv10<T> : ObjectDetectorBase<T>
+public partial class YOLOv10<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;
     private readonly YOLOv8Head<T>? _auxHead; // Auxiliary head for training

@@ -26,7 +26,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 /// <para>Reference: Ren et al., "Faster R-CNN: Towards Real-Time Object Detection with
 /// Region Proposal Networks", NeurIPS 2015</para>
 /// </remarks>
-public class RPN<T>
+public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _conv;
@@ -303,30 +303,13 @@ public class RPN<T>
                 $"Expected channel dimension to be numAnchors * {outputDim}.");
         }
 
+        // [B, A*D, H, W] -> [B, A, D, H, W] -> [B, H, W, A, D] -> [B, H*W*A, D], as engine ops so the
+        // RPN heads stay on the gradient tape.
         int numAnchors = channelDim / outputDim;
-        var result = new Tensor<T>(new[] { batch, height * width * numAnchors, outputDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            int idx = 0;
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int a = 0; a < numAnchors; a++)
-                    {
-                        for (int d = 0; d < outputDim; d++)
-                        {
-                            int channelIdx = a * outputDim + d;
-                            result[b, idx, d] = x[b, channelIdx, h, w];
-                        }
-                        idx++;
-                    }
-                }
-            }
-        }
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var split = engine.Reshape(x, new[] { batch, numAnchors, outputDim, height, width });
+        var ordered = engine.TensorPermute(split, new[] { 0, 3, 4, 1, 2 });
+        return engine.Reshape(ordered, new[] { batch, height * width * numAnchors, outputDim });
     }
 
     /// <summary>
@@ -392,6 +375,27 @@ public class RPN<T>
 
         return union > 0 ? intersect / union : 0;
     }
+
+    // The shared convolution and both heads, registered as live chunks. RPN is public, so it forwards
+    // the parameter interfaces to an internal module instead of deriving from one. Before this the
+    // generator could not see anything inside the RPN at all.
+    private DelegatingCvParameterModule<T>? _parameters;
+
+    private DelegatingCvParameterModule<T> Parameters
+        => _parameters ??= new DelegatingCvParameterModule<T>(() => new IParameterSource<T>?[] { _conv, _clsHead, _regHead });
+
+    /// <inheritdoc />
+    long IParameterSource<T>.ParameterCount => Parameters.ParameterCount;
+
+    /// <inheritdoc />
+    Vector<T> IParameterSource<T>.GetParameters() => Parameters.GetParameters();
+
+    /// <inheritdoc />
+    void IParameterSource<T>.SetParameters(Vector<T> parameters) => Parameters.SetParameters(parameters);
+
+    /// <inheritdoc />
+    IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> AiDotNet.Models.Parameters.IParameterChunkSource<T>.GetParameterStateChunks()
+        => Parameters.GetParameterStateChunks();
 }
 
 /// <summary>
@@ -433,88 +437,26 @@ internal class RoIAlign<T>
     public Tensor<T> Forward(Tensor<T> features, Tensor<T> rois, double spatialScale = 1.0 / 16.0, int[]? batchIndices = null)
     {
         int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int featureH = features.Shape[2];
-        int featureW = features.Shape[3];
         int numRois = rois.Shape[0];
 
-        var output = new Tensor<T>(new[] { numRois, channels, _outputSize, _outputSize });
-
-        for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
+        // The boxes are constants to the gradient (as in standard RoIAlign), so they are read out once;
+        // the pooling itself is a tape-visible gather over the feature map.
+        var boxes = new double[numRois * 4];
+        for (int i = 0; i < boxes.Length; i++)
         {
-            // Get batch index for this RoI (default to 0 if not provided)
-            int batchIdx = batchIndices is not null && roiIdx < batchIndices.Length
-                ? Math.Min(batchIndices[roiIdx], batchSize - 1)
-                : 0;
-
-            // Scale RoI to feature map coordinates
-            double x1 = _numOps.ToDouble(rois[roiIdx, 0]) * spatialScale;
-            double y1 = _numOps.ToDouble(rois[roiIdx, 1]) * spatialScale;
-            double x2 = _numOps.ToDouble(rois[roiIdx, 2]) * spatialScale;
-            double y2 = _numOps.ToDouble(rois[roiIdx, 3]) * spatialScale;
-
-            double roiW = x2 - x1;
-            double roiH = y2 - y1;
-
-            double binW = roiW / _outputSize;
-            double binH = roiH / _outputSize;
-
-            for (int c = 0; c < channels; c++)
-            {
-                for (int ph = 0; ph < _outputSize; ph++)
-                {
-                    for (int pw = 0; pw < _outputSize; pw++)
-                    {
-                        // Compute bin boundaries
-                        double binStartY = y1 + ph * binH;
-                        double binStartX = x1 + pw * binW;
-
-                        double sum = 0;
-                        int count = 0;
-
-                        // Sample points within the bin
-                        for (int iy = 0; iy < _samplingRatio; iy++)
-                        {
-                            for (int ix = 0; ix < _samplingRatio; ix++)
-                            {
-                                double y = binStartY + (iy + 0.5) * binH / _samplingRatio;
-                                double x = binStartX + (ix + 0.5) * binW / _samplingRatio;
-
-                                // Bilinear interpolation
-                                if (y >= 0 && y < featureH && x >= 0 && x < featureW)
-                                {
-                                    sum += BilinearInterpolate(features, batchIdx, c, y, x, featureH, featureW);
-                                    count++;
-                                }
-                            }
-                        }
-
-                        output[roiIdx, c, ph, pw] = _numOps.FromDouble(count > 0 ? sum / count : 0);
-                    }
-                }
-            }
+            boxes[i] = _numOps.ToDouble(rois[i]);
         }
 
-        return output;
+        var indices = new int[numRois];
+        for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
+        {
+            indices[roiIdx] = batchIndices is not null && roiIdx < batchIndices.Length
+                ? Math.Min(batchIndices[roiIdx], batchSize - 1)
+                : 0;
+        }
+
+        return CvTensorOps<T>.RoIAlign(features, boxes, indices, spatialScale, _outputSize, _samplingRatio);
     }
 
-    private double BilinearInterpolate(Tensor<T> features, int batch, int channel, double y, double x, int height, int width)
-    {
-        int y0 = (int)Math.Floor(y);
-        int x0 = (int)Math.Floor(x);
-        int y1 = Math.Min(y0 + 1, height - 1);
-        int x1 = Math.Min(x0 + 1, width - 1);
 
-        double wy1 = y - y0;
-        double wy0 = 1.0 - wy1;
-        double wx1 = x - x0;
-        double wx0 = 1.0 - wx1;
-
-        double v00 = _numOps.ToDouble(features[batch, channel, y0, x0]);
-        double v01 = _numOps.ToDouble(features[batch, channel, y0, x1]);
-        double v10 = _numOps.ToDouble(features[batch, channel, y1, x0]);
-        double v11 = _numOps.ToDouble(features[batch, channel, y1, x1]);
-
-        return wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-    }
 }

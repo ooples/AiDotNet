@@ -161,8 +161,13 @@ public abstract class DetectionModelTestBase<T>
         var second = model.Predict(CreateRandomImage(rng));
 
         // A model whose output ignores its input is not reading the image at all - the failure
-        // mode a constant-returning stub would show.
-        Assert.Equal(first.Length, second.Length);
+        // mode a constant-returning stub would show. A two-stage detector's output length depends on
+        // how many proposals survive, so a different LENGTH already proves input dependence.
+        if (first.Length != second.Length)
+        {
+            return;
+        }
+
         bool anyDifference = false;
         for (int i = 0; i < first.Length && !anyDifference; i++)
         {
@@ -260,14 +265,16 @@ public abstract class DetectionModelTestBase<T>
         using var model = CreateModel();
 
         var image = CreateRandomImage(rng);
-        var target = CreateTargetLike(model.Predict(image), rng);
+        WarmUp(model, rng);
 
         var before = ParametersOf(model);
         Assert.True(before.Length > 0, "Model reports no trainable parameters.");
 
         for (int step = 0; step < TrainingIterations; step++)
         {
-            model.Train(image, target);
+            // Re-derive the target each step: a two-stage detector's output length follows its
+            // proposals, which move once its weights do.
+            model.Train(image, CreateTargetLike(model.Predict(image), rng));
         }
 
         var after = ParametersOf(model);
@@ -297,11 +304,9 @@ public abstract class DetectionModelTestBase<T>
         using var model = CreateModel();
 
         var image = CreateRandomImage(rng);
-        var target = CreateTargetLike(model.Predict(image), rng);
-
         for (int step = 0; step < TrainingIterations; step++)
         {
-            model.Train(image, target);
+            model.Train(image, CreateTargetLike(model.Predict(image), rng));
         }
 
         var output = model.Predict(image);

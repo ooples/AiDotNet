@@ -205,8 +205,10 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var detector = CreateDetector();
 
-        const double nmsThreshold = 0.45;
-        var detections = detector.Detect(CreateRandomImage(rng), 0.05, nmsThreshold).Detections;
+        // Compare against the threshold the detector says it applies: set-prediction detectors
+        // (DETR, RT-DETR) declare a higher one rather than suppressing at the caller's value.
+        double nmsThreshold = detector.EffectiveNmsThreshold(0.45);
+        var detections = detector.Detect(CreateRandomImage(rng), 0.05, 0.45).Detections;
 
         // Per-class NMS is the standard; a class-agnostic implementation also satisfies this,
         // so the weaker per-class claim is the right one to assert.
@@ -317,6 +319,39 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         }
 
         return image;
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task Detect_BoxesShouldLieInsideASourceImageOfAnotherSize()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var detector = CreateDetector();
+
+        // A source image whose size and aspect ratio differ from the network input. Boxes decode in
+        // the network-input frame and must be mapped back to this frame; clipping them without that
+        // mapping produced inverted boxes (x1 beyond x2) and silently dropped the rest.
+        int height = InputShape[2] * 3 / 4, width = InputShape[3] * 5 / 4;
+        var image = new Tensor<T>(new[] { 1, InputShape[1], height, width });
+        for (int i = 0; i < image.Length; i++)
+        {
+            image[i] = ToT(rng.NextDouble());
+        }
+
+        var result = detector.Detect(image, 0.0, DetectNmsThreshold);
+
+        Assert.Equal(width, result.ImageWidth);
+        Assert.Equal(height, result.ImageHeight);
+        foreach (var detection in result.Detections)
+        {
+            var (xMin, yMin, xMax, yMax) = detection.Box.ToXYXY();
+            Assert.True(xMax > xMin && yMax > yMin, $"Degenerate box ({xMin},{yMin})-({xMax},{yMax}).");
+            Assert.InRange(xMin, -1e-6, width + 1e-6);
+            Assert.InRange(xMax, -1e-6, width + 1e-6);
+            Assert.InRange(yMin, -1e-6, height + 1e-6);
+            Assert.InRange(yMax, -1e-6, height + 1e-6);
+        }
     }
 }
 
