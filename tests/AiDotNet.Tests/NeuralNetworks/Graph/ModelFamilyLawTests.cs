@@ -108,6 +108,36 @@ public class ModelFamilyLawTests
 
         int familiesProbed = 0;
 
+        // Bounded isolation. Each member is built and probed in its own worker process with a 1 GB
+        // managed heap and a deadline (ModelShapeConformanceProcess), so one slow or pathological
+        // model costs at most memberTimeout instead of the whole sweep's xUnit Timeout. Both knobs are
+        // measurement/CI-sizing hooks; the defaults are the real configuration.
+        int workers = EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1);
+        var memberTimeout = TimeSpan.FromSeconds(EnvInt("ADNSHAPE_MODEL_TIMEOUT_SECONDS", 180, 1));
+        var observationProfiles = Profiles
+            .Select(p => new ModelShapeConformanceProcess.ObservationProfile(
+                Name: p.Name,
+                InputType: "ThreeDimensional",
+                InputSize: p.Extent,
+                InputDepth: 3,
+                Classes: p.Classes,
+                Batches: new[] { p.Batch },
+                AxisCap: p.Extent,
+                AltExtent: 0,
+                UseDefaultConstructor: false,
+                FallBackToDefaultConstructor: true,
+                OverrideClassCountParameters: true,
+                StopAtFirstFailure: true))
+            .ToArray();
+
+        async Task<ModelShapeConformanceProcess.Observation?> ObserveMemberAsync(Type open)
+        {
+            Type closed;
+            try { closed = open.MakeGenericType(typeof(double)); }
+            catch { return null; }
+            return await ModelShapeConformanceProcess.ObserveAsync(closed, observationProfiles, memberTimeout);
+        }
+
         foreach (var family in selected.OrderByDescending(f => f.Value.Count))
         {
             _out.WriteLine("");
@@ -115,55 +145,54 @@ public class ModelFamilyLawTests
 
             var rows = new List<(string Model, int[][] In, int[][] Out)>();
             var skipped = new List<string>();
+            var familyClock = System.Diagnostics.Stopwatch.StartNew();
+            int attempted = 0;
 
-            foreach (var open in family.Value.Distinct().OrderBy(t => t.Name, StringComparer.Ordinal))
+            var members = family.Value.Distinct().OrderBy(t => t.Name, StringComparer.Ordinal).ToList();
+
+            // Members are OBSERVED in isolated worker processes, a bounded batch at a time, but
+            // CONSUMED strictly in alphabetical order, so the rows are the first PerFamilyBudget
+            // members that produce a complete profile set - the same selection the sequential
+            // in-process loop made - regardless of which worker finished first. A batch can only
+            // observe a few members past the budget; those extra results are discarded unread.
+            for (int next = 0; next < members.Count && rows.Count < PerFamilyBudget; next += workers)
             {
-                if (rows.Count >= PerFamilyBudget) break;
+                var batchMembers = members.Skip(next).Take(workers).ToList();
+                var observations = await Task.WhenAll(batchMembers.Select(ObserveMemberAsync));
 
-                Type closed;
-                try { closed = open.MakeGenericType(typeof(double)); }
-                catch { continue; }
-
-                var ins = new List<int[]>();
-                var outs = new List<int[]>();
-                string? failure = null;
-
-                foreach (var (_, classes, extent, batch) in Profiles)
+                for (int m = 0; m < batchMembers.Count && rows.Count < PerFamilyBudget; m++)
                 {
-                    object? model = null;
-                    try { model = Construct(closed, classes, extent); }
-                    catch (Exception ex) { failure ??= $"{Unwrap(ex).GetType().Name} constructing"; break; }
-                    if (model is null) { failure ??= "no usable constructor"; break; }
+                    attempted++;
+                    var (open, observation) = (batchMembers[m], observations[m]);
+                    if (observation is null) continue;   // not closable over double
 
-                    try
+                    var ins = new List<int[]>();
+                    var outs = new List<int[]>();
+                    string? failure = observation.Status == "observed"
+                        ? null
+                        : $"{observation.Status}{(observation.Error is null ? "" : $" ({observation.Error})")}";
+
+                    foreach (var profile in observation.Profiles)
                     {
-                        int[]? perSample = TryArchitectureInputShape(model);
-                        if (perSample is null || perSample.Length == 0 || perSample.Any(d => d <= 0))
-                        {
-                            failure ??= "no concrete declared input shape";
-                            break;
-                        }
-
-                        var shape = new int[perSample.Length + 1];
-                        shape[0] = batch;
-                        for (int i = 0; i < perSample.Length; i++) shape[i + 1] = Math.Min(perSample[i], extent);
-
-                        var (o, f) = TryPredict(model, shape);
-                        if (o is null) { failure ??= f; break; }
-                        ins.Add(shape);
-                        outs.Add(o);
+                        if (profile.Failure is not null) { failure ??= profile.Failure; break; }
+                        var probe = profile.Observations.FirstOrDefault();
+                        if (probe?.Output is null) { failure ??= probe?.Failure ?? "no probe ran"; break; }
+                        ins.Add(probe.Input);
+                        outs.Add(probe.Output);
                     }
-                    finally { (model as IDisposable)?.Dispose(); }
-                }
 
-                if (outs.Count < Profiles.Length)
-                {
-                    skipped.Add($"{open.Name}: {failure ?? "incomplete profile set"}");
-                    continue;
-                }
+                    if (outs.Count < Profiles.Length)
+                    {
+                        skipped.Add($"{open.Name}: {failure ?? "incomplete profile set"}");
+                        continue;
+                    }
 
-                rows.Add((open.Name, ins.ToArray(), outs.ToArray()));
+                    rows.Add((open.Name, ins.ToArray(), outs.ToArray()));
+                }
             }
+
+            _out.WriteLine($"  observed {attempted}/{members.Count} members in {familyClock.Elapsed.TotalSeconds:F0} s "
+                + $"(workers={workers}, per-member timeout={memberTimeout.TotalSeconds:F0} s)");
 
             if (rows.Count == 0)
             {
@@ -247,76 +276,10 @@ public class ModelFamilyLawTests
             yield return a.IsGenericType ? a.GetGenericTypeDefinition() : a;
     }
 
-    /// <summary>
-    /// Builds the model, overriding any constructor parameter that names a class count.
-    /// </summary>
-    /// <remarks>
-    /// Overriding BY PARAMETER NAME rather than position, because the class count sits at a different
-    /// index in almost every model and a positional guess would silently pass 7 as a dropout rate.
-    /// </remarks>
-    private static object? Construct(Type closed, int classes, int extent)
-    {
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
+    // Construction (by-name class-count override, TinyForTests options, default-ctor fallback) and the
+    // whole-number probe fill now live in the worker: tests/AiDotNet.ParameterSweepWorker/
+    // ShapeObservationWorker.cs, shared with the shape-discovery sweep.
 
-        if (ctor is null)
-        {
-            return closed.GetConstructor(Type.EmptyTypes) is not null
-                ? Activator.CreateInstance(closed)
-                : null;
-        }
-
-        var pars = ctor.GetParameters();
-        var args = new object?[pars.Length];
-        args[0] = new NeuralNetworkArchitecture<double>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-            inputDepth: 3, inputHeight: extent, inputWidth: extent, outputSize: classes);
-
-        for (int i = 1; i < pars.Length; i++)
-        {
-            var p = pars[i];
-            bool isClassCount = p.ParameterType == typeof(int)
-                && (p.Name?.IndexOf("numClasses", StringComparison.OrdinalIgnoreCase) >= 0
-                    || p.Name?.IndexOf("classCount", StringComparison.OrdinalIgnoreCase) >= 0);
-            args[i] = isClassCount ? classes : p.DefaultValue;
-        }
-
-        return ctor.Invoke(args);
-    }
-
-    private static int[]? TryArchitectureInputShape(object model)
-    {
-        try
-        {
-            dynamic arch = ((dynamic)model).GetArchitecture();
-            int[] shape = arch.GetInputShape();
-            return shape;
-        }
-        catch { return null; }
-    }
-
-    private static (int[]? Shape, string? Failure) TryPredict(object model, int[] shape)
-    {
-        try
-        {
-            var probe = new Tensor<double>(shape);
-            for (int i = 0; i < probe.Length; i++) probe[i] = (i * 7) % 13;
-            var result = ((dynamic)model).Predict(probe);
-            return result is null ? (null, "Predict returned null") : ((int[])result._shape, null);
-        }
-        catch (Exception ex)
-        {
-            var root = Unwrap(ex);
-            var msg = root.Message.Split('\n')[0].Trim();
-            return (null, $"{root.GetType().Name}: {(msg.Length > 80 ? msg.Substring(0, 80) + "..." : msg)}");
-        }
-    }
-
-    private static Exception Unwrap(Exception ex) =>
-        ex is TargetInvocationException { InnerException: not null } tie ? tie.InnerException : ex;
+    private static int EnvInt(string name, int fallback, int minimum) =>
+        int.TryParse(Environment.GetEnvironmentVariable(name), out int v) && v >= minimum ? v : fallback;
 }
