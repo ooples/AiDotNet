@@ -82,5 +82,58 @@ internal static class DisposeOnceGuard
         }
     }
 
+    /// <summary>
+    /// Disposes every <see cref="IDisposable"/> in <paramref name="owned"/> through <see cref="TryDispose"/>,
+    /// continuing past failures, then reports them: a single failure is rethrown unchanged, two or more are
+    /// thrown together as one <see cref="AggregateException"/>.
+    /// </summary>
+    /// <param name="owned">The resources to release; nulls and non-disposable entries are skipped.</param>
+    /// <param name="owner">Names the owner in the aggregate message.</param>
+    /// <remarks>
+    /// <para>
+    /// An owner that releases its resources in a plain loop leaks every resource after the first one whose
+    /// <c>Dispose</c> throws. Collecting the failures and reporting them after the loop releases everything
+    /// that can be released. Each instance is still disposed at most once, so the same resource listed twice,
+    /// or shared with another owner, is released a single time.
+    /// </para>
+    /// <para>
+    /// Exactly one failure -- by far the common case -- is rethrown as the original exception through
+    /// <see cref="System.Runtime.ExceptionServices.ExceptionDispatchInfo"/>, keeping its type and the stack of the
+    /// code that threw it. A caller that caught a specific exception type from an owner's <c>Dispose</c> before
+    /// that owner started using this method therefore keeps working. Only two or more failures, which cannot be
+    /// reported as one exception without losing some, are wrapped in an <see cref="AggregateException"/> -- the
+    /// library's convention for multi-resource disposal (compare <c>DataPipeline</c>).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="AggregateException">Two or more resources threw from <c>Dispose</c>.</exception>
+    public static void DisposeAll(IEnumerable<object?> owned, string owner)
+    {
+        if (owned is null) return;
+
+        List<Exception>? failures = null;
+        foreach (var item in owned)
+        {
+            if (item is not IDisposable disposable) continue;
+            try
+            {
+                TryDispose(disposable);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failures ??= new List<Exception>();
+                failures.Add(ex);
+            }
+        }
+
+        if (failures is null) return;
+
+        if (failures.Count == 1)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+
+        throw new AggregateException($"{failures.Count} resources owned by {owner} failed to dispose.", failures);
+    }
+
     private static readonly object _sentinel = new();
 }

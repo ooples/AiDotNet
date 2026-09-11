@@ -570,6 +570,9 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// </remarks>
     public void Dispose()
     {
+        // A repeated call must not re-enter a derived Dispose(bool) override: overrides do their
+        // own teardown before calling base, so only this entry point can keep that teardown to one run.
+        if (_disposed) return;
         Dispose(disposing: true);
         System.GC.SuppressFinalize(this);
     }

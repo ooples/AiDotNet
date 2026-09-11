@@ -9350,6 +9350,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public void Dispose()
     {
+        // A repeated call must not re-enter a derived Dispose(bool) override. Overrides run their own
+        // teardown before calling base -- DenseLayer's, for one, re-invalidates the engine's GPU cache
+        // entry for _weights/_biases, tensors whose pooled storage the first call already handed back
+        // and a newer layer may now own. Only this entry point can keep that teardown to one run.
+        lock (_bufferRegistrationLock)
+        {
+            if (_disposed) return;
+        }
+
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }

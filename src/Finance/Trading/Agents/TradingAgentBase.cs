@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -101,6 +102,27 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// Total number of trades executed.
     /// </summary>
     protected int _totalTrades;
+
+    /// <summary>
+    /// The neural networks this agent owns: policy, value, Q and target networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This mirrors <see cref="DeepReinforcementLearningAgentBase{T}"/>'s <c>Networks</c> list. A trading
+    /// agent derives from <see cref="ReinforcementLearningAgentBase{T}"/> directly, whose
+    /// <see cref="ReinforcementLearningAgentBase{T}.Dispose"/> releases nothing, so without this list a
+    /// disposed PPO/DQN/A2C/SAC agent left every network it had built -- with its pooled weight
+    /// buffers, GPU allocations and compiled training plans -- alive until the garbage collector ran.
+    /// Every concrete agent adds each network it constructs here, and <see cref="Dispose"/> releases them.
+    /// </para>
+    /// <para>
+    /// This is lifecycle bookkeeping only, not a parameter surface. The concrete agents' own fields
+    /// declare whether each network is trainable or a target buffer; registering this mixed-role
+    /// aggregate as trainable would alias the target networks under the wrong role.
+    /// </para>
+    /// </remarks>
+    [ExternalState]
+    protected readonly List<INeuralNetwork<T>> Networks = new List<INeuralNetwork<T>>();
 
     #endregion
 
@@ -633,6 +655,30 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     public override Dictionary<string, T> GetMetrics()
     {
         return GetTradingMetrics();
+    }
+
+    /// <summary>
+    /// Disposes the agent and every network it owns.
+    /// </summary>
+    /// <remarks>
+    /// Each network is released at most once, even when two of the agent's fields (or two agents)
+    /// hold the same instance, and calling this method again is harmless: disposal goes through
+    /// the same process-wide once-only guard that <see cref="NeuralNetworkBase{T}"/> uses for its layers.
+    /// A network whose <c>Dispose</c> throws does not stop the others from being released; every
+    /// failure is reported afterwards: a single failure is rethrown unchanged (same type and stack), two or
+    /// more together in one <see cref="AggregateException"/>.
+    /// </remarks>
+    /// <exception cref="AggregateException">Two or more networks threw from <c>Dispose</c>.</exception>
+    public override void Dispose()
+    {
+        try
+        {
+            DisposeOnceGuard.DisposeAll(Networks, GetType().Name);
+        }
+        finally
+        {
+            base.Dispose();
+        }
     }
 
     #endregion
