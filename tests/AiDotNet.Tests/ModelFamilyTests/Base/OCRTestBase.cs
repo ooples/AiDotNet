@@ -172,10 +172,11 @@ public abstract class OCRTestBase<T> : DetectionModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var recognizer = CreateRecognizer();
 
-        var result = recognizer.Recognize(CreateRandomImage(rng));
+        var image = CreateRandomImage(rng);
+        var result = recognizer.Recognize(image);
 
-        Assert.True(result.ImageWidth > 0, "OCRResult.ImageWidth was not populated.");
-        Assert.True(result.ImageHeight > 0, "OCRResult.ImageHeight was not populated.");
+        Assert.Equal(image.Shape[3], result.ImageWidth);
+        Assert.Equal(image.Shape[2], result.ImageHeight);
     }
 
     [Fact(Timeout = 120000)]

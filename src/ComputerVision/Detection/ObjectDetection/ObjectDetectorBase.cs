@@ -374,8 +374,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     private Tensor<T> PreprocessCore(Tensor<T> image)
     {
         // Default preprocessing: resize to input size and normalize
-        int targetHeight = Options.InputSize[0];
-        int targetWidth = Options.InputSize[1];
+        var (targetHeight, targetWidth) = GetValidatedInputSize();
 
         // Resize if needed
         var resized = ResizeImage(image, targetHeight, targetWidth);
@@ -384,6 +383,30 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         var normalized = Normalize(resized);
 
         return normalized;
+    }
+
+    private (int Height, int Width) GetValidatedInputSize()
+    {
+        // InputSize is publicly mutable, so validate at each consuming boundary rather than
+        // only at construction. Return the dimensions, not the caller-owned array.
+        var inputSize = Options.InputSize;
+        if (inputSize is null || inputSize.Length != 2)
+        {
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
+        }
+
+        int height = inputSize[0];
+        int width = inputSize[1];
+        if (height <= 0 || width <= 0)
+        {
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
+        }
+
+        return (height, width);
     }
 
     /// <summary>
@@ -640,7 +663,9 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     {
         if (_resolvedInputShape is not null && copy is ObjectDetectorBase<T> rebuilt)
         {
-            rebuilt.Predict(new Tensor<T>(_resolvedInputShape));
+            var shape = (int[])_resolvedInputShape.Clone();
+            shape[0] = 1;
+            rebuilt.Predict(new Tensor<T>(shape));
         }
     }
 
@@ -693,7 +718,8 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
             return;
         }
 
-        Predict(new Tensor<T>(new[] { 1, InputChannels, Options.InputSize[0], Options.InputSize[1] }));
+        var (height, width) = GetValidatedInputSize();
+        Predict(new Tensor<T>(new[] { 1, InputChannels, height, width }));
     }
 
     /// <inheritdoc />

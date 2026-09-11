@@ -355,12 +355,6 @@ public partial class TrOCR<T> : OCRBase<T>
         return _outputProjection.ForwardTokens(x);
     }
 
-    private static double GELU(double x)
-    {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-    }
-
     /// <inheritdoc/>
     public override long GetParameterCount()
     {
@@ -828,32 +822,29 @@ internal class TrOCREncoderLayer<T> : CvParameterModule<T>
 
     public Tensor<T> Forward(Tensor<T> x)
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-
         // Self-attention with proper scaled dot-product attention
-        var attnOut = ApplySelfAttention(x, batch, seqLen);
+        var attnOut = ApplySelfAttention(x);
 
         // Add residual & LayerNorm with learnable parameters
-        var residual1 = AddTensors(x, attnOut, batch, seqLen);
+        var residual1 = AddTensors(x, attnOut);
         var x1 = _norm1.Forward(residual1);
 
         // FFN
-        var ffnOut = ApplyFFN(x1, batch, seqLen);
+        var ffnOut = ApplyFFN(x1);
 
         // Add residual & LayerNorm with learnable parameters
-        var residual2 = AddTensors(x1, ffnOut, batch, seqLen);
+        var residual2 = AddTensors(x1, ffnOut);
         var output = _norm2.Forward(residual2);
 
         return output;
     }
 
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private Tensor<T> ApplySelfAttention(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplySelfAttention(Tensor<T> x)
     {
         // Project Q, K, V
         var q = ProjectSequence(x, _queryProj);
@@ -861,19 +852,18 @@ internal class TrOCREncoderLayer<T> : CvParameterModule<T>
         var v = ProjectSequence(x, _valueProj);
 
         // Compute multi-head attention
-        var attnOutput = ComputeMultiHeadAttention(q, k, v, batch, seqLen, seqLen);
+        var attnOutput = ComputeMultiHeadAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _outputProj);
     }
 
-    private Tensor<T> ComputeMultiHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batch, int queryLen, int keyLen)
+    private Tensor<T> ComputeMultiHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
         => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale);
 
     private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj) => proj.ForwardTokens(x);
 
-    private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplyFFN(Tensor<T> x)
         => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
 
@@ -1039,34 +1029,30 @@ internal class TrOCRDecoderLayer<T> : CvParameterModule<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> encoderOutput)
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int encoderLen = encoderOutput.Shape[1];
-
         // Masked self-attention (causal mask for autoregressive decoding)
-        var selfAttnOut = ApplyCausalSelfAttention(x, batch, seqLen);
-        var residual1 = AddTensors(x, selfAttnOut, batch, seqLen);
+        var selfAttnOut = ApplyCausalSelfAttention(x);
+        var residual1 = AddTensors(x, selfAttnOut);
         var x1 = _norm1.Forward(residual1);
 
         // Cross-attention to encoder output
-        var crossAttnOut = ApplyCrossAttention(x1, encoderOutput, batch, seqLen, encoderLen);
-        var residual2 = AddTensors(x1, crossAttnOut, batch, seqLen);
+        var crossAttnOut = ApplyCrossAttention(x1, encoderOutput);
+        var residual2 = AddTensors(x1, crossAttnOut);
         var x2 = _norm2.Forward(residual2);
 
         // FFN
-        var ffnOut = ApplyFFN(x2, batch, seqLen);
-        var residual3 = AddTensors(x2, ffnOut, batch, seqLen);
+        var ffnOut = ApplyFFN(x2);
+        var residual3 = AddTensors(x2, ffnOut);
         var output = _norm3.Forward(residual3);
 
         return output;
     }
 
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x)
     {
         // Project Q, K, V
         var q = ProjectSequence(x, _selfQueryProj);
@@ -1074,16 +1060,16 @@ internal class TrOCRDecoderLayer<T> : CvParameterModule<T>
         var v = ProjectSequence(x, _selfValueProj);
 
         // Compute masked attention (causal mask)
-        var attnOutput = ComputeCausalAttention(q, k, v, batch, seqLen);
+        var attnOutput = ComputeCausalAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _selfOutputProj);
     }
 
-    private Tensor<T> ComputeCausalAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, int batch, int seqLen)
+    private Tensor<T> ComputeCausalAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
         => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale, causal: true);
 
-    private Tensor<T> ApplyCrossAttention(Tensor<T> x, Tensor<T> encoderOutput, int batch, int seqLen, int encoderLen)
+    private Tensor<T> ApplyCrossAttention(Tensor<T> x, Tensor<T> encoderOutput)
     {
         // Query from decoder, Key/Value from encoder
         var q = ProjectSequence(x, _crossQueryProj);
@@ -1091,19 +1077,18 @@ internal class TrOCRDecoderLayer<T> : CvParameterModule<T>
         var v = ProjectSequence(encoderOutput, _crossValueProj);
 
         // Compute cross-attention (no mask needed)
-        var attnOutput = ComputeCrossAttention(q, k, v, batch, seqLen, encoderLen);
+        var attnOutput = ComputeCrossAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _crossOutputProj);
     }
 
-    private Tensor<T> ComputeCrossAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batch, int queryLen, int keyLen)
+    private Tensor<T> ComputeCrossAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
         => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale);
 
     private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj) => proj.ForwardTokens(x);
 
-    private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplyFFN(Tensor<T> x)
         => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
 
@@ -1223,7 +1208,7 @@ internal class TrOCRDecoderLayer<T> : CvParameterModule<T>
             _crossOutputProj);
         var x2 = _norm2.Forward(engine.TensorAdd(x1, crossAttn));
 
-        return _norm3.Forward(engine.TensorAdd(x2, ApplyFFN(x2, x2.Shape[0], 1)));
+        return _norm3.Forward(engine.TensorAdd(x2, ApplyFFN(x2)));
     }
 }
 

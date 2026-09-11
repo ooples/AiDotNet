@@ -488,12 +488,6 @@ internal class RTDETREncoderLayer<T> : CvParameterModule<T>
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private static double GELU(double x)
-    {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-    }
-
     /// <inheritdoc />
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {

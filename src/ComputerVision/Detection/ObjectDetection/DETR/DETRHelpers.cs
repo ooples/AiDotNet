@@ -74,24 +74,11 @@ internal static class DETRHelpers
     }
 
     /// <summary>
-    /// Computes the GELU activation function.
-    /// </summary>
-    /// <param name="x">Input value.</param>
-    /// <returns>GELU activation output.</returns>
-    public static double GELU(double x)
-    {
-        // Approximate GELU: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-    }
-
-    /// <summary>
     /// Adds two tensors element-wise.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
     /// <param name="a">First tensor.</param>
     /// <param name="b">Second tensor.</param>
-    /// <param name="numOps">Numeric operations provider.</param>
     /// <returns>Element-wise sum of the tensors.</returns>
     public static Tensor<T> AddTensors<T>(Tensor<T> a, Tensor<T> b) => AiDotNetEngine.Current.TensorAdd(a, b);
 }

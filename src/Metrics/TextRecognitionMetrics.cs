@@ -177,7 +177,8 @@ public static class TextRecognitionMetrics
     /// </summary>
     /// <param name="references">The ground-truth texts.</param>
     /// <param name="hypotheses">The recognised texts, aligned with <paramref name="references"/>.</param>
-    /// <returns>CER over the whole corpus, or 0 when the references contain no characters.</returns>
+    /// <returns>CER over the whole corpus. With no reference characters, returns 0 if no edits
+    /// are needed, otherwise <see cref="double.NaN"/> because the rate is undefined.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The lists have different lengths.</exception>
     public static double CharacterErrorRate(IReadOnlyList<string> references, IReadOnlyList<string> hypotheses)
@@ -193,7 +194,7 @@ public static class TextRecognitionMetrics
             length += reference.Length;
         }
 
-        return length > 0 ? distance / (double)length : 0.0;
+        return length > 0 ? distance / (double)length : distance == 0 ? 0.0 : double.NaN;
     }
 
     /// <summary>
@@ -223,7 +224,8 @@ public static class TextRecognitionMetrics
     /// </summary>
     /// <param name="references">The ground-truth texts.</param>
     /// <param name="hypotheses">The recognised texts, aligned with <paramref name="references"/>.</param>
-    /// <returns>WER over the whole corpus, or 0 when the references contain no tokens.</returns>
+    /// <returns>WER over the whole corpus. With no reference tokens, returns 0 if no edits
+    /// are needed, otherwise <see cref="double.NaN"/> because the rate is undefined.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The lists have different lengths.</exception>
     public static double WordErrorRate(IReadOnlyList<string> references, IReadOnlyList<string> hypotheses)
@@ -239,7 +241,7 @@ public static class TextRecognitionMetrics
             count += referenceTokens.Count;
         }
 
-        return count > 0 ? distance / (double)count : 0.0;
+        return count > 0 ? distance / (double)count : distance == 0 ? 0.0 : double.NaN;
     }
 
     /// <summary>

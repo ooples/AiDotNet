@@ -124,7 +124,6 @@ public partial class DBNet<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         var fused = _pyramid.Forward(EnsureBackbone.ExtractFeatures(input));
@@ -238,7 +237,6 @@ public partial class DBNet<T> : TextDetectorBase<T>
         return engine.Sigmoid(scaled);
     }
 
-    /// <inheritdoc/>
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()
         => _pyramid.ParameterCount + _probabilityHead.ParameterCount + _thresholdHead.ParameterCount;

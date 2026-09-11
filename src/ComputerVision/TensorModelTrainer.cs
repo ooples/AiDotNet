@@ -31,7 +31,12 @@ internal static class TensorModelTrainer<T>
     /// Models whose lazy layers have already resolved their shapes, so the warm-up forward is paid
     /// once per model rather than on every training step.
     /// </summary>
-    private static readonly ConditionalWeakTable<object, object> Warmed = new();
+    private static readonly ConditionalWeakTable<object, WarmupState> Warmed = new();
+
+    private sealed class WarmupState
+    {
+        public bool Complete;
+    }
 
     /// <summary>
     /// Runs one tape-based training step: forward under a gradient tape, the loss (mean squared
@@ -67,16 +72,27 @@ internal static class TensorModelTrainer<T>
         // adapter infer their input depth on first Forward and own no parameters until then, so the
         // registry would report none and the step would silently do nothing. No tape is active here,
         // so this records nothing.
-        if (!Warmed.TryGetValue(model, out _))
+        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
+        if (!System.Threading.Volatile.Read(ref warmup.Complete))
         {
-            forward(input);
-            Warmed.Add(model, model);
+            // GetValue may invoke competing factories; its returned state is the one shared by
+            // every caller. Serialize initialization, not the whole training step. A failed forward
+            // leaves Complete false so a later call retries instead of caching the exception.
+            lock (warmup)
+            {
+                if (!warmup.Complete)
+                {
+                    forward(input);
+                    System.Threading.Volatile.Write(ref warmup.Complete, true);
+                }
+            }
         }
 
         var parameters = LiveTrainableTensors(model);
         if (parameters.Length == 0)
         {
-            return numOps.Zero;
+            throw new InvalidOperationException(
+                $"No live trainable tensors were discovered for model '{model.GetType().FullName}'.");
         }
 
         var engine = AiDotNetEngine.Current;

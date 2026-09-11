@@ -163,12 +163,7 @@ public abstract class DetectionModelTestBase<T>
         // A model whose output ignores its input is not reading the image at all - the failure
         // mode a constant-returning stub would show. A two-stage detector's output length depends on
         // how many proposals survive, so a different LENGTH already proves input dependence.
-        if (first.Length != second.Length)
-        {
-            return;
-        }
-
-        bool anyDifference = false;
+        bool anyDifference = first.Length != second.Length;
         for (int i = 0; i < first.Length && !anyDifference; i++)
         {
             if (Math.Abs(ToD(first[i]) - ToD(second[i])) > 1e-12)
@@ -247,6 +242,13 @@ public abstract class DetectionModelTestBase<T>
         }
 
         ((IParameterizable<T, Tensor<T>, Tensor<T>>)clone).SetParameters(mutated);
+
+        var cloneAfter = ParametersOf(clone);
+        Assert.Equal(mutated.Length, cloneAfter.Length);
+        for (int i = 0; i < mutated.Length; i++)
+        {
+            Assert.Equal(ToD(mutated[i]), ToD(cloneAfter[i]), 10);
+        }
 
         var after = ParametersOf(model);
         Assert.Equal(before.Length, after.Length);

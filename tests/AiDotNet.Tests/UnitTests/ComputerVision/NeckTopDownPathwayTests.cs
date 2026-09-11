@@ -66,6 +66,7 @@ public class NeckTopDownPathwayTests
     }
 
     [Theory]
+    [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
     public async Task PaNet_OutputDependsOnEveryDeeperStage(int level)
