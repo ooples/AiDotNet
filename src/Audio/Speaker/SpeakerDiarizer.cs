@@ -166,8 +166,11 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
             _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
                 extractorArch,
                 modelPath: _options.EmbeddingModelPath,
-                sampleRate: _options.SampleRate,
-                embeddingDimension: _options.EmbeddingDimension);
+                options: new SpeakerEmbeddingOptions
+                {
+                    SampleRate = _options.SampleRate,
+                    EmbeddingDimension = _options.EmbeddingDimension
+                });
         }
         else
         {
@@ -175,8 +178,11 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
             _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
                 extractorArch,
                 modelPath: modelPath,
-                sampleRate: _options.SampleRate,
-                embeddingDimension: _options.EmbeddingDimension);
+                options: new SpeakerEmbeddingOptions
+                {
+                    SampleRate = _options.SampleRate,
+                    EmbeddingDimension = _options.EmbeddingDimension
+                });
         }
 
         InitializeLayers();
@@ -214,8 +220,11 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
         _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
             extractorArch,
-            sampleRate: _options.SampleRate,
-            embeddingDimension: _options.EmbeddingDimension);
+            options: new SpeakerEmbeddingOptions
+            {
+                SampleRate = _options.SampleRate,
+                EmbeddingDimension = _options.EmbeddingDimension
+            });
 
         InitializeLayers();
     }

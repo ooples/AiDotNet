@@ -110,9 +110,12 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     private readonly int _numEncoderLayers;
 
     /// <summary>
-    /// Number of attention heads.
+    /// The resolved configuration this instance was built from.
     /// </summary>
-    private readonly int _numHeads;
+    private readonly SpeakerVerifierOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -159,9 +162,7 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         : this(
             new NeuralNetworkArchitecture<T>(
                 inputFeatures: 256,
-                outputSize: 256),
-            sampleRate: 16000,
-            embeddingDimension: 256)
+                outputSize: 256))
     {
     }
 
@@ -170,40 +171,44 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="embeddingModelPath">Required path to speaker embedding ONNX model.</param>
-    /// <param name="sampleRate">Expected sample rate for input audio. Default is 16000.</param>
-    /// <param name="embeddingDimension">Dimension of speaker embeddings. Default is 256.</param>
-    /// <param name="defaultThreshold">Default verification threshold. Default is 0.6.</param>
-    /// <param name="onnxOptions">ONNX runtime options.</param>
+    /// <param name="options">Configuration options; null uses the published defaults.</param>
     public SpeakerVerifier(
         NeuralNetworkArchitecture<T> architecture,
         string embeddingModelPath,
-        int sampleRate = 16000,
-        int embeddingDimension = 256,
-        double defaultThreshold = 0.6,
-        OnnxModelOptions? onnxOptions = null)
+        SpeakerVerifierOptions? options = null)
         : base(architecture)
     {
         if (embeddingModelPath is null)
             throw new ArgumentNullException(nameof(embeddingModelPath));
 
+        // Copied rather than held by reference: the path is recorded on the instance below, and
+        // that must not mutate an options object the caller still holds.
+        _options = options is null ? new SpeakerVerifierOptions() : new SpeakerVerifierOptions(options);
+        _options.Validate();
+        _options.EmbeddingModelPath = embeddingModelPath;
+
         _useNativeMode = false;
         _embeddingModelPath = embeddingModelPath;
 
         // Store parameters
-        SampleRate = sampleRate;
-        EmbeddingDimension = embeddingDimension;
-        DefaultThreshold = NumOps.FromDouble(defaultThreshold);
-        _hiddenDim = 256;
-        _numEncoderLayers = 3;
-        _numHeads = 4;
+        SampleRate = _options.SampleRate;
+        EmbeddingDimension = _options.EmbeddingDimension;
+        DefaultThreshold = NumOps.FromDouble(_options.VerificationThreshold);
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
 
         // Create embedding extractor
         _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
             architecture,
             embeddingModelPath,
-            sampleRate,
-            embeddingDimension,
-            onnxOptions: onnxOptions);
+            new SpeakerEmbeddingOptions
+            {
+                SampleRate = _options.SampleRate,
+                EmbeddingDimension = _options.EmbeddingDimension,
+                HiddenDim = _options.HiddenDim,
+                NumEncoderLayers = _options.NumEncoderLayers,
+                OnnxOptions = _options.OnnxOptions
+            });
 
         // Initialize enrolled speakers
         _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
@@ -219,45 +224,38 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     /// Creates a SpeakerVerifier for native training mode.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="sampleRate">Expected sample rate for input audio. Default is 16000.</param>
-    /// <param name="embeddingDimension">Dimension of speaker embeddings. Default is 256.</param>
-    /// <param name="defaultThreshold">Default verification threshold. Default is 0.6.</param>
-    /// <param name="hiddenDim">Hidden dimension for encoder layers. Default is 256.</param>
-    /// <param name="numEncoderLayers">Number of encoder layers. Default is 3.</param>
-    /// <param name="numHeads">Number of attention heads. Default is 4.</param>
     /// <param name="optimizer">Optimizer for training. If null, AdamW is used.</param>
     /// <param name="lossFunction">Loss function for training. If null, MSE loss is used.</param>
     public SpeakerVerifier(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int embeddingDimension = 256,
-        double defaultThreshold = 0.6,
-        int hiddenDim = 256,
-        int numEncoderLayers = 3,
-        int numHeads = 4,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        SpeakerVerifierOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new SpeakerVerifierOptions();
+        _options.Validate();
+
         _useNativeMode = true;
         _embeddingModelPath = null;
 
         // Store parameters
-        SampleRate = sampleRate;
-        EmbeddingDimension = embeddingDimension;
-        DefaultThreshold = NumOps.FromDouble(defaultThreshold);
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numHeads = numHeads;
+        SampleRate = _options.SampleRate;
+        EmbeddingDimension = _options.EmbeddingDimension;
+        DefaultThreshold = NumOps.FromDouble(_options.VerificationThreshold);
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
 
         // Create embedding extractor in native mode
         _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
             architecture,
-            sampleRate,
-            embeddingDimension,
-            hiddenDim: hiddenDim,
-            numEncoderLayers: numEncoderLayers,
-            numHeads: numHeads);
+            options: new SpeakerEmbeddingOptions
+            {
+                SampleRate = _options.SampleRate,
+                EmbeddingDimension = _options.EmbeddingDimension,
+                HiddenDim = _options.HiddenDim,
+                NumEncoderLayers = _options.NumEncoderLayers
+            });
 
         // Initialize enrolled speakers
         _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
@@ -638,10 +636,12 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
                 SpeakerId = s.speakerId,
                 Score = s.score
             }).ToList(),
-            Threshold = NumOps.ToDouble(DefaultThreshold)
+            // The threshold reported is the one applied just below, so a caller reading it back
+            // sees the rule that actually decided the result.
+            Threshold = _options.IdentificationThreshold
         };
 
-        if (ranked.Count > 0 && ranked[0].score >= NumOps.ToDouble(DefaultThreshold))
+        if (ranked.Count > 0 && ranked[0].score >= _options.IdentificationThreshold)
         {
             result.IdentifiedSpeakerId = ranked[0].speakerId;
             result.TopScore = ranked[0].score;

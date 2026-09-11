@@ -116,10 +116,6 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// </summary>
     private readonly int _numEncoderLayers;
 
-    /// <summary>
-    /// Number of attention heads.
-    /// </summary>
-    private readonly int _numHeads;
 
     #endregion
 
@@ -168,10 +164,9 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     public SpeakerEmbeddingExtractor(SpeakerEmbeddingOptions options)
         : this(
             new NeuralNetworkArchitecture<T>(
-                inputFeatures: options.EmbeddingDimension,
+                inputFeatures: (options ?? throw new ArgumentNullException(nameof(options))).EmbeddingDimension,
                 outputSize: options.EmbeddingDimension),
-            options.SampleRate,
-            options.EmbeddingDimension)
+            options: options)
     {
     }
 
@@ -180,10 +175,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="modelPath">Required path to speaker embedding ONNX model.</param>
-    /// <param name="sampleRate">Expected sample rate for input audio. Default is 16000.</param>
-    /// <param name="embeddingDimension">Dimension of output embeddings. Default is 256.</param>
-    /// <param name="minimumDurationSeconds">Minimum audio duration for reliable embedding. Default is 0.5.</param>
-    /// <param name="onnxOptions">ONNX runtime options.</param>
+    /// <param name="options">Configuration options; null uses the published defaults.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this constructor when you have a pretrained speaker embedding model.
     ///
@@ -198,37 +190,30 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     public SpeakerEmbeddingExtractor(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int embeddingDimension = 256,
-        double minimumDurationSeconds = 0.5,
-        OnnxModelOptions? onnxOptions = null)
+        SpeakerEmbeddingOptions? options = null)
         : base(architecture)
     {
         if (modelPath is null)
             throw new ArgumentNullException(nameof(modelPath));
 
+        // Copied rather than held by reference: the path is recorded on the instance below, and
+        // that must not mutate an options object the caller still holds.
+        _options = options is null ? new SpeakerEmbeddingOptions() : new SpeakerEmbeddingOptions(options);
+        _options.Validate();
+        _options.ModelPath = modelPath;
+
         _useNativeMode = false;
         _modelPath = modelPath;
 
         // Store parameters
-        SampleRate = sampleRate;
-        EmbeddingDimension = embeddingDimension;
-        MinimumDurationSeconds = minimumDurationSeconds;
-        _hiddenDim = 256;
-        _numEncoderLayers = 3;
-        _numHeads = 4;
-
-        // Initialize options
-        _options = new SpeakerEmbeddingOptions
-        {
-            SampleRate = sampleRate,
-            EmbeddingDimension = embeddingDimension,
-            ModelPath = modelPath,
-            OnnxOptions = onnxOptions ?? new OnnxModelOptions()
-        };
+        SampleRate = _options.SampleRate;
+        EmbeddingDimension = _options.EmbeddingDimension;
+        MinimumDurationSeconds = _options.MinimumDurationSeconds;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
 
         // Create MFCC extractor
-        MfccExtractor = CreateMfccExtractor(sampleRate);
+        MfccExtractor = CreateMfccExtractor(_options);
 
         // Load ONNX model
         _onnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -245,12 +230,6 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// Creates a SpeakerEmbeddingExtractor for native training mode.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="sampleRate">Expected sample rate for input audio. Default is 16000.</param>
-    /// <param name="embeddingDimension">Dimension of output embeddings. Default is 256.</param>
-    /// <param name="minimumDurationSeconds">Minimum audio duration for reliable embedding. Default is 0.5.</param>
-    /// <param name="hiddenDim">Hidden dimension for encoder layers. Default is 256.</param>
-    /// <param name="numEncoderLayers">Number of encoder layers. Default is 3.</param>
-    /// <param name="numHeads">Number of attention heads. Default is 4.</param>
     /// <param name="optimizer">Optimizer for training. If null, AdamW is used.</param>
     /// <param name="lossFunction">Loss function for training. If null, MSE loss is used.</param>
     /// <remarks>
@@ -265,36 +244,26 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// </remarks>
     public SpeakerEmbeddingExtractor(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int embeddingDimension = 256,
-        double minimumDurationSeconds = 0.5,
-        int hiddenDim = 256,
-        int numEncoderLayers = 3,
-        int numHeads = 4,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        SpeakerEmbeddingOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new SpeakerEmbeddingOptions();
+        _options.Validate();
+
         _useNativeMode = true;
         _modelPath = null;
 
         // Store parameters
-        SampleRate = sampleRate;
-        EmbeddingDimension = embeddingDimension;
-        MinimumDurationSeconds = minimumDurationSeconds;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numHeads = numHeads;
-
-        // Initialize options
-        _options = new SpeakerEmbeddingOptions
-        {
-            SampleRate = sampleRate,
-            EmbeddingDimension = embeddingDimension
-        };
+        SampleRate = _options.SampleRate;
+        EmbeddingDimension = _options.EmbeddingDimension;
+        MinimumDurationSeconds = _options.MinimumDurationSeconds;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
 
         // Create MFCC extractor
-        MfccExtractor = CreateMfccExtractor(sampleRate);
+        MfccExtractor = CreateMfccExtractor(_options);
 
         // Initialize optimizer and loss function
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -328,14 +297,13 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         }
         else
         {
-            int numMels = _options.NumMfcc > 0 ? _options.NumMfcc : 80;
             Layers.AddRange(LayerHelper<T>.CreateDefaultSpeakerEmbeddingLayers(
-                numMels: numMels,
+                numMels: _options.NumMfcc,
                 hiddenDim: _hiddenDim,
                 embeddingDim: EmbeddingDimension,
                 numLayers: _numEncoderLayers,
-                maxFrames: 1000,
-                dropoutRate: 0.0));
+                maxFrames: _options.MaxFrames,
+                dropoutRate: _options.DropoutRate));
         }
     }
 

@@ -512,7 +512,10 @@ public class AudioExtendedIntegrationTests
     public async Task SpeakerVerifierOptions_DefaultValues()
     {
         var options = new SpeakerVerifierOptions();
-        Assert.Equal(0.7, options.VerificationThreshold, Tolerance);
+        // 0.6, not the 0.7 asserted before: nothing read this class, so the model applied its own
+        // 0.6 to every verification. The property is now the value the model uses, and it carries
+        // the number that was actually in force rather than the one that never was.
+        Assert.Equal(0.6, options.VerificationThreshold, Tolerance);
         Assert.Equal(0.6, options.IdentificationThreshold, Tolerance);
     }
 
