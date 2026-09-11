@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -232,12 +232,6 @@ public abstract partial class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, V
     /// <inheritdoc/>
     public override ILossFunction<T> DefaultLossFunction =>
         new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        return (AnomalyDetectorBase<T>)MemberwiseClone();
-    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
