@@ -85,8 +85,49 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // DiffusionModelBase.Predict's CanonicalizeGenShape hook, which reads
     // each variant's NoisePredictor.InputChannels and rewrites the
     // generation shape to match. No generator-level exclusion needed.
+    /// <summary>
+    /// Models with no generic constructor shape that the generator nonetheless knows how to build,
+    /// because an explicit constructor pin for each one appears in the constructor table.
+    /// </summary>
+    /// <remarks>
+    /// Every existing pin targets a model that ALREADY passes canConstruct (parameterless,
+    /// architecture-only or vector-only), so a pin alone could never rescue a model whose constructor
+    /// needs something else - a kernel, two architectures that must agree. This set is that missing
+    /// link, and it is deliberately explicit: listing a name here without adding its pin would emit a
+    /// fixture with no way to construct the model, so the two must change together.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> ExplicitlyConstructedClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "MultiOutputGaussianProcess",
+            "MultiTaskGaussianProcess",
+            "WGAN",
+            "PhysicsInformedNeuralNetwork",
+            "MultiFidelityPINN",
+            "Gpt4VisionNeuralNetwork",
+        };
+
     private static readonly string[] ExcludedClassNames = new[]
     {
+        // A memory buffer for continual learning, not a model: its Predict throws
+        // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
+        // design and Train is empty. It is also generic over three types, so no fixture could pick
+        // TInput/TOutput for it. Covered where it is used, by the continual-learning strategies.
+        "ExperienceReplayBuffer",
+
+        // A knowledge-distillation STRATEGY, not a model: its Predict is the identity (input => input)
+        // and its Train is empty. Its real surface is ComputeFeatureLoss / ComputeFeatureGradient over
+        // student and teacher features, which no model-family fixture can exercise; asserting that
+        // training changes parameters would fail for a reason that is not a defect.
+        "FeatureDistillationStrategy",
+
+        // A meta-learning inner-loop model: Train is ONE gradient step at its learning rate (0.01),
+        // by design ("useful for meta-learning examples and testing"). The Regression family asserts
+        // properties of a FITTED regressor - translation equivariance, near-zero residual mean - which a
+        // single step cannot have; measured, 7 of its invariants failed that way (predicted shift 22.6
+        // against ~1000), none of them a defect. It is exercised by the meta-learners that own it.
+        "LinearVectorModel",
+
         // Internal AutoML wrapper around UNet+VAE+Scheduler+Conditioner.
         // Even with a parameterless ctor that wires up sensible defaults,
         // its Predict path requires conditioning input that matches a
@@ -434,6 +475,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "CreateModel",
         };
+
+    /// <summary>Overridable surface of <c>TensorModuleTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> TensorModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "Width", "BatchSize" };
+
+    /// <summary>Overridable surface of <c>NeckTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> NeckTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "InputChannels", "OutputChannels", "TopResolution" };
 
     private static readonly System.Collections.Generic.HashSet<string> SafetyModuleTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -3008,7 +3058,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || model.HasVectorOnlyConstructor
                                     || (model.ExtendsVisionDetectorBase
                                         && model.VisionDetectorOptionsType.Length > 0)
-                                    || model.ExtendsTextConditioningBase) &&
+                                    || model.ExtendsTextConditioningBase
+                                    || (model.HasLeadingIntConstructor
+                                        && model.UsesMatrixInput && model.UsesVectorOutput)
+                                    || family.Value is TestFamily.TensorModule or TestFamily.Neck
+                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3210,6 +3264,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsVisionDetector = false;
         string visionDetectorOptions = string.Empty;
         bool extendsTextConditioning = false;
+        bool extendsNeck = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3387,6 +3442,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // build their own backbone from an options object, so one family covers them.
             else if (baseName.StartsWith("TextConditioningBase", System.StringComparison.Ordinal))
                 extendsTextConditioning = true;
+            else if (baseName.StartsWith("NeckBase", System.StringComparison.Ordinal))
+                extendsNeck = true;
             else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
@@ -3427,6 +3484,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
         bool hasVectorOnlyCtor = false;
+        bool hasLeadingIntCtor = false;
         string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
@@ -3477,6 +3535,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     && restOptional)
                 {
                     hasVectorOnlyCtor = true;
+                }
+
+                // A leading required int with everything else optional is a construction-time WIDTH
+                // (LinearVectorModel(int inputDim)). It is only safe to supply when the fixture's own
+                // width is known and passed through, which RegressionModelTestBase does via
+                // CreateModel(int featureCount) - so the flag is recorded here and USED only for
+                // Matrix->Vector models, where that hook exists.
+                if (firstParam.Type.SpecialType == SpecialType.System_Int32
+                    && !firstParam.HasExplicitDefaultValue
+                    && restOptional)
+                {
+                    hasLeadingIntCtor = true;
                 }
 
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
@@ -3540,12 +3610,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVisionDetectorBase = extendsVisionDetector,
             VisionDetectorOptionsType = visionDetectorOptions,
             ExtendsTextConditioningBase = extendsTextConditioning,
+            ExtendsNeckBase = extendsNeck,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             HasVectorOnlyConstructor = hasVectorOnlyCtor,
+            HasLeadingIntConstructor = hasLeadingIntCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
@@ -3959,6 +4031,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // any category can intercept.
         if (model.ExtendsVisionDetectorBase)
             return TestFamily.VisionDetector;
+
+        // Priority 0c: Neck. NeckBase.Predict(Tensor) throws by design - a neck consumes one feature
+        // map per level through Forward(List<Tensor<T>>) - so no single-tensor family can build or
+        // drive one. NeckTestBase feeds the levels itself, from the channel configuration it hands
+        // the factory.
+        if (model.ExtendsNeckBase)
+            return TestFamily.Neck;
+
+        // Priority 0d: TensorModule. Tensor-to-Tensor components whose only required constructor
+        // argument is a width (CenteringMechanism(int dimension), RelationModule(int hiddenDimension)).
+        // They declare [ModelCategory(NeuralNetwork)] descriptively without implementing
+        // INeuralNetworkModel, so the category route could only ever assign them a family they fail.
+        // Restricted to types with NO zero-argument constructor, so nothing already constructible -
+        // and therefore nothing already covered - can be taken from the family it passes in.
+        if (model.UsesTensorInput
+            && model.HasLeadingIntConstructor
+            && !model.HasParameterlessConstructor
+            && !model.ImplementsNeuralNetworkModel
+            && model.TypeParameterCount == 1)
+            return TestFamily.TensorModule;
 
         // Priority 1: GaussianProcess
         if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
@@ -4480,8 +4572,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // intended construction path rather than a stub that would not tokenize.
             if (model.ExtendsTextConditioningBase)
             {
+                // Bounded size, not the variant: several conditioners have no small variant at all
+                // (ChatGLM3 is 6B only, Gemma's floor is 2B, Qwen2's 1.5B), and at paper scale the
+                // generated suite reached 4 of 8 classes in 18 minutes while one testhost climbed past
+                // 40 GB. The explicit dimension overrides default to each variant's paper values, so
+                // production behaviour is unchanged. numKvHeads exists only on the two GQA models.
+                bool groupedQuery = model.ClassName is "ChatGLM3TextConditioner" or "Qwen2TextConditioner";
                 constructorExpr = $"new {typeName}<double>("
-                    + "AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting())";
+                    + "AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), "
+                    + "hiddenSize: 16, numLayers: 1, numHeads: 2"
+                    + (groupedQuery ? ", numKvHeads: 2" : string.Empty) + ")";
             }
             else if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
             {
@@ -7090,6 +7190,78 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Fingerprinting.ConformerFPOptions { NumMels = 32, " +
                     "EmbeddingDim = 32, HiddenDim = 64, NumLayers = 2, NumAttentionHeads = 4, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "WGAN" && model.TypeParameterCount == 1)
+            {
+                // WGAN takes a generator AND a critic architecture, and the two have to agree with each
+                // other and with the fixture - the size-in-several-places trap. The generic GAN branch
+                // feeds a 16-wide latent (InputShape [16]) and checks a 4-wide sample (OutputShape [4]),
+                // so: generator 16 -> 4, and a critic that consumes that 4-wide sample. WGAN's Predict is
+                // Generator.Predict(input) and its critic scores expectedOutput directly, so these three
+                // numbers are the whole contract.
+                //
+                // The critic emits ONE score per sample - the rule recorded against WGANGP, whose critic
+                // once shared the generator's 64-wide head, scored every input a uniform 1/64, and left
+                // E[D(fake)] - E[D(real)] at exactly 0 so neither network could move.
+                //
+                // OneDimensional routes both through FeedForwardNeuralNetwork in WGAN's own
+                // CreateNetworkForInputType; the 3-D path would demand an image layout the generic GAN
+                // fixture does not feed.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "criticArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 1), " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName is "PhysicsInformedNeuralNetwork" or "MultiFidelityPINN"
+                     && model.TypeParameterCount == 1)
+            {
+                // inputSize 2 IS the Poisson problem's InputDimension (spatialDimension, default 2);
+                // the fixture reads it back from this architecture rather than restating it. 64
+                // collocation points instead of the 10,000 default: the paper-scale sampling is a
+                // training-quality setting, and the invariants exercise the supervised path.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "pdeSpecification: new AiDotNet.PhysicsInformed.PDEs.PoissonEquation<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPoints: 64)";
+            }
+            else if (model.ClassName == "Gpt4VisionNeuralNetwork" && model.TypeParameterCount == 1)
+            {
+                // Every size bounded; production keeps the GPT-4V-scale defaults. imageSize 16 equals
+                // the pinned 16 x 16 architecture, which is where the vision fixture reads its shape.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 16), " +
+                    "tokenizer: AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), " +
+                    "embeddingDimension: 16, visionEmbeddingDim: 16, maxSequenceLength: 16, " +
+                    "contextWindowSize: 64, imageSize: 16, hiddenDim: 16, numVisionLayers: 1, " +
+                    "numLanguageLayers: 1, numHeads: 2, patchSize: 8, vocabularySize: 49408)";
+            }
+            else if (model.ClassName == "MultiOutputGaussianProcess" && model.TypeParameterCount == 1)
+            {
+                // The only required argument is the covariance kernel. GaussianKernel (the RBF /
+                // squared-exponential kernel, sigma = 1) is the conventional default for a GP, and its
+                // own constructor is zero-argument. The model fits the GP family's single-output data
+                // through its Fit(Matrix, Vector) override.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Kernels.GaussianKernel<double>())";
+            }
+            else if (model.ClassName == "MultiTaskGaussianProcess" && model.TypeParameterCount == 1)
+            {
+                // numTasks: 1 is the honest single-task case, not a workaround: the model's own
+                // single-output Fit(Matrix, Vector) wraps y into a one-column target matrix and "uses
+                // first task only", which is exactly the data the GP family feeds.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Kernels.GaussianKernel<double>(), numTasks: 1)";
             }
             else if (model.ClassName == "AnoGANDetector" && model.TypeParameterCount == 1)
             {
@@ -11216,6 +11388,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
             }
+            else if (model.HasLeadingIntConstructor
+                     && !model.HasParameterlessConstructor
+                     && model.UsesMatrixInput && model.UsesVectorOutput
+                     && model.TypeParameterCount <= 1)
+            {
+                // Width = 3, the generated regression fixture's feature count (RegressionModelTestBase
+                // .Features). The CreateModel(int featureCount) override emitted below passes the
+                // invariant's own width instead, so the model and the data it is fed cannot disagree.
+                constructorExpr = model.TypeParameterCount == 0
+                    ? $"new {typeName}(3)"
+                    : $"new {typeName}<double>(3)";
+            }
             else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
             {
                 // A coefficient-backed regression model is only meaningful when its coefficient width
@@ -11809,8 +11993,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // SafetyModuleTestBase joins this list for the same reason: it is declared non-generic and
         // pins ISafetyModule<double>, so appending a <float> argument would not compile.
         bool baseHasNoGenericForm = baseClassName == "LatentDiffusionTestBase"
-            || baseClassName == "SafetyModuleTestBase";
+            || baseClassName == "SafetyModuleTestBase"
+            // These two factories are emitted with <double> constructors and a double return type,
+            // so they derive from the double convenience base rather than a <float> form.
+            || baseClassName == "TensorModuleTestBase"
+            || baseClassName == "NeckTestBase";
+        // A non-generic model (LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>)
+        // has no type argument to rewrite, so a float scaffold would declare IFullModel<float, ...>
+        // over a double-only type and fail to compile (CS0266).
         bool useFloat = !isFloatExcluded
+                     && model.TypeParameterCount > 0
                      && !baseHasNoGenericForm
                      && (Fp32TestClassNames.Contains(model.ClassName)
                          || model.RequestsFloatScaffold
@@ -14108,6 +14300,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8, 8 };");
             }
+            else if (model.ClassName == "WGAN")
+            {
+                // One sample, rank 2: TrainStep reads Shape[0] as the batch, so [16] / [4] were read
+                // as batches of 16 and 4. Widths match the pin (generator 16 -> 4, critic 4 -> 1).
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            }
             else if (model.ClassName == "TabPFNNetwork")
             {
                 // Transformer attention consumes [batch, features], not a bare feature vector.
@@ -14116,10 +14315,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine(model.ClassName == "HamiltonianNeuralNetwork"
+                // PINNs too: their width is the PDE's InputDimension, pinned in the constructor above,
+                // so the fixture derives it from the model instead of restating a generic 16.
+                sb.AppendLine(model.ClassName is "HamiltonianNeuralNetwork" or "PhysicsInformedNeuralNetwork"
+                        or "MultiFidelityPINN"
                     ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
                     : $"    protected override int[] InputShape => new[] {{ {dim} }};");
-                sb.AppendLine(model.ClassName == "QuantumNeuralNetwork"
+                sb.AppendLine(model.ClassName is "QuantumNeuralNetwork" or "PhysicsInformedNeuralNetwork"
+                        or "MultiFidelityPINN"
                     ? "    protected override int[] OutputShape => new[] { 1 };"
                     : model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
@@ -15503,7 +15706,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
-        sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        // TensorModule and Neck bases OWN the size and pass it to the factory, so the fixture emits a
+        // parameterized factory in place of the parameterless one. A literal size here would be a
+        // second copy of a number the base already holds - the pattern behind every architecture /
+        // fixture disagreement this generator has produced.
+        bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck;
+        if (family == TestFamily.TensorModule)
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
+            sb.AppendLine($"        => new {typeName}<double>(width);");
+        }
+        else if (family == TestFamily.Neck)
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} CreateNeck(int[] inputChannels, int outputChannels)");
+            sb.AppendLine($"        => new {typeName}<double>(inputChannels, outputChannels);");
+        }
+        else
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        }
         // TOTEM's vector-quantizer codebook trains cleanly from most draws but sends the parameter
         // L2 to NaN on the first step from some, which surfaced only once it ran alongside sibling
         // classes that had advanced the shared RNG. Pin the scope so the draw no longer depends on
@@ -15513,7 +15734,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             pinInitSeed = true;
         }
 
-        if (pinInitSeed)
+        if (parameterizedFactory)
+        {
+            // Body already emitted above.
+        }
+        else if (pinInitSeed)
         {
             // Init-sensitive models: pin a deterministic per-layer init seed around
             // construction so weight init does NOT depend on how many sibling tests
@@ -15530,6 +15755,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else
         {
             sb.AppendLine(factoryBody);
+        }
+        if (family == TestFamily.Regression
+            && model.HasLeadingIntConstructor
+            && !model.HasParameterlessConstructor
+            && constructorExpr.EndsWith("(3)", System.StringComparison.Ordinal))
+        {
+            // Only RegressionModelTestBase declares the CreateModel(int featureCount) hook, hence the
+            // family gate - emitting it for any other Matrix->Vector base would be a CS0115.
+            string widthConstructor =
+                constructorExpr.Substring(0, constructorExpr.Length - "(3)".Length) + "(featureCount)";
+            sb.AppendLine();
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}(int featureCount)");
+            sb.AppendLine($"        => {widthConstructor};");
         }
         if (model.HasVectorOnlyConstructor)
         {
@@ -15683,6 +15921,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             TestFamily.SafetyModule => SafetyModuleTestBaseMembers,
             TestFamily.VisionDetector => VisionDetectorTestBaseMembers,
+            TestFamily.TensorModule => TensorModuleTestBaseMembers,
+            TestFamily.Neck => NeckTestBaseMembers,
             _ => null,
         };
         if (allowedMembers is not null)
@@ -15813,6 +16053,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // so reaching this family by base type is itself the compatibility proof.
             case TestFamily.VisionDetector:
                 return model.ExtendsVisionDetectorBase;
+
+            // Both bases construct through a factory they pass the size to, so reaching the family is
+            // the compatibility proof: the routing predicates above are exactly the constructor shape
+            // the factory calls.
+            case TestFamily.TensorModule:
+                return model.UsesTensorInput && model.HasLeadingIntConstructor;
+            case TestFamily.Neck:
+                return model.ExtendsNeckBase;
 
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
@@ -18044,6 +18292,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         public bool ExtendsTextConditioningBase { get; set; }
 
+        public bool ExtendsNeckBase { get; set; }
+
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
         public bool UsesMatrixInput { get; set; }
@@ -18066,6 +18316,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// The generated regression fixture supplies a vector matching its three input features.
         /// </summary>
         public bool HasVectorOnlyConstructor { get; set; }
+
+        public bool HasLeadingIntConstructor { get; set; }
 
         /// <summary>
         /// The fully-qualified display name of the architecture parameter type (e.g.,
@@ -18198,6 +18450,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Clustering,
         SafetyModule,
         VisionDetector,
+        TensorModule,
+        Neck,
         NeuralNetwork
     }
 
@@ -19009,6 +19263,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Clustering:            return "ClusteringModelTestBase";
             case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
             case TestFamily.VisionDetector:        return "ObjectDetectorTestBase";
+            case TestFamily.TensorModule:          return "TensorModuleTestBase";
+            case TestFamily.Neck:                  return "NeckTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
         }
@@ -19054,6 +19310,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SafetyModuleTestBase asks for CreateModule, not CreateModel.
             case TestFamily.SafetyModule:
                 return "CreateModule";
+            case TestFamily.Neck:
+                return "CreateNeck";
             default:
                 return "CreateModel";
         }
@@ -19106,7 +19364,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SafetyModule:
                 return "AiDotNet.Interfaces.ISafetyModule<double>";
             case TestFamily.VisionDetector:
+            case TestFamily.TensorModule:
                 return "IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
+            case TestFamily.Neck:
+                return "AiDotNet.ComputerVision.Detection.Necks.NeckBase<double>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:
