@@ -92,8 +92,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly SparseMAMLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -106,8 +104,13 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// Meta-learned per-parameter learning-rate multipliers, for the paper's "more expressive model
     /// where learning rates are meta-learned". Null unless that variant is enabled.
     /// </summary>
+    /// <remarks>
+    /// Empty when <c>MetaLearnPerParameterRates</c> is off: a resolved slot with no parameters. It used to be
+    /// null, which the parameter registry reads as a shape not yet known, so the learner's whole parameter
+    /// surface - GetParameters, Serialize, every copy - threw ParameterLayoutNotReadyException.
+    /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T>? _perParameterRates;
+    private Vector<T> _perParameterRates = new Vector<T>(0);
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SparseMAML;
@@ -224,7 +227,7 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             {
                 double gate = Gate(d);
                 double rate = _algoOptions.InnerLearningRate;
-                if (_perParameterRates is not null) rate *= NumOps.ToDouble(_perParameterRates[d]);
+                if (_perParameterRates.Length > 0) rate *= NumOps.ToDouble(_perParameterRates[d]);
 
                 adapted[d] = NumOps.Subtract(adapted[d],
                     NumOps.FromDouble(rate * gate * NumOps.ToDouble(grad[d])));
