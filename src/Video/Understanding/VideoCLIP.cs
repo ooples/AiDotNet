@@ -179,15 +179,26 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
     #region Constructors
 
+    /// <summary>Default clip length (frames) when neither the caller nor the architecture declares one.</summary>
+    private const int DefaultNumFrames = 32;
+
     /// <summary>
-    /// Initializes a new instance with default architecture settings.
+    /// Initializes a new instance with default architecture settings (32-frame 224x224 RGB clips).
     /// </summary>
+    /// <remarks>
+    /// The declared input is the clip the model encodes, <c>[32, 3, 224, 224]</c>
+    /// (<see cref="Enums.InputType.FourDimensional"/> with <c>inputFrames</c> equal to the default
+    /// <c>numFrames</c>), matching the model's <c>[Frames, Channels, Height, Width]</c> input layout. It used
+    /// to be <see cref="Enums.InputType.ThreeDimensional"/>, i.e. a single <c>[3, 224, 224]</c> frame, which
+    /// <see cref="EncodeVideo"/> cannot take: a tensor of the model's own declared input shape failed Predict.
+    /// </remarks>
     public VideoCLIP()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
+            inputType: Enums.InputType.FourDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 224, inputWidth: 224, inputDepth: 3,
-            outputSize: 400))
+            outputSize: 400,
+            inputFrames: DefaultNumFrames))
     {
     }
 
@@ -195,7 +206,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// Initializes a new instance of the VideoCLIP class.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFrames">Number of video frames to process.</param>
+    /// <param name="numFrames">Number of video frames per clip (default: 32). When the architecture declares a
+    /// frame count (<see cref="NeuralNetworkArchitecture{T}.InputFrames"/> &gt; 0) that count is used, as for
+    /// VideoMAE and TimeSformer; passing a different non-default value throws.</param>
     /// <param name="embeddingDim">Dimension of the shared embedding space.</param>
     /// <param name="textMaxLength">Maximum text sequence length.</param>
     /// <param name="vocabSize">Vocabulary size for text encoding.</param>
@@ -217,7 +230,7 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </remarks>
     public VideoCLIP(
         NeuralNetworkArchitecture<T> architecture,
-        int numFrames = 32,
+        int numFrames = DefaultNumFrames,
         int embeddingDim = 512,
         int textMaxLength = 77,
         int vocabSize = 49408,
@@ -235,7 +248,7 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFrames = numFrames;
+        _numFrames = VideoClipFrameCount.Resolve(architecture, numFrames, DefaultNumFrames);
         _embeddingDim = embeddingDim;
         _textMaxLength = textMaxLength;
         _vocabSize = vocabSize;
@@ -1117,6 +1130,32 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     #endregion
 
     #region Abstract Implementation
+
+    /// <summary>
+    /// The shape the lazy layers are resolved from ahead of the first forward: ONE frame,
+    /// <c>[1, C, H, W]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The layer stack runs per frame (the spatial encoder consumes frames, not clips), so the
+    /// architecture-driven lazy-shape walk must start from a frame. It used to get exactly that by
+    /// accident: the default architecture declared a single <c>[3, 224, 224]</c> frame. Now that it declares
+    /// the clip Predict takes, <c>[Frames, C, H, W]</c>, the base walk would start from a rank-5 tensor the
+    /// first convolution rejects, leave the stack unresolved until the first forward, and under-report
+    /// <c>ParameterCount</c> until then (38.0M instead of 211.1M for the default model) - the count that
+    /// memory decisions such as weight streaming are gated on.
+    /// </remarks>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        if (Architecture.IsLayerOnly)
+        {
+            return base.TryGetArchitectureInputShape();
+        }
+
+        int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int height = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
+        int width = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
+        return [1, channels, height, width];
+    }
 
     /// <inheritdoc/>
     protected override void InitializeLayers()

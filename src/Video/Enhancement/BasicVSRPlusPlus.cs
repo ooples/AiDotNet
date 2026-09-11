@@ -446,8 +446,10 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <summary>
     /// Enhances a sequence of video frames using temporal super-resolution.
     /// </summary>
-    /// <param name="frames">Input frames tensor with shape [numFrames, channels, height, width].</param>
-    /// <returns>Enhanced frames tensor with shape [numFrames, channels, height*scale, width*scale].</returns>
+    /// <param name="frames">Input frames tensor with shape [numFrames, channels, height, width], or a single
+    /// frame [channels, height, width].</param>
+    /// <returns>Enhanced frames tensor with shape [numFrames, channels, height*scale, width*scale], or
+    /// [channels, height*scale, width*scale] for a single frame.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Pass your low-resolution video frames as a 4D tensor:
@@ -458,6 +460,13 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// SaveVideoFrames(hrFrames, "output_4x.mp4");
     /// </code>
     /// </para>
+    /// <para>
+    /// A single frame <c>[C, H, W]</c> - the shape this model's own default architecture declares - is
+    /// the degenerate one-frame clip of the super-resolution family contract: it is upscaled as a clip of
+    /// length one (no neighbours, so no propagation) and returned without the frame axis. It used to be
+    /// read as a clip of <c>C</c> two-dimensional "frames", so the model could not run on its own declared
+    /// input shape.
+    /// </para>
     /// </remarks>
     public Tensor<T> EnhanceVideo(Tensor<T> frames)
     {
@@ -466,6 +475,14 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         if (_useNativeMode)
         {
+            if (frames.Rank == 3)
+            {
+                // Recorded reshapes, so training through a single frame keeps its gradient path.
+                var clip = Engine.Reshape(frames, [1, frames.Shape[0], frames.Shape[1], frames.Shape[2]]);
+                var enhanced = EnhanceVideoNative(clip);
+                return Engine.Reshape(enhanced, [enhanced.Shape[1], enhanced.Shape[2], enhanced.Shape[3]]);
+            }
+
             return EnhanceVideoNative(frames);
         }
         else
