@@ -2,7 +2,10 @@
 
 **Issue:** #2090
 **Date:** 2026-09-08
-**Status:** Approved. Phase 1 landed 2026-09-08 (`9f7fe07b6`).
+**Status:** Approved design; implementation is tracked on separate phase branches.
+Phase 1 scaffolding is recorded at `9f7fe07b6` and `944a1fd72`, and phase 2 at
+`671836a34`. Those commits are not ancestors of this specification branch;
+"recorded" below does not mean merged into master or fully validated against the revised contract.
 
 ---
 
@@ -17,11 +20,11 @@ var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                   .ConfigureModel(model);
 ```
 
-In `src/NeuralNetworks`, `src/Video` and `src/Document` that surface does not
-work. The `Options` object is
-accepted, stored, and returned by `GetOptions()`, but **no value is ever read
-from it**. Every tunable value lives instead in a defaulted constructor
-parameter that has no `Options` equivalent.
+Many models in `src/NeuralNetworks`, `src/Video` and `src/Document` accept, store
+and return an `Options` object without consuming its model-specific values.
+Their tunable values live instead in defaulted constructor parameters with no
+`Options` equivalent. Section 2 records the measured exceptions as well as this
+recurring defect; it is not a claim that every model in those directories is inert.
 
 This design makes `Options` load-bearing across those three areas, adds a
 compiler-checked ratchet so the two surfaces cannot drift apart again, and adds
@@ -32,9 +35,14 @@ currently placeholders, not paper values.
 
 ## 2. Measured baseline
 
-All figures produced this session against `origin/master` by scanning
-`src/NeuralNetworks/*.cs` and `src/**/*Options.cs`. Scripts are in the session
-scratchpad; the metric is reproduced permanently by the ratchet test in §7.
+The following source-scan figures are historical estimates recorded on 2026-09-08,
+not a current count or a complete scope ledger. The authoritative historical
+reflection baselines are the `Baseline` constants in
+`OptionsSurfaceRatchetTests.cs` at `9f7fe07b6` (1067) and `671836a34` (977).
+This docs-only review verifies those immutable sources and the arithmetic; it does
+not claim to have rebuilt either historical assembly and repeated its measurement.
+Every implementation phase must publish a fresh, complete gap ledger and the
+assembly/commit used to produce it, as required by §7.
 
 ### 2.1 The Options object is inert
 
@@ -68,10 +76,12 @@ undercounted by more than half — for `BGE` the first constructor is the
 parameterless one. 470 is the corrected figure and the one the ratchet in §7
 reproduces.
 
-Base classes do not rescue this. `ModelOptions` declares one property (`Seed`);
-`NeuralNetworkOptions` declares one (`EncoderLayerCount`), and a repo-wide
-search finds **no read of `EncoderLayerCount` anywhere** — every textual match
-is an unrelated local variable.
+Base classes do not rescue this. `ModelOptions` declares `Seed`;
+`NeuralNetworkOptions` declares `EncoderLayerCount`. On this specification branch,
+the latter is copied by several Options copy constructors, but those copies do not
+make it affect a model's encoder/decoder boundary. No consuming model path was found
+in the audited families. The explicit disposition is to remove this inert property,
+not to count it as configuration coverage; see §5.2.
 
 ### 2.3 `src/NeuralNetworks` is the outlier, not the norm
 
@@ -92,9 +102,9 @@ Five of the eight largest areas have **zero** inert Options classes. Of the 200
 fully-inert classes in the entire repository, 169 are in the three areas this
 spec covers: `NeuralNetworks` (99), `Video` (43) and `Document` (27).
 
-**This is the load-bearing finding: the target design is not new work to invent.
-It is already implemented, at scale, in five areas of this repository. #2090 is
-the job of bringing one area up to the house standard.**
+**The reusable Options pattern already exists, but a populated Options class is
+not proof that a model consumes it.** The expanded audit in §2.6 demonstrates why
+#2090 needs both structural and behavioral checks across the full in-scope hierarchy.
 
 ### 2.4 The defaults in `src/NeuralNetworks` are placeholders, not paper values
 
@@ -149,13 +159,14 @@ carry 11 apiece.
 
 ### 2.6 The reflection baseline found a fourth cluster (measured 2026-09-08)
 
-Phase 1's ratchet measured **1067**, against the file-based estimate of 806. The
-261-parameter difference is not noise in the counting rules — it is models the
-file scan never looked at, because §2.3 selected areas by asking *"do this area's
-Options classes declare properties or set constructor defaults?"* That is a
-different question from *"do this area's models read them"*, and the areas that
-scored cleanest on the first question contain some of the worst offenders on the
-second:
+Phase 1's ratchet recorded **1067**, against the file-based estimate of 806.
+The arithmetic difference is 261, but these are not interchangeable populations:
+the reflection test already excludes architecture descriptors and compiled-model
+hosts, and it scans the full model inheritance tree rather than three directories.
+Therefore 261 must not be treated as a proven, exhaustively identified audio cluster.
+The original scan asked *"do this area's Options classes declare properties or set
+constructor defaults?"*, not *"do this area's models read them?"* The broader audit
+found additional affected models, including:
 
 | Model | Tunable ctor params | Options type it is handed |
 | --- | ---: | --- |
@@ -170,9 +181,10 @@ constructor — and its models are configured against a *generic ONNX* options
 type rather than any of them. A healthy-looking Options class and a model that
 reads it are independent properties, and §2.3 only measured the first.
 
-This is the strongest argument yet for the ratchet being reflection over the
-built assembly rather than a source scan: the scan reproduced my assumptions
-about where to look, and the reflection did not.
+The additional audio/speech estimate is 192, not 261. The remaining work must be
+identified by the per-model ledger rather than silently omitted or classified as
+out of scope. Section 8 accounts for the entire 1067 baseline, including the
+currently unallocated remainder.
 
 ---
 
@@ -224,9 +236,12 @@ Three properties of this shape make it the right target:
    `LayerHelper<T>.CreateDefaultRoboticsActionLayers(...)` — the wiring that
    `src/NeuralNetworks` is missing.
 
-`RT2.cs:303` also contains a comment asking for exactly this feature
-("extend `RT2Options` with an `EncoderLayerCount` property"), which is
-independent evidence that the Options-driven route is the intended direction.
+The historical RT2 comment about adding `EncoderLayerCount` records a real
+custom-layer partitioning problem, not a justification for keeping an inert
+Options property. Section 5.2 resolves that topology setting through the
+architecture/layout contract. The existing RT2 constructor illustrates where
+paper defaults belong; it must adopt §5.5's non-recording initialization path if
+explicit-assignment tracking is added.
 
 ---
 
@@ -234,9 +249,10 @@ independent evidence that the Options-driven route is the intended direction.
 
 ### 5.1 Scope
 
-Across the three areas: 470 parameters in `NeuralNetworks`, 134 in `Video`,
-205 in `Document` — **809 total, of which 3 have an Options property, leaving
-806 missing**. 806 is the figure the ratchet counts.
+The original three-area source estimate was 470 parameters in `NeuralNetworks`,
+134 in `Video`, and 205 in `Document`: **809 total, of which 3 had an Options
+property, leaving 806 missing before source-scan exclusions**. These numbers are
+retained as historical planning data, not as the reflection ratchet's population.
 
 Of the 470 in `NeuralNetworks`:
 
@@ -244,7 +260,7 @@ Of the 470 in `NeuralNetworks`:
 | --- | ---: | ---: | --- |
 | Architecture types (`NeuralNetworkArchitecture`, `Transformer…`, `DualStream…`, `TripleStream…`, `AudioTextDualStream…`) | 5 | 48 | **Out of scope.** Topology knobs stay on the architecture type per the locked bucket-B decision. |
 | Infrastructure hosts (`CompiledModelHost`, `ChainedCompiledModelHost`) | 1 | 1 | **Out of scope.** `modelIdentity` / `shapeMode` are not hyperparameters. |
-| **Vision-language / multimodal** | 11 | 107 | In scope → `VisionLanguageOptions` |
+| **Vision-language / multimodal** | 11 | 107 | In scope → `VisionLanguageModelOptions` |
 | **Sequence / language models** | 18 | 98 | In scope → `SequenceModelOptions` |
 | **Embedding & retrieval** (BGE, ColBERT, SGPT, SPLADE, SimCSE, Instructor, Matryoshka, FastText, GloVe, Word2Vec, TransformerEmbedding) | 11 | 77 | In scope → `EmbeddingModelOptions` |
 | **GAN family** | 10 | 41 | In scope → `GanOptions` |
@@ -259,29 +275,39 @@ equivalents), rather than from new groupings:
 
 | Area | Models | Params | Family base |
 | --- | ---: | ---: | --- |
-| `src/Document` | 29 | 205 | `DocumentModelOptions` under the existing `DocumentNeuralNetworkBase<T>` hierarchy |
-| `src/Video` | 44 | 134 | `VideoModelOptions`, sub-split by task (segmentation, generation, super-resolution, tracking) |
+| `src/Document` | 29 | 205 | `DocumentNeuralNetworkOptions` under the existing `DocumentNeuralNetworkBase<T>` hierarchy |
+| `src/Video` | 44 | 134 | `VideoHyperparameterOptions`, sub-split by task (segmentation, generation, super-resolution, tracking) |
 
-**Grand total in scope: 163 models, 757 parameters.**
+**Historical three-area subset: 163 models, 757 missing parameters.** This is not
+the full scope after §2.6: the authoritative initial in-scope gap count is 1067.
 
-Arithmetic: 806 missing, less the 49 out-of-scope (48 architecture types plus
-one compiled-model host), leaves 757. Within `NeuralNetworks` the five groups
-sum to 98 + 107 + 77 + 41 + 97 = 420, which is 469 missing less the same 49.
+Source-estimate arithmetic: 806 missing, less 49 estimated architecture/host
+parameters, leaves 757. Within `NeuralNetworks` the five groups sum to
+98 + 107 + 77 + 41 + 97 = 420. The reflection test excludes the relevant types
+before counting, so those 49 must **not** be subtracted from 1067 or retained as
+a completion floor. All 1067 measured gaps require disposition. The final model
+count and family ownership come from the complete ledger, not from adding
+incompatible source-scan estimates.
 
 The long tail is 40 models averaging 2.4 parameters each. It is the largest
 model count and the smallest per-model effort, but it is also where §9.3 (family
 grouping inferred from parameter names) is most likely to be wrong, so it is
-sequenced last.
+sequenced after the more cohesive `NeuralNetworks` families.
 
 ### 5.2 Family base classes
 
-Seven base classes, each declaring the shared knobs once. Four are new under
-`src/NeuralNetworks/Options/`; the rest live in `src/Models/Options/` or beside
-their area. Two of them turned out to exist already, which changed the plan:
+Seven family base classes declare shared knobs once. The authoritative roster
+below is checked against implementation snapshot `944a1fd72`. All seven derive
+from `ModelHyperparameterOptions`, which derives from `NeuralNetworkOptions`
+and owns the shared training option `MaxGradNorm`; that common infrastructure
+base is not an eighth family. Four family bases live under
+`src/NeuralNetworks/Options/`, two under `src/Models/Options/`, and one under
+`src/Video/Options/`.
 
 - **`DocumentNeuralNetworkOptions` already existed and all 29 Document options
   classes already derive from it.** It was empty. Extending it reaches the whole
-  area without touching a single leaf — no new base was needed.
+  area's available property surface without changing every leaf's parent — no new
+  base was needed. Models still have to consume the added values.
 - **Video has no base in use.** 96 of its 108 options classes derive straight
   from `NeuralNetworkOptions`. A `VideoModelOptions<T>` exists but takes a type
   parameter it never uses, follows the nullable + `Effective*` pattern, and is
@@ -291,22 +317,37 @@ their area. Two of them turned out to exist already, which changed the plan:
   areas' phases. The new base is named `VideoHyperparameterOptions` to avoid
   colliding with the abandoned one.
 
-The seven:
+| Family base | Location | Declared shared properties at `944a1fd72` |
+| --- | --- | --- |
+| `SequenceModelOptions` | `src/NeuralNetworks/Options/SequenceModelOptions.cs` | `VocabSize`, `ModelDimension`, `NumLayers`, `NumHeads`, `StateDimension`, `MaxSequenceLength`, `AttentionInterval`, `ExpandFactor`, `FfnMultiplier` |
+| `VisionLanguageModelOptions` | `src/NeuralNetworks/Options/VisionLanguageModelOptions.cs` | `EmbeddingDimension`, `MaxSequenceLength`, `ImageSize`, `PatchSize`, `Channels`, `VocabSize`, `NumHeads`, `HiddenDim`, `NumEncoderLayers`, `VisionHiddenDim`, `NumVisionLayers` |
+| `GanOptions` | `src/NeuralNetworks/Options/GanOptions.cs` | `LatentSize`, `GeneratorChannels`, `DiscriminatorChannels`, `ImageChannels`, `CriticIterations`, `InitialLearningRate` |
+| `EmbeddingModelOptions` | `src/NeuralNetworks/Options/EmbeddingModelOptions.cs` | `VocabSize`, `EmbeddingDimension`, `MaxSequenceLength`, `NumLayers`, `NumHeads`, `FeedForwardDim` |
+| `DocumentNeuralNetworkOptions` | `src/Models/Options/DocumentNeuralNetworkOptions.cs` | `ImageSize`, `ImageWidth`, `ImageHeight`, `PatchSize`, `MaxSequenceLength`, `VocabSize`, `HiddenDim`, `NumHeads`, `NumLayers`, `NumEncoderLayers`, `NumDecoderLayers`, `VisionDim`, `VisionLayers`, `BackboneChannels`, `NumClasses` |
+| `VideoHyperparameterOptions` | `src/Video/Options/VideoHyperparameterOptions.cs` | `NumFeatures`, `NumLayers`, `NumFrames`, `EmbedDim`, `NumHeads`, `NumClasses`, `ScaleFactor`, `NumIterations` |
+| `AudioHyperparameterOptions` | `src/Models/Options/AudioHyperparameterOptions.cs` | `SampleRate`, `NumMels`, `FftSize`, `HopLength`, `HiddenDim`, `NumHeads`, `NumEncoderLayers`, `NumDecoderLayers`, `SpeakingRate`, `Language` |
 
-- `SequenceModelOptions : NeuralNetworkOptions` — `VocabSize`, `ModelDimension`,
-  `NumLayers`, `NumHeads`, `StateDimension`, `MaxSeqLength`, `ExpandFactor`,
-  `AttentionInterval`, `FfnMultiplier`
-- `VisionLanguageOptions : NeuralNetworkOptions` — `EmbeddingDimension`,
-  `MaxSequenceLength`, `ImageSize`, `VisionEmbeddingDim`, `NumFrames`
-- `GanOptions : NeuralNetworkOptions` — `LatentSize`, `GeneratorChannels`,
-  `DiscriminatorChannels`, `CriticIterations`
-- `EmbeddingModelOptions : NeuralNetworkOptions` — `VocabSize`,
-  `EmbeddingDimension`, `MaxSequenceLength`, `NumLayers`, `NumHeads`,
-  `FeedForwardDim`, `PoolingStrategy` — for the BGE/ColBERT/SGPT/SPLADE/SimCSE/
-  Instructor/Matryoshka/FastText/GloVe/Word2Vec/TransformerEmbedding group
+`AudioHyperparameterOptions` spans `TextToSpeech`, `SpeechRecognition` and
+`Audio`, which share signal settings. The source uses `HopLength` and `FftSize`;
+any migration from `hopSize` or `frameSize` must use a reviewed, typed parameter-to-property
+mapping rather than count a renamed, correctly wired option as a missing property.
+`PoolingStrategy` remains on the applicable embedding leaf options unless its
+meaning and enum type are genuinely shared; it is not declared by the recorded family base.
 
 Each leaf `XxxOptions` sets its own paper defaults in its parameterless
-constructor and adds only genuinely model-specific properties.
+constructor and adds only genuinely model-specific properties. Defaults must use
+the non-explicit initialization path in §5.5; ordinary tracked setters alone do
+not satisfy this constructor contract.
+
+**Inert-property disposition, required before family migration is considered complete:**
+Remove `NeuralNetworkOptions.EncoderLayerCount` and its copy-constructor assignments
+in the shared topology/options cleanup. Do not retain an ignored compatibility
+property or add a second topology surface. Encoder/decoder partitioning for supplied
+custom layers belongs to the architecture/layout contract and must be consumed and
+validated there. The migration includes a surface assertion that the Options property
+is absent, plus generated/shared-layout tests for the intended custom-layer partition.
+This specification does not itself delete a production API; the required implementation
+change is explicit and remains outstanding on the recorded phase branches.
 
 ### 5.3 Constructors
 
@@ -377,10 +418,41 @@ throws an `ArgumentException` naming both sides:
 > NeuralNetworkArchitecture.Layers. Supply one or the other.`
 
 Silence is not acceptable here — `RT2.cs:295-315` documents a real bug caused by
-guessing when the two disagreed. A knob left at its default value is not a
-conflict; only an explicitly-set contradicting value is. Explicitness is tracked
-by a `HashSet<string>` of assigned property names maintained by the setters on
-the family base.
+guessing when the two disagreed. A constructor-applied default is not an explicit
+choice. A user assignment **is explicit even when its value equals the paper default**.
+For example, a fresh `BGEOptions` with paper-default depth may accompany a valid
+custom layer layout without a conflict, but an object initializer explicitly
+requesting that same depth must conflict if the custom layout represents another depth.
+
+The required implementation contract is:
+
+1. Track explicit assignments with generated, strongly typed `OptionPropertyId`
+   enum values, such as `EmbeddingNumLayers`, in `HashSet<OptionPropertyId>`.
+   Keys identify the declaring semantic property; aliases share one canonical key.
+   Property-name strings may appear in diagnostics, never as policy or dispatch keys.
+2. Provide a protected, synchronous default-initialization scope for leaf constructors.
+   While that scope is active, setters apply paper defaults without recording an
+   explicit assignment. Scope disposal restores tracking even when initialization
+   throws; it does not clear assignments already recorded by another constructor.
+   The scope ends before any caller's object initializer or normal setter runs.
+   This retains the RT2-style leaf defaults without misclassifying them as user input.
+3. Copy constructors copy values through the same non-recording initialization path
+   and clone the explicit-key set exactly, including inherited and leaf-specific keys.
+   Do not reconstruct explicitness by comparing values with defaults, invoke ordinary
+   setters during a copy, or share the mutable set between source and copy.
+   Configuration/checkpoint round trips that preserve Options must preserve this
+   metadata too; generated enum identities need an explicit versioned wire contract.
+4. Conflict checks use the model's typed logical-layout metadata, not a generic
+   `architecture.Layers.Count` comparison: one logical block can contain several layers.
+   Only contradictory, explicitly assigned topology keys cause this conflict.
+   Training, output and runtime options do not become topology conflicts.
+
+Generated/shared-base regressions must distinguish untouched defaults, explicit
+non-default values, explicit values equal to defaults, consistent and inconsistent
+custom layouts, copies of each case, and independent mutation of source/copy metadata.
+Also verify that an initialization exception cannot leave tracking disabled. The
+historical phase-1 auto-properties do not implement these guarantees yet; adding
+the roster alone is not completion of this requirement.
 
 ---
 
@@ -421,19 +493,25 @@ directly. `BGE` derives from `TransformerEmbeddingNetwork<T>`,
 under `src/NeuralNetworks` finds only 3 files. Reflection walks the base chain
 and gets this right; no file-path or naming heuristic does.
 
-- **Baseline: 1067, measured by the ratchet test on 2026-09-08.** This is the
-  authoritative figure and it supersedes the 806 estimated below. **Out-of-scope
-  floor: 49. In-scope target: 0.**
+- **Initial recorded baseline: 1067 at `9f7fe07b6`; after the recorded phase-2
+  migration: 977 at `671836a34`.** These values supersede the three-area source
+  estimate of 806. Excluded types are removed before counting: **in-scope target: 0,
+  with no nonzero out-of-scope floor**.
 - Implemented as a reflection test over `AiDotNet.dll`, so it needs no
   documentation to exist and cannot be defeated by #2088's doc deletions.
-- **The 806 figure was a file-based proxy, and it was low by 261.** As this
-  section promised, the reflection number wins. See §2.6 for what the extra 261
-  turned out to be.
-- Stored as a single integer in
-  `tests/AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchet.txt`,
-  alongside the existing `SourceGeneratorCoverageTests` convention. The test
-  fails if the count rises, and fails with "lower the baseline" if it drops —
-  so the number only moves deliberately.
+- The numerical difference from the file-based proxy is 261, not a verified list
+  of additional models or an exemption budget. See §2.6 and the residual accounting in §8.
+- The historical implementation stores a `Baseline` constant in
+  `tests/AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchetTests.cs`,
+  not a separate text file. It rejects increases and currently permits a `Slack` of
+  10 before requiring a lower baseline. Every migration must nevertheless publish
+  its **exact** new count and lower the constant deliberately. The completion gate
+  is exactly zero; historical slack must not allow remaining gaps to disappear.
+- Persist the complete gap ledger, not just the largest 15 entries: owning model
+  identity, constructor parameter, Options type/property or missing mapping,
+  semantic category, and migration phase. Partial assembly/type loading makes the
+  measurement invalid and must fail closed, not report an artificially lower count.
+  Every nonzero gap has an owner; an unassigned row is not an exclusion.
 
 **Exclusions, stated precisely** (each of these produced a false positive in the
 baseline scan and must be excluded by the test, not by the scanner's accident):
@@ -441,49 +519,99 @@ baseline scan and must be excluded by the test, not by the scanner's accident):
 - the `options` parameter itself
 - parameters whose type is an interface or delegate (optimizer, loss function,
   tokenizer) — collaborators, not configuration
-- the five architecture types and two compiled-model hosts of §5.1
+- the five architecture types and two compiled-model hosts of §5.1, already
+  excluded by the historical `GetModelTypes()` implementation before gap counting
 - `modelIdentity`, and any parameter typed `string?` defaulting to `null` that
   names an artifact path rather than a hyperparameter
 
-A second assertion pins the fix rather than the shape: for every in-scope model,
-constructing it with a non-default Options value must produce a model whose
-`GetOptions()` returns that value **and** whose layer stack differs from the
-default. Without this, a model could satisfy the count by declaring properties it
-still ignores — the exact failure mode of the current code.
+A second, property-specific assertion pins the fix rather than just the presence
+of a property. For every applicable migrated option, `GetOptions()` must retain the
+configured value **and** a controlled test must observe the behavior it governs.
+Use generated, typed `OptionBehaviorKind` metadata, not property-name strings or
+hand-authored per-model exceptions, to select the shared test contract:
+
+| Semantic kind | Required observable proof |
+| --- | --- |
+| `OptionBehaviorKind.Topology` | The relevant logical depth, width, head count, branch or parameter shape changes as requested; layer-list length alone is insufficient. |
+| `OptionBehaviorKind.Training` | A controlled training step or gradient calculation reflects the setting. For `MaxGradNorm`, a gradient above the threshold is clipped by the expected amount, while the disabled-clipping case follows its documented behavior. |
+| `OptionBehaviorKind.Output` | Known activations produce the requested output behavior. For `PoolingStrategy`, compare the expected CLS/mean/etc. output on input for which those results differ. |
+| `OptionBehaviorKind.Runtime` | The supported runtime path or resource policy is observably selected and numerical results remain within the declared contract; CPU tests do not remove production GPU support. |
+
+Non-topology tests should also confirm that unrelated topology is unchanged.
+Do not add artificial layers to make training/output/runtime settings satisfy a
+topology assertion. Setting every value to a convenient number, or merely checking
+`GetOptions()`, is not behavioral proof. Inapplicable inherited options must have
+an explicit validated disposition, not be silently ignored or exempted by a string whitelist.
+
+These cases belong in the test scaffold generator and shared model/layout test
+bases. They use deliberately small supported configurations and deterministic data;
+generated model test files are never patched manually. Each phase must enable the
+appropriate behavioral contracts before declaring its migrated models complete.
 
 ---
 
 ## 8. Phasing
 
-Each phase is independently mergeable and leaves the build green.
+Each phase must be independently mergeable and leave the build green. The table
+separates recorded baseline constants from forecasts; a forecast is not test
+evidence and must be replaced by a measured, non-overlapping ledger when its phase runs.
+The original phase-2 source estimate was 98; the recorded implementation reduced
+the baseline by 90. That eight-gap difference must not be silently carried forward
+as completed work.
 
-| Phase | Content | Ratchet |
+| Phase | Content and provenance | Ratchet (before → after) |
 | --- | --- | --- |
-| ~~1~~ | ~~Seven family base classes; ratchet test establishing the authoritative baseline~~ **DONE `9f7fe07b6`, `944a1fd72`** | **1067 measured** |
-| ~~2~~ | ~~`NeuralNetworks` — sequence / language models (17 models, 90 params)~~ **DONE `671836a34`** | **1067 → 977** |
-| 3 | `NeuralNetworks` — vision-language / multimodal (11 models, 107 params) | 708 → 601 |
-| 4 | `NeuralNetworks` — embedding & retrieval (11, 77) and GAN (10, 41) | 601 → 483 |
-| 5 | `NeuralNetworks` — long tail (40 models, 97 params) | 483 → 386 |
-| 6 | `src/Document` (29 models, 203 missing) | 386 → 183 |
-| 7 | `src/Video` (44 models, 134 params) | 183 → 49 |
-| 8 | `TextToSpeech`, `SpeechRecognition`, `Audio` (22 models, ~192 params) — added 2026-09-08, see §2.6 | 183 → 49 |
-| 9 | `docs/model-paper-defaults.tsv`, `[PaperDefaults]`, fidelity test, correction of the §2.4 placeholder values | 49 |
+| 1 | Seven-family scaffolding recorded at `9f7fe07b6` plus `944a1fd72`; revised explicitness/inert-property contracts remain required | Initial recorded baseline **1067** |
+| 2 | Sequence/language migration recorded at `671836a34` (17 models, 90-gap reduction) | 1067 → 977 |
+| 3 | Vision-language/multimodal; provisional reduction 107 | 977 → 870 |
+| 4 | Embedding/retrieval and GAN; provisional reduction 77 + 41 = 118 | 870 → 752 |
+| 5 | Neural-network long tail; provisional reduction 97 | 752 → 655 |
+| 6 | Document; provisional reduction 203 | 655 → 452 |
+| 7 | Video; provisional reduction 134 | 452 → 318 |
+| 8a | Text-to-speech, speech recognition and audio; provisional reduction 192 | 318 → 126 |
+| 8b | Identify and migrate **all residual in-scope ledger entries**; provisional remainder 126, not an exemption | 126 → 0 |
+| 9 | Reviewed paper-defaults data, fidelity tests and correction of placeholder values; preserve the zero-gap gate | 0 → 0 |
 
-The floor of 49 is the out-of-scope architecture types and compiled-model hosts
-of §5.1, which the ratchet excludes from its in-scope count but which are listed
-here so the arithmetic is checkable.
+The forecast is now arithmetically complete:
+`1067 - (90 + 107 + 118 + 97 + 203 + 134 + 192 + 126) = 0`.
+The older subset estimate of 757 and audio estimate of 192 would leave 118 from
+1067; replacing the sequence estimate of 98 by its recorded reduction of 90 leaves
+126. Neither this calculation nor the original 261 difference identifies the actual
+residual models. Phase 8b therefore starts with a complete typed gap ledger and
+assigns every residual entry to a reviewed family migration; it cannot be waived
+or replaced by lowering the threshold to a nonzero floor. If the earlier forecasts
+overlap or differ from measurements, recalculate the residual from the actual ledger.
+
+Completion requires a complete successful measurement of **zero in-scope gaps**,
+enabled property-specific behavioral cases for all migrated options, and the
+paper-default tests. Excluded architecture/host parameters are never part of this
+count. A partially loaded assembly, missing behavior cases or remaining unassigned
+entries blocks completion even when the numeric threshold happens to pass.
 
 `Document` precedes `Video` because it is the denser defect (every one of its 29
 models is affected, averaging seven parameters each) and because its models
 already share `DocumentNeuralNetworkBase<T>`, so its family base is read off the
 existing hierarchy rather than inferred.
 
-**Phases 2-8 are renumbered against the measured 1067 rather than the estimated
-806, and the 261 parameters in §2.6 need a phase of their own — see §11.4.** The
-per-phase reductions below are unchanged; only the running total shifts.
+**Phases 5, 8 and 9 require explicit numerical-behavior review**, not just a
+signature/source-equivalence check:
 
-Phase 8 is the only phase that changes numerical behaviour. Splitting it out
-keeps the mechanical rewiring reviewable separately from the value changes.
+- Phase 5 can activate previously ignored long-tail options or repair model defaults.
+  Require before/after default and explicit-option cases, seeded forward/training
+  regression tests through the shared model-family bases, and release notes for every
+  intentional default/output change.
+- Phase 8 wires audio/speech signal settings and any residual configuration paths.
+  Require signal/output-shape and numerical fixtures for affected sample-rate, FFT,
+  hop-length, speaking-rate and other applicable settings, plus small end-to-end
+  model-family regressions. Document changed behavior and migration guidance.
+- Phase 9 changes paper-default values. Require independently reviewed source rows,
+  default-value assertions, explicitly small generated execution fixtures, and
+  release notes showing the old/new defaults and resource or numerical implications.
+
+This is a minimum list, not permission to ignore behavior changes in other phases.
+If any migration starts consuming a formerly ignored constructor/Options value,
+the corresponding before/after behavioral proof and release note are required there too.
+Mechanical rewiring and intentional numerical repairs should remain separately reviewable.
 Several phases exceed the 100-file PR limit; each will be split by family, not by
 arbitrary file count.
 
@@ -491,13 +619,15 @@ arbitrary file count.
 
 ## 9. Risks and open questions
 
-1. **Default-value changes alter results.** Phase 5 changes trained-model
-   behaviour for anyone relying on today's `modelDimension = 256`. Pre-v1, so
-   acceptable, but it belongs in release notes and is the reason phase 5 is last.
+1. **Default-value changes alter results.** Phase 5 may repair long-tail defaults;
+   phase 9 explicitly repairs the sequence-model placeholders in §2.4. Pre-v1
+   does not remove the obligation to prove and document those changes. Phase 9 is
+   last so paper-value changes remain distinguishable from mechanical migration.
 2. **Paper values may be too large for CI.** A faithful Mamba default
    (768 × 24) instantiated in a unit test is much heavier than 256 × 4. Tests
    must construct explicitly-small Options rather than relying on defaults; if
-   any test depends on the default being small it will surface in phase 5.
+   any test depends on the default being small it must be corrected in its shared
+   test base or generator before the applicable behavior-changing phase lands.
    *This is the risk most likely to force a design change* — if it turns out that
    many tests depend on small defaults, the alternative is a documented
    `XxxOptions.Small()` factory for test use, which I would rather add
@@ -506,15 +636,13 @@ arbitrary file count.
    hierarchy that exists today. If two models share a parameter name with
    different meanings, the shared property is wrong. Phase 2 must verify each
    model's usage before hoisting, not trust the name.
-4. **Scope size.** Widening to `Video` and `Document` (decided 2026-09-08) takes
-   this to 163 models and 757 parameters across three areas. That is a large
-   change to land before v1, and it is the risk most likely to force a
-   re-scoping. The phasing in §8 is ordered so each area is independently
-   shippable: if time runs short, `NeuralNetworks` alone still closes the
-   user-facing defect, and the ratchet baseline simply stops descending rather
-   than the work being left half-migrated.
-5. **Unverified:** I have not yet confirmed that every in-scope model's layer
-   stack actually derives from the parameters being moved. If some model ignores
+4. **Scope size.** The historical three-area subset alone contains 163 models
+   and 757 missing parameters, while the authoritative initial baseline is 1067
+   in-scope gaps. The final family/model roster must be taken from the ledger.
+   Individual areas can ship independently, but stopping after an area is partial
+   delivery, not completion of #2090; the remaining count and owners stay visible.
+5. **Unverified:** Not every in-scope model's observable behavior has been
+   confirmed to derive from the parameters being moved. If some model ignores
    its own constructor parameter today, moving it to Options preserves a
    pre-existing bug rather than fixing it. The §7 behavioural assertion is
    designed to surface exactly this, and will be run before phase 2 is declared
@@ -533,8 +661,9 @@ Recorded so the spec can be reviewed against what was agreed:
   `AiModelBuilder` is the single user-facing surface
 - `Layers` + a contradicting knob is a validation error naming the conflict
 - A separate attribute following #2098's `[PaperOptimizer]` pattern
-- An empty Options class can be legitimately correct (74 of 117 models have no
-  tunable constructor parameters at all and need none)
+- An empty Options class can be legitimately correct when the complete constructor
+  and behavior audit finds no model-specific knobs; the superseded first-constructor
+  scan is not evidence for exempting a model.
 
 ## 11. Decisions resolved 2026-09-08
 
@@ -546,16 +675,50 @@ Recorded so the spec can be reviewed against what was agreed:
    has been amended accordingly.
 3. **§9.4 — widen #2090 to cover `Video` and `Document`** rather than filing a
    follow-up issue. One sweep, one ratchet, one consistent result; the cost is
-   163 models and 757 in-scope parameters, tracked as the primary risk in §9.4.
+   at least the historical 163-model/757-gap subset, plus the broader in-scope
+   ledger now required by §2.6 and §8.
 
 4. **`TextToSpeech`, `SpeechRecognition` and `Audio` — decided 2026-09-08: give
    them their own phase (now phase 8).** They were excluded from §5.1 on the
    strength of a measurement that asked the wrong question (§2.6). Including them
-   is what lets the ratchet actually reach its floor of 49 rather than stalling
-   around 310, so the library ships v1 configured one way rather than two.
+   is necessary but not sufficient for the zero-gap target: the 192 estimate
+   does not cover the entire residual population. Phase 8b resolves every remaining
+   ledger entry, so no in-scope parameters disappear from the completion criterion.
    `AudioHyperparameterOptions` was added to phase 1 as the seventh family base
    (`944a1fd72`): 22 models, 192 tunable parameters, dominated by signal settings
    rather than network shape — `sampleRate` alone appears in 21 of the 22.
 
-Phase 1 landed 2026-09-08 as `9f7fe07b6`: six family bases, the ratchet at 1067,
-and the behavioural assertion skipped until phase 2.
+Phase 1 was recorded in two commits: `9f7fe07b6` introduced six family bases and
+the 1067 baseline; `944a1fd72` added Audio, making **seven family bases in total**.
+The original behavioral assertion was skipped pending phase 2. These historical
+facts do not imply the revised initialization, semantic-behavior and zero-gap
+completion contracts have already been implemented or merged into master.
+
+## 12. Reproducible specification checks
+
+Run the read-only checker from a checkout that contains the cited implementation
+commits (the `feature/options-surface-*` history):
+
+```powershell
+pwsh -NoProfile -File tools/ValidateModelOptionsSpec.ps1
+```
+
+It verifies the seven family names, paths, direct base contract and all 65 declared
+shared properties against `944a1fd72`; checks the 1067/977 baseline constants at
+`9f7fe07b6`/`671836a34`; and requires continuous phase transitions ending at zero.
+Missing Git objects cause a failure rather than an invented or partial result.
+
+Before/after control for this review:
+
+```powershell
+# Expected failure: the original roster/schedule cannot satisfy these source-backed contracts.
+pwsh -NoProfile -File tools/ValidateModelOptionsSpec.ps1 -SpecRevision cea3a4578e3c14a23b90f4ea3d68b74cb473a36b
+# Expected success: the revised specification.
+pwsh -NoProfile -File tools/ValidateModelOptionsSpec.ps1
+```
+
+The original schedule fails continuity at phases 3 and 8 and finishes at 49;
+the revised schedule has nine continuous transitions and finishes at zero.
+This is proof of **document/source consistency and arithmetic**, not proof that
+model migrations, explicitness tracking, paper corrections or runtime behavioral
+tests are already implemented. Those require the phase-specific evidence above.
