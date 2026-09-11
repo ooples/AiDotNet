@@ -1,7 +1,7 @@
-using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 
 namespace AiDotNet.Tests.Generators;
@@ -35,17 +35,23 @@ namespace AiDotNet.Attributes
     public sealed class ModelTaskAttribute : Attribute { public ModelTaskAttribute(int task) { } }
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class ModelMetadataExemptAttribute : Attribute { }
+}
+namespace AiDotNet.Interfaces
+{
+    public interface IFullModel<T, TInput, TOutput> { }
 }";
 
     private const string ModelSource = @"
 namespace Probe
 {
-    public class Base { }
+    // Discovery requires the full-model interface, not just metadata attributes. Deliberately
+    // use scalar I/O with no supported family so no generated scaffold can supply real coverage.
+    public abstract class Base : AiDotNet.Interfaces.IFullModel<float, float, float> { }
 
     // A MODEL whose name ends in ""Test"". This is the shape that produced the phantom coverage:
     // IsTestCandidate admits it to the test-name set purely on its name. The attributes are what
-    // make the generator track it as a model at all - without them the census is empty and any
-    // assertion about the report's contents passes vacuously.
+    // make the generator track this full model - without the interface and attributes the census
+    // is empty and any assertion about the report's contents passes vacuously.
     [AiDotNet.Attributes.ModelDomain(0)]
     [AiDotNet.Attributes.ModelCategory(0)]
     public class WidgetTest : Base { }
@@ -81,12 +87,26 @@ namespace Probe
     }
 
     [Fact]
-    public void TestCompilation_PublishesAMeasuredFigure()
+    public void TestCompilation_WithModelsButNoTests_PublishesMeasuredZero()
     {
         var report = Run("AiDotNetTests");
 
         Assert.Contains("IsMeasurable = true", report);
         Assert.DoesNotContain("CoveragePercent = -1.0", report);
+
+        // The test compilation contains two models but no actual test classes. Measurability
+        // alone must not let WidgetTest vouch for itself or its TEST suffix vouch for that model.
+        Assert.Contains("TotalModels = 2", report);
+        Assert.Contains("TestedCount = 0", report);
+        Assert.Contains("UntestedCount = 2", report);
+
+        var reportSyntax = CSharpSyntaxTree.ParseText(report).GetRoot();
+        var testedNames = Assert.Single(
+            reportSyntax.DescendantNodes().OfType<PropertyDeclarationSyntax>(),
+            property => property.Identifier.ValueText == "TestedModelNames");
+        var initializer = Assert.IsType<EqualsValueClauseSyntax>(testedNames.Initializer);
+        var names = Assert.IsType<ArrayCreationExpressionSyntax>(initializer.Value);
+        Assert.Empty(Assert.IsType<InitializerExpressionSyntax>(names.Initializer).Expressions);
     }
 
     // The assembly names are exact on purpose: RegisterSourceOutput refuses to run this generator
@@ -100,6 +120,8 @@ namespace Probe
             new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(ModelSource) },
             new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        Assert.Empty(compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             new AiDotNet.Generators.TestScaffoldGenerator());
