@@ -39,7 +39,12 @@ public class OptionsSurfaceRatchetTests
 {
     private readonly ITestOutputHelper _output;
 
-    public OptionsSurfaceRatchetTests(ITestOutputHelper output) => _output = output;
+    public OptionsSurfaceRatchetTests(ITestOutputHelper output)
+    {
+        // .NET Framework does not invoke the assembly's module initializer.
+        TestModuleInitializer.EnsureInitialized();
+        _output = output;
+    }
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters that have no correspondingly-named

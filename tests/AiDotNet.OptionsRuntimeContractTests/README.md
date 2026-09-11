@@ -28,6 +28,23 @@ visibility is widened. The source-linked fixtures also remain in the main test p
 partial assembly loads, empty censuses, and missing migrated models. `ReportRemainingGaps`
 writes the complete grouped report through xUnit output rather than discarding it.
 
+Both fixture constructors explicitly call `TestModuleInitializer.EnsureInitialized()`.
+The automatic module initializer is excluded on .NET Framework, so merely linking its source
+does not initialize a focused `net471` run. The explicit call preserves the same CPU/threading
+and offline-licensing setup without relying on another test class running first.
+
+The runner targets `net10.0`, `net8.0` and `net471`. After the final explicit-initialization
+correction, the primary reviewer ran the same 63-case filter on all three: **63 passed,
+zero failed, zero skipped per target** (189 passing executions). With all three core outputs
+already built, reproduce with:
+
+```powershell
+$env:AIDOTNET_FORCE_CPU = '1'
+$env:DOTNET_gcServer = '0'
+$env:COMPlus_gcServer = '0'
+dotnet test tests/AiDotNet.OptionsRuntimeContractTests/AiDotNet.OptionsRuntimeContractTests.csproj -c Release -m:1 -p:BuildProjectReferences=false -p:BuildInParallel=false -p:UseSharedCompilation=false --filter 'FullyQualifiedName~OptionsSurfaceRatchetTests|FullyQualifiedName~RWKV7LanguageModelTests.Model_Constructor_' --logger 'trx;LogFilePrefix=pr2128-runtime-explicit-init' --results-directory artifacts/options-runtime
+```
+
 ## Recorded local proof (2026-09-11)
 
 Against the current PR's Release/net10.0 core, the complete filter passed **63/63, zero skips**
