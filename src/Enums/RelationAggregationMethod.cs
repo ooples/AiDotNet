@@ -55,7 +55,9 @@ public enum RelationAggregationMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Computes attention weights to weight each support example's contribution.
+    /// Weights each support example's relation by <c>softmax_s(h_s' U q)</c> within its class, a learned bilinear
+    /// attention between the support embedding <c>h_s</c> and the query <c>q</c>. <c>U</c> starts at zero, where the
+    /// weights are uniform - the mean. It used to fall back to the mean silently.
     /// </para>
     /// <para><b>For Beginners:</b> This gives more weight to more relevant examples.
     /// If some support examples are more similar to the query, their scores count more.
@@ -68,12 +70,28 @@ public enum RelationAggregationMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Learns a neural network to weight the contribution of each support example.
+    /// Weights the k-th support example of every class by <c>exp(w_k)</c>, with <c>w</c> learned per shot position
+    /// and starting at zero - the mean. It used to fall back to the mean silently.
     /// </para>
     /// <para><b>For Beginners:</b> Instead of using fixed rules (mean, max), the
     /// network learns the best way to combine scores during training. This is the
     /// most flexible but requires more data to learn the weighting.
     /// </para>
     /// </remarks>
-    LearnedWeighting
+    LearnedWeighting,
+
+    /// <summary>
+    /// Sum each class's support embeddings and compute one relation per class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The paper's K-shot rule (Sung et al. 2018, section 3.2): "we element-wise sum over the embedding module
+    /// outputs of all samples from each training class to form this class' feature map". One relation score per
+    /// class, however many shots.
+    /// </para>
+    /// <para><b>For Beginners:</b> All of a class's examples are added together into one description of the class,
+    /// and the query is compared with that.
+    /// </para>
+    /// </remarks>
+    EmbeddingSum
 }
