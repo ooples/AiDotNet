@@ -309,8 +309,14 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     /// </summary>
     private static bool TryGetLiveArray(Tensor<T> tensor, out float[] array)
     {
-        array = (float[])(object)tensor.GetDataArray();
-        return ReferenceEquals(array, tensor.GetLiveBackingArrayOrNull());
+        if (tensor.GetDataArray() is float[] liveArray &&
+            ReferenceEquals(liveArray, tensor.GetLiveBackingArrayOrNull()))
+        {
+            array = liveArray;
+            return true;
+        }
+        array = Array.Empty<float>();
+        return false;
     }
 
     private float[][]? _compiledMlpWeightRefs;   // live weight arrays the plan was built from
@@ -372,18 +378,20 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
         }
         if (wRefs[0].Length < (long)inFeatures * weights[0].Shape[1]) return false;
 
+        var cachedWeights = _compiledMlpWeightRefs;
+        var cachedBiases = _compiledMlpBiasRefs;
         bool rebuild = _compiledMlpPlan is null
             || batch > _compiledMlpMaxBatch
-            || _compiledMlpWeightRefs is null
-            || _compiledMlpWeightRefs.Length != layerCount
-            || _compiledMlpBiasRefs is null
-            || _compiledMlpBiasRefs.Length != layerCount;
-        if (!rebuild)
+            || cachedWeights is null
+            || cachedWeights.Length != layerCount
+            || cachedBiases is null
+            || cachedBiases.Length != layerCount;
+        if (!rebuild && cachedWeights is not null && cachedBiases is not null)
         {
             for (int i = 0; i < layerCount; i++)
             {
-                if (!ReferenceEquals(_compiledMlpWeightRefs![i], wRefs[i])
-                    || !ReferenceEquals(_compiledMlpBiasRefs![i], bRefs[i]))
+                if (!ReferenceEquals(cachedWeights[i], wRefs[i])
+                    || !ReferenceEquals(cachedBiases[i], bRefs[i]))
                 {
                     rebuild = true;
                     break;
@@ -410,7 +418,7 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
             _compiledMlpMaxBatch = maxBatch;
         }
 
-        var plan = _compiledMlpPlan!;
+        var plan = _compiledMlpPlan ?? throw new InvalidOperationException("The compiled MLP plan was not initialized.");
         if (inFeatures != plan.InputFeatures) return false;
 
         var inputArr = (float[])(object)input.GetDataArray();
