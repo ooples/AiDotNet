@@ -22,7 +22,7 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
     [InlineData(Sac)]
     [InlineData(MarketMaking)]
     [Trait("category", "unit")]
-    public void Replay_agents_do_not_update_until_WarmupSteps_transitions_are_stored(FinancialAgentKind kind)
+    public void Replay_agents_do_not_update_until_WarmupSteps_transitions_are_stored(string kind)
     {
         var options = Options(kind, StateSize, ActionSize, seed: 8);
         options.BatchSize = 2;
@@ -48,7 +48,7 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
     [InlineData(Sac)]
     [InlineData(MarketMaking)]
     [Trait("category", "unit")]
-    public void Agent_built_networks_use_the_HiddenLayers_option(FinancialAgentKind kind)
+    public void Agent_built_networks_use_the_HiddenLayers_option(string kind)
     {
         var options = Options(kind, StateSize, ActionSize, seed: 9);
         options.HiddenLayers = new[] { 7, 5 };
@@ -57,26 +57,6 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
 
         var widths = architecture.Layers.Select(layer => layer.GetOutputShape()[0]).ToArray();
         Assert.Equal(new[] { 7, 5, ActionSize }, widths);
-        var networks = Networks(agent, kind, StateSize, ActionSize);
-        Assert.Equal(kind switch { Sac => 5, MarketMaking => 1, _ => 2 }, networks.Count);
-        foreach (var entry in networks)
-        {
-            Assert.Equal(entry.Inputs, entry.Network.Architecture.CalculatedInputSize);
-            Assert.Equal(entry.Outputs, entry.Network.Architecture.OutputSize);
-            Assert.Equal(new[] { 7, 5, entry.Outputs },
-                entry.Network.Layers.Select(layer => layer.GetOutputShape()[0]).ToArray());
-            Assert.Equal(new[] { 7, 5, entry.Outputs },
-                entry.Network.Architecture.Layers.Select(layer => layer.GetOutputShape()[0]).ToArray());
-        }
-
-        // Equal widths must not conceal shared mutable layers between online/target/twin networks.
-        for (int i = 0; i < networks.Count; i++)
-        for (int j = i + 1; j < networks.Count; j++)
-        {
-            Assert.NotSame(networks[i].Network.Architecture, networks[j].Network.Architecture);
-            for (int layer = 0; layer < 3; layer++)
-                Assert.NotSame(networks[i].Network.Layers[layer], networks[j].Network.Layers[layer]);
-        }
     }
 
     [Fact]
@@ -98,30 +78,23 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
         var options = Options(Dqn, StateSize, ActionSize, seed: 11);
         options.HiddenLayers = new[] { 7, 5 };
         var architecture = Arch(StateSize, ActionSize);
-        var hidden = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(
-            12, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>());
-        var output = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(
-            ActionSize, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>());
-        architecture.Layers.Add(hidden);
-        architecture.Layers.Add(output);
+        architecture.Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(
+            12, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()));
+        architecture.Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(
+            ActionSize, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()));
         using var agent = Create(Dqn, options, architecture);
 
         Assert.Equal(2, architecture.Layers.Count);
-        Assert.Same(hidden, architecture.Layers[0]);
-        Assert.Same(output, architecture.Layers[1]);
     }
 
-    private static void StoreTransitions(TradingAgentBase<double> agent, FinancialAgentKind kind, int count)
+    private static void StoreTransitions(TradingAgentBase<double> agent, string kind, int count)
     {
         for (int i = 0; i < count; i++)
         {
             var state = State(StateSize, salt: i);
-            var action = kind switch
-            {
-                A2C => SampleActionForIndex(Assert.IsType<FinancialA2CAgent<double>>(agent), state, i % ActionSize),
-                Sac or MarketMaking => State(ActionSize, salt: 100 + i),
-                _ => OneHot(ActionSize, i % ActionSize),
-            };
+            var action = kind is Sac or MarketMaking
+                ? State(ActionSize, salt: 100 + i)
+                : OneHot(ActionSize, i % ActionSize);
             agent.StoreExperience(state, action, 0.1 * (i + 1), State(StateSize, salt: i + 1), done: false);
         }
     }

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Trading.Agents;
 using AiDotNet.Finance.Trading.Environments;
@@ -9,9 +7,6 @@ using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Tests.UnitTests.Finance;
 
-public enum FinancialAgentKind { Dqn, A2C, Ppo, Sac, MarketMaking }
-internal enum FinancialNetworkRole { Policy, Critic, SecondCritic, TargetCritic, SecondTargetCritic }
-
 /// <summary>
 /// Shared construction helpers for the financial RL agent regression tests: one place that knows how each
 /// agent is wired (actor/critic shapes, the SAC critic's state+action input, the market-making options type)
@@ -19,23 +14,11 @@ internal enum FinancialNetworkRole { Policy, Critic, SecondCritic, TargetCritic,
 /// </summary>
 internal static class FinancialAgentTestKit
 {
-    internal const FinancialAgentKind Dqn = FinancialAgentKind.Dqn;
-    internal const FinancialAgentKind A2C = FinancialAgentKind.A2C;
-    internal const FinancialAgentKind Ppo = FinancialAgentKind.Ppo;
-    internal const FinancialAgentKind Sac = FinancialAgentKind.Sac;
-    internal const FinancialAgentKind MarketMaking = FinancialAgentKind.MarketMaking;
-
-    internal static Vector<double> SampleActionForIndex(FinancialA2CAgent<double> agent, Vector<double> state, int selected)
-    {
-        // These numeric-oracle fixtures need a particular sampled action, not a fabricated
-        // behavior token. Seeded tiny policies give every tested action nonzero probability.
-        for (int draw = 0; draw < 512; draw++)
-        {
-            var action = agent.SelectAction(state, training: true);
-            if (ArgMax(action) == selected) return action;
-        }
-        throw new InvalidOperationException($"The fixture did not sample action {selected} in 512 draws.");
-    }
+    internal const string Dqn = "DQN";
+    internal const string A2C = "A2C";
+    internal const string Ppo = "PPO";
+    internal const string Sac = "SAC";
+    internal const string MarketMaking = "MM";
 
     internal static NeuralNetworkArchitecture<double> Arch(int inputs, int outputs) =>
         new(inputType: InputType.OneDimensional,
@@ -43,7 +26,7 @@ internal static class FinancialAgentTestKit
             inputSize: inputs,
             outputSize: outputs);
 
-    internal static TradingAgentOptions<double> Options(FinancialAgentKind kind, int stateSize, int actionSize, int? seed)
+    internal static TradingAgentOptions<double> Options(string kind, int stateSize, int actionSize, int? seed)
     {
         TradingAgentOptions<double> options = kind switch
         {
@@ -62,11 +45,11 @@ internal static class FinancialAgentTestKit
         return options;
     }
 
-    internal static TradingAgentBase<double> Create(FinancialAgentKind kind, TradingAgentOptions<double> options) =>
+    internal static TradingAgentBase<double> Create(string kind, TradingAgentOptions<double> options) =>
         Create(kind, options, Arch(options.StateSize, options.ActionSize));
 
     internal static TradingAgentBase<double> Create(
-        FinancialAgentKind kind,
+        string kind,
         TradingAgentOptions<double> options,
         NeuralNetworkArchitecture<double> primary)
     {
@@ -81,49 +64,6 @@ internal static class FinancialAgentTestKit
             MarketMaking => new MarketMakingAgent<double>(primary, (MarketMakingOptions<double>)options),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown agent kind."),
         };
-    }
-
-    internal static IReadOnlyList<(FinancialNetworkRole Role, NeuralNetworkBase<double> Network, int Inputs, int Outputs)>
-        Networks(TradingAgentBase<double> agent, FinancialAgentKind kind, int stateSize, int actionSize)
-    {
-        var networks = new List<(FinancialNetworkRole, NeuralNetworkBase<double>, int, int)>();
-        void Add(FinancialNetworkRole role, string fieldName, int inputs, int outputs)
-        {
-            // Field names describe the real private storage, not policy selection. Reading the actual
-            // networks also checks the SAC-created clones, not only caller-supplied architecture objects.
-            var field = agent.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
-                ?? throw new InvalidOperationException($"Missing network storage: {fieldName}");
-            if (field.GetValue(agent) is not NeuralNetworkBase<double> network)
-                throw new InvalidOperationException($"Unexpected network storage: {fieldName}");
-            networks.Add((role, network, inputs, outputs));
-        }
-
-        switch (kind)
-        {
-            case Dqn:
-                Add(FinancialNetworkRole.Policy, "_qNetwork", stateSize, actionSize);
-                Add(FinancialNetworkRole.TargetCritic, "_targetNetwork", stateSize, actionSize);
-                break;
-            case A2C:
-            case Ppo:
-                Add(FinancialNetworkRole.Policy, "_actor", stateSize, actionSize);
-                Add(FinancialNetworkRole.Critic, "_critic", stateSize, 1);
-                break;
-            case Sac:
-                Add(FinancialNetworkRole.Policy, "_actor", stateSize, actionSize);
-                Add(FinancialNetworkRole.Critic, "_critic1", stateSize + actionSize, 1);
-                Add(FinancialNetworkRole.SecondCritic, "_critic2", stateSize + actionSize, 1);
-                Add(FinancialNetworkRole.TargetCritic, "_targetCritic1", stateSize + actionSize, 1);
-                Add(FinancialNetworkRole.SecondTargetCritic, "_targetCritic2", stateSize + actionSize, 1);
-                break;
-            case MarketMaking:
-                Add(FinancialNetworkRole.Policy, "_policyNetwork", stateSize, actionSize);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown agent kind.");
-        }
-
-        return networks;
     }
 
     /// <summary>A deterministic, bounded state vector (no RNG, so it is identical on every runtime).</summary>

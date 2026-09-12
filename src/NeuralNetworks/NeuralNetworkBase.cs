@@ -1382,16 +1382,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         foreach (var (source, destination) in pairs)
-        {
             source.AsSpan().CopyTo(destination.AsWritableSpan());
-            // AsWritableSpan deliberately does not publish a mutation. Consumers of live
-            // chunks and resident GPU buffers rely on this version, while CPU packed-weight
-            // caches key the backing array. Invalidate only the tensor/array actually written.
-            destination.IncrementVersion();
-            AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
-            Engine.InvalidatePersistentTensor(destination);
-            GpuEngine?.InvalidateResidentWeightBuffer(destination);
-        }
     }
 
     #region GPU Training Methods

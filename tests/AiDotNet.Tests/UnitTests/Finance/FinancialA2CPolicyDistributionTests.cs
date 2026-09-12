@@ -65,7 +65,7 @@ public sealed class FinancialA2CPolicyDistributionTests
         const int punished = 1;
 
         // Terminal transition, reward -1, V(s) = 0  =>  advantage = -1 for the interior action.
-        agent.StoreExperience(state, SampleActionForIndex(agent, state, punished), -1.0, state, done: true);
+        agent.StoreExperience(state, OneHot(ActionSize, punished), -1.0, state, done: true);
         agent.Train();
 
         // grad of -A * log softmax(z)[a] with A < 0 lowers z[a] and raises every other logit, so the
@@ -81,7 +81,7 @@ public sealed class FinancialA2CPolicyDistributionTests
         using var agent = CreateZeroedAgent(seed: 4, out var state);
         const int rewarded = 2;
 
-        agent.StoreExperience(state, SampleActionForIndex(agent, state, rewarded), 1.0, state, done: true);
+        agent.StoreExperience(state, OneHot(ActionSize, rewarded), 1.0, state, done: true);
         agent.Train();
 
         Assert.Equal(rewarded, ArgMax(agent.SelectAction(state, training: false)));

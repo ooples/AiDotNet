@@ -324,7 +324,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         // collapses the Bellman update to Q(s,a) ← Q(s,a) + α·(r − Q(s,a)) which is
         // exactly the one-shot supervised semantics callers expect. The abstract
         // <see cref="Train()"/> consumes the stored experience and applies one update.
-        StoreSupervisedExperience(state, actionVec, bestValue, state, done: true);
+        StoreExperience(state, actionVec, bestValue, state, done: true);
         // Flag the one-shot supervised update so replay agents bypass warmup and train now.
         SupervisedUpdateRequested = true;
         try
@@ -336,21 +336,6 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             SupervisedUpdateRequested = false;
         }
     }
-
-    /// <summary>
-    /// Stores the labelled transition created by <see cref="Train(Vector{T}, Vector{T})"/>.
-    /// </summary>
-    /// <param name="state">The labelled input state.</param>
-    /// <param name="action">The preferred action decoded from the supervised target.</param>
-    /// <param name="reward">The target value associated with that action.</param>
-    /// <param name="nextState">The terminal successor state.</param>
-    /// <param name="done">Whether this labelled transition is terminal.</param>
-    /// <remarks>
-    /// The default retains the existing public store dispatch. On-policy agents can isolate
-    /// explicitly labelled updates without admitting unverified actions through public collection.
-    /// </remarks>
-    protected virtual void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
-        => StoreExperience(state, action, reward, nextState, done);
 
     /// <summary>
     /// Serializes the agent to bytes.
@@ -429,7 +414,6 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
 
         // Keys and shapes are state, not values. Recreate them before generated state and the flat
         // vector are restored so sparse/tabular sources expose the same slots as the checkpoint.
-        OnParametersRestoring();
         if (magic == AgentSerializationMagicV2)
         {
             _ = Components;
@@ -499,19 +483,6 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     }
 
     /// <summary>
-    /// Runs before an explicit parameter update or checkpoint restore can mutate components.
-    /// </summary>
-    /// <remarks>
-    /// On-policy agents invalidate pending behavior here, including when a later component restore
-    /// fails after an earlier one changed. Implementations must be idempotent: checkpoint restore
-    /// enters this boundary before restoring structure and again when distributing parameter values.
-    /// The default is a no-op; successful-update behavior remains in <see cref="OnParametersRestored"/>.
-    /// </remarks>
-    protected virtual void OnParametersRestoring()
-    {
-    }
-
-    /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
     /// </summary>
@@ -563,7 +534,6 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
-        OnParametersRestoring();
         _ = Components;
         _parameterRegistry.SetParameters(parameters);
         OnParametersRestored();
