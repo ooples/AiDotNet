@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Trading.Agents;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Parameters;
@@ -192,6 +193,10 @@ public sealed class FinancialA2CLiveStorageTests
         return new FinancialA2CAgent<double>(architecture, Arch(4, 1), options);
     }
 
+    // ForwardTraced hands back the SAME tensor it was given; the only thing that changes is the
+    // scratch counter this fixture exists to observe. Shape preserved at every rank, which is
+    // precisely what [ElementWiseShape] claims.
+    [ElementWiseShape]
     private sealed class ScratchPrefix : LayerBase<double>
     {
         [Scratch]
@@ -207,20 +212,50 @@ public sealed class FinancialA2CLiveStorageTests
         public override void ResetState() { }
     }
 
-    private sealed class OpaqueComposite : LayerBase<double>
+    // The ONLY one of these four fixtures that is not shape-preserving: it forwards to a
+    // DenseLayer(3), so 4 features go in and 3 come out and [ElementWiseShape] would be a false
+    // claim. Ranks 1 and 2 are the ranks this fixture is actually driven at - SelectAction feeds
+    // [4], and Train at BatchSize = 2 feeds [2, 4] - so one BatchOptional layout covers both.
+    // Higher ranks decline rather than assert a relation nothing here measures.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class OpaqueComposite : LayerBase<double>, IShapeContract
     {
+        // One constant behind both the constructor and the contract, so the declared width cannot
+        // drift from the width the layer is actually built with.
+        private const int OutputFeatures = 3;
+
         private readonly FinancialA2CPolicyOwnershipTests.LegacyLayer _child;
         public OpaqueComposite(FinancialA2CPolicyOwnershipTests.LegacyLayer child)
-            : base(new[] { 4 }, new[] { 3 })
+            : base(new[] { 4 }, new[] { OutputFeatures })
         {
             _child = child;
             RegisterSubLayer(child);
         }
+
+        // Mirrors DenseLayer: the feature axis is projected to a configured width and any leading
+        // batch axis is carried through untouched.
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch
+        {
+            1 => new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures)) },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures)),
+            },
+            _ => null,
+        };
+
         public override bool SupportsTraining => true;
         protected override Tensor<double> ForwardTraced(Tensor<double> input) => _child.Forward(input);
         public override void ResetState() => _child.ResetState();
     }
 
+    // ForwardTraced returns the input unchanged. What this fixture varies is the ORDER in which it
+    // declares its parameter buffers, never the tensor's dimensions.
+    [ElementWiseShape]
     private sealed class ReorderingPrefix : LayerBase<double>
     {
         private readonly Tensor<double> _first = new(new[] { 1 });
@@ -244,6 +279,9 @@ public sealed class FinancialA2CLiveStorageTests
         public override void ResetState() { }
     }
 
+    // Scales every element by a single fp16 factor: the VALUES change and the dimensions do not,
+    // at any rank. That is the element-wise contract exactly.
+    [ElementWiseShape]
     private sealed class HalfPrefix : LayerBase<double>
     {
         public Tensor<Half> Scale { get; } = new(new[] { 1 });
