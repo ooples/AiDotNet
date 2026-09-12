@@ -193,6 +193,12 @@ public abstract class GraphModelLayoutBase<T> : DeclaredModelLayoutBase<T>
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract class MultimodalModelLayoutBase<T> : DeclaredModelLayoutBase<T>
 {
+    /// <summary>
+    /// Gets the immutable loaded-graph configuration when this model uses ONNX, or null in
+    /// native mode. Unlike requested options, these signatures come from the loaded sessions.
+    /// </summary>
+    public AiDotNet.Onnx.OnnxMultimodalConfiguration? OnnxConfiguration { get; protected set; }
+
     protected MultimodalModelLayoutBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction,
         double maxGradNorm = 1.0) : base(architecture, lossFunction, maxGradNorm) { }
     protected MultimodalModelLayoutBase(ILossFunction<T> lossFunction, double maxGradNorm = 1.0)

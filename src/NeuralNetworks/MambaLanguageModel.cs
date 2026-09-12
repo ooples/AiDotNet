@@ -67,16 +67,19 @@ public partial class MambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MambaLanguageModel{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The network architecture. Supply custom layers here to
+    /// override the default topology.</param>
+    /// <param name="options">The model's configuration. When null, <see cref="MambaOptions"/>
+    /// supplies this model's shipped defaults.</param>
+    /// <param name="lossFunction">The training loss. When null, cross-entropy-with-logits is
+    /// used, which is what this model's raw-logit head requires.</param>
     public MambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int stateDimension = 16,
-        int expandFactor = 2,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        MambaOptions? options = null)
+        MambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Mamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateMambaLayers), so the loss must be cross-entropy-with-logits (fused
@@ -88,19 +91,15 @@ public partial class MambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             // TensorClamp has ZERO gradient, so those classes get no training signal at all.
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
-        if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
-        if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
-        if (numLayers <= 0) throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
-        if (stateDimension <= 0) throw new ArgumentException($"State dimension ({stateDimension}) must be positive.", nameof(stateDimension));
-
         _options = options ?? new MambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _expandFactor = expandFactor;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _expandFactor = _options.ExpandFactor;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

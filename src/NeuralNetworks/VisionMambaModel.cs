@@ -9,27 +9,6 @@ using AiDotNet.NeuralNetworks.Options;
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Defines the scan pattern used by the Vision Mamba model to convert 2D patch grids into 1D sequences.
-/// </summary>
-public enum VisionScanPattern
-{
-    /// <summary>
-    /// Bidirectional scan: forward + reverse, used by the original Vision Mamba (Vim) paper.
-    /// </summary>
-    Bidirectional,
-
-    /// <summary>
-    /// Cross-scan: four directional scans (L→R, R→L, T→B, B→T), used by VMamba.
-    /// </summary>
-    CrossScan,
-
-    /// <summary>
-    /// Continuous/zigzag scan preserving spatial locality, used by PlainMamba.
-    /// </summary>
-    Continuous
-}
-
-/// <summary>
 /// Implements the Vision Mamba (Vim) model: PatchEmbed + scan pattern + bidirectional Mamba + classifier.
 /// </summary>
 /// <remarks>
@@ -145,54 +124,40 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
     public VisionMambaModel(
         NeuralNetworkArchitecture<T> architecture,
-        int imageHeight = 224,
-        int imageWidth = 224,
-        int patchSize = 16,
-        int channels = 3,
-        int modelDimension = 192,
-        int numLayers = 4,
-        int numClasses = 10,
-        int stateDimension = 16,
-        VisionScanPattern scanPattern = VisionScanPattern.Bidirectional,
-        ILossFunction<T>? lossFunction = null,
-        VisionMambaOptions? options = null)
+        VisionMambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageClassification))
     {
-        if (imageHeight <= 0) throw new ArgumentException($"Image height ({imageHeight}) must be positive.", nameof(imageHeight));
-        if (imageWidth <= 0) throw new ArgumentException($"Image width ({imageWidth}) must be positive.", nameof(imageWidth));
-        if (patchSize <= 0) throw new ArgumentException($"Patch size ({patchSize}) must be positive.", nameof(patchSize));
-        if (imageHeight % patchSize != 0) throw new ArgumentException($"Image height ({imageHeight}) must be divisible by patch size ({patchSize}).", nameof(imageHeight));
-        if (imageWidth % patchSize != 0) throw new ArgumentException($"Image width ({imageWidth}) must be divisible by patch size ({patchSize}).", nameof(imageWidth));
-        if (numClasses <= 0) throw new ArgumentException($"Number of classes ({numClasses}) must be positive.", nameof(numClasses));
-
         _options = options ?? new VisionMambaOptions();
-        Options = _options;
-        _imageHeight = imageHeight;
-        _imageWidth = imageWidth;
-        _patchSize = patchSize;
-        _channels = channels;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numClasses = numClasses;
-        _stateDimension = stateDimension;
-        _scanPattern = scanPattern;
+        _options.Validate();
 
-        _numPatchesH = imageHeight / patchSize;
-        _numPatchesW = imageWidth / patchSize;
+        Options = _options;
+        _imageHeight = _options.ImageHeight;
+        _imageWidth = _options.ImageWidth;
+        _patchSize = _options.PatchSize;
+        _channels = _options.Channels;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numClasses = _options.NumClasses;
+        _stateDimension = _options.StateDimension;
+        _scanPattern = _options.ScanPattern;
+
+        _numPatchesH = _options.ImageHeight / _options.PatchSize;
+        _numPatchesW = _options.ImageWidth / _options.PatchSize;
         _numPatches = _numPatchesH * _numPatchesW;
-        _mambaInputDim = scanPattern == VisionScanPattern.Bidirectional
-            ? modelDimension * 2
-            : modelDimension;
+        _mambaInputDim = _options.ScanPattern == VisionScanPattern.Bidirectional
+            ? _options.ModelDimension * 2
+            : _options.ModelDimension;
 
         // Initialize patch embedding weights
-        int patchDim = patchSize * patchSize * channels;
-        _patchProjectionWeights = new Tensor<T>(new[] { patchDim, modelDimension });
-        _patchProjectionBias = new Tensor<T>(new[] { modelDimension });
+        int patchDim = _options.PatchSize * _options.PatchSize * _options.Channels;
+        _patchProjectionWeights = new Tensor<T>(new[] { patchDim, _options.ModelDimension });
+        _patchProjectionBias = new Tensor<T>(new[] { _options.ModelDimension });
         InitializeTensor(_patchProjectionWeights);
         _patchProjectionBias.Fill(NumOps.Zero);
 
-        _positionalEmbedding = new Tensor<T>(new[] { _numPatches, modelDimension });
+        _positionalEmbedding = new Tensor<T>(new[] { _numPatches, _options.ModelDimension });
         InitializeTensor(_positionalEmbedding, scale: 0.02);
 
         // Final norm
@@ -200,9 +165,9 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         _finalNormGamma.Fill(NumOps.One);
 
         // Classification head
-        _classifierWeights = new Tensor<T>(new[] { _mambaInputDim, numClasses });
+        _classifierWeights = new Tensor<T>(new[] { _mambaInputDim, _options.NumClasses });
         InitializeTensor(_classifierWeights);
-        _classifierBias = new Tensor<T>(new[] { numClasses });
+        _classifierBias = new Tensor<T>(new[] { _options.NumClasses });
         _classifierBias.Fill(NumOps.Zero);
 
         InitializeLayers();

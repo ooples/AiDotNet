@@ -2,6 +2,24 @@ namespace AiDotNet.Models.Options;
 
 public abstract class ModelOptions
 {
+    /// <summary>Initializes the shared model settings with their defaults.</summary>
+    protected ModelOptions()
+    {
+    }
+
+    /// <summary>Copies the settings owned by this base class.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    protected ModelOptions(ModelOptions other)
+    {
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
+        Seed = other.Seed;
+    }
+
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>

@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
@@ -76,6 +77,11 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private readonly InferenceSession? _imageEncoder;
     private readonly InferenceSession? _textEncoder;
     private readonly InferenceSession? _audioEncoder;
+    private readonly string _imageOutputName = string.Empty;
+    private readonly string _textOutputName = string.Empty;
+    private readonly string _audioOutputName = string.Empty;
+    private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.Vector
+        | OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
     private readonly string? _imageEncoderPath;
     private readonly string? _textEncoderPath;
     private readonly string? _audioEncoderPath;
@@ -182,16 +188,13 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         string textEncoderPath,
         string audioEncoderPath,
         ITokenizer tokenizer,
-        int embeddingDimension = 1024,
-        int maxSequenceLength = 77,
-        int imageSize = 224,
-        int audioSampleRate = 16000,
+        ImageBindOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ImageBindOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new ImageBindOptions();
+        _options.ValidateOnnx();
         Options = _options;
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
             throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
@@ -210,18 +213,21 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
         _audioEncoderPath = audioEncoderPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _audioSampleRate = audioSampleRate;
-        _audioMaxDuration = 10; // 10 seconds max
-        _patchSize = 14;
-        _hiddenDim = 1280;
-        _numEncoderLayers = 32;
-        _numHeads = 16;
-        _vocabularySize = 49408;
-        _imuTimesteps = 2000;
-        _numVideoFrames = 2;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _audioSampleRate = _options.AudioSampleRate;
+        _audioMaxDuration = _options.AudioMaxDuration;
+        _patchSize = _options.PatchSize;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabularySize = _options.VocabSize;
+        _imuTimesteps = _options.ImuTimesteps;
+        _numVideoFrames = _options.NumVideoFrames;
+
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         _supportedModalities = new List<ModalityType>
         {
@@ -238,20 +244,39 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             imageEncoder = new InferenceSession(imageEncoderPath);
             textEncoder = new InferenceSession(textEncoderPath);
             audioEncoder = new InferenceSession(audioEncoderPath);
+            var imageGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, imageEncoder);
+            var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textEncoder);
+            var audioGraph = new OnnxGraphSignature(OnnxModelRole.AudioEncoder, audioEncoder);
+            imageGraph.RequireInputSet("pixel_values");
+            imageGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            textGraph.RequireInputSet("input_ids", "attention_mask");
+            textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            audioGraph.RequireInputSet("input_values");
+            // Waveform duration determines the time axis at execution; it is not the
+            // native encoder's AudioMaxDuration/AudioSampleRate capacity calculation.
+            audioGraph.RequireInputAxes("input_values", OnnxTensors.TensorElementType.Float, 1, 1, 128, null);
+            string imageOutput = imageGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            string audioOutput = audioGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, imageGraph, textGraph, audioGraph);
             _imageEncoder = imageEncoder;
             _textEncoder = textEncoder;
             _audioEncoder = audioEncoder;
-            Guard.NotNull(tokenizer);
-            _tokenizer = tokenizer;
+            _imageOutputName = imageOutput;
+            _textOutputName = textOutput;
+            _audioOutputName = audioOutput;
+            OnnxConfiguration = configuration;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }
         catch
         {
-            imageEncoder?.Dispose();
-            textEncoder?.Dispose();
-            audioEncoder?.Dispose();
+            try { audioEncoder?.Dispose(); } catch { }
+            try { textEncoder?.Dispose(); } catch { }
+            try { imageEncoder?.Dispose(); } catch { }
             throw;
         }
     }
@@ -261,40 +286,28 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// </summary>
     public ImageBindNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 224,
-        int channels = 3,
-        int patchSize = 14,
-        int vocabularySize = 49408,
-        int maxSequenceLength = 77,
-        int embeddingDimension = 1024,
-        int hiddenDim = 1280,
-        int numEncoderLayers = 32,
-        int numHeads = 16,
-        int audioSampleRate = 16000,
-        int audioMaxDuration = 10,
-        int imuTimesteps = 2000,
-        int numVideoFrames = 2,
+        ImageBindOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ImageBindOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new ImageBindOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
-        _audioSampleRate = audioSampleRate;
-        _audioMaxDuration = audioMaxDuration;
-        _imuTimesteps = imuTimesteps;
-        _numVideoFrames = numVideoFrames;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _audioSampleRate = _options.AudioSampleRate;
+        _audioMaxDuration = _options.AudioMaxDuration;
+        _imuTimesteps = _options.ImuTimesteps;
+        _numVideoFrames = _options.NumVideoFrames;
 
         _supportedModalities = new List<ModalityType>
         {
@@ -306,7 +319,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-        InitializeNativeLayers(channels);
+        InitializeNativeLayers(_options.Channels);
     }
 
     #endregion
@@ -1075,6 +1088,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         if (_imageEncoder is null)
             throw new InvalidOperationException("ONNX image encoder not initialized.");
 
+        if (image.Rank != 3 || image.Shape[0] != 3 || image.Shape[1] != _imageSize || image.Shape[2] != _imageSize)
+            throw new ArgumentException($"ONNX image must have shape [3,{_imageSize},{_imageSize}].", nameof(image));
+
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
@@ -1098,16 +1114,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             NamedOnnxValue.CreateFromTensor("pixel_values", inputTensor)
         };
 
-        using var results = _imageEncoder.Run(inputs);
+        using var results = _imageEncoder.Run(inputs, new[] { _imageOutputName });
         var outputTensor = results.First().AsTensor<float>();
-
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < outputTensor.Length; i++)
-        {
-            embedding[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return Normalize(embedding);
+        return Normalize(OnnxEmbeddingContract.Read<T>(outputTensor, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.ImageEncoder));
     }
 
     private Vector<T> EncodeTextOnnx(string text)
@@ -1135,16 +1144,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor)
         };
 
-        using var results = _textEncoder.Run(inputs);
+        using var results = _textEncoder.Run(inputs, new[] { _textOutputName });
         var outputTensor = results.First().AsTensor<float>();
-
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < outputTensor.Length; i++)
-        {
-            embedding[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return Normalize(embedding);
+        return Normalize(OnnxEmbeddingContract.Read<T>(outputTensor, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.TextEncoder));
     }
 
     private Vector<T> EncodeAudioOnnx(Tensor<T> audioWaveform, int sampleRate)
@@ -1157,6 +1159,10 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         int melBins = melSpec.Shape[0];
         int timeSteps = melSpec.Shape[1];
+
+        var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        configuration.Graphs[OnnxModelRole.AudioEncoder].RequireInput("input_values",
+            OnnxTensors.TensorElementType.Float, 1, 1, melBins, timeSteps);
 
         var inputArray = new float[1 * 1 * melBins * timeSteps];
         int idx = 0;
@@ -1174,16 +1180,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             NamedOnnxValue.CreateFromTensor("input_values", inputTensor)
         };
 
-        using var results = _audioEncoder.Run(inputs);
+        using var results = _audioEncoder.Run(inputs, new[] { _audioOutputName });
         var outputTensor = results.First().AsTensor<float>();
-
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < outputTensor.Length; i++)
-        {
-            embedding[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return Normalize(embedding);
+        return Normalize(OnnxEmbeddingContract.Read<T>(outputTensor, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.AudioEncoder));
     }
 
     #endregion
@@ -1552,6 +1551,21 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+            return new ModelMetadata<T>
+            {
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    [nameof(OnnxConfiguration)] = configuration,
+                    ["EmbeddingDimension"] = _embeddingDimension,
+                    ["MaxSequenceLength"] = _maxSequenceLength,
+                    ["ImageSize"] = _imageSize,
+                    ["UseNativeMode"] = false
+                }
+            };
+        }
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>

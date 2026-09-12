@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <GeneratorProjectPath Condition="'$(GeneratorProjectPath)' == ''">../../src/AiDotNet.Generators/AiDotNet.Generators.csproj</GeneratorProjectPath>
+    <GeneratorSourcePath Condition="'$(GeneratorSourcePath)' == ''">../../src/AiDotNet.Generators/TestScaffoldGenerator.cs</GeneratorSourcePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <ProjectReference Include="$(GeneratorProjectPath)" />
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/GeneratedSequenceFixtureContractTests.cs" Link="GeneratedSequenceFixtureContractTests.cs" />
+    <EmbeddedResource Include="$(GeneratorSourcePath)" LogicalName="Review.TestScaffoldGenerator.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReviewModelDirectory)' == ''">
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReviewModelDirectory)' != ''">
+    <Reference Include="AiDotNet"><HintPath>$(ReviewModelDirectory)/AiDotNet.dll</HintPath></Reference>
+    <Reference Include="AiDotNet.Tensors"><HintPath>$(ReviewModelDirectory)/AiDotNet.Tensors.dll</HintPath></Reference>
+  </ItemGroup>
+  <Target Name="ValidateReviewModelDirectory" BeforeTargets="ResolveReferences" Condition="'$(ReviewModelDirectory)' != ''">
+    <Error Condition="!Exists('$(ReviewModelDirectory)/AiDotNet.dll') or !Exists('$(ReviewModelDirectory)/AiDotNet.Tensors.dll')"
+           Text="ReviewModelDirectory must contain both real AiDotNet.dll and AiDotNet.Tensors.dll." />
+  </Target>
+</Project>
