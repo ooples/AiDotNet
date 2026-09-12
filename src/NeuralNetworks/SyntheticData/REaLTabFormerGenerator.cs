@@ -246,8 +246,9 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = columns.ToList();
         _seqLength = columns.Count;
 
@@ -264,7 +265,7 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -281,13 +282,14 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, cancellationToken);
     }
 

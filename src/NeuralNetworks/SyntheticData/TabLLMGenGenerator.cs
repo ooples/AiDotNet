@@ -244,8 +244,9 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
 
         // Build vocabulary and tokenization
@@ -260,7 +261,7 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
@@ -272,10 +273,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => Fit(data, columns, epochs), cancellationToken);
+        int epochCount = epochs ?? _options.Epochs;
+        return Task.Run(() => Fit(data, columns, epochCount), cancellationToken);
     }
 
     /// <inheritdoc />

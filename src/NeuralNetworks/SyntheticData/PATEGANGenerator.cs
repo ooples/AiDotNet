@@ -307,8 +307,9 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = columns.ToList();
 
         // Transform data
@@ -327,7 +328,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         T lr = NumOps.FromDouble(_options.LearningRate);
 
         // Phase 1: Pre-train teachers on their partitions
-        int teacherEpochs = Math.Max(1, epochs / 4);
+        int teacherEpochs = Math.Max(1, epochCount / 4);
         SetTrainingMode(true);
         try
         {
@@ -338,7 +339,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         finally { SetTrainingMode(false); }
 
         // Phase 2: Joint student + generator training
-        int jointEpochs = epochs - teacherEpochs;
+        int jointEpochs = epochCount - teacherEpochs;
         for (int epoch = 0; epoch < jointEpochs; epoch++)
         {
             SetTrainingMode(true);
@@ -358,8 +359,9 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     /// <inheritdoc />
     public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns,
-        int epochs, CancellationToken cancellationToken = default)
+        int? epochs = null, CancellationToken cancellationToken = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -382,7 +384,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             T lr = NumOps.FromDouble(_options.LearningRate);
 
             // Phase 1: Pre-train teachers
-            int teacherEpochs = Math.Max(1, epochs / 4);
+            int teacherEpochs = Math.Max(1, epochCount / 4);
             for (int epoch = 0; epoch < teacherEpochs; epoch++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -393,7 +395,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             }
 
             // Phase 2: Joint training
-            int jointEpochs = epochs - teacherEpochs;
+            int jointEpochs = epochCount - teacherEpochs;
             for (int epoch = 0; epoch < jointEpochs; epoch++)
             {
                 cancellationToken.ThrowIfCancellationRequested();

@@ -265,9 +265,10 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region ISyntheticTabularGenerator<T> Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
         _columns = PrepareColumns(data, columns);
 
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
@@ -283,7 +284,7 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
@@ -296,9 +297,10 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
         _columns = PrepareColumns(data, columns);
 
         await Task.Run(() =>
@@ -318,7 +320,7 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 for (int b = 0; b < data.Rows; b += batchSize)

@@ -136,7 +136,8 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
                 numHeads: _options.NumHeads,
                 numLayers: _options.NumLayers,
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

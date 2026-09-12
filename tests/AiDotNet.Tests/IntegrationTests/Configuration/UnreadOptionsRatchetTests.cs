@@ -120,8 +120,59 @@ public class UnreadOptionsRatchetTests
     /// duplicate was removed — the same copy-constructor hazard this file already documents,
     /// reached from the opposite direction.
     /// </para>
+    /// <para>
+    /// 97 -> 66 across two clusters and one detector repair.
+    /// </para>
+    /// <para>
+    /// <b>Epochs, 21 synthetic-data generators.</b> Each declared a per-model published value
+    /// (TimeGAN 2000, MedGAN and TabDDPM 1000, TabFlow 500, AutoDiffTab 200, three at 100, the rest
+    /// 300) while <c>Fit</c> and <c>FitAsync</c> took <c>epochs</c> as a REQUIRED argument, so none
+    /// of them could ever apply -- the doc examples showed both at once. The parameter is now
+    /// <c>int? epochs = null</c> resolving to the options value. Deliberately not a sentinel
+    /// (<c>int epochs = 0</c> plus <c>epochs &gt; 0 ? epochs : _options.Epochs</c>): that is the
+    /// shape removed from CSDI and its siblings in the previous commit, where it made the options
+    /// value reachable only by passing zero. TabSyn held the same defect in MIRROR form --
+    /// <c>_options.VAEEpochs &gt; 0 ? _options.VAEEpochs : epochs</c>, always true because
+    /// VAEEpochs defaults to 100, so the caller's required argument was dead.
+    /// </para>
+    /// <para>
+    /// <b>The tabular cluster.</b> <c>HiddenVectorActivation</c> now reaches the hidden dense
+    /// layers of SAINT, TabDPT, TabPFN, Mambular and AutoInt, and <c>FeedForwardDimension</c>
+    /// replaces a hardcoded <c>* 4</c> in four builders -- the literal that had been shadowing the
+    /// declared multiplier. Fixing that exposed a second defect: <c>FeedForwardDimension</c> was
+    /// computed from <c>EmbeddingDimension</c> on SAINT and TabTransformer, which those models
+    /// never pass to layer construction, so the computed 128 bore no relation to the 512 actually
+    /// built. It now derives from <c>HiddenDimension</c> and every value is unchanged at runtime.
+    /// Three properties were DELETED rather than wired, having nothing to wire to: NODE's
+    /// <c>HiddenVectorActivation</c> (a tree ensemble plus an output projection has no hidden
+    /// activation) and TabR's feed-forward pair (its builder has no transformer feed-forward).
+    /// </para>
+    /// <para>
+    /// <b>The detector under-reported its own fix.</b> Following computed properties required
+    /// walking options-class getters, which are otherwise skipped. The first attempt kept the
+    /// existing <c>seen</c> set -- keyed on the CALL TARGET and used to skip work -- and the count
+    /// rose to 156: whichever walker reached a getter token first claimed it, so a read from
+    /// inside an options class recorded its edge and every later read of that property BY A MODEL
+    /// was skipped before it could be counted. 83 genuinely-read properties reported as unread.
+    /// The repair caches the resolution instead of the decision. Worth keeping in mind here: this
+    /// is the second dedup-shaped under-report in this file, after raw metadata-token comparison
+    /// once made every generic options class read as 100% unread.
+    /// </para>
+    /// <para>
+    /// The drop from 73 to 66 is exactly 3 deletions plus 4 false positives removed
+    /// (FeedForwardMultiplier on SAINT, TabDPT, TabPFN and TabTransformer, each consumed through
+    /// the computed property). Matching the prediction to the property is what shows the
+    /// propagation reaches what it was built for and nothing else.
+    /// </para>
+    /// <para>
+    /// OPEN: <c>NODEOptions.HiddenActivation</c> is as unwired as the vector sibling just deleted
+    /// -- NODENetwork reads no activation at all -- yet it is not reported. It is not in
+    /// <see cref="ReflectivelyUsed"/>, the property collection applies no type filter, and the
+    /// generated clone registry mentions the name only as a string literal. Something marks it
+    /// read and the path was not identified; until it is, this count may UNDER-report.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 97;
+    private const int UnreadBaseline = 66;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry
@@ -214,11 +265,15 @@ public class UnreadOptionsRatchetTests
         _output.WriteLine($"Options property getters declared: {getters.Count}");
         _output.WriteLine($"Never called from anywhere in {assembly.GetName().Name}: {count}");
         _output.WriteLine(string.Empty);
-        _output.WriteLine("Largest offenders:");
-        foreach (var group in byType.Take(30))
+        // Listed in full rather than truncated. This goes to test output, not to an assertion
+        // message, so there is no readability budget to protect -- and a truncated report is
+        // exactly what makes the remaining work unactionable: the tail below the cut is invisible,
+        // so nobody can tell whether it is one more property or forty.
+        _output.WriteLine("Unread, by declaring type:");
+        foreach (var group in byType)
         {
             _output.WriteLine($"  {StripArity(group.Key)} ({group.Count()}): "
-                + string.Join(", ", group.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).Take(10)));
+                + string.Join(", ", group.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal)));
         }
 
         Assert.True(count <= UnreadBaseline + Slack,
@@ -260,7 +315,15 @@ public class UnreadOptionsRatchetTests
     {
         var (single, multi) = BuildOpCodeTables();
         var called = new HashSet<(string Type, string Name)>();
-        var seen = new HashSet<(int Module, int Token)>();
+
+        // computed options property -> the options properties its getter reads
+        var derivedFrom = new Dictionary<(string Type, string Name),
+            HashSet<(string Type, string Name)>>();
+        // Resolution cache. Deliberately NOT a skip-set: the same getter token is reached from
+        // many call sites, and what matters is what the CALLER is (a model, or a computed property
+        // inside an options class). Skipping a token after the first sighting silently discards
+        // every later call site -- which is exactly how this scan once under-reported by 83.
+        var resolvedTokens = new Dictionary<(int Module, int Token), (string Type, string Name)?>();
         unresolved = 0;
         total = 0;
 
@@ -276,7 +339,10 @@ public class UnreadOptionsRatchetTests
             //
             // Skipping the hierarchy asks the question that matters: does anything OUTSIDE the
             // options classes consume this value?
-            if (IsOptionsType(type)) continue;
+            // Options types are not scanned for direct reads -- see above -- but their property
+            // GETTERS are collected separately, so a computed property can pass consumption on to
+            // the properties it derives from.
+            bool isOptions = IsOptionsType(type);
 
             IEnumerable<MethodBase> methods;
             try
@@ -334,38 +400,89 @@ public class UnreadOptionsRatchetTests
                     // another's, and skipping the retry would reproduce exactly the silent "no"
                     // this scan is being repaired for.
                     var key = (method.Module.MetadataToken, token);
-                    if (seen.Contains(key)) continue;
-
-                    total++;
-                    MethodBase? target = null;
-                    try
+                    if (!resolvedTokens.TryGetValue(key, out var cached))
                     {
-                        target = method.Module.ResolveMethod(token, typeArgs, methodArgs);
-                    }
-                    catch
-                    {
-                        target = null;
+                        total++;
+                        MethodBase? target = null;
+                        try
+                        {
+                            target = method.Module.ResolveMethod(token, typeArgs, methodArgs);
+                        }
+                        catch
+                        {
+                            target = null;
+                        }
+
+                        if (target?.DeclaringType == null)
+                        {
+                            unresolved++;
+                            cached = null;
+                        }
+                        else
+                        {
+                            var declaringType = target.DeclaringType;
+                            if (declaringType.IsGenericType)
+                            {
+                                declaringType = declaringType.GetGenericTypeDefinition();
+                            }
+
+                            cached = (declaringType.FullName ?? declaringType.Name,
+                                target.Name.StartsWith("get_", StringComparison.Ordinal)
+                                    ? target.Name.Substring(4)
+                                    : target.Name);
+                        }
+
+                        resolvedTokens[key] = cached;
                     }
 
-                    if (target?.DeclaringType == null)
-                    {
-                        unresolved++;
-                        continue;
-                    }
-
-                    seen.Add(key);
-
-                    var declaring = target.DeclaringType;
-                    if (declaring.IsGenericType) declaring = declaring.GetGenericTypeDefinition();
+                    if (cached == null) continue;
 
                     // Property getters are named get_X; store the property name so the key matches
                     // the one built from PropertyInfo on the other side.
-                    string name = target.Name.StartsWith("get_", StringComparison.Ordinal)
-                        ? target.Name.Substring(4)
-                        : target.Name;
+                    var targetKey = cached.Value;
+                    if (isOptions)
+                    {
+                        // Only a property getter propagates. A copy constructor or Validate()
+                        // reading the same property proves nothing about whether a MODEL reads it.
+                        if (method.IsSpecialName
+                            && method.Name.StartsWith("get_", StringComparison.Ordinal)
+                            && method.DeclaringType != null)
+                        {
+                            var ownerType = method.DeclaringType.IsGenericType
+                                ? method.DeclaringType.GetGenericTypeDefinition()
+                                : method.DeclaringType;
+                            var ownerKey = (ownerType.FullName ?? ownerType.Name,
+                                method.Name.Substring(4));
+                            if (!derivedFrom.TryGetValue(ownerKey, out var set))
+                            {
+                                set = new HashSet<(string Type, string Name)>();
+                                derivedFrom[ownerKey] = set;
+                            }
 
-                    called.Add((declaring.FullName ?? declaring.Name, name));
+                            set.Add(targetKey);
+                        }
+
+                        continue;
+                    }
+
+                    called.Add(targetKey);
                 }
+            }
+        }
+
+        // A computed property that is read from outside consumes whatever its getter reads, so
+        // walk those edges transitively. `FeedForwardDimension` being read is what makes
+        // `FeedForwardMultiplier` read; without this the multiplier reports as unread while
+        // changing it demonstrably changes the model.
+        var queue = new Queue<(string Type, string Name)>(called);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!derivedFrom.TryGetValue(current, out var sources)) continue;
+
+            foreach (var source in sources)
+            {
+                if (called.Add(source)) queue.Enqueue(source);
             }
         }
 

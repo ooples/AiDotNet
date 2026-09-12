@@ -131,7 +131,8 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
                 stateDimension: _options.StateDimension,
                 numLayers: _options.NumLayers,
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

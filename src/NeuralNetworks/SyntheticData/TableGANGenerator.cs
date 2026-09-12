@@ -240,8 +240,9 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = columns.ToList();
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, columns);
@@ -292,7 +293,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         // remaining call site that runs layer.UpdateParameters(lr) without
         // an intervening tape throws "Backward pass must be called before
         // updating parameters." See WGANGP.TrainStep for the canonical pattern.
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -314,13 +315,14 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, cancellationToken);
     }
 

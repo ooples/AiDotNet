@@ -176,16 +176,7 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// </remarks>
     public bool UseFiLM { get; set; } = false;
 
-    /// <summary>
-    /// Gets or sets the feed-forward dimension multiplier.
-    /// </summary>
-    /// <value>The multiplier, defaulting to 4.</value>
-    public int FeedForwardMultiplier { get; set; } = 4;
 
-    /// <summary>
-    /// Gets the feed-forward network dimension.
-    /// </summary>
-    public int FeedForwardDimension => EmbeddingDimension * FeedForwardMultiplier;
 
     /// <summary>
     /// Gets or sets the weight decay coefficient.
@@ -212,7 +203,6 @@ public class TabROptions<T> : RiskModelOptions<T>
             UseLayerNorm = UseLayerNorm,
             ActivationType = ActivationType,
             UseFiLM = UseFiLM,
-            FeedForwardMultiplier = FeedForwardMultiplier,
             WeightDecay = WeightDecay,
             MaxGradNorm = MaxGradNorm
         };

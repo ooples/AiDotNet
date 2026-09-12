@@ -435,7 +435,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// </summary>
     /// <param name="data">The real data matrix.</param>
     /// <param name="columns">Metadata describing each column.</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method first searches for the best diffusion configuration
@@ -443,9 +443,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -471,7 +472,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         SetTrainingMode(true);
         try
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 for (int b = 0; b < data.Rows; b += batchSize)
                 {
@@ -486,9 +487,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -516,7 +518,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             SetTrainingMode(true);
             try
             {
-                for (int epoch = 0; epoch < epochs; epoch++)
+                for (int epoch = 0; epoch < epochCount; epoch++)
                 {
                     ct.ThrowIfCancellationRequested();
                     for (int b = 0; b < data.Rows; b += batchSize)

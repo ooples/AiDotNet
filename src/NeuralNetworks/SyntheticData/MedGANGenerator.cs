@@ -405,8 +405,9 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// ordering is load-bearing — the generator's whole job is to hit a latent space that already
     /// means something, so starting the GAN against an untrained decoder is training against noise.
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
 
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
@@ -419,7 +420,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         RebuildLayersWithActualDimensions();
 
         double noiseMultiplier = _options.EnablePrivacy
-            ? ComputeNoiseMultiplier(data.Rows, epochs)
+            ? ComputeNoiseMultiplier(data.Rows, epochCount)
             : 0.0;
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -427,8 +428,8 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         // --- Stage 1: pre-train the autoencoder on the real records ---
         int pretrainEpochs = _options.AutoencoderPretrainEpochs
-            ?? Math.Max(1, (int)Math.Round(epochs * _options.AutoencoderPretrainFraction));
-        pretrainEpochs = Math.Min(pretrainEpochs, epochs);
+            ?? Math.Max(1, (int)Math.Round(epochCount * _options.AutoencoderPretrainFraction));
+        pretrainEpochs = Math.Min(pretrainEpochs, epochCount);
 
         for (int epoch = 0; epoch < pretrainEpochs; epoch++)
         {
@@ -439,7 +440,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
 
         // --- Stage 2: the GAN, with the decoder still training as part of theta_(g,dec) ---
-        for (int epoch = pretrainEpochs; epoch < epochs; epoch++)
+        for (int epoch = pretrainEpochs; epoch < epochCount; epoch++)
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
@@ -456,10 +457,11 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => Fit(data, columns, epochs), cancellationToken);
+        int epochCount = epochs ?? _options.Epochs;
+        return Task.Run(() => Fit(data, columns, epochCount), cancellationToken);
     }
 
     /// <inheritdoc />

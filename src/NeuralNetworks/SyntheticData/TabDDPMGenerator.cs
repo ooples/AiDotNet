@@ -305,9 +305,10 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region ISyntheticTabularGenerator<T> Implementation
 
     /// <inheritdoc/>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -336,7 +337,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         SetTrainingMode(true);
         try
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 for (int batch = 0; batch < numBatches; batch++)
                 {
@@ -355,9 +356,10 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc/>
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -384,7 +386,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             SetTrainingMode(true);
             try
             {
-                for (int epoch = 0; epoch < epochs; epoch++)
+                for (int epoch = 0; epoch < epochCount; epoch++)
                 {
                     ct.ThrowIfCancellationRequested();
                     for (int batch = 0; batch < numBatches; batch++)

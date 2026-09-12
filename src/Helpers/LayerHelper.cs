@@ -17846,6 +17846,24 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
+
+    /// <summary>
+    /// Builds a hidden dense layer, honouring a caller-supplied vector activation when one is given.
+    /// </summary>
+    /// <remarks>
+    /// The tabular options classes declare a nullable <c>HiddenVectorActivation</c>. Before this
+    /// existed nothing read it, so the property advertised an extension point that did nothing.
+    /// When it is null the builder keeps the activation it always used, so the default path is
+    /// unchanged.
+    /// </remarks>
+    private static DenseLayer<T> TabularHiddenDense(
+        int outputSize,
+        IVectorActivationFunction<T>? vectorActivation,
+        IActivationFunction<T> fallback)
+        => vectorActivation is null
+            ? new DenseLayer<T>(outputSize, fallback)
+            : new DenseLayer<T>(outputSize, vectorActivation);
+
     /// <summary>
     /// Creates default layers for a SAINT model.
     /// </summary>
@@ -17857,7 +17875,9 @@ public static partial class LayerHelper<T>
         int numLayers = 2,
         int sequenceLength = 1,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its OWN learnable token, producing a real
         // [features, embedding] sequence. SAINT (Somepalli et al. 2021, "SAINT: Improved Neural
@@ -17874,13 +17894,13 @@ public static partial class LayerHelper<T>
         //      defining contribution, letting a sample attend to other rows in the batch.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (hiddenDimension * 4));
             yield return new IntersampleAttentionLayer<T>(hiddenDimension, numHeads, dropoutRate);
         }
 
         // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
         // training). Final activation is task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(hiddenDimension / 2, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -17895,7 +17915,8 @@ public static partial class LayerHelper<T>
         int numLayers = 2,
         int sequenceLength = 1,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null)
     {
         // Feature tokenization. Turn the flat [features] vector into a real
         // [features, embedding] token sequence so self-attention operates ACROSS
@@ -17914,7 +17935,7 @@ public static partial class LayerHelper<T>
         // stacks trainable — the same encoder block ViT / BERT are built from.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (hiddenDimension * 4));
         }
 
         // MLP head, matching the ViT/BERT readout (GELU projection -> output, no dropout). A ReLU
@@ -18046,7 +18067,8 @@ public static partial class LayerHelper<T>
         int numHeads = 2,
         int numLayers = 3,
         int numClasses = 2,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its own learnable vector,
         // producing a real [features, embedding] token sequence. AutoInt (Song et al.
@@ -18064,8 +18086,8 @@ public static partial class LayerHelper<T>
 
         // MLP head (GELU readout; a ReLU head drives the output projection dead
         // during training). Final activation is task-dependent.
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
+        yield return TabularHiddenDense(32, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18087,7 +18109,8 @@ public static partial class LayerHelper<T>
         int stateDimension = 16,
         int numLayers = 4,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its OWN learnable token, producing a
         // [features, embedding] sequence that the Mamba blocks scan. Mambular (Thielmann et al.
@@ -18110,7 +18133,7 @@ public static partial class LayerHelper<T>
         // Per-token MLP head (GELU readout; tape-safe sequence pooling is unavailable so the head
         // runs per feature-token, matching the sibling tabular models). Final activation is
         // task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18132,7 +18155,9 @@ public static partial class LayerHelper<T>
         int numHeads = 4,
         int numLayers = 6,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its OWN learnable vector, producing a
         // real [features, embedding] token sequence. TabDPT (Ma et al. 2024, "TabDPT: Scaling
@@ -18148,12 +18173,12 @@ public static partial class LayerHelper<T>
         // the ViT/BERT encoder block that keeps deep attention stacks trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (embeddingDimension * 4));
         }
 
         // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
         // training). Final activation is task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(embeddingDimension / 2, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18175,10 +18200,12 @@ public static partial class LayerHelper<T>
         int numHeads = 4,
         int numLayers = 12,
         int numClasses = 2,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Input projection
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(embeddingDimension, hiddenVectorActivation, new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
         // Deep transformer encoder. TabPFN's encoder is a residual Transformer;
@@ -18195,13 +18222,13 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderBlock<T>(
                 hiddenSize: embeddingDimension,
                 numHeads: numHeads,
-                ffnDim: embeddingDimension * 4,
+                ffnDim: feedForwardDimension ?? (embeddingDimension * 4),
                 dropoutRate: dropoutRate,
                 ffnActivation: new GELUActivation<T>());
         }
 
         // Output head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 

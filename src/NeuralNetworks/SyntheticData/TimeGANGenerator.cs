@@ -339,21 +339,22 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         // Options remain publicly accessible after construction, so validate again before using
         // them to rebuild the component networks.
         ValidateOptions();
 
         // Reject configurations that would silently no-op training. With
-        // epochs <= 0 every phase loop runs zero iterations and IsFitted
+        // epochCount <= 0 every phase loop runs zero iterations and IsFitted
         // would still flip true at the bottom (untrained model marked
         // ready for Generate). With SequenceLength < 2 there are no
         // (xt, xt+1) pairs so Phase 2 (supervisor) and the supervised
         // term of Phase 3 (joint) become no-ops — the TimeGAN variant
         // described in the class docs is no longer what's being trained.
-        if (epochs <= 0)
-            throw new ArgumentOutOfRangeException(nameof(epochs), epochs, "epochs must be greater than 0.");
+        if (epochCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epochCount), epochCount, "epochCount must be greater than 0.");
         if (_options.SequenceLength < 2)
             throw new InvalidOperationException(
                 "TimeGAN requires SequenceLength >= 2 for the supervisor + temporal-supervision objectives. "
@@ -382,14 +383,14 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         int batchSize = Math.Min(_options.BatchSize, sequences.Count);
-        // Honor the caller's total epochs budget across the three phases —
-        // the prior `phaseDuration = max(1, epochs/3)` formulation ran each
+        // Honor the caller's total epochCount budget across the three phases —
+        // the prior `phaseDuration = max(1, epochCount/3)` formulation ran each
         // phase that many times, so the model actually trained for
-        // 3·phaseDuration passes (over-training when epochs < 3 since
+        // 3·phaseDuration passes (over-training when epochCount < 3 since
         // Math.Max(1, …) floors to 1 per phase, and dropping the remainder
         // for non-multiples of 3). Split as base + remainder distribution.
-        int baseEpochs = epochs / 3;
-        int remainder = epochs % 3;
+        int baseEpochs = epochCount / 3;
+        int remainder = epochCount % 3;
         int phase1Epochs = baseEpochs + (remainder > 0 ? 1 : 0);
         int phase2Epochs = baseEpochs + (remainder > 1 ? 1 : 0);
         int phase3Epochs = baseEpochs;
@@ -433,12 +434,13 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         return Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, ct);
     }
 

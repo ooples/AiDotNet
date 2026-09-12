@@ -156,9 +156,4 @@ public class NODEOptions<T> : RiskModelOptions<T>
     /// <value>The activation function, defaulting to ReLU.</value>
     public IActivationFunction<T>? HiddenActivation { get; set; } = new ReLUActivation<T>();
 
-    /// <summary>
-    /// Gets or sets the hidden layer vector activation function (alternative to scalar activation).
-    /// </summary>
-    /// <value>The vector activation function, or null to use scalar activation.</value>
-    public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; }
 }
