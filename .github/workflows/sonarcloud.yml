@@ -163,6 +163,7 @@ jobs:
       - name: Checkout validation reuse policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
+          persist-credentials: false
           # Delta reuse rebuilds the pull request's validated tree from its merge parents and diffs
           # the landed commit against it in the certified map's line coordinates, which needs the
           # map commit and both parents in history.
@@ -2199,7 +2200,7 @@ jobs:
       # Post-merge delta reuse: the shards this run did not re-run are the pull request's results,
       # so the landed commit's ledger covers every shard the pull request validated.
       - name: Download pull-request shard results for delta import
-        if: needs.validation-source.outputs.import_run_id != ''
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ needs.validation-source.outputs.import_sha }}-*
@@ -2210,7 +2211,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Import pull-request shard results
-        if: needs.validation-source.outputs.import_run_id != ''
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         shell: pwsh
         env:
           IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
@@ -2542,7 +2543,7 @@ jobs:
           merge-multiple: true
 
       - name: Download pull-request coverage for delta import
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' }}
+        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           github-token: ${{ github.token }}
@@ -2553,7 +2554,7 @@ jobs:
           merge-multiple: false
 
       - name: Import pull-request coverage
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' }}
+        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         shell: pwsh
         env:
           IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
@@ -2730,7 +2731,7 @@ jobs:
           path: TestDiagnostics
 
       - name: Download pull-request diagnostics for delta import
-        if: needs.validation-source.outputs.import_run_id != ''
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: test-results-${{ needs.validation-source.outputs.import_sha }}-*
@@ -2741,7 +2742,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Import pull-request diagnostics
-        if: needs.validation-source.outputs.import_run_id != ''
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         shell: pwsh
         env:
           IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}

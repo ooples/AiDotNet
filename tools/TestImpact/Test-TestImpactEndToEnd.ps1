@@ -8,6 +8,11 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+foreach ($review in 'Test-CertificateEvidenceReview', 'Test-ReviewFixtureCleanup') {
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot "$review.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "$review failed." }
+}
+
 enum InvalidMapFixture {
     Missing
     Malformed

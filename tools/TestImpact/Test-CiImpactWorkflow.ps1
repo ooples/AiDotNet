@@ -67,6 +67,23 @@ function Get-JobHeader {
     return $JobBlock.Substring(0, $steps.Index)
 }
 
+function Test-CheckoutCredentialsDisabled {
+    param([string] $Step)
+
+    # This contract deliberately accepts the workflow's block-mapping form only.
+    # Limit inputs to the one active `with` mapping and its direct children:
+    # comments, another step property, and nested block-scalar text are not inputs.
+    $withHeaders = [regex]::Matches($Step, '(?m)^        with:[^\r\n]*\r?$')
+    if ($withHeaders.Count -ne 1) { return $false }
+    $withBlock = [regex]::Match($Step,
+        '(?ms)^        with:[ \t]*(?:#[^\r\n]*)?\r?\n(?<inputs>.*?)(?=^ {0,8}\S|\z)')
+    if (-not $withBlock.Success) { return $false }
+    $credentials = [regex]::Matches($withBlock.Groups['inputs'].Value,
+        '(?m)^          ["'']?persist-credentials["'']?:[ \t]*(?<value>[^\r\n]*)\r?$')
+    return $credentials.Count -eq 1 -and
+        $credentials[0].Groups['value'].Value -cmatch '^false[ \t]*(?:#.*)?$'
+}
+
 function Test-JobDependency {
     param([string] $JobHeader, [string] $Dependency)
 
@@ -253,6 +270,8 @@ Assert-Contract ([bool] $resolverCheckoutStep) `
     'validation-source invokes a repository script without checking out the tested tree'
 Assert-Contract ($resolverCheckoutStep.Contains('uses: actions/checkout@')) `
     'validation-source checkout step does not use actions/checkout'
+Assert-Contract (Test-CheckoutCredentialsDisabled -Step $resolverCheckoutStep) `
+    'validation-source persists checkout credentials although it only reads Git history'
 Assert-Contract ([bool] $resolverCheckoutStep -and [bool] $resolveStep -and
     $resolver.IndexOf($resolverCheckoutStep, [StringComparison]::Ordinal) -lt
     $resolver.IndexOf($resolveStep, [StringComparison]::Ordinal)) `
@@ -399,14 +418,33 @@ Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
 Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `
     'imported shards are reported to regression analysis as deliberately skipped'
 foreach ($consumer in @(
-        @{ Job = 'test-regression-analysis'; Prefix = 'coverage' },
-        @{ Job = 'ci-test-analysis'; Prefix = 'test-results' },
-        @{ Job = 'sonarcloud'; Prefix = 'coverage' })) {
+        @{ Job = 'test-regression-analysis'; Prefix = 'coverage'; Download = 'Download pull-request shard results for delta import'; Import = 'Import pull-request shard results' },
+        @{ Job = 'ci-test-analysis'; Prefix = 'test-results'; Download = 'Download pull-request diagnostics for delta import'; Import = 'Import pull-request diagnostics' },
+        @{ Job = 'sonarcloud'; Prefix = 'coverage'; Download = 'Download pull-request coverage for delta import'; Import = 'Import pull-request coverage' })) {
     $consumerJob = Get-JobBlock -WorkflowText $validation -Job $consumer.Job
-    Assert-Contract ($consumerJob.Contains('Import-PullRequestShardArtifacts.ps1') -and
-            $consumerJob.Contains("-ArtifactPrefix $($consumer.Prefix)") -and
-            $consumerJob.Contains('run-id: ${{ needs.validation-source.outputs.import_run_id }}')) `
-        "$($consumer.Job) does not import the pull request's results for shards a partial run did not re-run"
+    $downloadStep = Get-StepBlock -JobBlock $consumerJob -Step $consumer.Download
+    $importStep = Get-StepBlock -JobBlock $consumerJob -Step $consumer.Import
+    $downloadInputs = [regex]::Match($downloadStep,
+        '(?m)^        with:\r?\n(?<fields>(?:^          [^\r\n]*(?:\r?\n|\z))*)').Groups['fields'].Value
+    $expectedRunId = [regex]::Escape('          run-id: ${{ needs.validation-source.outputs.import_run_id }}')
+    $expectedPattern = [regex]::Escape("          pattern: $($consumer.Prefix)-`${{ needs.validation-source.outputs.import_sha }}-*")
+    Assert-Contract ($downloadStep -match '(?m)^        uses: actions/download-artifact@[^\s#]+(?:[ \t]+#[^\r\n]*)?[ \t]*\r?$' -and
+            $downloadInputs -match ('(?m)^' + $expectedRunId + '[ \t]*\r?$') -and
+            $downloadInputs -match ('(?m)^' + $expectedPattern + '[ \t]*\r?$') -and
+            $downloadInputs -match '(?m)^          path: delta-import-staging[ \t]*\r?$') `
+        "$($consumer.Job) delta download is not bound to the matching PR artifacts"
+    $expectedInvocation = '(?m)^        run: \|\r?\n' +
+        '          \./tools/TestImpact/Import-PullRequestShardArtifacts\.ps1 -StagingDirectory delta-import-staging `\r?\n' +
+        '            -DestinationDirectory [^\s]+ -ArtifactPrefix ' + [regex]::Escape($consumer.Prefix) + ' `\r?\n'
+    Assert-Contract ($importStep -match $expectedInvocation) `
+        "$($consumer.Job) delta importer is not bound to its matching download"
+    foreach ($step in @($downloadStep, $importStep)) {
+        $condition = [regex]::Match($step, '(?m)^        if: (?<expression>[^\r\n]+)').Groups['expression'].Value
+        $expectedCondition = "needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'"
+        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && $expectedCondition }}" }
+        Assert-Contract ($condition.Trim() -ceq $expectedCondition) `
+            "$($consumer.Job) delta import is not disabled after selector escalation"
+    }
 }
 
 # A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
