@@ -195,6 +195,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
         int registrationIndex = 0;
         foreach (var type in distinct)
         {
+            ReportShadowedPlanMembers(context, type);
+
             if (EmitRegistration(registrationMethods, type, registrationIndex))
             {
                 sb.AppendLine($"        Register_{registrationIndex:D6}();");
@@ -503,6 +505,159 @@ public class ClonePlanGenerator : IIncrementalGenerator
         }
 
         return candidates.Count == 0 ? null : candidates;
+    }
+
+    private static readonly DiagnosticDescriptor ShadowedPlanMemberDescriptor = new DiagnosticDescriptor(
+        id: "ADNCLONE001",
+        title: "A clone plan records a member name that is shadowed with a different type",
+        messageFormat: "'{0}' declares '{1}', shadowing a member of the same name on '{2}' that holds "
+                       + "a different type. A clone plan addresses members by bare name and the runtime "
+                       + "read takes the first declaration walking up from the derived type, so a plan "
+                       + "that meant the base's member silently receives the derived one, its "
+                       + "constructor candidate fails its type check, and the clone is rebuilt from "
+                       + "constructor defaults instead of the values it was given. Rename the derived "
+                       + "member.",
+        category: "AiDotNet.ClonePlan",
+        // WARNING, NOT ERROR. The three models this was written for are fixed, but how many other
+        // types shadow a base member with a differing type is not known until a full build reports
+        // it, and erroring first would redden the build on models nobody has looked at yet. The flip
+        // to Error is the point of the rule once that backlog is known to be empty.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// Reports every bare member name a plan would record for <paramref name="type"/> that is
+    /// ambiguous across the inheritance chain.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A plan addresses members by BARE NAME, and <c>CloneEngine.TryReadMember</c> resolves one by
+    /// walking <c>type -&gt; BaseType</c> and taking the FIRST declaration. A derived member that
+    /// shadows a base member of the same name therefore wins silently, whatever the plan intended.
+    /// </para>
+    /// <para>
+    /// MGIE, EmuEdit and SmartEdit each declared their own <c>_options</c> beside
+    /// <c>DiffusionModelBase</c>'s <c>DiffusionModelOptions&lt;T&gt; _options</c>. The type search
+    /// correctly matched the BASE field for the <c>diffusionOptions</c> parameter and recorded
+    /// "_options", but the runtime read returned the DERIVED options. The only recorded candidate
+    /// then failed its type check and the clone was rebuilt from constructor defaults - a
+    /// 320-channel U-Net in place of the one it was handed, 711,458,851 parameters against the
+    /// source's 29,315,931.
+    /// </para>
+    /// <para>
+    /// REPORT ONLY, deliberately. <c>CloneAutomationAnalyzer</c> reads
+    /// <see cref="CollectConstructorParameters"/> as a null/non-null predicate, so changing what the
+    /// resolver RETURNS would move that analyzer's diagnostics too. Refusing the candidate would
+    /// also be worse than useless here: the shadowed name is legitimately right for one of the two
+    /// parameters, so dropping it leaves the type with no candidate at all and the clone rebuilds
+    /// from defaults anyway - the same bug by another route.
+    /// </para>
+    /// </remarks>
+    private static void ReportShadowedPlanMembers(SourceProductionContext context, INamedTypeSymbol type)
+    {
+        var candidates = CollectConstructorCandidates(
+            type, type.AllInterfaces.Any(i => i.Name == "IFullModel"));
+        if (candidates is null) return;
+
+        var reported = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            foreach (var member in candidate)
+            {
+                // UseDefault is a sentinel, not a member, and a dotted owner.member form is already
+                // qualified enough for TryReadMember to resolve it unambiguously.
+                if (string.Equals(member, UseDefault, System.StringComparison.Ordinal)) continue;
+                if (member.IndexOf('.') >= 0) continue;
+                if (!reported.Add(member)) continue;
+
+                // RECORDED TWICE IS THE WHOLE FAULT. A shadowed name read once is read correctly: the
+                // first declaration walking up from the derived type is the one the resolver meant, so
+                // nothing is lost. It only goes wrong when TWO parameters resolve to the same bare
+                // name and they cannot both be right - MGIE recorded "_options" for its own
+                // MGIEOptions parameter AND for the base's DiffusionModelOptions<T> parameter, and one
+                // of the two was always going to receive the other's value.
+                //
+                // Without this condition the rule reported 32 types (BigGAN over
+                // GenerativeAdversarialNetwork, the embedding networks over TransformerEmbeddingNetwork,
+                // the PINNs, Tacotron2) whose shadowing is real but inert: not one of them has a
+                // recorded constructor candidate, so no plan ever addresses the name and there is
+                // nothing to corrupt. Reporting a hazard that cannot fire is how a rule gets
+                // suppressed wholesale instead of fixed.
+                int timesRecorded = 0;
+                foreach (var other in candidate)
+                {
+                    if (string.Equals(other, member, System.StringComparison.Ordinal)) timesRecorded++;
+                }
+
+                if (timesRecorded < 2) continue;
+
+                if (FindShadowedDeclaration(type, member) is not INamedTypeSymbol shadowed) continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ShadowedPlanMemberDescriptor,
+                    type.Locations.FirstOrDefault() ?? Location.None,
+                    type.Name, member, shadowed.Name));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The base type that redeclares <paramref name="memberName"/> with a type UNRELATED to the
+    /// derived one, or <see langword="null"/> when the name is safe.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DIFFERENT IS NOT ENOUGH, and flagging mere difference is why the first version of this rule
+    /// reported 94 sites and broke the build. Narrowing a redeclared member to a more-derived type is
+    /// the library's normal idiom - AdaBoostClassifier over ClassifierBase.Options, ElasticNetRegression
+    /// over RegressionBase.Options, BigGAN over GenerativeAdversarialNetwork._options, ColBERT over
+    /// TransformerEmbeddingNetwork._options, 94 in all - and it is harmless precisely because the
+    /// derived value still satisfies a parameter typed as the base. <see cref="IsCarriedAs"/> is the
+    /// same predicate the resolver uses to decide a member can supply a parameter, so asking it in
+    /// BOTH directions is what separates the idiom from the fault.
+    /// </para>
+    /// <para>
+    /// MGIE's <c>MGIEOptions</c> against <c>DiffusionModelBase</c>'s
+    /// <c>DiffusionModelOptions&lt;T&gt;</c> is neither: two unrelated types sharing one name, so
+    /// whichever the runtime read returns first is wrong for one of the two parameters that recorded
+    /// it. That is the only shape worth a diagnostic.
+    /// </para>
+    /// </remarks>
+    private static INamedTypeSymbol? FindShadowedDeclaration(INamedTypeSymbol type, string memberName)
+    {
+        ITypeSymbol? first = null;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers(memberName))
+            {
+                ITypeSymbol? memberType = member switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false } property => property.Type,
+                    IFieldSymbol { IsStatic: false, IsConst: false } field => field.Type,
+                    _ => null,
+                };
+
+                if (memberType is null) continue;
+
+                if (first is null)
+                {
+                    first = memberType;
+                    continue;
+                }
+
+                // Asked in BOTH directions on purpose. IsCarriedAs already accepts a derived/base
+                // pair either way round, so one call would very nearly do; spelling out both makes
+                // the intent - "neither declaration can stand in for the other" - survive any later
+                // narrowing of that predicate, and costs nothing at generation time.
+                if (!IsCarriedAs(first, memberType) && !IsCarriedAs(memberType, first))
+                {
+                    return current;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

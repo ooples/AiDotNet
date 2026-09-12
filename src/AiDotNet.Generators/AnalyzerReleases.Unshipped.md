@@ -1,7 +1,8 @@
 ﻿; Unshipped analyzer release
 ; Diagnostic prefixes remain split by generator until the final generator-refactor PR can
 ; renumber them atomically: AIDN (shipped rules), ADN00xx (layer state), ADNSHAPE
-; (shape contracts), ADNTEST (scaffold correctness), and ADNGEN (coverage gaps).
+; (shape contracts), ADNTEST (scaffold correctness), ADNGEN (coverage gaps), and
+; ADNCLONE (clone plans).
 
 ### New Rules
 
@@ -83,3 +84,4 @@ AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, 
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
 AIDN106 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
 AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
+ADNCLONE001 | AiDotNet.ClonePlan | Warning | ClonePlanGenerator, Clone plan records a member name shadowed with an unrelated type
