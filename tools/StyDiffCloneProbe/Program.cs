@@ -53,6 +53,7 @@ internal static class Program
         var input = CreateRandomTensor(InputShape, rng);
 
         LocaliseOnce(input);
+        ProbePackCacheArms(input, Math.Max(3, iterations));
 
         Console.WriteLine("=== MDOP x CONTENTION SWEEP ===");
         Console.WriteLine("Run #1 (clean process, MDOP=ProcessorCount, no contention) gave 0/50 on this");
@@ -403,6 +404,61 @@ internal static class Program
         }
 
         return threads;
+    }
+
+    /// <summary>
+    /// DETERMINISTIC test of the mechanism the test's own comment blames ("cold
+    /// packed-weight rounding path", DiffusionModelTestBase.cs:191-197).
+    ///
+    /// Rather than waiting for the rare CI race, this FORCES the cold/warm asymmetry
+    /// using the public InferenceWeightCache API and asks whether it can produce a
+    /// divergence at all:
+    ///
+    ///   A baseline          original.Predict then clone.Predict (what the test does)
+    ///   B invalidate-between original runs WARM, clone then runs COLD
+    ///   C invalidate-before-both  both run COLD
+    ///   D double-invalidate  cold original vs warm clone (the reverse asymmetry)
+    ///
+    /// If A is clean but B or D diverges, the packed-weight path is the mechanism and
+    /// the flake is whatever makes the cache state differ in a loaded shard. If every
+    /// arm is clean, the packed-weight explanation in that comment is wrong.
+    /// </summary>
+    private static void ProbePackCacheArms(Tensor<float> input, int iterations)
+    {
+        Console.WriteLine("=== PACKED-WEIGHT CACHE ARMS (deterministic cold/warm forcing) ===");
+        Console.WriteLine($"{"arm",-22} {"iters",6} {"diverged",9} {"worstAbs",16}");
+
+        foreach (var arm in new[] { "A-baseline", "B-cold-clone", "C-cold-both", "D-cold-original" })
+        {
+            int diverged = 0;
+            double worst = 0.0;
+
+            for (int i = 0; i < iterations; i++)
+            {
+                using var arena = TensorArena.Create();
+                using var model = CreateModel();
+
+                if (arm is "C-cold-both" or "D-cold-original") InferenceWeightCache.InvalidateAll();
+                var p1 = model.Predict(input);
+
+                if (arm is "B-cold-clone" or "C-cold-both") InferenceWeightCache.InvalidateAll();
+                using var clone = (IDiffusionModel<float>)model.Clone();
+                var c1 = clone.Predict(input);
+
+                var cmp = Compare(p1, c1);
+                if (cmp.MaxDiff > worst) worst = cmp.MaxDiff;
+                if (cmp.MaxDiff > 0)
+                {
+                    diverged++;
+                    if (diverged == 1) Report($"  {arm} first divergence", cmp, p1);
+                }
+            }
+
+            Console.WriteLine($"{arm,-22} {iterations,6} {diverged,9} "
+                + $"{worst.ToString("R", CultureInfo.InvariantCulture),16}");
+        }
+
+        Console.WriteLine();
     }
 
     private static void LocaliseOnce(Tensor<float> input)
