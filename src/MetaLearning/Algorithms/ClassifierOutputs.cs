@@ -165,6 +165,29 @@ internal static class ClassifierOutputs<T>
         return loss.ComputeTapeLoss(logProbabilities, labels)[0];
     }
 
+    /// <summary>
+    /// The loss of an adapted classifier whose output is scores rather than probabilities: the configured loss of
+    /// the score rows against the class indices, or the error rate of a Vector of predicted classes.
+    /// </summary>
+    internal static T ScoreLoss(ILossFunction<T> loss, object? predictions, object? expected, int numClasses)
+    {
+        var labels = Labels(expected, numClasses);
+        if (predictions is Vector<T> predictedClasses)
+        {
+            int wrong = 0;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                if (i >= predictedClasses.Length || Math.Abs(Ops.ToDouble(predictedClasses[i]) - Ops.ToDouble(labels[i])) > 0.5)
+                    wrong++;
+            }
+
+            return Ops.FromDouble(labels.Length == 0 ? 0 : (double)wrong / labels.Length);
+        }
+
+        using var noGrad = new NoGradScope<T>();
+        return loss.ComputeTapeLoss(ScoreRows(predictions, labels.Length), labels)[0];
+    }
+
     /// <summary><c>[rows, classes]</c> scores as the learner's output type.</summary>
     internal static TOutput ToOutput<TOutput>(Tensor<T> scores)
     {
