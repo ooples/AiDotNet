@@ -299,9 +299,11 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     public async Task LEO_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the
+        // feature encoder's per-example output width, which LEO now checks.
         var options = new LEOOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             LatentDimension = 2,
             HiddenDimension = 2,
             NumClasses = 2,
@@ -329,10 +331,12 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     public async Task MetaOptNet_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the
+        // embedding network's per-example output width, which MetaOptNet now checks.
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
         {
             NumClasses = 2,
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             SolverType = ConvexSolverType.RidgeRegression,
             RegularizationStrength = 0.1,
             OuterLearningRate = 0.01,
