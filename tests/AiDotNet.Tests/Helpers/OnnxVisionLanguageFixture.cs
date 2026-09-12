@@ -9,11 +9,11 @@ namespace AiDotNet.Tests.Helpers;
 /// <summary>Local, data-dependent ONNX graphs for shared vision-language boundary tests.</summary>
 internal sealed class OnnxVisionLanguageFixture : IDisposable
 {
-    internal enum EncoderKind { Image, Video, Text }
+    internal enum EncoderKind { Image, Video, Text, Audio }
     internal enum OutputKind
     {
         FixedEmbedding, TokenSequence, BatchedEmbedding, FirstTokenEmbedding,
-        ContextTokenFeatures, BatchedTokenFeatures, EmptyTokenFeatures
+        ContextTokenFeatures, BatchedTokenFeatures, EmptyTokenFeatures, SpatialTokenFeatures
     }
     internal enum TextInputKind { TokensAndMask, TokensOnly }
 
@@ -27,7 +27,7 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         OutputKind outputKind = OutputKind.FixedEmbedding,
         TensorProto.Types.DataType tokenType = TensorProto.Types.DataType.Int64,
         int channels = 3, bool extraRequiredInput = false, bool auxiliarySequenceOutput = false,
-        TextInputKind textInputKind = TextInputKind.TokensAndMask)
+        TextInputKind textInputKind = TextInputKind.TokensAndMask, int audioBins = 128)
     {
         var builder = new OnnxGraphBuilder(new OnnxExportOptions { OpsetVersion = 17 });
         string valueInput;
@@ -50,6 +50,13 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
             }
             outputName = "text_embeds";
         }
+        else if (kind == EncoderKind.Audio)
+        {
+            builder.AddInput(TensorInfo("input_values", TensorProto.Types.DataType.Float,
+                new[] { 1, 1, audioBins, dynamicInputs ? -1 : frames }));
+            valueInput = "input_values";
+            outputName = "audio_embeds";
+        }
         else
         {
             int spatial = dynamicInputs ? -1 : image;
@@ -64,7 +71,25 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         if (extraRequiredInput)
             builder.AddInput(TensorInfo("unsupported_required_input", TensorProto.Types.DataType.Float, new[] { 1 }));
 
-        if (outputKind == OutputKind.ContextTokenFeatures)
+        if (outputKind == OutputKind.SpatialTokenFeatures)
+        {
+            if (kind != EncoderKind.Image) throw new ArgumentException("Spatial token features require an image encoder.", nameof(kind));
+            var axes = new TensorProto { Name = "reduction_axes", DataType = (int)TensorProto.Types.DataType.Int64 };
+            axes.Dims.Add(2);
+            axes.Int64Data.Add(new long[] { 1, 2 });
+            builder.AddInitializer(axes);
+            var reduce = builder.AddOp("ReduceSum", new[] { valueInput, axes.Name }, new[] { "column_sums" });
+            reduce.Attribute.Add(new AttributeProto { Name = "keepdims", Type = AttributeProto.Types.AttributeType.Int, I = 0 });
+            var featureAxis = new TensorProto { Name = "feature_axis", DataType = (int)TensorProto.Types.DataType.Int64 };
+            featureAxis.Dims.Add(1);
+            featureAxis.Int64Data.Add(2);
+            builder.AddInitializer(featureAxis);
+            builder.AddOp("Unsqueeze", new[] { "column_sums", featureAxis.Name }, new[] { "column_features" });
+            string offsets = builder.AddFloatInitializer("offsets", Enumerable.Range(1, embedding).Select(value => (float)value).ToArray(), new[] { 1, 1, embedding });
+            builder.AddOp("Add", new[] { "column_features", offsets }, new[] { outputName });
+            builder.AddOutput(TensorInfo(outputName, TensorProto.Types.DataType.Float, new[] { 1, dynamicInputs ? -1 : image, embedding }));
+        }
+        else if (outputKind == OutputKind.ContextTokenFeatures)
         {
             if (kind != EncoderKind.Text) throw new ArgumentException("Token features require a text encoder.", nameof(kind));
             var axes = new TensorProto { Name = "feature_axis", DataType = (int)TensorProto.Types.DataType.Int64 };
@@ -127,6 +152,19 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         {
             Name = "to", Type = AttributeProto.Types.AttributeType.Int, I = (long)TensorProto.Types.DataType.Float
         });
+    }
+
+    internal string WriteEmbeddedLanguageModel(int width = 4, bool extraRequiredInput = false)
+    {
+        var builder = new OnnxGraphBuilder(new OnnxExportOptions { OpsetVersion = 17 });
+        builder.AddInput(TensorInfo("inputs_embeds", TensorProto.Types.DataType.Float, new[] { 1, -1, width }));
+        if (extraRequiredInput)
+            builder.AddInput(TensorInfo("unsupported_required_input", TensorProto.Types.DataType.Float, new[] { 1 }));
+        builder.AddOp("Identity", new[] { "inputs_embeds" }, new[] { "last_hidden_state" });
+        builder.AddOutput(TensorInfo("last_hidden_state", TensorProto.Types.DataType.Float, new[] { 1, -1, width }));
+        string path = Path.Combine(_directory, "language-" + _nextFile++ + ".onnx");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) builder.WriteTo(stream);
+        return path;
     }
 
     private static ValueInfoProto TensorInfo(string name, TensorProto.Types.DataType type, int[] dimensions)

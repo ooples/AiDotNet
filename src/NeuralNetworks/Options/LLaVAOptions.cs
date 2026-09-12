@@ -68,6 +68,21 @@ public class LLaVAOptions : VisionLanguageModelOptions
             throw new ArgumentException($"{GetType().Name}.{nameof(VisionEncoderType)} must identify a vision encoder.", OptionsParameterName);
     }
 
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        var defaults = new LLaVAOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(VisionDim, defaults.VisionDim, nameof(VisionDim));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
+        RequireNativeDefaultForOnnx(NumLmLayers, defaults.NumLmLayers, nameof(NumLmLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        if (string.IsNullOrWhiteSpace(VisionEncoderType))
+            throw new ArgumentException($"{GetType().Name}.{nameof(VisionEncoderType)} must identify a vision encoder.", OptionsParameterName);
+    }
+
     /// <summary>
     /// Gets or sets the language model backbone.
     /// </summary>

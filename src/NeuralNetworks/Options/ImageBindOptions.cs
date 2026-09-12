@@ -102,4 +102,20 @@ public class ImageBindOptions : VisionLanguageModelOptions
         Require(NumEncoderLayers, nameof(NumEncoderLayers));
         Require(NumHeads, nameof(NumHeads));
     }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        var defaults = new ImageBindOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(NumEncoderLayers, defaults.NumEncoderLayers, nameof(NumEncoderLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(AudioSampleRate, defaults.AudioSampleRate, nameof(AudioSampleRate));
+        RequireNativeDefaultForOnnx(AudioMaxDuration, defaults.AudioMaxDuration, nameof(AudioMaxDuration));
+        RequireNativeDefaultForOnnx(ImuTimesteps, defaults.ImuTimesteps, nameof(ImuTimesteps));
+        RequireNativeDefaultForOnnx(NumVideoFrames, defaults.NumVideoFrames, nameof(NumVideoFrames));
+    }
 }
