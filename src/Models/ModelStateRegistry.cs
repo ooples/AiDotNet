@@ -501,6 +501,35 @@ public sealed class ModelStateRegistry<T>
         ReadRandomObject(reader, random, name, depth: 0);
     }
 
+    /// <summary>
+    /// A new random generator at exactly <paramref name="source"/>'s stream position, sharing nothing with it.
+    /// </summary>
+    /// <remarks>
+    /// The copy is the state this registry writes, read back into a fresh generator, so a copy serializes exactly as
+    /// its source does and the two then draw the same numbers independently. Copying the object graph field by
+    /// field is not enough: a <see cref="RandomHelper"/> generator wraps an implementation whose seed table is two
+    /// references deep, and a shallow copy keeps sharing it. Independent of <typeparamref name="T"/>.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The generator's runtime layout is not one this registry can restore.</exception>
+    internal static Random? CopyRandom(Random? source)
+    {
+        if (source is null) return null;
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WriteRandomState(writer, source);
+        }
+
+        stream.Position = 0;
+        Random? copy = null;
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            ReadRandomState(reader, null, restored => copy = restored, "copy");
+        }
+
+        return copy;
+    }
+
     private static Random ReadRandomIntoNewInstance(BinaryReader reader, string name)
     {
         if (!reader.BaseStream.CanSeek)
