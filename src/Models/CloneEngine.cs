@@ -938,7 +938,35 @@ public static class CloneEngine
         if (!ReferenceEquals(componentCopy, value)) return componentCopy;
         if (value is null || value is string || value.GetType().IsValueType) return value;
 
-        var plan = CloneRegistry.GetPlan(value.GetType());
+        var elementType = value.GetType();
+
+        // A nested container - double[][], List<Vector<T>>[] - is duplicated as a container, which walks
+        // its own elements through this same method. Without this the OUTER array was copied while every
+        // inner array stayed shared.
+        if (value is Array || value is IDictionary || value is IList
+            || (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(HashSet<>)))
+        {
+            return Duplicate(value);
+        }
+
+        // An element that can duplicate itself does so. Vector<T> and Matrix<T> carry a public
+        // parameterless Clone() but do NOT implement AiDotNet.Interfaces.ICloneable<T>, so the
+        // clone-contract probe below never matched them: a Vector<T>[] or List<Vector<T>> was copied as a
+        // container of the ORIGINAL vectors, and training the copy wrote through into its original. That
+        // is invisible to an equality check right after the copy and only shows up once one side trains,
+        // which is exactly what the family clone test asserts.
+        var clone = elementType.GetMethod(
+            "Clone", BindingFlags.Public | BindingFlags.Instance, binder: null, Type.EmptyTypes, modifiers: null);
+        if (clone is not null && clone.ReturnType != typeof(void))
+        {
+            object? cloned = clone.Invoke(value, null);
+            if (cloned is not null && elementType.IsInstanceOfType(cloned) && !ReferenceEquals(cloned, value))
+            {
+                return cloned;
+            }
+        }
+
+        var plan = CloneRegistry.GetPlan(elementType);
         bool ownsCloneableComponent = false;
         foreach (var entry in plan.Entries)
         {
