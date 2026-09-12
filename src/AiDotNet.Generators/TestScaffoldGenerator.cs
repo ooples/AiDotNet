@@ -4144,6 +4144,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly string[] MetaLearnerFeatureWidthProperties = { "FeatureDimension", "FeatureDim", "InputDim" };
 
     /// <summary>
+    /// Options properties that size an external memory or controller, bound to CI-smoke capacities.
+    /// </summary>
+    /// <remarks>
+    /// These are capacity, not contract: the algorithm reads and writes the same memory whatever its size, so
+    /// shrinking them keeps every structural and default choice while removing the cost. NTM's production
+    /// defaults are a 128 x 20 memory behind a 100-unit controller, and the family base runs four support and
+    /// four query rows through a full addressing step per row - which took the generated fixture past the
+    /// 120-second watchdog. This mirrors the scale-down already applied to HiPPO's recurrent cell.
+    /// </remarks>
+    private static readonly (string Name, int Value)[] MetaLearnerMemoryCapacityProperties =
+    {
+        ("MemorySize", 8),
+        ("MemoryWidth", 4),
+        ("ControllerHiddenSize", 8),
+    };
+
+    /// <summary>
     /// The object initializer that binds a meta-learner's options to the task the family base builds: its class
     /// count to NumWays and its input feature width to FeatureCount, for whichever of those the options declare.
     /// </summary>
@@ -4173,6 +4190,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         assignments.Add($"{property.Name} = NumWays");
                     else if (System.Array.IndexOf(MetaLearnerFeatureWidthProperties, property.Name) >= 0)
                         assignments.Add($"{property.Name} = FeatureCount");
+                    else
+                    {
+                        foreach (var (name, value) in MetaLearnerMemoryCapacityProperties)
+                        {
+                            if (property.Name == name)
+                            {
+                                assignments.Add($"{property.Name} = {value}");
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
