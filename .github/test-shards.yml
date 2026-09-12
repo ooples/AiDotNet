@@ -859,6 +859,592 @@ shard:
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.ComponentTests|FullyQualifiedName~AiDotNet.Tests.AdversarialRobustness|FullyQualifiedName~AiDotNet.Tests.EndToEndTests)'
   # =====================================================================
+  # MODEL-INVENTORY SWEEPS AND SHAPE-CONFORMANCE WINDOWS
+  # =====================================================================
+  # These were two bespoke jobs (parameter-enumeration-sweep, model-shape-conformance-windows)
+  # that ran all 45 of their workloads on every validating run, whatever the change touched:
+  # 230 job-minutes against 21 for the three test shards a typical small PR selects, most of it
+  # runner overhead around 12-121 s of real testing. As shards they get what every other shard
+  # gets - selection from the coverage map, reuse and import when a PR lands on master, the
+  # selection audit - and they drop the sweep jobs' private ~7-minute rebuild for the shared
+  # build artifact.
+  #
+  # heavy: true puts them on the heavy-shard path they already ran under by hand: serialized
+  # collections, workstation GC, no coverage on ordinary runs, coverage in map-feeding runs.
+  # mustCover: the model code a shard exists to test runs in a child worker process (conformance and
+  # the count/chunk sweeps), where coverage may not follow. The map builder keeps such a shard
+  # always-run unless its digest actually reached that code, so a coverage gap costs runs, never a miss.
+  # coverageIncludeDirectory: when such a shard IS instrumented (map-feeding runs), coverlet also
+  # instruments the worker's own copy of AiDotNet (.github/scripts/New-CoverageRunSettings.ps1), which is
+  # what lets its digest reach the model code and the shard become selectable.
+  # env: is applied to the test process only. hangTimeout replaces the job-wide 5-minute
+  # blame-hang limit, which a single long sweep test (up to its own 30-minute Timeout) would
+  # otherwise trip.
+  #
+  # The sweeps are GATING now. Their jobs used to tolerate test failures, so a real
+  # parameter-contract violation was reported and never failed CI; each test already asserts
+  # zero violations, and all three pass today.
+  - name: Sweep - ParameterCountContractTests 0/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '0'
+  - name: Sweep - ParameterCountContractTests 1/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '1'
+  - name: Sweep - ParameterCountContractTests 2/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '2'
+  - name: Sweep - ParameterCountContractTests 3/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '3'
+  - name: Sweep - ParameterCountContractTests 4/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '4'
+  - name: Sweep - ParameterCountContractTests 5/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '5'
+  - name: Sweep - ParameterCountContractTests 6/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '6'
+  - name: Sweep - ParameterCountContractTests 7/8
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterCountContractTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      AIDOTNET_PARAMETER_COUNT_SHARD: '7'
+  - name: Sweep - ParameterChunkParityTests
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterChunkParityTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/Layers/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+  - name: Sweep - ParameterEnumerationParityTests
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ParameterEnumerationParityTests'
+    heavy: true
+    hangTimeout: 35min
+  # Four more Sweep-category surveys that no job ran at all: every shard filter excludes Category=Sweep and
+  # the old sweep job named only the three classes above. Verified before adding: each passes on its own
+  # (LayerOverrideRedundancy 43 s, LayerParameterSurface 66 s, ContractShadowSweep 86 s, ModelBaseCoverage
+  # 30 s). They construct models in-process, so their coverage needs no worker instrumentation.
+  - name: Sweep - Layer and Model Contract Surveys
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~LayerOverrideRedundancyTests|FullyQualifiedName~LayerParameterSurfaceTests|FullyQualifiedName~ContractShadowSweepTests|FullyQualifiedName~ModelBaseCoverageTests'
+    heavy: true
+    hangTimeout: 35min
+  # Two more Sweep-category tests that no job ran to completion: ModelFamilyLawTests hit the 30-minute
+  # Timeout and ModelShapeDiscoveryProbeTests never finished at all. Both now build their models in the
+  # AiDotNet.ParameterSweepWorker child process, which is what made them terminate. Measured on this
+  # branch at ADNSHAPE_WORKERS=2: the law test 8 m 01 s (VisionLanguageModelBase 300 s, TtsModelBase
+  # 94 s, AudioNeuralNetworkBase 54 s, DeclaredModelLayoutBase 33 s) and the probe 1 m 37 s (40 probed,
+  # 0 fit failures). Each keeps its own 30-minute xunit Timeout, so hangTimeout is 35min for the same
+  # reason the parameter sweeps use it: the test's own timeout must report before blame-hang kills the
+  # run. env restates the runner default (workers = min(4, cores/2) = 2 on a 4-vCPU runner) so a larger
+  # runner cannot silently change what these timings mean.
+  - name: Sweep - Model shape law
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelFamilyLawTests'
+    heavy: true
+    mustCover: ['src/Audio/*', 'src/VisionLanguage/*', 'src/TextToSpeech/*', 'src/NeuralNetworks/DeclaredModelLayoutBases.cs']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      ADNSHAPE_WORKERS: '2'
+      ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'
+  - name: Sweep - Model shape discovery
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelShapeDiscoveryProbeTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      ADNSHAPE_WORKERS: '2'
+      ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'
+  # VisionLanguage models in five-model windows. The current reflected inventory has 173 models,
+  # so offset 170 covers the final three. A partial final window is valid; a window that lands
+  # entirely past the end declares zero contracts and FAILS (asserted in the test), which is the
+  # signal that the family shrank and these entries need updating. Five models is the resource
+  # envelope: each concrete contract gets up to three minutes and 1 GiB in its own worker.
+  - name: Conformance - VisionLanguage offset 0
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '0'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 5
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '5'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 10
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '10'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 15
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '15'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 20
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '20'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 25
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '25'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 30
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '30'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 35
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '35'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 40
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '40'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 45
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '45'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 50
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '50'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 55
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '55'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 60
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '60'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 65
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '65'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 70
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '70'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 75
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '75'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 80
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '80'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 85
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '85'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 90
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '90'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 95
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '95'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 100
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '100'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 105
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '105'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 110
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '110'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 115
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '115'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 120
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '120'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 125
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '125'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 130
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '130'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 135
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '135'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 140
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '140'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 145
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '145'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 150
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '150'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 155
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '155'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 160
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '160'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 165
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '165'
+      ADNSHAPE_CONF_BUDGET: '5'
+  - name: Conformance - VisionLanguage offset 170
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelContractConformanceTests'
+    heavy: true
+    mustCover: ['*/VisionLanguage/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 20min
+    env:
+      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
+      ADNSHAPE_CONF_OFFSET: '170'
+      ADNSHAPE_CONF_BUDGET: '5'
+  # =====================================================================
   # SERVING TESTS
   # =====================================================================
   - name: AiDotNet.Serving.Tests
