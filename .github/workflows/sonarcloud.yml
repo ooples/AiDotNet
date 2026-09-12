@@ -130,6 +130,13 @@ jobs:
       # graph while still rerunning CodeQL and Sonar; only a complete certificate suppresses both.
       execute_validation: ${{ steps.resolve.outputs.execute_validation || steps.defaults.outputs.execute_validation }}
       execute_quality: ${{ steps.resolve.outputs.execute_quality || steps.defaults.outputs.execute_quality }}
+      # Delta reuse. Reuse: nothing re-runs (reuse=true above). Partial: re-run partial_shards only
+      # and import import_shards' artifacts from run import_run_id (tested commit import_sha).
+      delta_mode: ${{ steps.resolve.outputs.delta_mode || steps.defaults.outputs.delta_mode }}
+      partial_shards: ${{ steps.resolve.outputs.partial_shards || steps.defaults.outputs.partial_shards }}
+      import_run_id: ${{ steps.resolve.outputs.import_run_id || steps.defaults.outputs.import_run_id }}
+      import_sha: ${{ steps.resolve.outputs.import_sha || steps.defaults.outputs.import_sha }}
+      import_shards: ${{ steps.resolve.outputs.import_shards || steps.defaults.outputs.import_shards }}
 
     steps:
       - name: Initialize fail-closed validation decision
@@ -146,10 +153,51 @@ jobs:
             echo 'reused_requires_validation=true'
             echo 'execute_validation=true'
             echo 'execute_quality=true'
+            echo 'delta_mode='
+            echo 'partial_shards=[]'
+            echo 'import_run_id='
+            echo 'import_sha='
+            echo 'import_shards=[]'
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout validation reuse policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+          # Delta reuse rebuilds the pull request's validated tree from its merge parents and diffs
+          # the landed commit against it in the certified map's line coordinates, which needs the
+          # map commit and both parents in history.
+          # Quoted: in an expression '&& 0 ||' treats 0 as false and would always yield 1.
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+
+      - name: Resolve certified shard map for delta reuse
+        id: delta-map
+        if: github.event_name == 'push'
+        continue-on-error: true
+        # continue-on-error bounds the OUTCOME, not the duration: a stalled gh call here would eat
+        # the job's margin before the resolver's own 40-minute wait even starts.
+        # Leave 40 minutes for evidence and 5 minutes for checkout/setup and fallback reporting.
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delta reuse selects over the base branch's later commits with the same audited map that
+          # pull-request selection uses. Any failure here leaves both inputs unset, and reuse stays
+          # exact-tree only - the pre-existing, fail-closed behaviour.
+          & ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -Repository '${{ github.repository }}' `
+              -OutDirectory delta-map -ResultFile delta-map-resolution.json -MapBranch master
+          if ($LASTEXITCODE -ne 0) { throw "certified map resolver exited $LASTEXITCODE" }
+          $resolution = Get-Content delta-map-resolution.json -Raw | ConvertFrom-Json
+          if (-not $resolution.found) { throw 'no certified map is available' }
+          & ./tools/TestImpact/Test-CertifiedShardMap.ps1 -MapFile delta-map/shard-map.json `
+              -CertificateFile delta-map/certification.json -CertificationRunId ([long] $resolution.runId)
+          if ($LASTEXITCODE -ne 0) { throw "certified map provenance is invalid (exit $LASTEXITCODE)" }
+          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+            Set-Content -LiteralPath delta-shard-manifest.json -Encoding utf8
+          'map_file=delta-map/shard-map.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          'manifest_file=delta-shard-manifest.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Resolve exact-tree PR run
         id: resolve
@@ -164,6 +212,8 @@ jobs:
             -EventName '${{ github.event_name }}' `
             -ExpectedBaseBranch '${{ github.ref_name }}' `
             -GitHubOutput $env:GITHUB_OUTPUT `
+            -MapFile '${{ steps.delta-map.outputs.map_file }}' `
+            -ShardManifestFile '${{ steps.delta-map.outputs.manifest_file }}' `
             -WaitMinutes 40
 
       - name: Report resolver fallback
@@ -549,7 +599,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_MAP_RUN_ID: ${{ inputs.test_impact_map_run_id }}
           FORCE_COVERAGE: ${{ inputs.collect_coverage_everywhere }}
-          MAP_BRANCH: ${{ github.base_ref || 'master' }}
+          # Maps are only ever built on master. A ci-proof/** branch is master plus the CI change under
+          # test, so a canary into it must select with master's map; looking for maps built on the
+          # proof branch found none and sent every canary to the full matrix, proving nothing.
+          MAP_BRANCH: ${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}
         run: |
           # Normal PRs may consume only an audited/certified map. The forced full-coverage run is
           # different: it consumes the exact candidate named by its dispatch input so that the next
@@ -648,13 +701,25 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          # NOT the event's base sha: that is the base branch as it stood when the pull request was
+          # opened, so for a pull request behind master it attributes every commit master
+          # has gained since to the pull request. The selector verifies the checked-out merge commit's
+          # second parent is this head and diffs against its first parent - the base actually tested.
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Post-merge delta reuse (validation-source): re-run only these, import these.
+          DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
+          PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}
+          IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
             Write-Host '::error::.github/test-shards.yml yielded no shards'
             exit 1
           }
+          # Test sources are never instrumented, so the coverage map cannot route them; the selector
+          # routes them through these same filters instead.
+          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+            Set-Content -LiteralPath shard-manifest.json -Encoding utf8
 
           function Read-RequiredJsonBoolean {
             param(
@@ -698,11 +763,21 @@ jobs:
           # pull request", which is the kind of misleading-but-green log this feature keeps
           # producing when a condition is collapsed.
           #
-          # Only pull requests may reduce. Pushes, merge groups, schedules and dispatches run the
-          # full matrix. Exact-tree master reuse is handled independently by validation-source;
-          # selecting a master delta here would create a second, weaker reuse mechanism.
+          # Pull requests reduce by selecting over their own change. A push reduces only through
+          # validation-source's delta decision: it has already rebuilt the tree the pull request
+          # validated, selected over what the base branch added since, and named the overlap to
+          # re-run. This step never selects a master delta itself, so there is one reuse mechanism.
+          # Merge groups, schedules and dispatches always run the full matrix.
           $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
           $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+          function ConvertFrom-ShardList([string] $Json) {
+            if ([string]::IsNullOrWhiteSpace($Json)) { return @() }
+            return @($Json | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })
+          }
+          $partialShards = @(ConvertFrom-ShardList $env:PARTIAL_SHARDS)
+          $importShards = @(ConvertFrom-ShardList $env:IMPORT_SHARDS)
+          $deltaPartial = '${{ github.event_name }}' -eq 'push' -and $env:DELTA_MODE -ceq 'Partial' -and
+            $partialShards.Count -gt 0
           $mapCertified = $false
 
           if ($env:MAP_KIND -eq 'certified' -and (Test-Path map/shard-map.json) -and
@@ -722,6 +797,21 @@ jobs:
 
           if (-not $selectorTrusted) {
             Write-Host '::error::the impact tooling failed its own self-test - running the full matrix.'
+            $deltaPartial = $false
+          }
+          elseif ($deltaPartial) {
+            $knownNames = [System.Collections.Generic.HashSet[string]]::new([string[]] @($all.name), [System.StringComparer]::Ordinal)
+            $unknown = @(@($partialShards) + @($importShards) | Where-Object { -not $knownNames.Contains($_) })
+            if ($unknown.Count -gt 0) {
+              Write-Host "::warning::delta plan names shard(s) absent from test-shards.yml: $($unknown -join ', ') - running the full matrix"
+              $deltaPartial = $false
+            }
+            else {
+              $escalate = $false
+              $requiresValidation = $true
+              $selected = @($partialShards)
+              Write-Host "post-merge delta: re-running $($partialShards.Count) shard(s) the base branch's later commits reach; importing $($importShards.Count) from the pull request run"
+            }
           }
           elseif (-not $eventCanReduce) {
             Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
@@ -734,7 +824,7 @@ jobs:
             $pathRequiresValidation = $true
             try {
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
-                  -BaseSha $env:PR_BASE_SHA -OutFile path-classification.json
+                  -PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
               $pathRequiresValidation = Read-RequiredJsonBoolean `
@@ -750,12 +840,14 @@ jobs:
               $selected = @()
             }
             elseif ($mapCertified) {
-              # No base ref: coverage selection diffs from the map's own commit, which is the only
-              # reference whose line numbers the map's ranges are expressed in.
+              # Line ranges still come from the map's own commit, the only reference whose line
+              # numbers the map's ranges are expressed in; the pull request head only decides WHICH
+              # paths are this pull request's change.
               try {
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
-                    -BaseSha $env:PR_BASE_SHA `
+                    -PullRequestHeadSha $env:PR_HEAD_SHA `
+                    -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
                 if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
@@ -829,6 +921,11 @@ jobs:
           # shard key - it reads it back from shard-metadata.json.
           $running = [System.Collections.Generic.HashSet[string]]::new(
               [string[]] @($matrixShards.name), [System.StringComparer]::Ordinal)
+          # A delta-imported shard is not skipped: its pull-request results are imported as this
+          # run's own, so the regression analysis must see them, not an approved removal.
+          if ($deltaPartial -and -not $escalate) {
+            foreach ($name in $importShards) { [void] $running.Add($name) }
+          }
           $skipped = @(
             $all |
               Where-Object { -not $running.Contains([string] $_.name) } |
@@ -2110,6 +2207,30 @@ jobs:
           path: current-test-results
           merge-multiple: false
 
+      # Post-merge delta reuse: the shards this run did not re-run are the pull request's results,
+      # so the landed commit's ledger covers every shard the pull request validated.
+      - name: Download pull-request shard results for delta import
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          pattern: coverage-${{ needs.validation-source.outputs.import_sha }}-*
+          path: delta-import-staging
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.import_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Import pull-request shard results
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        shell: pwsh
+        env:
+          IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
+          IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
+        run: |
+          ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1 -StagingDirectory delta-import-staging `
+            -DestinationDirectory current-test-results -ArtifactPrefix coverage `
+            -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
+
       - name: Determine comparison base
         id: comparison
         shell: pwsh
@@ -2448,6 +2569,28 @@ jobs:
           path: TestResults
           merge-multiple: true
 
+      - name: Download pull-request coverage for delta import
+        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.import_run_id }}
+          pattern: coverage-${{ needs.validation-source.outputs.import_sha }}-*
+          path: delta-import-staging
+          merge-multiple: false
+
+      - name: Import pull-request coverage
+        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        shell: pwsh
+        env:
+          IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
+          IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
+        run: |
+          ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1 -StagingDirectory delta-import-staging `
+            -DestinationDirectory TestResults/delta-imported -ArtifactPrefix coverage `
+            -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
+
       - name: Restore dependencies
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
         run: dotnet restore
@@ -2613,6 +2756,28 @@ jobs:
         with:
           pattern: test-results-${{ github.sha }}-*
           path: TestDiagnostics
+
+      - name: Download pull-request diagnostics for delta import
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          pattern: test-results-${{ needs.validation-source.outputs.import_sha }}-*
+          path: delta-import-staging
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.import_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Import pull-request diagnostics
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        shell: pwsh
+        env:
+          IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
+          IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
+        run: |
+          ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1 -StagingDirectory delta-import-staging `
+            -DestinationDirectory TestDiagnostics -ArtifactPrefix test-results `
+            -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
 
       - name: Collect shard states and latest merged baseline
         shell: pwsh

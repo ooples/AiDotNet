@@ -15,6 +15,8 @@ $resolver = Join-Path $PSScriptRoot 'Resolve-CiValidationReuse.ps1'
 if ($LASTEXITCODE -ne 0) { throw 'CI validation certificate self-test failed' }
 & $resolver -SelfTest
 if ($LASTEXITCODE -ne 0) { throw 'CI validation reuse self-test failed' }
+& (Join-Path $PSScriptRoot 'Import-PullRequestShardArtifacts.ps1') -SelfTest
+if ($LASTEXITCODE -ne 0) { throw 'pull-request shard artifact import self-test failed' }
 
-Write-Host 'Validation reuse mode proof passed (typed partial/complete scopes and fail-closed artifacts/tree checks).'
+Write-Host 'Validation reuse mode proof passed (typed partial/complete scopes, fail-closed artifacts/tree checks, delta decisions and shard imports).'
 exit 0
