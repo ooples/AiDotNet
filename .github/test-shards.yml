@@ -988,6 +988,37 @@ shard:
     filter: 'FullyQualifiedName~LayerOverrideRedundancyTests|FullyQualifiedName~LayerParameterSurfaceTests|FullyQualifiedName~ContractShadowSweepTests|FullyQualifiedName~ModelBaseCoverageTests'
     heavy: true
     hangTimeout: 35min
+  # Two more Sweep-category tests that no job ran to completion: ModelFamilyLawTests hit the 30-minute
+  # Timeout and ModelShapeDiscoveryProbeTests never finished at all. Both now build their models in the
+  # AiDotNet.ParameterSweepWorker child process, which is what made them terminate. Measured on this
+  # branch at ADNSHAPE_WORKERS=2: the law test 8 m 01 s (VisionLanguageModelBase 300 s, TtsModelBase
+  # 94 s, AudioNeuralNetworkBase 54 s, DeclaredModelLayoutBase 33 s) and the probe 1 m 37 s (40 probed,
+  # 0 fit failures). Each keeps its own 30-minute xunit Timeout, so hangTimeout is 35min for the same
+  # reason the parameter sweeps use it: the test's own timeout must report before blame-hang kills the
+  # run. env restates the runner default (workers = min(4, cores/2) = 2 on a 4-vCPU runner) so a larger
+  # runner cannot silently change what these timings mean.
+  - name: Sweep - Model shape law
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelFamilyLawTests'
+    heavy: true
+    mustCover: ['src/Audio/*', 'src/VisionLanguage/*', 'src/TextToSpeech/*', 'src/NeuralNetworks/DeclaredModelLayoutBases.cs']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      ADNSHAPE_WORKERS: '2'
+      ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'
+  - name: Sweep - Model shape discovery
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'FullyQualifiedName~ModelShapeDiscoveryProbeTests'
+    heavy: true
+    mustCover: ['src/NeuralNetworks/*']
+    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    hangTimeout: 35min
+    env:
+      ADNSHAPE_WORKERS: '2'
+      ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'
   # VisionLanguage models in five-model windows. The current reflected inventory has 173 models,
   # so offset 170 covers the final three. A partial final window is valid; a window that lands
   # entirely past the end declares zero contracts and FAILS (asserted in the test), which is the
