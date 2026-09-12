@@ -47,8 +47,10 @@ internal static class Program
 
         ConfigureLikeTestAssembly();
         PrintBanner(iterations);
+        ProbeColdStart();
         ProbeConvolutionPlatformArms();
         ProbeInstantStyle(Math.Max(3, iterations));
+        ProbeMdopFlip(Math.Max(3, iterations));
 
         var rng = RandomHelper.CreateSeededRandom(42);
         var input = CreateRandomTensor(InputShape, rng);
@@ -174,6 +176,39 @@ internal static class Program
                 Console.WriteLine($"  [{string.Join(",", s)}] k3s1 : differing={cmp.DiffCount}/{allocating.Length}"
                     + $"  maxAbs={cmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
                     + $"  maxRel={cmp.MaxRel.ToString("R", CultureInfo.InvariantCulture)}");
+
+                // SENTINEL COVERAGE TEST — does Conv2DInto write EVERY element it owns?
+                //
+                // On Linux preferConv2DInto is true, so TrackedConv2DInto
+                // (ConvolutionalLayer.cs:1487-1488) rents an UNINITIALIZED buffer from
+                // TensorAllocator and relies on Conv2DInto to fill it. Any position left
+                // unwritten keeps whatever the pool last had there — and that residue
+                // differs between the original's forward and the clone's, because they
+                // occur at different points in the allocation sequence. Windows takes the
+                // allocating Winograd Conv2D instead, which is why it would never show this.
+                //
+                // Comparing Conv2D vs Conv2DInto cannot detect it (a fresh buffer's residue
+                // is zeros, so the values coincide). Flooding the destination with an absurd
+                // sentinel first does: any survivor is a byte the kernel never wrote.
+                const float sentinel = 987654.3f;
+                var probe = new Tensor<float>(s);
+                for (int i = 0; i < probe.Length; i++) probe[i] = sentinel;
+                engine.Conv2DInto(probe, inputT, kernel, 1, 1, 1);
+
+                int unwritten = 0, firstUnwritten = -1;
+                for (int i = 0; i < probe.Length; i++)
+                {
+                    if (probe[i] == sentinel)
+                    {
+                        unwritten++;
+                        if (firstUnwritten < 0) firstUnwritten = i;
+                    }
+                }
+
+                Console.WriteLine(unwritten == 0
+                    ? $"      sentinel: Conv2DInto wrote all {probe.Length} elements (no residue window)"
+                    : $"      sentinel: *** {unwritten}/{probe.Length} elements LEFT UNWRITTEN, "
+                      + $"firstIndex={firstUnwritten} -> reads pool residue ***");
             }
             catch (Exception ex)
             {
@@ -244,6 +279,140 @@ internal static class Program
     /// A deterministic divergence can be localised directly, so this reproduces the
     /// fixture exactly as InstantStyleModelTests.cs:30-43 declares it.
     /// </summary>
+    /// <summary>
+    /// MDOP FLIPPED BETWEEN THE ORIGINAL'S PREDICT AND THE CLONE'S.
+    ///
+    /// AiDotNet.Native.OpenBLAS/OneDNN/CLBlast 0.130.3 ship runtimes/win-x64 ONLY —
+    /// there is no linux-x64 native binary in any of them. So on Linux every GEMM
+    /// takes the MANAGED BlasManaged path, which partitions over
+    /// CpuParallelSettings.MaxDegreeOfParallelism. (It also means the suite's
+    /// determinism guard is inoperative there: OPENBLAS_NUM_THREADS=1 and
+    /// BlasProvider.SetDeterministicMode -> openblas_set_num_threads(1) pin a library
+    /// that was never loaded on Linux.)
+    ///
+    /// MDOP is PROCESS-GLOBAL and test fixtures mutate it:
+    ///   DiffusionModelTestBase.cs:107      static ctor  -> ProcessorCount
+    ///   ModuleInitializer.cs:87-95         -> 1
+    ///   FoundationScaleCpuFixture.cs:32-44 ctor -> ProcessorCount, Dispose RESTORES
+    ///                                       whatever a previous collection left
+    ///
+    /// InstantStyleModelTests carries no [Collection("FoundationScaleSerial")], so it
+    /// runs in the default PARALLEL collection — where another collection finishing can
+    /// flip MDOP in between this test's two Predict calls. Same weights, different
+    /// partition count, different reduction order, small divergence. This forces that
+    /// interleaving deterministically instead of waiting for the race.
+    /// </summary>
+    /// <summary>
+    /// COLD START — the clone comparison as the FIRST computation in the process.
+    ///
+    /// Every previous probe run executed the conv arms and warm-up loops before the
+    /// measured comparison, which tiers the hot kernels up to Tier1 BEFORE anything is
+    /// compared. That systematically hides the one mechanism still untested:
+    ///
+    ///   .NET promotes a hot method from Tier0 to Tier1 on a background thread after
+    ///   ~30 calls, and Tier1 may vectorize / contract FMAs differently. In the real
+    ///   test the original's Predict (10 DDIM steps x many layers) drives those kernels
+    ///   past the threshold, so the CLONE's Predict can execute Tier1 code while the
+    ///   original ran Tier0. Same weights, different codegen, small divergence.
+    ///
+    /// That is clone-specific, deterministic for a fixed test ordering (InstantStyle),
+    /// intermittent when call counts shift (StyDiff), and invisible to
+    /// Predict_ShouldBeDeterministic when both its calls land on one side of the tier-up.
+    ///
+    /// Pair this with DOTNET_TieredCompilation=0 as the A/B: if divergence appears here
+    /// and vanishes with tiering off, the JIT tier transition is the mechanism.
+    /// </summary>
+    private static void ProbeColdStart()
+    {
+        Console.WriteLine("=== COLD START — clone comparison as the FIRST computation ===");
+        string tiered = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation") ?? "<default: on>";
+        string tieredPgo = Environment.GetEnvironmentVariable("DOTNET_TieredPGO") ?? "<default>";
+        string osr = Environment.GetEnvironmentVariable("DOTNET_TC_QuickJitForLoops") ?? "<default>";
+        Console.WriteLine($"  DOTNET_TieredCompilation={tiered}  DOTNET_TieredPGO={tieredPgo}  TC_QuickJitForLoops={osr}");
+
+        foreach (var (name, factory, shape) in new (string, Func<IDiffusionModel<float>>, int[])[]
+                 {
+                     ("InstantStyle", CreateInstantStyleModel, [1, 4, 8, 8]),
+                     ("StyDiff", CreateModel, InputShape),
+                 })
+        {
+            var rng = RandomHelper.CreateSeededRandom(42);
+            var input = CreateRandomTensor(shape, rng);
+
+            using var arena = TensorArena.Create();
+            using var model = factory();
+
+            var p1 = model.Predict(input);                     // Tier0-ish, cold process
+            using var clone = (IDiffusionModel<float>)model.Clone();
+            var c1 = clone.Predict(input);                     // may now be Tier1
+            var p2 = model.Predict(input);
+
+            var cloneCmp = Compare(p1, c1);
+            var selfCmp = Compare(p1, p2);
+            Console.WriteLine($"  {name,-13} COLD: P1-vs-C1 maxAbs="
+                + $"{cloneCmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
+                + $" differing={cloneCmp.DiffCount}/{p1.Length}"
+                + $" | P1-vs-P2 maxAbs={selfCmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
+                + $" | out[2]={(p1.Length > 2 ? p1[2].ToString("R", CultureInfo.InvariantCulture) : "n/a")}");
+
+            if (cloneCmp.MaxDiff > 0) Report($"  {name} COLD divergence", cloneCmp, p1);
+        }
+
+        Console.WriteLine();
+    }
+
+    private static void ProbeMdopFlip(int iterations)
+    {
+        Console.WriteLine("=== MDOP FLIPPED BETWEEN ORIGINAL AND CLONE ===");
+        int[][] pairs = [[4, 1], [1, 4], [4, 8], [8, 4], [4, 2], [2, 4]];
+
+        var models = new (string Name, Func<IDiffusionModel<float>> Factory, int[] Shape)[]
+        {
+            ("StyDiff", CreateModel, InputShape),
+            ("InstantStyle", CreateInstantStyleModel, [1, 4, 8, 8]),
+        };
+
+        foreach (var (name, factory, shape) in models)
+        {
+            var rng = RandomHelper.CreateSeededRandom(42);
+            var input = CreateRandomTensor(shape, rng);
+
+            foreach (var pair in pairs)
+            {
+                int a = pair[0], b = pair[1];
+                int diverged = 0;
+                double worst = 0.0;
+
+                for (int i = 0; i < iterations; i++)
+                {
+                    using var arena = TensorArena.Create();
+                    using var model = factory();
+
+                    CpuParallelSettings.MaxDegreeOfParallelism = a;
+                    var p1 = model.Predict(input);
+
+                    CpuParallelSettings.MaxDegreeOfParallelism = b;
+                    using var clone = (IDiffusionModel<float>)model.Clone();
+                    var c1 = clone.Predict(input);
+
+                    var cmp = Compare(p1, c1);
+                    if (cmp.MaxDiff > worst) worst = cmp.MaxDiff;
+                    if (cmp.MaxDiff > 0)
+                    {
+                        diverged++;
+                        if (diverged == 1) Report($"  {name} mdop {a}->{b} first divergence", cmp, p1);
+                    }
+                }
+
+                Console.WriteLine($"  {name,-13} mdop {a,2} -> {b,-2} : diverged={diverged}/{iterations}"
+                    + $"  worstAbs={worst.ToString("R", CultureInfo.InvariantCulture)}");
+            }
+        }
+
+        CpuParallelSettings.MaxDegreeOfParallelism = Environment.ProcessorCount;
+        Console.WriteLine();
+    }
+
     private static void ProbeInstantStyle(int iterations)
     {
         Console.WriteLine("=== INSTANTSTYLE — deterministic CI signature ===");

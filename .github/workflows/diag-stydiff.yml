@@ -103,19 +103,40 @@ jobs:
       - name: Build probe
         run: dotnet build tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj -c Release -m:4
 
-      - name: Run probe (InstantStyle deterministic case first)
+      - name: Arm 1 — probe with tiered JIT ON (default)
         run: |
           mkdir -p diag-out
           dotnet run --project tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj \
             -c Release --no-build \
             -- --iterations "${{ github.event.inputs.iterations || '6' }}" --mdop-sweep "4" \
-            2>&1 | tee diag-out/probe-output.txt
+            2>&1 | tee diag-out/probe-tiering-on.txt
 
-      - name: Report
+      # Run 6 showed this runner reports Avx512=True while run 1's reported False, so the
+      # ubuntu-latest fleet is heterogeneous and emits different SIMD codegen for the same IL.
+      # The remaining untested mechanism is the Tier0 -> Tier1 transition: the original's
+      # Predict drives the hot kernels past the tier-up threshold, so the CLONE's Predict can
+      # execute differently-vectorised code with identical weights. If the cold-start arm
+      # diverges with tiering ON and is clean with it OFF, that is the mechanism.
+      - name: Arm 2 — probe with DOTNET_TieredCompilation=0
+        if: always()
+        env:
+          DOTNET_TieredCompilation: '0'
+        run: |
+          mkdir -p diag-out
+          dotnet run --project tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj \
+            -c Release --no-build \
+            -- --iterations "${{ github.event.inputs.iterations || '6' }}" --mdop-sweep "4" \
+            2>&1 | tee diag-out/probe-tiering-off.txt
+
+      - name: Compare the two arms
         if: always()
         run: |
-          echo "===== INSTANTSTYLE (deterministic case) ====="
-          sed -n '/INSTANTSTYLE/,/^=== PACKED/p' diag-out/probe-output.txt 2>/dev/null || echo "(none)"
+          echo "===== COLD START, TIERING ON ====="
+          grep -A6 "COLD START" diag-out/probe-tiering-on.txt 2>/dev/null || echo "(none)"
+          echo "===== COLD START, TIERING OFF ====="
+          grep -A6 "COLD START" diag-out/probe-tiering-off.txt 2>/dev/null || echo "(none)"
+          echo "===== ISA (fleet is heterogeneous) ====="
+          grep -h "Sse2/Avx" diag-out/*.txt 2>/dev/null || true
 
       - name: Upload diagnostics
         if: always()
