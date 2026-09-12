@@ -179,6 +179,25 @@ public static class LayerCloning
         CopyRandomState(source, clone, shareRandomState: true);
     }
 
+    /// <summary>
+    /// Whether <paramref name="layerType"/> is declared OUTSIDE the AiDotNet core assembly.
+    /// </summary>
+    /// <param name="layerType">The layer's runtime type.</param>
+    /// <returns><c>true</c> when the type comes from a consumer assembly.</returns>
+    /// <remarks>
+    /// The name-keyed layer table in <c>DeserializationHelper</c> is built by scanning AiDotNet's
+    /// own assembly, so a layer defined in a consumer's assembly can never be resolved from a
+    /// type-name string and must be rebuilt through its own type instead. Both clone paths that
+    /// have to recognise such a layer ask this single question rather than each repeating the
+    /// assembly comparison.
+    /// </remarks>
+    internal static bool IsDeclaredOutsideAiDotNet(Type layerType)
+    {
+        if (layerType is null) throw new ArgumentNullException(nameof(layerType));
+
+        return layerType.Assembly != typeof(LayerCloning).Assembly;
+    }
+
     private static bool IsStochasticCounter(FieldInfo field)
     {
         if (field.IsInitOnly || field.IsStatic
@@ -589,12 +608,38 @@ public static class LayerCloning
             && !LayerFactoryRegistry<T>.TryCreate(
                 type, definition, bag, source.ScalarActivation, source.VectorActivation, out rebuilt))
         {
-            throw new NotSupportedException(
-                $"{type.Name} cannot be rebuilt: no generated factory, no registered factory, and its "
-                + "constructor could not be satisfied from the saved state. If this layer lives "
-                + "outside AiDotNet, register a factory with "
-                + $"LayerFactoryRegistry<{typeof(T).Name}>.Register, or make sure each constructor "
-                + "argument is stored in a field of the same name so it is written at save time.");
+            // LAST RESORT: retry with the layer's own declared shapes added to the saved state.
+            //
+            // A layer whose constructor forwards its shapes straight to base(inputShape, outputShape)
+            // stores them in NO field of its own, so there is nothing for the generator to record and
+            // nothing for the reflection tier to match those parameters against -- even though
+            // LayerBase itself has held both shapes all along. That is the one piece of construction
+            // state this class can always recover without the author writing anything, which is
+            // exactly the promise the reflection tier is documented to keep for layers defined
+            // outside AiDotNet.
+            //
+            // Deliberately only after every tier above has already declined, and only for keys that
+            // were not saved: a layer that reconstructs today takes the identical path it took
+            // before, so this can add successes but cannot change an existing one.
+            var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
+            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = source.GetInputShape();
+            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = source.GetOutputShape();
+
+            if (!LayerFactoryRegistry<T>.TryCreate(
+                    type,
+                    definition,
+                    new LayerStateBag(withShapes, type.Name),
+                    source.ScalarActivation,
+                    source.VectorActivation,
+                    out rebuilt))
+            {
+                throw new NotSupportedException(
+                    $"{type.Name} cannot be rebuilt: no generated factory, no registered factory, and its "
+                    + "constructor could not be satisfied from the saved state. If this layer lives "
+                    + "outside AiDotNet, register a factory with "
+                    + $"LayerFactoryRegistry<{typeof(T).Name}>.Register, or make sure each constructor "
+                    + "argument is stored in a field of the same name so it is written at save time.");
+            }
         }
 
         if (rebuilt is not LayerBase<T> layer)

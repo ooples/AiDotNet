@@ -15442,8 +15442,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // enumerate the registry directly from a static helper, so the
             // check is by assembly identity: anything outside the AiDotNet
             // core assembly is treated as custom.)
-            var layerAssembly = _layers[i].GetType().Assembly;
-            if (layerAssembly != typeof(NeuralNetworkBase<T>).Assembly)
+            if (AiDotNet.NeuralNetworks.Layers.LayerCloning.IsDeclaredOutsideAiDotNet(
+                    _layers[i].GetType()))
                 hasCustomLayer = true;
         }
 
