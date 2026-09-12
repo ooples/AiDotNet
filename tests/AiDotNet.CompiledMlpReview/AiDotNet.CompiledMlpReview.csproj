@@ -8,6 +8,11 @@
     <AssemblyName>AiDotNetTests</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/ConfigureMethodCoverage/ConfigureMethodTestBase.cs" Link="ConfigureMethodTestBase.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/ConfigureMethodCoverage/Bucket12_DistributedTests.cs" Link="Bucket12_DistributedTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/ConfigureMethodCoverage/LazyDistributedParameterTests.cs" Link="LazyDistributedParameterTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/DistributedTraining/DistributedTrainingDeepMathIntegrationTests.cs" Link="DistributedTrainingDeepMathIntegrationTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/DistributedTraining/DistributedTrainingIntegrationTests.cs" Link="DistributedTrainingIntegrationTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
