@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -175,6 +177,11 @@ public sealed class CustomObjectiveTrainingContractTests
 
     private static Tensor<double> Target() => Tensor<double>.CreateDefault(new[] { 2, 1 }, 0.4);
 
+    // [Batch, Features] in and out: one dense 4 -> 1 branch over a single feature axis.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
     private sealed class ObjectiveNetwork : NeuralNetworkBase<double>
     {
         public override bool SupportsTraining => true;
@@ -211,6 +218,11 @@ public sealed class CustomObjectiveTrainingContractTests
             }, optimizer);
     }
 
+    // [Batch, Features] in and out, as above: the shared dense branch is 4 -> 1 over one feature axis.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
     private sealed class CompositeObjectiveNetwork : NeuralNetworkBase<double>
     {
         internal CompositeBranch Branch { get; } = new();
@@ -238,7 +250,14 @@ public sealed class CustomObjectiveTrainingContractTests
                 => new MeanSquaredErrorLoss<double>().ComputeTapeLoss(Branch.Forward(currentInput), currentTarget), optimizer);
     }
 
-    private sealed class CompositeBranch : LayerBase<double>
+    // 4 -> 1 through the dense sub-layer, with dropout preserving whatever it is handed, so the composite
+    // is not shape-preserving: the axis roles are declared here and the width comes from OutputShape, the
+    // way FullyConnectedLayer states the same relation.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class CompositeBranch : LayerBase<double>, IShapeContract
     {
         internal FullyConnectedLayer<double> Dense { get; } = new(1,
             (AiDotNet.Interfaces.IActivationFunction<double>)new IdentityActivation<double>());
@@ -254,6 +273,21 @@ public sealed class CustomObjectiveTrainingContractTests
 
         protected override Tensor<double> ForwardTraced(Tensor<double> input) => Dropout.Forward(Dense.Forward(input));
         public override void ResetState() { Dense.ResetState(); Dropout.ResetState(); }
+
+        /// <inheritdoc />
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            int outputSize = OutputShape.Length > 0 ? OutputShape[0] : -1;
+            if (outputSize <= 0) return null;
+
+            var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
+            return inputRank switch
+            {
+                1 => new[] { features },
+                2 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), features },
+                _ => null,
+            };
+        }
     }
 
     private sealed class ObservedDropout : DropoutLayer<double>
