@@ -24,8 +24,8 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 /// <para>
 /// Write failures never stop a run. The engine already isolates observer exceptions, but silently losing the
 /// output is worse than losing it loudly, so a failed write is recorded in <see cref="LastError"/> and the run
-/// continues; a caller that cares can assert on it after the run. The observer holds no unbounded state: it keeps
-/// one record per write, and records never contain program text.
+/// continues; a caller that cares can assert on it after the run. Recent write receipts are bounded by
+/// <see cref="ProgramRunOutputOptions.MaxRetainedRecords"/>; older receipts are counted, not retained.
 /// </para>
 /// <para><b>For Beginners:</b> Hand this to the evolution engine as its observer and your run will leave the
 /// winning program on disk instead of only in memory - a copy at every checkpoint under
@@ -33,7 +33,7 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 /// one wiring step is registering the archives, which you do inside the archive factory you already pass to the
 /// engine so the observer knows where to look for the best program.</para>
 /// </remarks>
-public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
+public sealed class ProgramRunOutputObserver : IProgramEvolutionArchiveObserver
 {
     private const int MaxNoteLength = 256;
 
@@ -45,6 +45,7 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
     private readonly ProgramRunOutputWriter _writer;
     private readonly ProgramRunOutputOptions _options;
     private long _checkpointOrdinal;
+    private long _droppedRecords;
 
     /// <summary>Initializes an observer.</summary>
     /// <param name="writer">The writer that produces the files.</param>
@@ -58,6 +59,7 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         Guard.NotNull(writer);
         _writer = writer;
         _options = writer.GetOptions();
+        _checkpointOrdinal = _options.WriteAtCheckpoints ? writer.GetLastCheckpointOrdinal() : 0;
         if (archives is null) return;
         foreach (IEvolutionArchiveView<ProgramGenome> archive in archives)
         {
@@ -66,7 +68,7 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         }
     }
 
-    /// <summary>Gets the records of every write this observer has made, in order.</summary>
+    /// <summary>Gets the bounded most recent write receipts, in chronological order.</summary>
     public IReadOnlyList<ProgramRunOutputRecord> Records
     {
         get { lock (_gate) { return new ReadOnlyCollection<ProgramRunOutputRecord>(_records.ToArray()); } }
@@ -80,6 +82,9 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
 
     /// <summary>Gets a bounded description of the most recent failed write, or <c>null</c> when none has failed.</summary>
     public string? LastError { get; private set; }
+
+    /// <summary>Gets how many older in-memory receipts were dropped; no files are deleted.</summary>
+    public long DroppedRecords { get { lock (_gate) { return _droppedRecords; } } }
 
     /// <summary>Gets how many per-candidate program files this observer has written.</summary>
     public long ProgramsWritten => Interlocked.Read(ref _programsWritten);
@@ -107,7 +112,15 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         if (evolutionEvent.Kind == EvolutionEventKind.Checkpointed && _options.WriteAtCheckpoints)
         {
             long ordinal;
-            lock (_gate) { ordinal = ++_checkpointOrdinal; }
+            lock (_gate)
+            {
+                if (_checkpointOrdinal == long.MaxValue)
+                {
+                    LastError = "Checkpoint output ordinal exhausted; select a new output directory.";
+                    return default;
+                }
+                ordinal = ++_checkpointOrdinal;
+            }
             TryWrite(ProgramRunOutputTrigger.Checkpoint, ordinal, evolutionEvent.Message);
         }
         else if (evolutionEvent.Kind == EvolutionEventKind.Stopped && _options.WriteAtRunEnd)
@@ -127,7 +140,7 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         EvolutionArchiveEntry<ProgramGenome>? best = SelectBest();
         if (best is null) return null;
         ProgramRunOutputRecord record = _writer.Write(best, ProgramRunOutputTrigger.Manual, 0, Bound(note));
-        lock (_gate) { _records.Add(record); }
+        Remember(record);
         return record;
     }
 
@@ -194,7 +207,7 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         try
         {
             ProgramRunOutputRecord record = _writer.Write(best, trigger, ordinal, Bound(note));
-            lock (_gate) { _records.Add(record); }
+            Remember(record);
         }
         catch (IOException exception)
         {
@@ -203,6 +216,19 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         catch (UnauthorizedAccessException exception)
         {
             LastError = Bound(exception.Message);
+        }
+    }
+
+    private void Remember(ProgramRunOutputRecord record)
+    {
+        lock (_gate)
+        {
+            if (_records.Count == _options.MaxRetainedRecords)
+            {
+                _records.RemoveAt(0);
+                _droppedRecords++;
+            }
+            _records.Add(record);
         }
     }
 

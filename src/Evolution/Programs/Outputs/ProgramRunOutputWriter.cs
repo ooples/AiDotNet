@@ -74,6 +74,26 @@ public sealed class ProgramRunOutputWriter
     /// <returns>A copy that a caller may mutate without affecting this instance.</returns>
     public ProgramRunOutputOptions GetOptions() => _options.Clone();
 
+    // Output ordinals are not engine safe-sequence numbers. Continue existing layouts, including legacy runs.
+    // Bound enumeration without deleting history; callers can select a new output root if the cap is reached.
+    internal long GetLastCheckpointOrdinal()
+    {
+        string root = Path.Combine(_outputDirectory, _options.CheckpointsDirectoryName);
+        if (!Directory.Exists(root)) return 0;
+        long maximum = 0;
+        int visited = 0;
+        foreach (string path in Directory.EnumerateFileSystemEntries(root))
+        {
+            if (++visited > 1000000) throw new IOException("Checkpoint history exceeds the one-million-entry scan limit; select a new output directory.");
+            string name = Path.GetFileName(path);
+            if (name.StartsWith(_options.CheckpointDirectoryPrefix, StringComparison.Ordinal) &&
+                long.TryParse(name.Substring(_options.CheckpointDirectoryPrefix.Length),
+                    System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long ordinal))
+                maximum = Math.Max(maximum, ordinal);
+        }
+        return maximum;
+    }
+
     /// <summary>Writes the run's final answer into the <c>best</c> directory.</summary>
     /// <param name="best">The archive entry holding the winning program and its evaluation.</param>
     /// <param name="note">An optional short note recorded in the info document, such as the stop reason.</param>
@@ -168,9 +188,27 @@ public sealed class ProgramRunOutputWriter
 
         lock (_gate)
         {
-            Directory.CreateDirectory(directory);
-            WriteAtomic(programPath, source);
-            WriteAtomic(infoPath, Utf8.GetBytes(JsonConvert.SerializeObject(document, Formatting.Indented)));
+            byte[] info = Utf8.GetBytes(JsonConvert.SerializeObject(document, Formatting.Indented));
+            if (trigger == ProgramRunOutputTrigger.Checkpoint)
+            {
+                if (Directory.Exists(directory) || File.Exists(directory))
+                    throw new IOException("Checkpoint output already exists and cannot be overwritten.");
+                string parent = Path.GetDirectoryName(directory) ?? throw new IOException("Missing checkpoint output parent.");
+                Directory.CreateDirectory(parent);
+                string staging = Path.Combine(parent, ".aidotnet-checkpoint-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(staging);
+                WriteAtomic(Path.Combine(staging, Path.GetFileName(programPath)), source);
+                WriteAtomic(Path.Combine(staging, Path.GetFileName(infoPath)), info);
+                // Same-parent publication makes the pair visible together and refuses racing writers.
+                // Failed private staging is retained for diagnosis, never recursively deleted here.
+                Directory.Move(staging, directory);
+            }
+            else
+            {
+                Directory.CreateDirectory(directory);
+                WriteAtomic(programPath, source);
+                WriteAtomic(infoPath, info);
+            }
         }
 
         return new ProgramRunOutputRecord(trigger, ordinal, best.Candidate.CanonicalGenome.Id, directory,

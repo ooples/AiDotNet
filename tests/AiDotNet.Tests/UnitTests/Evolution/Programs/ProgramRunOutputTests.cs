@@ -13,6 +13,67 @@ namespace AiDotNetTests.UnitTests.Evolution.Programs;
 public sealed class ProgramRunOutputTests
 {
     [Fact]
+    public async Task BoundedReceiptsDoNotDeleteSnapshotHistory()
+    {
+        using var directory = new TemporaryDirectory();
+        var options = new ProgramRunOutputOptions { MaxRetainedRecords = 2 };
+        var observer = new ProgramRunOutputObserver(new ProgramRunOutputWriter(directory.Path, options),
+            new[] { new FakeArchiveView(Entry("print(7)", 1)) });
+        options.MaxRetainedRecords = 100; // The writer and observer own snapshots.
+        for (int i = 1; i <= 5; i++)
+            await observer.OnEventAsync(new EvolutionEvent<ProgramGenome>(EvolutionEventKind.Checkpointed, i));
+        Assert.Equal(new long[] { 4, 5 }, observer.Records.Select(item => item.Ordinal));
+        Assert.Equal(3, observer.DroppedRecords);
+        Assert.Equal(5, Directory.EnumerateDirectories(Path.Combine(directory.Path, "checkpoints")).Count());
+        Assert.Equal(5, observer.LastRecord!.Ordinal);
+        Assert.Null(observer.LastError);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65537)]
+    public void InvalidReceiptBoundsAreRefused(int limit) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ProgramRunOutputOptions { MaxRetainedRecords = limit }.Validate());
+
+    [Fact]
+    public async Task ExhaustedSnapshotNumbersFailWithoutWrappingOrOverwriting()
+    {
+        using var directory = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "checkpoints", "checkpoint_" + long.MaxValue));
+        var observer = new ProgramRunOutputObserver(new ProgramRunOutputWriter(directory.Path),
+            new[] { new FakeArchiveView(Entry("print(7)", 1)) });
+        await observer.OnEventAsync(new EvolutionEvent<ProgramGenome>(EvolutionEventKind.Checkpointed, 1));
+        Assert.Contains("exhausted", observer.LastError);
+        Assert.Empty(observer.Records);
+    }
+
+    [Fact]
+    public void ACheckpointSnapshotCannotBeReplacedByAnotherWriter()
+    {
+        using var directory = new TemporaryDirectory();
+        var first = new ProgramRunOutputWriter(directory.Path).WriteCheckpoint(Entry("print(7)", 1), 1);
+        byte[] source = File.ReadAllBytes(first.ProgramPath), info = File.ReadAllBytes(first.InfoPath);
+        Assert.Throws<IOException>(() => new ProgramRunOutputWriter(directory.Path).WriteCheckpoint(Entry("print(6)", 100), 1));
+        Assert.Equal(source, File.ReadAllBytes(first.ProgramPath));
+        Assert.Equal(info, File.ReadAllBytes(first.InfoPath));
+    }
+
+    [Fact]
+    public async Task ANewObserverContinuesSnapshotNumberingWithoutOverwritingHistory()
+    {
+        using var directory = new TemporaryDirectory();
+        var first = new ProgramRunOutputWriter(directory.Path).WriteCheckpoint(Entry("print(7)", 1), 9);
+        var resumed = new ProgramRunOutputObserver(new ProgramRunOutputWriter(directory.Path),
+            new[] { new FakeArchiveView(Entry("print(8)", 2)) });
+        await resumed.OnEventAsync(new EvolutionEvent<ProgramGenome>(EvolutionEventKind.Checkpointed, 1, message: "checkpoint 700"));
+        Assert.Null(resumed.LastError);
+        Assert.Equal(10, resumed.LastRecord!.Ordinal);
+        Assert.Equal("print(7)", File.ReadAllText(first.ProgramPath));
+        Assert.Equal("print(8)", File.ReadAllText(resumed.LastRecord.ProgramPath));
+    }
+
+    [Fact]
     public void SourceHashMatchesTheExactCompleteArtifact()
     {
         using var directory = new TemporaryDirectory();

@@ -27,9 +27,11 @@ internal static class EvolveCommandLine
     /// <param name="output">Where normal output goes.</param>
     /// <param name="error">Where diagnostics go.</param>
     /// <param name="cancellationToken">Stops a run in progress.</param>
+    /// <param name="control">Optional one-run graceful-stop control, distinct from cancellation.</param>
     /// <returns>The process exit code.</returns>
     public static async Task<int> ExecuteAsync(
-        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default,
+        EvolutionRunControl? control = null)
     {
         if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
         {
@@ -42,7 +44,12 @@ internal static class EvolveCommandLine
             string command = args[0].ToLowerInvariant();
             string[] known = command switch
             {
-                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best" },
+                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best", "session", "preflight-max-tests", "record", "include-source" },
+                "preflight" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "preflight-max-tests" },
+                "inspect" or "pause" or "cancel" => new[] { "session" },
+                "inspect-record" => new[] { "record" },
+                "export" => new[] { "record", "out" },
+                "compare" => new[] { "left", "right", "out" },
                 "validate" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume" },
                 "schema" or "docs" => new[] { "out" },
                 "benchmark-program" => new[] { "worker", "output", "runs", "measurements" },
@@ -52,8 +59,14 @@ internal static class EvolveCommandLine
             Arguments rest = Arguments.Parse(args.Skip(1).ToArray(), known);
             return command switch
             {
-                "run" => await RunAsync(rest, output, error, cancellationToken).ConfigureAwait(false),
+                "run" => await RunAsync(rest, output, error, cancellationToken, control).ConfigureAwait(false),
                 "validate" => Validate(rest, output, error),
+                "preflight" => await PreflightAsync(rest, output, cancellationToken).ConfigureAwait(false),
+                "inspect" or "pause" or "cancel" => await ControlAsync(command, rest, output, cancellationToken).ConfigureAwait(false),
+                "inspect-record" => EvidenceCommands.Inspect(rest.Require("record"), output),
+                "export" => EvidenceCommands.Export(rest.Require("record"), rest.Require("out"), output),
+                "compare" => EvidenceCommands.Compare(rest.Require("left"), rest.Require("right"),
+                    rest.TryGet("out", out string comparisonOutput) ? comparisonOutput : null, output),
                 "benchmark-program" => await ProgramBenchmark.RunAsync(rest.Require("worker"), rest.Require("output"),
                     rest.TryGet("runs", out string runs) ? ParseInt32(runs, "runs") : 4,
                     rest.TryGet("measurements", out string measurements) ? ParseInt32(measurements, "measurements") : 3,
@@ -92,9 +105,7 @@ internal static class EvolveCommandLine
         }
     }
 
-    /// <summary>Loads a configuration file, runs the search it describes, and reports the outcome.</summary>
-    private static async Task<int> RunAsync(
-        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken)
+    private static (YamlModelConfig Config, AiModelBuilder<double, Matrix<double>, Vector<double>> Builder) LoadProgramRun(Arguments arguments)
     {
         string configPath = arguments.Require("config");
         YamlModelConfig config = YamlConfigLoader.LoadFromFile(configPath);
@@ -110,32 +121,102 @@ internal static class EvolveCommandLine
                 "written in code. Use the library directly for that.");
 
         ApplyOverrides(options, arguments);
-        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(configPath);
-        builder.ConfigureEvolution(options);
+        // CLI history is retained even for an automatically derived output root. Do not let the facade's
+        // derived-output cleanup recursively remove prior segments or the directory whose lease we hold.
+        if (options.OutputDirectory is null &&
+            (options.Resume || options.CheckpointInterval > 0 || options.CheckpointDirectory is not null || options.Trace.Enabled))
+            options.OutputDirectory = Path.Combine(Path.GetTempPath(), "aidotnet-evolve", EvolutionOutputLayout.CreateStem(options.RunId));
+        if (options.OutputDirectory is not null) config.ProgramEvolution.Engine.OutputDirectory = options.OutputDirectory;
+        var builder = AiModelBuilder<double, Matrix<double>, Vector<double>>.FromConfiguration(config);
+        if (config.ProgramEvolution.TestCases.Count > 0) builder.WithProgramTestCaseCorrectness();
+        return (config, builder);
+    }
 
-        AiModelResult<double, Matrix<double>, Vector<double>> result;
+    private static int PreflightLimit(Arguments arguments) => arguments.TryGet("preflight-max-tests", out string maximum)
+        ? ParseInt32(maximum, "preflight-max-tests") : 256;
+
+    private static async Task<int> PreflightAsync(Arguments arguments, TextWriter output, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var (config, builder) = LoadProgramRun(arguments);
+        using var lease = RunDirectoryLease.Acquire(config.Evolution!);
+        var report = await builder.PreflightProgramEvolutionAsync(PreflightLimit(arguments), token).ConfigureAwait(false);
+        output.WriteLine(JsonConvert.SerializeObject(report, Formatting.Indented));
+        return report.IsReady ? ExitSuccess : ExitRunFailed;
+    }
+
+    /// <summary>Loads one configuration document, preflights its first seed, then runs and reports the search.</summary>
+    private static async Task<int> RunAsync(
+        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken, EvolutionRunControl? control)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (arguments.Has("include-source") && !arguments.Has("record"))
+            throw new ArgumentException("--include-source requires --record.");
+        var (config, builder) = LoadProgramRun(arguments);
+        using var lease = RunDirectoryLease.Acquire(config.Evolution!);
+        using var record = arguments.TryGet("record", out string recordPath)
+            ? new RunRecord(recordPath, config, arguments.Has("include-source")) : null;
+        control ??= new EvolutionRunControl();
+        using var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var inspection = new RunInspection(control, runCancellation);
+        builder.WithEvolutionControl(control).ObserveProgramEvolution(inspection);
+        await using var service = arguments.TryGet("session", out string session)
+            ? new LocalRunControl(session, inspection.Handle) : null;
+
+        AiModelResult<double, Matrix<double>, Vector<double>>? result = null;
+        AiDotNet.Evolution.Programs.ProgramEvolutionPreflightResult? preflight = null;
+        int exitCode = ExitRunFailed;
         try
         {
-            result = await builder.BuildAsync(cancellationToken).ConfigureAwait(false);
+            error.WriteLine("Preflight checks one seed before search. Its correctness and additional fitness costs are separate from the search evaluation budget.");
+            preflight = await builder.PreflightProgramEvolutionAsync(PreflightLimit(arguments), runCancellation.Token).ConfigureAwait(false);
+            error.WriteLine(JsonConvert.SerializeObject(preflight));
+            if (preflight.IsReady)
+            {
+                result = await builder.BuildAsync(runCancellation.Token).ConfigureAwait(false);
+                if (result.EvolutionSummary is { } completed) exitCode = RunExitCode(completed);
+            }
         }
         catch (OperationCanceledException)
         {
-            throw;
+            exitCode = ExitCancelled;
+            error.WriteLine("Cancelled.");
         }
         catch (Exception exception)
         {
-            throw new RunFailedException(exception);
+            error.WriteLine(Flatten(exception));
         }
 
-        EvolutionRunSummary? summary = result.EvolutionSummary;
+        EvolutionRunSummary? summary = result?.EvolutionSummary;
+        await inspection.FinishAsync(summary).ConfigureAwait(false);
+        if (record is not null)
+        {
+            try { record.Complete(preflight, summary, result?.ProgramEvolution, inspection.Read(), exitCode); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or JsonException or System.Text.Json.JsonException)
+            {
+                error.WriteLine("Run evidence publication failed; no successful export is claimed. Check destination, bounds and configured-secret policy.");
+                if (exitCode == ExitSuccess) exitCode = ExitRunFailed;
+            }
+        }
         if (summary is null)
         {
             error.WriteLine("The run produced no evolution summary.");
-            return ExitRunFailed;
+            return exitCode;
         }
 
         if (arguments.Has("json")) output.WriteLine(JsonConvert.SerializeObject(summary, Formatting.Indented));
-        else PrintSummary(output, summary, result.ProgramEvolution?.BestProgram?.Source, arguments.Has("show-best"));
+        else PrintSummary(output, summary, result?.ProgramEvolution?.BestProgram?.Source, arguments.Has("show-best"));
+        if (service is not null) error.WriteLine(JsonConvert.SerializeObject(inspection.Read()));
+        return exitCode;
+    }
+
+    internal static int RunExitCode(EvolutionRunSummary summary) =>
+        summary.StopReason is EvolutionStopReason.CandidateFailure or EvolutionStopReason.NoCandidates ||
+        (summary.ArchiveCount == 0 && summary.StopReason != EvolutionStopReason.Canceled) ? ExitRunFailed : ExitSuccess;
+
+    private static async Task<int> ControlAsync(string command, Arguments arguments, TextWriter output, CancellationToken token)
+    {
+        output.WriteLine(await LocalRunControl.SendAsync(arguments.Require("session"), command, token).ConfigureAwait(false));
         return ExitSuccess;
     }
 
@@ -272,7 +353,16 @@ internal static class EvolveCommandLine
         output.WriteLine("aidotnet-evolve - run an evolution search described by a YAML configuration file.");
         output.WriteLine();
         output.WriteLine("  run       --config <file> [--run-id <id>] [--seed <n>] [--max-evaluations <n>]");
-        output.WriteLine("            [--output <dir>] [--resume] [--json] [--show-best]");
+        output.WriteLine("            [--output <dir>] [--resume] [--json] [--show-best] [--session <name>]");
+        output.WriteLine("            [--preflight-max-tests <1..4096>] first-seed preflight runs before search (default 256 public tests)");
+        output.WriteLine("            [--record <new-dir>] [--include-source] write immutable invocation evidence; source requires explicit review");
+        output.WriteLine("  inspect-record --record <dir> verify and inspect a completed invocation's record");
+        output.WriteLine("  export    --record <dir> --out <new-dir> copy a verified bundle, including any explicitly captured source");
+        output.WriteLine("  compare   --left <record> --right <record> [--out <new-dir>] descriptive comparison, not superiority evidence");
+        output.WriteLine("  preflight --config <file> [--preflight-max-tests <1..4096>] execute only the seed/setup checks");
+        output.WriteLine("  inspect | pause | cancel --session <name>  current-user-only live control");
+        output.WriteLine("            pause drains the batch and exits; resumability requires a verified checkpoint.");
+        output.WriteLine("            Resume with run --config <same file> --resume and the same run id/output/budget.");
         output.WriteLine("  validate  --config <file>   load the file, validate it, and print what it resolved to");
         output.WriteLine("  schema    [--out <path>]    write the JSON schema an editor validates the file against");
         output.WriteLine("  docs      [--out <path>]    write the markdown reference for every setting");
@@ -282,7 +372,7 @@ internal static class EvolveCommandLine
         output.WriteLine("Any ${NAME} in the file is replaced by that environment variable, and ${NAME:-value}");
         output.WriteLine("supplies a default, so an API key stays out of a file you commit.");
         output.WriteLine();
-        output.WriteLine("Exit codes: 0 success, 1 usage or configuration error, 2 cancelled, 3 no result.");
+        output.WriteLine("Exit codes: 0 success, 1 usage or configuration error, 2 cancelled, 3 preflight/run failed or no usable result.");
     }
 
     /// <summary>A minimal <c>--name value</c> and <c>--flag</c> parser.</summary>
@@ -295,7 +385,7 @@ internal static class EvolveCommandLine
         private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
 
         private static readonly HashSet<string> Flags =
-            new(new[] { "resume", "json", "show-best" }, StringComparer.OrdinalIgnoreCase);
+            new(new[] { "resume", "json", "show-best", "include-source" }, StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Parses the options of one command, refusing anything the command does not accept.</summary>
         /// <param name="args">The tokens after the command name.</param>
@@ -328,7 +418,12 @@ internal static class EvolveCommandLine
                         string.Join(", ", known.Select(option => "--" + option)) + ".");
                 }
 
+                if (parsed._values.ContainsKey(name))
+                    throw new ArgumentException($"Option '--{name}' may be specified only once.");
+
                 bool hasValue = index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal);
+                if (hasValue && Flags.Contains(name))
+                    throw new ArgumentException($"Flag option '--{name}' does not accept a value; omit the flag to leave it disabled.");
                 if (!hasValue && !Flags.Contains(name))
                     throw new ArgumentException($"'--{name}' expects a value.");
 
