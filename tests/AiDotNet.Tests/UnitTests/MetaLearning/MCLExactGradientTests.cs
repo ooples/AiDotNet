@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.Data.Structures;
 using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
