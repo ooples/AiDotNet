@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -47,6 +49,12 @@ public sealed class CustomObjectiveFailureLifecycleTests
         Assert.False(model.IsTrainingMode);
     }
 
+    // [Batch, Features] in and out: a single 128 -> 128 matmul over one feature axis, which is what
+    // ADNSHAPE007 asks a concrete model to publish.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
     private sealed class CachedLinearNetwork : NeuralNetworkBase<float>
     {
         internal CachedLinearLayer Linear => (CachedLinearLayer)Layers[0];
@@ -60,6 +68,9 @@ public sealed class CustomObjectiveFailureLifecycleTests
                 => new MeanSquaredErrorLoss<float>().ComputeTapeLoss(Linear.Forward(current), expected), optimizer);
     }
 
+    // 128 -> 128: the matmul preserves the shape at every rank it accepts, which is what
+    // [ElementWiseShape] declares.
+    [ElementWiseShape]
     private sealed class CachedLinearLayer : LayerBase<float>
     {
         internal Tensor<float> Weights { get; } = new(new[] { 128, 128 });
