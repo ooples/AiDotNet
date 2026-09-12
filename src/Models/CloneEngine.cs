@@ -617,6 +617,19 @@ public static class CloneEngine
             return true;
         }
 
+        // COLLECTIONS ARE TESTED BEFORE THE Clone() PROBE, and that order is the whole point: every Array
+        // carries a public parameterless Clone(), and Array.Clone() is SHALLOW. Probing first therefore
+        // matched every array-typed field, handed back a copy still holding the source's own elements, and
+        // left this branch unreachable for arrays. A Vector<T>[] of weights then aliased its source, so
+        // meta-training a clone wrote straight through into the original. Duplicate -> CopyArray replaces
+        // each element with DuplicateCollectionElement, which is the deep copy that was intended.
+        if (value is Array || value is IDictionary || value is IList
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)))
+        {
+            copy = Duplicate(value);
+            return true;
+        }
+
         var clone = type.GetMethod("Clone", BindingFlags.Public | BindingFlags.Instance, binder: null, Type.EmptyTypes, modifiers: null);
         if (clone is not null && clone.ReturnType != typeof(void))
         {
@@ -626,13 +639,6 @@ public static class CloneEngine
                 copy = cloned;
                 return true;
             }
-        }
-
-        if (value is Array || value is IDictionary || value is IList
-            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)))
-        {
-            copy = Duplicate(value);
-            return true;
         }
 
         return false;
