@@ -741,6 +741,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         try
         {
             IProgramFitnessEvaluator evaluator = CreateProgramEvaluator(programOptions, out ownedEngine);
+            evaluator = ApplyRequiredProgramTestCaseCorrectness(programOptions, evaluator, ref ownedEngine);
             if (_programCorrectnessEvaluator is { } correctness)
                 evaluator = new CorrectnessGatedProgramFitnessEvaluator(correctness, evaluator);
 
@@ -989,24 +990,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 "ProgramEvolutionOptions.TestCases, or set ProgramEvolutionOptions.EvaluatorScript or CustomFitnessEvaluator.");
         }
 
-        IProgramExecutionEngine? executionEngine = _programExecutionEngine;
-        if (executionEngine is null)
-        {
-            // Two places can describe the sandbox, and quietly preferring one would leave the other configured,
-            // validated, and ignored. Saying so is better than picking.
-            if (_programSandboxOptions is not null && programOptions.HasExplicitSandbox)
-            {
-                throw new ArgumentException(
-                    "The sandbox is configured twice, through ConfigureProgramSandbox and through " +
-                    "ProgramEvolutionOptions.Sandbox, and the two settings differ in effect. Configure it in one " +
-                    "place.",
-                    nameof(programOptions));
-            }
-
-            ProgramSandboxOptions sandbox = _programSandboxOptions ?? programOptions.Sandbox;
-            ownedEngine = new ProcessProgramExecutionEngine(sandbox);
-            executionEngine = ownedEngine;
-        }
+        IProgramExecutionEngine executionEngine = ResolveProgramRunner(programOptions, ref ownedEngine);
 
         return hasScript
             ? new ScriptProgramFitnessEvaluator(

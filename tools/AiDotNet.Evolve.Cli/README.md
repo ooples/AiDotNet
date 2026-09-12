@@ -20,10 +20,17 @@ appropriate containment boundary.
 `Completed` alone does not pass correctness: the seed must achieve maximize-one
 with no violations or declared reused measurement. Input/output fitness can supply
 that check; scripts and custom fitness require explicit correctness or public
-input/output examples. A seed with the wrong fitness direction or missing archive
-coordinates is also refused. This checks public examples, not a held-out suite, and
-does not automatically install an independent correctness gate on future script-
-scored proposals. That integration remains unfinished.
+input/output examples (custom fitness cannot be combined with examples under the
+existing options contract). A seed with the wrong fitness direction or missing
+archive coordinates is also refused. This checks public examples, not a held-out
+suite. When examples are configured, the CLI requires every candidate to pass
+them before script fitness runs. Built-in pass-fraction fitness becomes a hard
+gate without executing the examples twice. Library callers opt into this with
+`WithProgramTestCaseCorrectness()`; custom providers use a separate
+`ConfigureProgramCorrectness` checker. Both correctness and fitness stages are
+version-pinned before and after each call. Declared reused correctness never
+passes. The gate identity is now `correctness-gated-program-v4-fresh-pinned`;
+checkpoints created with older gate identities are not compatible.
 
 The preflight allowance is **separate from** `MaxEvaluationAttempts`: at most one
 correctness evaluation and one additional fitness evaluation. A built-in evaluator

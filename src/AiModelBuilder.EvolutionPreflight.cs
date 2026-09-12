@@ -92,12 +92,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             EvolutionTaskResult validation = await correctnessTask.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
             report.CorrectnessStatus = validation.Status;
             report.CorrectnessCostUnits = validation.CostUnits;
-            if (validation.Status != EvolutionEvaluationStatus.Completed || validation.Quality != 1 ||
-                validation.Direction != EvolutionOptimizationDirection.Maximize || validation.ConstraintViolations.Any(value => value > 0) ||
-                validation.MeasurementOrigin is { Kind: not EvolutionMeasurementOriginKind.Measured })
+            if (!CorrectnessGatedProgramFitnessEvaluator.PassesCorrectness(validation))
             { report.Code = "seed_correctness_failed"; return report; }
             cancellationToken.ThrowIfCancellationRequested();
             report.SharedCorrectnessAndFitness = ReferenceEquals(correctness, fitness);
+            // Public tests were already checked when they supplied correctness. If the caller supplied a different
+            // correctness evaluator, the requested public gate still has to run before additional fitness.
+            if (!report.SharedCorrectnessAndFitness && _programCorrectnessEvaluator is not null)
+            {
+                fitness = ApplyRequiredProgramTestCaseCorrectness(programs, fitness, ref owned);
+                report.FitnessIdentity = EvolutionHash.Combine(new[] { fitness.Id, fitness.VersionHash });
+            }
             var fitnessTask = report.SharedCorrectnessAndFitness ? correctnessTask : new ProgramEvolutionTask(fitness, descriptors, programs);
             EvolutionTaskResult measured = validation;
             if (!report.SharedCorrectnessAndFitness)

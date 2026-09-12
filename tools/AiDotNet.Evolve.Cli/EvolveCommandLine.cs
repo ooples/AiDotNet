@@ -116,6 +116,7 @@ internal static class EvolveCommandLine
         ApplyOverrides(options, arguments);
         if (options.OutputDirectory is not null) config.ProgramEvolution.Engine.OutputDirectory = options.OutputDirectory;
         var builder = AiModelBuilder<double, Matrix<double>, Vector<double>>.FromConfiguration(config);
+        if (config.ProgramEvolution.TestCases.Count > 0) builder.WithProgramTestCaseCorrectness();
         return (config, builder);
     }
 
