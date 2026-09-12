@@ -1,8 +1,9 @@
 # Evolution CLI — US24 implementation in progress
 
 This repository tool is not added to the core NuGet dependency graph. US24 is
-**not complete**: coordinated-provider preflight, durable inspection/export bundles,
-provider/model telemetry, backend queues and optional dashboard work remain.
+**not complete**: coordinated-provider preflight, complete replay configurations,
+held-out winner validation, provider/model telemetry, backend queues and optional
+dashboard work remain.
 
 ## Seed preflight and budgets
 
@@ -68,6 +69,71 @@ Without a usable checkpoint the final state is `stopped`, not resumable. Snapsho
 verification does not attest that the file cannot change later; resume verifies it
 again. Automatic resume remains unsupported for coordinated resource-ledger and
 persistent-fitness runs; the tool does not bypass the facade's existing guards.
+
+Cooperating CLI processes hold exclusive file leases on output, checkpoint and
+explicit trace directories before preflight. A competing writer fails without
+starting search. This is not a security boundary against a noncooperating process
+or an attacker changing filesystem links. Leases are released on disposal/process
+exit; their empty files remain to avoid unlink races. CLI-derived output roots are
+retained, not automatically recursively deleted. Choose a new root to start an
+independent experiment.
+
+Checkpoint **output snapshots** are now write-once source/info pairs. A new observer
+continues the highest existing output ordinal; these ordinals are not the engine's
+checkpoint safe-sequence numbers. Explicit attempts to replace an existing snapshot
+fail. Existing history is scanned without following subdirectories, up to one
+million entries; beyond that, select a new output root. Final `best/` files remain
+mutable convenience outputs. `MaxRetainedRecords` bounds recent in-memory write
+receipts (default 1,024; range 1–65,536), and `DroppedRecords` exposes evictions.
+This does not delete any historical files. Failed staging directories are retained
+for diagnosis; filesystem capacity still needs operator management.
+
+## Invocation records and exports
+
+```text
+run --config experiment.yaml --record records/attempt1 --include-source --json
+inspect-record --record records/attempt1
+export --record records/attempt1 --out exports/attempt1
+compare --left records/attempt1 --right records/attempt2 --out comparisons/pair1
+```
+
+`--record` is opt-in and requires a **new** destination for every invocation,
+including resumes. The destination is leased before preflight. Records include
+unsuccessful preflight, cancellation and handled search failure; abrupt process
+termination cannot promise a final record. The command returns a failure if a
+successful run cannot publish its requested record. No existing record is replaced.
+
+Each bundle contains a SHA-256 manifest plus `configuration.json`,
+`environment.json`, `validation.json`, `result.json`, and optionally `program.txt`.
+Metadata is bounded to 128 KiB per file and source to 4 MiB. Reads reject duplicate
+JSON properties, unknown/traversing names, file-size violations, linked roots/files,
+hash/length mismatches and disagreement between source and winner receipts. Staging
+and same-parent publication keep a partially written bundle from appearing at the
+requested destination. Unix staging uses owner-only permissions; Windows inherits
+the parent ACL. Neither is an authorization system or authenticity signature.
+
+Configuration is an **allowlisted search-settings projection**, not a complete
+replay recipe: it excludes paths, provider parameter bags, prompts, seed text,
+examples and evaluator script. Run IDs are hashed. Environment evidence includes
+runtime/platform/architecture and exact CLI/facade/core binary hashes, checking
+loaded module identity against disk first. It does not fingerprint every transitive
+dependency, sandbox, device or external evaluator. `validation.json` retains seed
+preflight and archive receipts, **not independent held-out winner revalidation**.
+Provider-reported final usage is process-segment scoped; zero tokens may mean the
+provider did not report usage, and no currency total is inferred.
+
+Source is omitted unless `--include-source` is supplied. When included it is taken
+from the in-memory winner, without truncation or rewriting, and must match the
+archive receipt. Every configured chat-provider string is treated conservatively
+as sensitive: finding one in the source or decoded JSON blocks publication. This
+can reject benign strings too. It cannot detect arbitrary unknown or encoded
+secrets. **Review source before sharing it**; no credentials are loaded from global
+environment/credential stores for this scan. The export command copies a verified
+bundle, including any source already explicitly captured; it is not a new secret
+scanner. Comparison export retains both independently verifiable bundles and a
+descriptive report with a root manifest. Equal configuration/environment
+projections do not establish equal tasks, fair budgets or statistical significance.
+Hashes attest integrity, never scientific validity or competitor superiority.
 
 On `run`, Ctrl+C first requests a graceful stop, a second interrupt cancels and may
 roll back in-flight work, and a third allows process termination. Other commands
