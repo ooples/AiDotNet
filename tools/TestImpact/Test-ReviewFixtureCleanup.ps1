@@ -21,8 +21,8 @@ foreach ($unsafePath in $unsafePaths) {
     }
     if (-not $rejected) { throw "Unsafe fixture cleanup was accepted: $unsafePath" }
 }
-New-Item -ItemType Directory -Path $fixture | Out-Null
 try {
+    New-Item -ItemType Directory -Path $fixture | Out-Null
     'owned fixture' | Set-Content -LiteralPath (Join-Path $fixture 'marker.txt')
     Remove-ReviewFixtureDirectory -LiteralPath $fixture -ExpectedLeafPrefix 'aidotnet-cleanup-review-' -ThrowOnUnsafePath
     if (Test-Path -LiteralPath $fixture) { throw 'The owned fixture was not removed.' }
@@ -36,8 +36,8 @@ $targetLeaf = 'aidotnet-cleanup-review-child'
 $sentinelChild = Join-Path $sentinel $targetLeaf
 $marker = Join-Path $sentinelChild 'marker.txt'
 $markerText = 'a linked ancestor must not allow deleting this sentinel'
-New-Item -ItemType Directory -Path $linkFixture, $sentinelChild | Out-Null
 try {
+    New-Item -ItemType Directory -Path $linkFixture, $sentinelChild | Out-Null
     $markerText | Set-Content -LiteralPath $marker
     # Junctions need no symlink privilege on Windows; Unix uses a directory symlink.
     $linkType = if ([IO.Path]::DirectorySeparatorChar -eq '\') { 'Junction' } else { 'SymbolicLink' }
