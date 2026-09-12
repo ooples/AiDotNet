@@ -371,6 +371,14 @@ jobs:
           & git checkout --quiet $sourceSha
           if ($LASTEXITCODE -ne 0) { throw 'checkout of audited commit failed - refusing to audit the wrong tree' }
 
+          # The audited tree's own shard filters, so replayed test-source routing is exactly what a pull
+          # request on that tree receives. Without it every test-source change escalates and the routing
+          # heuristic would never be measured against a complete matrix.
+          $auditManifest = Join-Path $env:RUNNER_TEMP 'audit-shard-manifest.json'
+          $auditShards = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          ConvertTo-Json -InputObject @($auditShards | Select-Object name, project, filter) -Depth 3 |
+            Set-Content -LiteralPath $auditManifest -Encoding utf8
+
           $audit = $null
           $auditExit = 0
           $basis = ''
@@ -383,7 +391,8 @@ jobs:
             & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
                 -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
                 -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json `
-                -CurrentChangeBaseSha $sourceSha -OutFile historical-audit.json
+                -CurrentChangeBaseSha $sourceSha -ShardManifestFile $auditManifest `
+                -OutFile historical-audit.json
             $auditExit = $LASTEXITCODE
             & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
                 -MapFile prevmap/shard-map.json -AuditFile historical-audit.json `
@@ -416,7 +425,8 @@ jobs:
             & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
                 -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
                 -MapFile shard-map.json -OutcomesFile outcomes.json `
-                -CurrentChangeBaseSha $sourceSha -OutFile fresh-audit.json
+                -CurrentChangeBaseSha $sourceSha -ShardManifestFile $auditManifest `
+                -OutFile fresh-audit.json
             $auditExit = $LASTEXITCODE
             & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
                 -MapFile shard-map.json -AuditFile fresh-audit.json -OutcomesFile outcomes.json `

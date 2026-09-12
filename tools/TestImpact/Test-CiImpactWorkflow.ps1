@@ -107,6 +107,55 @@ function Get-ContinuedShellCommand {
     return @($commands)
 }
 
+function Test-MapSelectorPullRequestScope {
+    param([string] $Step)
+
+    # Parse individual PowerShell invocations rather than searching the whole step:
+    # the classifier's argument, a comment, or a different variable proves nothing
+    # about the map-backed command that actually emits the selected shard matrix.
+    $lines = [regex]::Split($Step, '\r?\n')
+    $mapCommands = [System.Collections.Generic.List[System.Management.Automation.Language.CommandAst]]::new()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^\s*&\s+\./tools/TestImpact/Select-Shards\.ps1\b') { continue }
+        $parts = [System.Collections.Generic.List[string]]::new()
+        do {
+            $line = $lines[$i]
+            [void] $parts.Add($line)
+            $continued = $line.TrimEnd().EndsWith('`', [StringComparison]::Ordinal)
+            if ($continued) { $i++ }
+        } while ($continued -and $i -lt $lines.Count)
+        $tokens = $null; $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+            ($parts -join "`n"), [ref] $tokens, [ref] $parseErrors)
+        if ($parseErrors.Count -gt 0) { return $false }
+        foreach ($command in $ast.FindAll({ param($node)
+            $node -is [System.Management.Automation.Language.CommandAst]
+        }, $true)) {
+            if ($command.GetCommandName() -cne './tools/TestImpact/Select-Shards.ps1') { continue }
+            if (@($command.CommandElements | Where-Object {
+                $_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -ceq 'MapFile'
+            }).Count -gt 0) { [void] $mapCommands.Add($command) }
+        }
+    }
+    if ($mapCommands.Count -ne 1) { return $false }
+    $elements = $mapCommands[0].CommandElements
+    $arguments = @{}
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $element = $elements[$i]
+        if ($element -isnot [System.Management.Automation.Language.CommandParameterAst] -or
+            $element.ParameterName -cnotin @('MapFile', 'PullRequestHeadSha')) { continue }
+        if ($arguments.ContainsKey($element.ParameterName)) { return $false }
+        $value = $element.Argument
+        if ($null -eq $value -and $i + 1 -lt $elements.Count) { $value = $elements[$i + 1] }
+        $arguments[$element.ParameterName] = $value
+    }
+    return $arguments.ContainsKey('MapFile') -and $arguments.ContainsKey('PullRequestHeadSha') -and
+        $arguments.MapFile -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $arguments.MapFile.Value -ceq 'map/shard-map.json' -and
+        $arguments.PullRequestHeadSha -is [System.Management.Automation.Language.VariableExpressionAst] -and
+        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'env:PR_HEAD_SHA'
+}
+
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
 $selectorText = Get-Content -LiteralPath $Selector -Raw
@@ -251,8 +300,25 @@ Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
     'ordinary PR selection was given the audit-only unchanged-map capability'
 Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
-Assert-Contract ($selectStep.Contains('-BaseSha $env:PR_BASE_SHA')) `
+Assert-Contract ($selectStep.Contains('-ClassifyOnly `') -and
+        $selectStep.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) `
     'non-runtime classification does not use the exact PR base-to-head path set'
+Assert-Contract ($selectStep.Contains('PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}')) `
+    'the selector is not given the pull request head it must verify as the merge commit''s second parent'
+# The event base.sha is the base branch as it was when the pull request was opened. For a pull
+# request behind master it made every commit master gained since look like part of the pull
+# request: on #2100 it attributed 16 merged CI-control files to a 4-file change, escalating 116 shards.
+Assert-Contract (-not $selectStep.Contains('pull_request.base.sha') -and -not $selectStep.Contains('-BaseSha')) `
+    'pull-request selection reads the stale event base.sha instead of the merge commit''s first parent'
+Assert-Contract (Test-MapSelectorPullRequestScope -Step $selectStep) `
+    'the map-backed selector does not scope its change to the pull request head'
+Assert-Contract ($selectorText.Contains('function Resolve-PullRequestBase') -and
+        $selectorText.Contains('$parents.Count -ne 3') -and
+        $selectorText.Contains('$parents[2].Equals($PullRequestHeadSha')) `
+    'the selector does not verify the checkout is the two-parent merge of the pull request head'
+Assert-Contract ($selectStep.Contains('-ShardManifestFile shard-manifest.json') -and
+        $selectStep.Contains('Set-Content -LiteralPath shard-manifest.json')) `
+    'test sources are not routed through the shard manifest, so every test edit escalates'
 Assert-Contract ($selectStep.Contains('$pathRequiresValidation = Read-RequiredJsonBoolean')) `
     'the selector does not validate and consume the path classifier boolean'
 Assert-Contract ($selectStep.Contains('$selectionEscalated = Read-RequiredJsonBoolean')) `
@@ -612,6 +678,9 @@ Assert-Contract ($auditStep.Contains('-MapFile shard-map.json')) `
     'fresh coverage certification does not audit the candidate map that was just measured'
 Assert-Contract ($auditStep.Contains('-CurrentChangeBaseSha $sourceSha')) `
     'historically merged selector-control changes still wedge every later selection audit'
+Assert-Contract ($auditStep.Contains('-ShardManifestFile $auditManifest') -and
+        $auditStep.Contains("yq -o=json -I=0 '.shard' .github/test-shards.yml")) `
+    'the nightly audit does not replay test-source routing, so its misses are never measured'
 Assert-Contract ($auditStep.Contains('if ([int] $historicalDecision.missCount -gt 0)')) `
     'a historical selection miss can be hidden by fresh-coverage fallback'
 Assert-Contract ($auditStep.Contains('(-not $certified -and $auditExit -eq 0)')) `
