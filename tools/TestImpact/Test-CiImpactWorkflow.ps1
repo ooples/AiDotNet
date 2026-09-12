@@ -68,6 +68,23 @@ function Get-JobHeader {
     return $JobBlock.Substring(0, $steps.Index)
 }
 
+function Test-CheckoutCredentialsDisabled {
+    param([string] $Step)
+
+    # This contract deliberately accepts the workflow's block-mapping form only.
+    # Limit inputs to the one active `with` mapping and its direct children:
+    # comments, another step property, and nested block-scalar text are not inputs.
+    $withHeaders = [regex]::Matches($Step, '(?m)^        with:[^\r\n]*\r?$')
+    if ($withHeaders.Count -ne 1) { return $false }
+    $withBlock = [regex]::Match($Step,
+        '(?ms)^        with:[ \t]*(?:#[^\r\n]*)?\r?\n(?<inputs>.*?)(?=^ {0,8}\S|\z)')
+    if (-not $withBlock.Success) { return $false }
+    $credentials = [regex]::Matches($withBlock.Groups['inputs'].Value,
+        '(?m)^          ["'']?persist-credentials["'']?:[ \t]*(?<value>[^\r\n]*)\r?$')
+    return $credentials.Count -eq 1 -and
+        $credentials[0].Groups['value'].Value -cmatch '^false[ \t]*(?:#.*)?$'
+}
+
 function Test-JobDependency {
     param([string] $JobHeader, [string] $Dependency)
 
@@ -252,7 +269,7 @@ Assert-Contract ([bool] $resolverCheckoutStep) `
     'validation-source invokes a repository script without checking out the tested tree'
 Assert-Contract ($resolverCheckoutStep.Contains('uses: actions/checkout@')) `
     'validation-source checkout step does not use actions/checkout'
-Assert-Contract ($resolverCheckoutStep.Contains('persist-credentials: false')) `
+Assert-Contract (Test-CheckoutCredentialsDisabled -Step $resolverCheckoutStep) `
     'validation-source persists checkout credentials although it only reads Git history'
 Assert-Contract ([bool] $resolverCheckoutStep -and [bool] $resolveStep -and
     $resolver.IndexOf($resolverCheckoutStep, [StringComparison]::Ordinal) -lt

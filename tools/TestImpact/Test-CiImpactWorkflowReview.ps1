@@ -47,6 +47,25 @@ $cases = @(
     }
 )
 $deltaMapPattern = '(?ms)^      - name: Resolve certified shard map for delta reuse\r?\n.*?(?=^      - name:|\z)'
+$checkoutPattern = '(?ms)^      - name: Checkout validation reuse policy\r?\n.*?(?=^      - name:|\z)'
+$checkout = [regex]::Match($workflow, $checkoutPattern).Value
+$credentialInput = '          persist-credentials: false'
+if (-not $checkout.Contains($credentialInput)) { throw 'Missing checkout credential input for negative controls.' }
+foreach ($mutation in @(
+    @{ Name = 'checkout-credentials-comment-decoy'; Value = "          persist-credentials: true`n          # persist-credentials: false" },
+    @{ Name = 'checkout-credentials-comment-only'; Value = '          # persist-credentials: false' },
+    @{ Name = 'checkout-credentials-duplicate'; Value = "          persist-credentials: false`n          persist-credentials: true" },
+    @{ Name = 'checkout-credentials-duplicate-false'; Value = "$credentialInput`n$credentialInput" },
+    @{ Name = 'checkout-credentials-outside-with'; Value = "        env:`n$credentialInput" },
+    @{ Name = 'checkout-credentials-nested-decoy'; Value = "          unused: |`n            persist-credentials: false" },
+    @{ Name = 'checkout-credentials-duplicate-with'; Value = "        with:`n$credentialInput" }
+)) {
+    $cases += [pscustomobject]@{
+        Name = $mutation.Name
+        Reason = 'validation-source persists checkout credentials'
+        Content = $workflow.Replace($checkout, $checkout.Replace($credentialInput, $mutation.Value))
+    }
+}
 $deltaMapMatch = [regex]::Match($workflow, $deltaMapPattern)
 if (-not $deltaMapMatch.Success) { throw 'The fixture must identify the delta-map step.' }
 $unboundedMapStep = [regex]::Replace($deltaMapMatch.Value, '(?m)^        timeout-minutes:[^\r\n]*\r?\n', '')

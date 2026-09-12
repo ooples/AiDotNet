@@ -10,12 +10,12 @@ ever-current claim in this inventory.
 | --- | --- |
 | `Test-CiImpactWorkflow.ps1` | Expensive-job gates, map/PR identity, bounded waits, named download/import steps, escalation-safe imports, and heavy survey/window configuration |
 | `Test-CiImpactWorkflowReview.ps1` | Unsafe workflow and manifest mutations must fail for the intended reason; unrelated/comment-only evidence cannot satisfy an execution step |
-| `Test-CertificateEvidenceReview.ps1` | Execute actual tree-binding and candidate-selection code; inconsistent certificates are ineligible for both exact and delta reuse |
+| `Test-CertificateEvidenceReview.ps1` | Execute actual tree-binding and candidate-selection code across certificate, landed-tree, runtime and artifact-presence combinations; missing runtime artifacts block exact and delta reuse |
 | `Resolve-CiValidationReuse.ps1 -SelfTest` | Canonical named certificate scopes, required artifacts, exact-tree evidence, and typed delta decisions |
 | `Test-CiValidationReuseReview.ps1` | Execute the production emission branch for complete, missing and malformed artifact inventories; observe the decline path, not only its fallback result |
 | `Test-CiValidationReuseReviewControls.ps1` | Removing production decline notices must make every decline fixture fail even though fallback output remains correct |
 | `Test-NoCoverageShardPolicy.ps1` | Retain legitimate growing lists, collapse duplicate names, and reject oversized invalid parses |
-| `Test-ReviewFixtureCleanup.ps1` | Reject paths outside the temporary root or expected fixture prefix before recursive cleanup |
+| `Test-ReviewFixtureCleanup.ps1` | Reject paths outside the temporary root or expected fixture prefix and real reparse-point ancestors; preserve a separate sentinel before cleaning owned fixtures |
 | `Test-TestImpactEndToEnd.ps1` | Real Git histories for selected PR tests, behind-master PRs, deleted tests, exact/delta reuse, and fail-closed invalid maps; runs the review controls above |
 | `.github/scripts/New-CoverageRunSettings.ps1 -SelfTest` | Preserve coverage XML and write output in the PowerShell provider location even when the process directory differs |
 

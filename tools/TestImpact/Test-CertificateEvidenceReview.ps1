@@ -28,29 +28,39 @@ $delta = @($ast.EndBlock.Statements | Where-Object {
 if ($delta.Count -ne 1) { throw 'Expected exactly one production delta eligibility branch.' }
 $failures = [Collections.Generic.List[string]]::new()
 $cases = 0
+$artifactCases = @(foreach ($analysis in @($true, $false)) {
+    foreach ($coverage in @($true, $false)) {
+        foreach ($ledger in @($true, $false)) {
+            [pscustomobject]@{ Analysis = $analysis; Coverage = $coverage; Ledger = $ledger }
+        }
+    }
+})
 foreach ($certificateMatches in @($true, $false)) {
     foreach ($landedMatches in @($true, $false)) {
         foreach ($requiresRuntime in @($true, $false)) {
-            $cases++
-            $testedTree = '0123456789abcdef0123456789abcdef01234567'
-            $otherTree = '1123456789abcdef0123456789abcdef01234567'
-            $masterTree = if ($landedMatches) { $testedTree } else { $otherTree }
-            $parsed = [pscustomobject]@{ TestedTree = $(if ($certificateMatches) { $testedTree } else { $otherTree }) }
-            $certificateTreeMatches = $true
-            foreach ($binding in $bindings) { . ([scriptblock]::Create($binding.Extent.Text)) }
-            $evidence = @([pscustomobject]@{
-                Scope = [CiValidationReuseScope]::Validation; Event = 'pull_request'
-                RunId = 1; CreatedAt = '2026-01-01T00:00:00Z'
-                TreeMatches = $treeMatches; CertificateTreeMatches = $certificateTreeMatches
-                RequiresValidation = $requiresRuntime
-                HasAnalysis = $true; HasCoverage = $true; HasLedger = $true
-            })
-            $best = Select-BestCiEvidence $evidence
-            . ([scriptblock]::Create($delta[0].Extent.Text))
-            $expectedExact = $certificateMatches -and $landedMatches
-            $expectedDelta = $certificateMatches -and -not $landedMatches
-            if (($null -ne $best) -ne $expectedExact -or ($deltaCandidates.Count -gt 0) -ne $expectedDelta) {
-                [void] $failures.Add("certificate=$certificateMatches landed=$landedMatches runtime=$requiresRuntime exact=$($null -ne $best) delta=$($deltaCandidates.Count)")
+            foreach ($artifacts in $artifactCases) {
+                $cases++
+                $testedTree = '0123456789abcdef0123456789abcdef01234567'
+                $otherTree = '1123456789abcdef0123456789abcdef01234567'
+                $masterTree = if ($landedMatches) { $testedTree } else { $otherTree }
+                $parsed = [pscustomobject]@{ TestedTree = $(if ($certificateMatches) { $testedTree } else { $otherTree }) }
+                $certificateTreeMatches = $true
+                foreach ($binding in $bindings) { . ([scriptblock]::Create($binding.Extent.Text)) }
+                $evidence = @([pscustomobject]@{
+                    Scope = [CiValidationReuseScope]::Validation; Event = 'pull_request'
+                    RunId = 1; CreatedAt = '2026-01-01T00:00:00Z'
+                    TreeMatches = $treeMatches; CertificateTreeMatches = $certificateTreeMatches
+                    RequiresValidation = $requiresRuntime
+                    HasAnalysis = $artifacts.Analysis; HasCoverage = $artifacts.Coverage; HasLedger = $artifacts.Ledger
+                })
+                $best = Select-BestCiEvidence $evidence
+                . ([scriptblock]::Create($delta[0].Extent.Text))
+                $artifactsComplete = -not $requiresRuntime -or ($artifacts.Analysis -and $artifacts.Coverage -and $artifacts.Ledger)
+                $expectedExact = $certificateMatches -and $landedMatches -and $artifactsComplete
+                $expectedDelta = $certificateMatches -and -not $landedMatches -and $artifactsComplete
+                if (($null -ne $best) -ne $expectedExact -or ($deltaCandidates.Count -gt 0) -ne $expectedDelta) {
+                    [void] $failures.Add("certificate=$certificateMatches landed=$landedMatches runtime=$requiresRuntime artifacts=$artifacts exact=$($null -ne $best) delta=$($deltaCandidates.Count)")
+                }
             }
         }
     }
