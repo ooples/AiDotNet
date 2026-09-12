@@ -18,6 +18,8 @@
     <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" Link="LicenseTestSupport.cs" />
     <Compile Include="../AiDotNet.Tests/Helpers/OnnxVisionLanguageFixture.cs" Link="OnnxVisionLanguageFixture.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/BlipOnnxContractTests.cs" Link="BlipOnnxContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/ImageBindOnnxContractTests.cs" Link="ImageBindOnnxContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/LLaVAOnnxContractTests.cs" Link="LLaVAOnnxContractTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

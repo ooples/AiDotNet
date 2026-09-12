@@ -95,15 +95,30 @@ public sealed class OnnxGraphSignature
 
     internal void RequireInput(string name, TensorElementType elementType, params int[] dimensions)
     {
+        var input = RequireTensorInput(name, elementType, dimensions.Length);
+        for (int axis = 0; axis < dimensions.Length; axis++)
+            if (input.Dimensions[axis] is int actual && actual != dimensions[axis])
+                throw Conflict($"input '{name}' axis {axis} is {actual}, but configured input requires {dimensions[axis]}");
+    }
+
+    internal void RequireInputAxes(string name, TensorElementType elementType, params int?[] dimensions)
+    {
+        var input = RequireTensorInput(name, elementType, dimensions.Length);
+        for (int axis = 0; axis < dimensions.Length; axis++)
+            if (input.Dimensions[axis] is int actual &&
+                (actual <= 0 || dimensions[axis] is int expected && actual != expected))
+                throw Conflict($"input '{name}' axis {axis} is {actual}, incompatible with the host input contract");
+    }
+
+    private OnnxValueSignature RequireTensorInput(string name, TensorElementType elementType, int rank)
+    {
         if (!Inputs.TryGetValue(name, out var input)) throw Conflict($"does not declare input '{name}'");
         if (!input.IsTensor) throw Conflict($"input '{name}' is a {input.ValueType} value, but the wrapper supplies a tensor");
         if (input.ElementType != elementType)
             throw Conflict($"input '{name}' has element type {input.ElementType}, but the wrapper supplies {elementType}");
-        if (input.Dimensions.Count != dimensions.Length)
-            throw Conflict($"input '{name}' has rank {input.Dimensions.Count}, expected {dimensions.Length}");
-        for (int axis = 0; axis < dimensions.Length; axis++)
-            if (input.Dimensions[axis] is int actual && actual != dimensions[axis])
-                throw Conflict($"input '{name}' axis {axis} is {actual}, but configured input requires {dimensions[axis]}");
+        if (input.Dimensions.Count != rank)
+            throw Conflict($"input '{name}' has rank {input.Dimensions.Count}, expected {rank}");
+        return input;
     }
 
     internal string RequireEmbeddingOutput(int width, OnnxEmbeddingLayouts layouts, params string[] supportedNames)
@@ -222,6 +237,23 @@ internal static class OnnxEmbeddingContract
         for (int token = 0; token < features.Rows; token++)
             for (int column = 0; column < width; column++)
                 features[token, column] = operations.FromDouble(output[0, token, column]);
+        return features;
+    }
+
+    internal static AiDotNet.Tensors.LinearAlgebra.Tensor<T> ReadSequenceTensor<T>(
+        Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output, int width, OnnxModelRole role)
+    {
+        var dimensions = output.Dimensions;
+        int rank = dimensions.Length;
+        string? mismatch = FindMismatch(rank, rank > 1 ? dimensions[0] : (int?)null,
+            rank == 3 ? dimensions[1] : (int?)null, rank > 0 ? dimensions[rank - 1] : (int?)null,
+            width, OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures);
+        if (mismatch is not null) throw new InvalidOperationException($"ONNX {role} output {mismatch}.");
+        var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        int tokens = rank == 3 ? dimensions[1] : 1;
+        var features = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(new[] { tokens, width });
+        for (int index = 0; index < features.Length; index++)
+            features[index] = operations.FromDouble(output.GetValue(index));
         return features;
     }
 }

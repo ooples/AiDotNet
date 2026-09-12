@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
@@ -74,6 +75,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
     private readonly InferenceSession? _visionEncoder;
     private readonly InferenceSession? _languageModel;
+    private readonly string _visionOutputName = string.Empty;
     private readonly string? _visionEncoderPath;
     private readonly string? _languageModelPath;
 
@@ -144,7 +146,10 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     public string VisionEncoderType => _visionEncoderType;
 
     /// <inheritdoc/>
-    public int NumVisualTokens => _numVisualTokens;
+    /// <exception cref="InvalidOperationException">An ONNX graph has a symbolic token count;
+    /// inspect the effective graph signature or the executed feature tensor instead.</exception>
+    public int NumVisualTokens => _numVisualTokens > 0 ? _numVisualTokens
+        : throw new InvalidOperationException("The ONNX vision graph has a symbolic token count; inspect OnnxConfiguration or the executed feature tensor.");
 
     #endregion
 
@@ -171,8 +176,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LLaVAOptions();
-        _options.Validate();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -191,14 +195,15 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _patchSize = 14;
-        _numVisualTokens = (_options.ImageSize / _patchSize) * (_options.ImageSize / _patchSize);
-        _visionHiddenDim = 1024;
+        _patchSize = _options.PatchSize;
+        _visionHiddenDim = _options.VisionDim;
         _lmHiddenDim = _options.EmbeddingDimension;
-        _numVisionLayers = 24;
-        _numLmLayers = 32;
-        _numHeads = 16;
-        _vocabularySize = 32000;
+        _numVisionLayers = _options.VisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
+        _vocabularySize = _options.VocabSize;
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? languageModel = null;
@@ -207,19 +212,32 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         {
             visionEncoder = new InferenceSession(visionEncoderPath);
             languageModel = new InferenceSession(languageModelPath);
+            var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionEncoder);
+            var languageGraph = new OnnxGraphSignature(OnnxModelRole.LanguageModel, languageModel);
+            visionGraph.RequireInputSet("pixel_values");
+            visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            // This two-graph wrapper has no separate ONNX projector. Its vision export
+            // must already produce the language-input width, not an invented native width.
+            string visionOutput = visionGraph.RequireEmbeddingOutput(_embeddingDimension,
+                OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures);
+            languageGraph.RequireInputSet("inputs_embeds");
+            languageGraph.RequireInputAxes("inputs_embeds", OnnxTensors.TensorElementType.Float, 1, null, _embeddingDimension);
+            var featureShape = visionGraph.Outputs[visionOutput].Dimensions;
+            _numVisualTokens = featureShape.Count == 3 ? featureShape[1] ?? 0 : 1;
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, languageGraph);
             _visionEncoder = visionEncoder;
             _languageModel = languageModel;
-            // Tokenizer is required for ONNX mode - must match the language model backbone
-            Guard.NotNull(tokenizer);
-            _tokenizer = tokenizer;
+            _visionOutputName = visionOutput;
+            OnnxConfiguration = configuration;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }
         catch
         {
-            visionEncoder?.Dispose();
-            languageModel?.Dispose();
+            try { languageModel?.Dispose(); } catch { }
+            try { visionEncoder?.Dispose(); } catch { }
             throw;
         }
     }
@@ -717,26 +735,21 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
             NamedOnnxValue.CreateFromTensor("pixel_values", onnxTensor)
         };
 
-        using var results = _visionEncoder.Run(inputs);
+        using var results = _visionEncoder.Run(inputs, new[] { _visionOutputName });
         var outputTensor = results.First().AsTensor<float>();
-
-        var outputShape = outputTensor.Dimensions.ToArray();
-        var output = Tensor<T>.CreateDefault(outputShape, NumOps.Zero);
-        var flatOutput = outputTensor.ToArray();
-        for (int i = 0; i < flatOutput.Length; i++)
-        {
-            output[i] = NumOps.FromDouble(flatOutput[i]);
-        }
-
-        return output;
+        return OnnxEmbeddingContract.ReadSequenceTensor<T>(outputTensor, _embeddingDimension, OnnxModelRole.ImageEncoder);
     }
 
     private OnnxTensors.DenseTensor<float> PrepareImageForOnnx(Tensor<T> image)
     {
+        if (image.Rank != 3 && image.Rank != 4 || image.Rank == 4 && image.Shape[0] != 1)
+            throw new ArgumentException("ONNX image must be rank three or have a single-image batch.", nameof(image));
         bool is3D = image.Shape.Length == 3;
         int channels = is3D ? image.Shape[0] : image.Shape[1];
         int height = is3D ? image.Shape[1] : image.Shape[2];
         int width = is3D ? image.Shape[2] : image.Shape[3];
+        if (channels != 3 || height != _imageSize || width != _imageSize)
+            throw new ArgumentException($"ONNX image must have shape [3,{_imageSize},{_imageSize}] with an optional batch of one.", nameof(image));
 
         var onnxTensor = new OnnxTensors.DenseTensor<float>([1, channels, height, width]);
 
@@ -1214,6 +1227,21 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+            return new ModelMetadata<T>
+            {
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    [nameof(OnnxConfiguration)] = configuration,
+                    ["EmbeddingDimension"] = _embeddingDimension,
+                    ["MaxSequenceLength"] = _maxSequenceLength,
+                    ["ImageSize"] = _imageSize,
+                    ["UseNativeMode"] = false
+                }
+            };
+        }
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
