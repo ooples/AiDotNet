@@ -1,13 +1,17 @@
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
@@ -21,45 +25,30 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
 /// <remarks>
 /// <para>
-/// MetaOptNet replaces the gradient-based inner-loop optimization of MAML with a
-/// differentiable convex optimization solver. This provides several advantages:
-/// </para>
-/// <list type="bullet">
-/// <item>Closed-form solution (no iterative optimization)</item>
-/// <item>Theoretically guaranteed convergence</item>
-/// <item>Stable training dynamics</item>
-/// <item>Differentiable through implicit function theorem</item>
-/// </list>
-/// <para>
-/// <b>Key Innovation:</b> Instead of gradient descent in the inner loop:
-/// </para>
-/// <code>
-/// MAML inner loop: θ' = θ - α∇L(θ)  (repeat k times)
-/// MetaOptNet:      w* = argmin_w L(w) + λR(w)  (closed-form!)
-/// </code>
-/// <para>
-/// <b>For Beginners:</b> Imagine you're trying to fit a line to some points.
-/// MAML would iteratively adjust the line: "move a bit left, now a bit right..."
-/// MetaOptNet uses math to find the exact best line in one shot using the formula:
-/// w = (X^T X + λI)^(-1) X^T y
+/// MetaOptNet (Lee et al. 2019) uses a regularized linear classifier as the base learner: the embedding network
+/// produces features, a convex solver fits a classifier to the support set, and the query loss of that classifier
+/// trains the embedding. The paper's base learner is the Crammer and Singer multi-class SVM in its dual form
+/// (eq. 10), with ridge regression and logistic regression as the other convex choices.
 /// </para>
 /// <para>
-/// <b>Supported Solvers:</b>
-/// - Ridge Regression: Fast, closed-form, good for most tasks
-/// - SVM: More powerful, better margins, but slower
-/// - Logistic Regression: For probabilistic outputs
+/// <b>The gradient through the solver.</b> The paper differentiates the base learner by applying the implicit
+/// function theorem to the solver's KKT conditions (section 3.2), not by differentiating its iterations. Each
+/// solver here therefore runs numerically, off the tape, and its solution enters the tape as
+/// <c>theta = theta* - Jinv F(theta*, Z)</c>: the KKT residual <c>F</c> is rebuilt from the embeddings with engine
+/// ops, and <c>Jinv</c> - the inverse KKT Jacobian at the solution - is a constant. The value is the solution
+/// (the residual vanishes there) and the derivative is exactly the implicit one, so the embedding network's
+/// meta-gradient runs through the base learner at the cost of one multiplication by a constant matrix.
 /// </para>
 /// <para>
-/// <b>Algorithm:</b>
-/// <code>
-/// For each task batch:
-///   For each task:
-///     1. Extract embeddings from support set: Z_s = f(X_s)
-///     2. Solve convex problem: w* = Solver(Z_s, Y_s, λ)
-///     3. Classify query set: Y_q = Z_q × w*
-///     4. Compute query loss
-///   Meta-update encoder f using gradients through the solver
-/// </code>
+/// <b>What this replaced.</b> "SVM" was ridge regression on +/-1 labels; the linear system was solved by
+/// Gauss-Seidel iteration; logistic regression took fixed 0.1-sized steps and called them Newton's method; and the
+/// encoder's meta-gradient was the configured loss of its raw output against the labels, which never involved the
+/// solver at all. Query logits also flattened the batch into one vector.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> MetaOptNet learns a feature extractor that produces embeddings where simple classifiers
+/// work well. The convex solver finds the best simple classifier for the few labelled examples, and the feature
+/// extractor is updated so that classifier does better on the rest of the task.
 /// </para>
 /// <para>
 /// Reference: Lee, K., Maji, S., Ravichandran, A., &amp; Soatto, S. (2019).
@@ -82,95 +71,51 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 {
     private readonly MetaOptNetOptions<T, TInput, TOutput> _metaOptNetOptions;
 
-    // Learned temperature parameter for scaling logits
-    private T _temperature;
+    /// <summary>
+    /// The learnable scale that multiplies the logits (eq. 12's gamma), one value; learned unless
+    /// <see cref="MetaOptNetOptions{T,TInput,TOutput}.UseLearnedTemperature"/> is off.
+    /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _logitScale;
 
     /// <summary>
     /// Initializes a new instance of the MetaOptNetAlgorithm class.
     /// </summary>
     /// <param name="options">MetaOptNet configuration options containing the model and all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when options is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
-    /// <example>
-    /// <code>
-    /// // Create MetaOptNet with minimal configuration
-    /// var options = new MetaOptNetOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor, Tensor&gt;(options);
-    ///
-    /// // Create MetaOptNet with SVM solver
-    /// var options = new MetaOptNetOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
-    /// {
-    ///     SolverType = ConvexSolverType.SVM,
-    ///     RegularizationStrength = 1.0,
-    ///     NumClasses = 5
-    /// };
-    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor, Tensor&gt;(options);
-    /// </code>
-    /// </example>
+    /// <exception cref="ArgumentException">Thrown when the configuration is invalid.</exception>
     public MetaOptNetAlgorithm(MetaOptNetOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            options.LossFunction ?? new CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
             options.InnerOptimizer)
     {
         _metaOptNetOptions = options;
-        _temperature = NumOps.FromDouble(options.InitialTemperature);
+        if (!options.IsValid())
+        {
+            throw new ArgumentException("MetaOptNet configuration is invalid. Check all parameters.", nameof(options));
+        }
+
+        _logitScale = new Vector<T>(1);
+        _logitScale[0] = NumOps.FromDouble(options.InitialTemperature);
     }
 
     /// <summary>
     /// Gets the algorithm type identifier for this meta-learner.
     /// </summary>
     /// <value>Returns <see cref="MetaLearningAlgorithmType.MetaOptNet"/>.</value>
-    /// <remarks>
-    /// <para>
-    /// This property identifies the algorithm as MetaOptNet, which uses differentiable
-    /// convex optimization in the inner loop for meta-learning.
-    /// </para>
-    /// </remarks>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaOptNet;
 
     /// <summary>
-    /// Performs one meta-training step using MetaOptNet's convex optimization approach.
+    /// Performs one meta-training step: each task's query loss under its solved base learner, differentiated through
+    /// the solver into the embedding network and the logit scale.
     /// </summary>
     /// <param name="taskBatch">A batch of tasks to meta-train on, each containing support and query sets.</param>
-    /// <returns>The average meta-loss across all tasks in the batch (evaluated on query sets).</returns>
+    /// <returns>The average query loss across the batch.</returns>
     /// <exception cref="ArgumentException">Thrown when the task batch is null or empty.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when meta-gradient computation fails.</exception>
-    /// <remarks>
-    /// <para>
-    /// MetaOptNet meta-training differs from MAML in the inner loop:
-    /// </para>
-    /// <para>
-    /// <b>MetaOptNet Training Loop:</b>
-    /// <code>
-    /// For each task:
-    ///   1. Extract embeddings: Z_s = f_θ(X_s), Z_q = f_θ(X_q)
-    ///   2. Solve for classifier: w* = ConvexSolver(Z_s, Y_s)
-    ///   3. Classify query: logits = Z_q × w* / τ  (τ = temperature)
-    ///   4. Compute loss: L = CrossEntropy(softmax(logits), Y_q)
-    /// Update encoder θ using gradients through the solver
-    /// </code>
-    /// </para>
-    /// <para>
-    /// <b>Key Difference from MAML:</b>
-    /// - MAML: Gradients flow through the optimization trajectory
-    /// - MetaOptNet: Gradients flow through the implicit function at the optimum
-    /// </para>
-    /// <para>
-    /// The implicit gradient computation uses:
-    /// ∂w*/∂θ = -(H^-1) × (∂²L/∂w∂θ)
-    /// where H is the Hessian of the inner objective.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> MetaOptNet learns a feature extractor that produces
-    /// embeddings where simple classifiers work well. The convex solver finds
-    /// the best simple classifier, and we update the feature extractor to make
-    /// this classifier work even better on the query set.
-    /// </para>
-    /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         if (taskBatch == null || taskBatch.BatchSize == 0)
@@ -178,141 +123,51 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
-        Vector<T>? accumulatedGradients = null;
-        T accumulatedTempGradient = NumOps.Zero;
+        var body = ParamModel.GetParameters();
+        Vector<T>? bodyGradient = null, scaleGradient = null;
         T totalLoss = NumOps.Zero;
-
         foreach (var task in taskBatch.Tasks)
         {
-            // Step 1: Extract embeddings from support and query sets
-            int supportN = Math.Max(1, task.NumWays * task.NumShots);
-            int queryN = Math.Max(1, task.NumWays * task.NumQueryPerClass);
-            var supportEmbeddings = ExtractEmbeddings(task.SupportInput, supportN);
-            var queryEmbeddings = ExtractEmbeddings(task.QueryInput, queryN);
-
-            // Normalize embeddings if configured
-            if (_metaOptNetOptions.NormalizeEmbeddings)
-            {
-                supportEmbeddings = NormalizeEmbeddings(supportEmbeddings);
-                queryEmbeddings = NormalizeEmbeddings(queryEmbeddings);
-            }
-
-            // Step 2: Get labels as one-hot vectors
-            var supportLabels = ConvertToLabels(task.SupportOutput);
-
-            // Step 3: Solve convex optimization problem
-            var classifierWeights = SolveConvexProblem(supportEmbeddings, supportLabels);
-
-            // Step 4: Classify query set
-            var queryLogits = ComputeLogits(queryEmbeddings, classifierWeights);
-
-            // Apply temperature scaling
-            if (_metaOptNetOptions.UseLearnedTemperature)
-            {
-                queryLogits = ScaleByTemperature(queryLogits, _temperature);
-            }
-
-            // Step 5: Compute query loss — paper-faithful softmax cross-entropy
-            // Lee et al. 2019 §3.1 trains the convex meta-classifier via softmax CE
-            // against one-hot labels; the generic LossFunction.CalculateLoss would
-            // compare flat [N×C] logits against [N] class indices and crash.
-            var queryLabelMatrix = ConvertToLabels(task.QueryOutput);
-            T taskLoss = ComputeSoftmaxCrossEntropy(
-                queryLogits, queryLabelMatrix, queryEmbeddings.Rows, _metaOptNetOptions.NumClasses);
-            totalLoss = NumOps.Add(totalLoss, taskLoss);
-
-            // Step 6: Compute gradients for encoder
-            var encoderGradients = ComputeEncoderGradients(
-                task, supportEmbeddings, queryEmbeddings, classifierWeights, taskLoss);
-
-            // Compute temperature gradient if using learned temperature
-            T tempGradient = NumOps.Zero;
-            if (_metaOptNetOptions.UseLearnedTemperature)
-            {
-                tempGradient = ComputeTemperatureGradient(queryLogits, task.QueryOutput, _temperature);
-                accumulatedTempGradient = NumOps.Add(accumulatedTempGradient, tempGradient);
-            }
-
-            // Accumulate gradients
-            if (accumulatedGradients == null)
-            {
-                accumulatedGradients = encoderGradients;
-            }
-            else
-            {
-                for (int i = 0; i < accumulatedGradients.Length; i++)
-                {
-                    accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], encoderGradients[i]);
-                }
-            }
+            var (loss, taskBody, scale) = EpisodeGradient(task);
+            totalLoss = NumOps.Add(totalLoss, loss);
+            bodyGradient = Accumulate(bodyGradient, taskBody);
+            scaleGradient = Accumulate(scaleGradient, scale);
         }
 
-        if (accumulatedGradients == null)
+        T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
+        bodyGradient = Scale(bodyGradient ?? new Vector<T>(body.Length), batchSize);
+        scaleGradient = Scale(scaleGradient ?? new Vector<T>(1), batchSize);
+
+        if (_metaOptNetOptions.EncoderL2Regularization > 0)
         {
-            throw new InvalidOperationException("Failed to compute meta-gradients.");
+            T decay = NumOps.FromDouble(_metaOptNetOptions.EncoderL2Regularization);
+            for (int i = 0; i < bodyGradient.Length; i++)
+            {
+                bodyGradient[i] = NumOps.Add(bodyGradient[i], NumOps.Multiply(decay, body[i]));
+            }
         }
 
-        // Average gradients
-        T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedGradients.Length; i++)
-        {
-            accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], batchSizeT);
-        }
-        accumulatedTempGradient = NumOps.Divide(accumulatedTempGradient, batchSizeT);
-
-        // Clip gradients if configured
         if (_metaOptNetOptions.GradientClipThreshold.HasValue && _metaOptNetOptions.GradientClipThreshold.Value > 0)
         {
-            accumulatedGradients = ClipGradients(accumulatedGradients, _metaOptNetOptions.GradientClipThreshold.Value);
+            bodyGradient = ClipGradients(bodyGradient, _metaOptNetOptions.GradientClipThreshold.Value);
         }
 
-        // Update encoder parameters
-        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _metaOptNetOptions.OuterLearningRate);
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
-
-        // Update temperature
+        double beta = _metaOptNetOptions.OuterLearningRate;
+        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
         if (_metaOptNetOptions.UseLearnedTemperature)
         {
-            T tempUpdate = NumOps.Multiply(NumOps.FromDouble(_metaOptNetOptions.OuterLearningRate), accumulatedTempGradient);
-            _temperature = NumOps.Subtract(_temperature, tempUpdate);
-            // Clamp temperature to positive values
-            if (NumOps.LessThan(_temperature, NumOps.FromDouble(0.01)))
-            {
-                _temperature = NumOps.FromDouble(0.01);
-            }
+            _logitScale = ApplyGradients(_logitScale, scaleGradient, beta);
         }
 
-        return NumOps.Divide(totalLoss, batchSizeT);
+        return NumOps.Divide(totalLoss, batchSize);
     }
 
     /// <summary>
-    /// Adapts the meta-learned model to a new task using convex optimization.
+    /// Adapts to a new task by solving the convex base learner on its support set.
     /// </summary>
     /// <param name="task">The new task containing support set examples for adaptation.</param>
-    /// <returns>A new model instance that has been adapted to the given task.</returns>
+    /// <returns>The embedding network's own copy with the classifier the solver produced.</returns>
     /// <exception cref="ArgumentNullException">Thrown when task is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// MetaOptNet adaptation is extremely fast because it uses a closed-form solution:
-    /// </para>
-    /// <list type="number">
-    /// <item>Extract embeddings from support examples</item>
-    /// <item>Solve convex optimization for classifier weights</item>
-    /// <item>Return model with encoder + classifier</item>
-    /// </list>
-    /// <para>
-    /// <b>For Beginners:</b> Adaptation is instant! We just:
-    /// 1. Transform support examples into feature space
-    /// 2. Use a mathematical formula to find the best classifier
-    /// 3. Done! No gradient steps needed.
-    /// </para>
-    /// <para>
-    /// <b>Speed Comparison:</b>
-    /// - MAML: ~10 gradient steps at test time
-    /// - MetaOptNet: 1 matrix inversion (constant time)
-    /// </para>
-    /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -320,495 +175,388 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             throw new ArgumentNullException(nameof(task));
         }
 
-        // Clone the meta model
-        var featureEncoder = CloneModel();
+        var episode = Episode(task);
+        var (support, _) = Embed(task, episode);
+        var solved = Solve(support, episode);
 
-        // Extract and normalize support embeddings
-        int supportNAdapt = Math.Max(1, task.NumWays * task.NumShots);
-        var supportEmbeddings = ExtractEmbeddings(task.SupportInput, supportNAdapt);
-        if (_metaOptNetOptions.NormalizeEmbeddings)
+        // One row per class of NumClasses, in class order: a class the task did not contain keeps a zero row, which
+        // scores zero for every example.
+        var weights = new Matrix<T>(_metaOptNetOptions.NumClasses, _metaOptNetOptions.EmbeddingDimension);
+        var primal = Primal(solved.Coefficients, support);
+        for (int c = 0; c < episode.ClassSlots.Length; c++)
         {
-            supportEmbeddings = NormalizeEmbeddings(supportEmbeddings);
-        }
-
-        // Get support labels
-        var supportLabels = ConvertToLabels(task.SupportOutput);
-
-        // Solve for classifier weights
-        var classifierWeights = SolveConvexProblem(supportEmbeddings, supportLabels);
-
-        return new MetaOptNetModel<T, TInput, TOutput>(
-            featureEncoder,
-            classifierWeights,
-            _temperature,
-            _metaOptNetOptions);
-    }
-
-    #region Convex Optimization Solvers
-
-    /// <summary>
-    /// Solves the convex optimization problem to get classifier weights.
-    /// </summary>
-    private Matrix<T> SolveConvexProblem(Matrix<T> embeddings, Matrix<T> labels)
-    {
-        return _metaOptNetOptions.SolverType switch
-        {
-            ConvexSolverType.RidgeRegression => SolveRidgeRegression(embeddings, labels),
-            ConvexSolverType.SVM => SolveSVM(embeddings, labels),
-            ConvexSolverType.LogisticRegression => SolveLogisticRegression(embeddings, labels),
-            _ => SolveRidgeRegression(embeddings, labels)
-        };
-    }
-
-    /// <summary>
-    /// Solves ridge regression: w* = (X^T X + λI)^(-1) X^T y
-    /// </summary>
-    private Matrix<T> SolveRidgeRegression(Matrix<T> embeddings, Matrix<T> labels)
-    {
-        int numSamples = embeddings.Rows;
-        int embDim = embeddings.Columns;
-        int numClasses = labels.Columns;
-
-        // Compute X^T X — vectorized Engine.TensorMatMul
-        var embTensor = Tensor<T>.FromMatrix(embeddings);
-        var embT = embTensor.Transpose(new[] { 1, 0 });
-        var xtx = Engine.TensorMatMul(embT, embTensor).ToMatrix();
-
-        // Add regularization: X^T X + λI
-        T lambda = NumOps.FromDouble(_metaOptNetOptions.RegularizationStrength);
-        for (int i = 0; i < embDim; i++)
-        {
-            xtx[i, i] = NumOps.Add(xtx[i, i], lambda);
-        }
-
-        // Compute X^T y — vectorized Engine.TensorMatMul
-        var labelsTensor = Tensor<T>.FromMatrix(labels);
-        var xty = Engine.TensorMatMul(embT, labelsTensor).ToMatrix();
-
-        // Solve (X^T X + λI) w = X^T y using Cholesky decomposition or simple inversion
-        var weights = SolveLinearSystem(xtx, xty);
-
-        return weights;
-    }
-
-    /// <summary>
-    /// Solves linear system Ax = b using iterative refinement.
-    /// </summary>
-    private Matrix<T> SolveLinearSystem(Matrix<T> a, Matrix<T> b)
-    {
-        int n = a.Rows;
-        int m = b.Columns;
-        var result = new Matrix<T>(n, m);
-
-        // Use Gauss-Seidel iteration for stability
-        for (int col = 0; col < m; col++)
-        {
-            // Extract column from b
-            var rhs = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
+            for (int j = 0; j < _metaOptNetOptions.EmbeddingDimension; j++)
             {
-                rhs[i] = b[i, col];
-            }
-
-            // Solve using iteration
-            var x = new Vector<T>(n);
-            for (int iter = 0; iter < _metaOptNetOptions.MaxSolverIterations; iter++)
-            {
-                var xNew = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    T sum = rhs[i];
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (j != i)
-                        {
-                            T xj = j < i ? xNew[j] : x[j];
-                            sum = NumOps.Subtract(sum, NumOps.Multiply(a[i, j], xj));
-                        }
-                    }
-                    xNew[i] = NumOps.Divide(sum, a[i, i]);
-                }
-
-                // Check convergence
-                double maxDiff = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = Math.Abs(NumOps.ToDouble(xNew[i]) - NumOps.ToDouble(x[i]));
-                    maxDiff = Math.Max(maxDiff, diff);
-                }
-
-                x = xNew;
-
-                if (maxDiff < _metaOptNetOptions.SolverTolerance)
-                {
-                    break;
-                }
-            }
-
-            // Store result
-            for (int i = 0; i < n; i++)
-            {
-                result[i, col] = x[i];
+                weights[episode.ClassSlots[c], j] = primal[c * _metaOptNetOptions.EmbeddingDimension + j];
             }
         }
 
-        return result;
+        return new MetaOptNetModel<T, TInput, TOutput>(MetaModel, weights, _logitScale[0], _metaOptNetOptions);
     }
 
-    /// <summary>
-    /// Solves SVM using simplified quadratic programming.
-    /// </summary>
-    private Matrix<T> SolveSVM(Matrix<T> embeddings, Matrix<T> labels)
-    {
-        // For simplicity, use a hinge loss approximation with ridge regression
-        // Full SVM would require proper QP solver
-
-        int numSamples = embeddings.Rows;
-
-        // Modify labels to be in {-1, +1} format for binary SVM per class
-        var svmLabels = new Matrix<T>(labels.Rows, labels.Columns);
-        for (int i = 0; i < labels.Rows; i++)
-        {
-            for (int j = 0; j < labels.Columns; j++)
-            {
-                double val = NumOps.ToDouble(labels[i, j]);
-                svmLabels[i, j] = NumOps.FromDouble(val > 0.5 ? 1.0 : -1.0);
-            }
-        }
-
-        // Use ridge regression as approximation with adjusted regularization
-        T originalLambda = NumOps.FromDouble(_metaOptNetOptions.RegularizationStrength);
-        return SolveRidgeRegression(embeddings, svmLabels);
-    }
-
-    /// <summary>
-    /// Solves logistic regression using Newton's method.
-    /// </summary>
-    private Matrix<T> SolveLogisticRegression(Matrix<T> embeddings, Matrix<T> labels)
-    {
-        // Initialize weights
-        var weights = new Matrix<T>(embeddings.Columns, labels.Columns);
-
-        // Newton's method iteration
-        for (int iter = 0; iter < _metaOptNetOptions.MaxSolverIterations; iter++)
-        {
-            // Compute predictions
-            var logits = MatrixMultiply(embeddings, weights);
-            var probs = ApplySoftmax(logits);
-
-            // Compute gradient
-            var gradient = ComputeLogisticGradient(embeddings, labels, probs);
-
-            // Update weights (simplified Newton step)
-            T stepSize = NumOps.FromDouble(0.1);
-            for (int i = 0; i < weights.Rows; i++)
-            {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    T update = NumOps.Multiply(stepSize, gradient[i, j]);
-                    weights[i, j] = NumOps.Subtract(weights[i, j], update);
-                }
-            }
-        }
-
-        return weights;
-    }
-
-    /// <summary>
-    /// Computes logistic regression gradient.
-    /// </summary>
-    private Matrix<T> ComputeLogisticGradient(Matrix<T> embeddings, Matrix<T> labels, Matrix<T> probs)
-    {
-        int embDim = embeddings.Columns;
-        int numClasses = labels.Columns;
-        var gradient = new Matrix<T>(embDim, numClasses);
-
-        // gradient = X^T (P - Y) / n + λW
-        for (int i = 0; i < embDim; i++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < embeddings.Rows; k++)
-                {
-                    T diff = NumOps.Subtract(probs[k, c], labels[k, c]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[k, i], diff));
-                }
-                gradient[i, c] = NumOps.Divide(sum, NumOps.FromDouble(embeddings.Rows));
-            }
-        }
-
-        return gradient;
-    }
-
-    #endregion
-
-    #region Feature Extraction
-
-    /// <summary>
-    /// Extracts embeddings from input, sized to <paramref name="expectedSamples"/> rows.
-    /// </summary>
+    /// <inheritdoc/>
     /// <remarks>
-    /// Lee et al. 2019 (MetaOptNet) assume the feature encoder produces an [N, embDim] embedding
-    /// per sample. When the encoder produces fewer scalars than embDim × N (e.g., a 1-D regression
-    /// head used in mock tests), the remaining columns are zero-padded so the downstream ridge /
-    /// SVM / logistic solver still receives a well-formed [N, embDim] feature matrix.
+    /// The adapted model returns one score row per example, so this is the configured loss of those scores against
+    /// the class indices. A Vector output carries one predicted class per example, and its loss is the error rate.
     /// </remarks>
-    private Matrix<T> ExtractEmbeddings(TInput input, int expectedSamples)
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ScoreLoss(LossFunction, predictions, expectedOutput, _metaOptNetOptions.NumClasses);
+
+    #region Episode
+
+    /// <summary>A solved base learner: its coefficients and the constant that makes them differentiable.</summary>
+    private readonly struct Solved
     {
-        int embDim = _metaOptNetOptions.EmbeddingDimension;
-        var output = MetaModel.Predict(input);
-        var vec = ConvertToVector(output);
-
-        if (vec == null || vec.Length == 0)
+        public Solved(Tensor<T> coefficients, Tensor<T> dual, bool isDual)
         {
-            return new Matrix<T>(Math.Max(1, expectedSamples), embDim);
+            Coefficients = coefficients;
+            Dual = dual;
+            IsDual = isDual;
         }
 
-        int numSamples = expectedSamples > 0
-            ? expectedSamples
-            : Math.Max(1, vec.Length / embDim);
+        /// <summary>The classifier: dual coefficients <c>[support, classes]</c>, or weights <c>[classes, width]</c>.</summary>
+        public Tensor<T> Coefficients { get; }
 
-        int perSample = numSamples > 0 ? vec.Length / numSamples : 0;
-        int cols = Math.Min(perSample, embDim);
+        /// <summary>The dual coefficients when the solver works in the dual, else the weights again.</summary>
+        public Tensor<T> Dual { get; }
 
-        var matrix = new Matrix<T>(numSamples, embDim);
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                int idx = i * perSample + j;
-                matrix[i, j] = idx < vec.Length ? vec[idx] : NumOps.Zero;
-            }
-        }
-
-        return matrix;
+        /// <summary>Whether <see cref="Coefficients"/> are dual coefficients over the support set.</summary>
+        public bool IsDual { get; }
     }
 
     /// <summary>
-    /// Normalizes embeddings to unit norm.
+    /// One task's query loss and the exact gradient of that loss with respect to the embedding network and the logit
+    /// scale.
     /// </summary>
-    private Matrix<T> NormalizeEmbeddings(Matrix<T> embeddings)
+    private (T Loss, Vector<T> Body, Vector<T> Scale) EpisodeGradient(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var normalized = new Matrix<T>(embeddings.Rows, embeddings.Columns);
+        var episode = Episode(task);
+        var stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
+        var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
+        var scaleTensor = Tensor<T>.FromVector(_logitScale);
 
-        for (int i = 0; i < embeddings.Rows; i++)
+        var composed = new EmbeddingObjectiveLoss<T>(embeddings =>
         {
-            T normSq = NumOps.Zero;
-            for (int j = 0; j < embeddings.Columns; j++)
-            {
-                normSq = NumOps.Add(normSq, NumOps.Multiply(embeddings[i, j], embeddings[i, j]));
-            }
-            double norm = Math.Sqrt(Math.Max(NumOps.ToDouble(normSq), 1e-8));
+            var engine = AiDotNetEngine.Current;
+            var support = CheckWidth(engine.TensorMatMul(episode.SupportSelector, embeddings));
+            var query = engine.TensorMatMul(episode.QuerySelector, embeddings);
+            return QueryLoss(support, query, episode, scaleTensor);
+        });
+        var bodyGradient = ComputeGradients(MetaModel, stackedInput, stackedTarget, composed);
 
-            for (int j = 0; j < embeddings.Columns; j++)
+        var (fixedSupport, fixedQuery) = Embed(task, episode);
+        T loss;
+        var scaleGradient = new Vector<T>(1);
+        using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
+        {
+            var objective = QueryLoss(fixedSupport, fixedQuery, episode, scaleTensor);
+            loss = objective[0];
+            var gradients = tape.ComputeGradients(objective, new[] { scaleTensor });
+            if (gradients.TryGetValue(scaleTensor, out var g)) scaleGradient[0] = g[0];
+        }
+
+        return (loss, bodyGradient, scaleGradient);
+    }
+
+    /// <summary>The task's query loss with the base learner solved on its support set (eq. 12).</summary>
+    private Tensor<T> QueryLoss(Tensor<T> support, Tensor<T> query, PrototypeEpisode<T> episode, Tensor<T> scale)
+    {
+        var engine = AiDotNetEngine.Current;
+        var solved = Solve(support, episode);
+        var logits = solved.IsDual
+            ? engine.TensorMatMul(engine.TensorMatMul(query, engine.TensorTranspose(support)), solved.Coefficients)
+            : engine.TensorMatMul(query, engine.TensorTranspose(solved.Coefficients));
+        logits = engine.TensorMultiply(logits, engine.Reshape(scale, new[] { 1, 1 }));
+        return SmoothedLoss(logits, episode.QueryTarget, episode.ClassSlots.Length);
+    }
+
+    /// <summary>
+    /// The configured loss of the logits against the class indices, or - with
+    /// <see cref="MetaOptNetOptions{T,TInput,TOutput}.LabelSmoothing"/> - the cross-entropy against the smoothed
+    /// label distribution the paper uses for miniImageNet.
+    /// </summary>
+    private Tensor<T> SmoothedLoss(Tensor<T> logits, Tensor<T> target, int classes)
+    {
+        double epsilon = _metaOptNetOptions.LabelSmoothing;
+        if (epsilon <= 0) return Scalar(LossFunction.ComputeTapeLoss(logits, target));
+
+        var engine = AiDotNetEngine.Current;
+        var max = engine.ReduceMax(logits, new[] { 1 }, keepDims: true, out _);
+        var shifted = engine.TensorAdd(logits, engine.TensorNegate(engine.StopGradient(max)));
+        var logSum = engine.TensorLog(engine.ReduceSum(engine.TensorExp(shifted), new[] { 1 }, keepDims: true));
+        var logProbabilities = engine.TensorAdd(shifted, engine.TensorNegate(logSum));
+
+        var smoothed = new Tensor<T>(new[] { target.Length, classes });
+        T off = Ops.FromDouble(epsilon / classes);
+        T on = Ops.FromDouble(1.0 - epsilon + epsilon / classes);
+        for (int r = 0; r < target.Length; r++)
+        {
+            int label = (int)Math.Round(Ops.ToDouble(target[r]));
+            for (int c = 0; c < classes; c++) smoothed[r * classes + c] = c == label ? on : off;
+        }
+
+        var product = engine.TensorMultiply(logProbabilities, smoothed);
+        return engine.TensorMultiplyScalar(
+            Scalar(engine.ReduceSum(product, null)), Ops.FromDouble(-1.0 / Math.Max(1, target.Length)));
+    }
+
+    /// <summary>
+    /// Solves the configured base learner on the support set and returns its solution as a tape tensor whose
+    /// derivative is the implicit one.
+    /// </summary>
+    private Solved Solve(Tensor<T> support, PrototypeEpisode<T> episode)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = support.Shape[0], d = support.Shape[1], classes = episode.ClassSlots.Length;
+        var labels = SupportLabels(episode, n);
+        var oneHot = new double[n, classes];
+        for (int i = 0; i < n; i++) oneHot[i, labels[i]] = 1.0;
+
+        if (_metaOptNetOptions.SolverType == ConvexSolverType.LogisticRegression)
+        {
+            var features = ToDoubles(support);
+            double logisticLambda = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.LogisticLambda;
+            var (weights, hessianInverse) = ConvexBaseLearners.SolveLogistic(
+                features, oneHot, logisticLambda,
+                _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
+
+            // F(W) = Z'(softmax(Z W') - Y) / n + lambda W, zero at the solution; W = W* - Hinv F(W; Z).
+            var solution = FromDoubles(weights, classes, d);
+            var probabilities = engine.Softmax(
+                engine.TensorMatMul(support, engine.TensorTranspose(solution)), axis: 1);
+            var residual = engine.TensorAdd(
+                engine.TensorMultiplyScalar(
+                    engine.TensorMatMul(engine.TensorTranspose(
+                        engine.TensorAdd(probabilities, engine.TensorNegate(FromDoubles(oneHot, n, classes)))), support),
+                    Ops.FromDouble(1.0 / n)),
+                engine.TensorMultiplyScalar(solution, Ops.FromDouble(logisticLambda)));
+            return new Solved(Implicit(solution, residual, hessianInverse, classes, d), solution, isDual: false);
+        }
+
+        var kernelTensor = engine.TensorMatMul(support, engine.TensorTranspose(support));
+        var kernel = ToDoubles(kernelTensor);
+
+        if (_metaOptNetOptions.SolverType == ConvexSolverType.SVM)
+        {
+            double cost = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.SvmCost;
+            var alpha = ConvexBaseLearners.SolveCrammerSingerDual(
+                kernel, labels, classes, cost, _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
+            var jacobianInverse = ConvexBaseLearners.CrammerSingerJacobianInverse(
+                kernel, alpha, labels, classes, cost, _metaOptNetOptions.SolverTolerance);
+
+            // Stationarity: (K alpha)_nk - [k = y_n] + lambda_nk + nu_n = 0, zero at the solution.
+            var multipliers = StationarityConstant(kernel, alpha, labels, classes, cost);
+            var solution = FromDoubles(alpha, n, classes);
+            var residual = engine.TensorAdd(engine.TensorMatMul(kernelTensor, solution), FromDoubles(multipliers, n, classes));
+            return new Solved(Implicit(solution, residual, jacobianInverse, n, classes), solution, isDual: true);
+        }
+
+        double ridge = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.RidgeLambda;
+        var (dual, inverse) = ConvexBaseLearners.SolveRidgeDual(kernel, oneHot, ridge);
+
+        // (K + lambda I) M - Y = 0 at the solution.
+        var dualTensor = FromDoubles(dual, n, classes);
+        var ridgeResidual = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMatMul(kernelTensor, dualTensor),
+                engine.TensorMultiplyScalar(dualTensor, Ops.FromDouble(ridge))),
+            engine.TensorNegate(FromDoubles(oneHot, n, classes)));
+
+        // (K + lambda I) acts on each class column independently, so the implicit correction is that one [n, n]
+        // inverse applied to the residual's columns - not a matrix over the flattened solution as the SVM and
+        // logistic Jacobians are.
+        var ridgeCorrection = engine.TensorMatMul(FromDoubles(inverse, n, n), ridgeResidual);
+        return new Solved(
+            engine.TensorAdd(dualTensor, engine.TensorNegate(ridgeCorrection)), dualTensor, isDual: true);
+    }
+
+    /// <summary>
+    /// <c>theta* - Jinv vec(residual)</c>: the solution's value with the implicit function theorem's derivative.
+    /// </summary>
+    private static Tensor<T> Implicit(Tensor<T> solution, Tensor<T> residual, double[,] jacobianInverse, int rows, int columns)
+    {
+        var engine = AiDotNetEngine.Current;
+        int size = rows * columns;
+        var constant = new Tensor<T>(new[] { size, size });
+        for (int i = 0; i < size; i++)
+            for (int j = 0; j < size; j++) constant[i * size + j] = Ops.FromDouble(jacobianInverse[i, j]);
+
+        var correction = engine.TensorMatMul(constant, engine.Reshape(residual, new[] { size, 1 }));
+        return engine.TensorAdd(solution, engine.TensorNegate(engine.Reshape(correction, new[] { rows, columns })));
+    }
+
+    /// <summary>
+    /// The parts of the SVM's stationarity residual that do not depend on the embeddings: <c>-onehot</c> plus the
+    /// multipliers of the constraints active at the solution.
+    /// </summary>
+    private static double[,] StationarityConstant(double[,] kernel, double[,] alpha, int[] labels, int classes, double cost)
+    {
+        int n = labels.Length;
+        var product = new double[n, classes];
+        for (int i = 0; i < n; i++)
+            for (int k = 0; k < classes; k++)
             {
-                normalized[i, j] = NumOps.Divide(embeddings[i, j], NumOps.FromDouble(norm));
+                double sum = 0;
+                for (int j = 0; j < n; j++) sum += kernel[i, j] * alpha[j, k];
+                product[i, k] = sum - (k == labels[i] ? 1.0 : 0.0);
             }
+
+        var constant = new double[n, classes];
+        for (int i = 0; i < n; i++)
+        {
+            // nu_n comes from any entry off its bound; with every entry pinned the row's multiplier is free.
+            double nu = 0;
+            for (int k = 0; k < classes; k++)
+            {
+                double upper = k == labels[i] ? cost : 0.0;
+                if (upper - alpha[i, k] > 1e-9) { nu = -product[i, k]; break; }
+            }
+
+            for (int k = 0; k < classes; k++)
+            {
+                double upper = k == labels[i] ? cost : 0.0;
+                double lambda = upper - alpha[i, k] > 1e-9 ? 0.0 : -(product[i, k] + nu);
+                constant[i, k] = -(k == labels[i] ? 1.0 : 0.0) + lambda + nu;
+            }
+        }
+
+        return constant;
+    }
+
+    /// <summary>The primal weights <c>[classes * width]</c> of a solved base learner.</summary>
+    private Vector<T> Primal(Tensor<T> coefficients, Tensor<T> support)
+    {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var weights = _metaOptNetOptions.SolverType == ConvexSolverType.LogisticRegression
+            ? coefficients
+            : engine.TensorMatMul(engine.TensorTranspose(coefficients), support);
+        return weights.ToVector();
+    }
+
+    private PrototypeEpisode<T> Episode(IMetaLearningTask<T, TInput, TOutput> task)
+        => PrototypeEpisode<T>.Build(ReadLabels(task.SupportOutput), ReadLabels(task.QueryOutput));
+
+    private int[] ReadLabels(TOutput labels)
+    {
+        var tensor = ClassifierOutputs<T>.Labels(labels, _metaOptNetOptions.NumClasses);
+        var indices = new int[tensor.Length];
+        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
+        return indices;
+    }
+
+    private static int[] SupportLabels(PrototypeEpisode<T> episode, int rows)
+    {
+        var labels = new int[rows];
+        for (int c = 0; c < episode.ClassSlots.Length; c++)
+            for (int r = 0; r < rows; r++)
+                if (Ops.ToDouble(episode.Membership[c * rows + r]) > 0.5) labels[r] = c;
+        return labels;
+    }
+
+    private (Tensor<T> Support, Tensor<T> Query) Embed(IMetaLearningTask<T, TInput, TOutput> task, PrototypeEpisode<T> episode)
+    {
+        Tensor<T> embeddings;
+        using (new NoGradScope<T>())
+        {
+            embeddings = ClassifierOutputs<T>.AsRows(
+                MetaModel.Predict(ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput)));
+        }
+
+        var engine = AiDotNetEngine.Current;
+        return (CheckWidth(engine.TensorMatMul(episode.SupportSelector, embeddings)),
+            engine.TensorMatMul(episode.QuerySelector, embeddings));
+    }
+
+    private Tensor<T> CheckWidth(Tensor<T> embeddings)
+    {
+        var normalized = _metaOptNetOptions.NormalizeEmbeddings
+            ? PrototypeMetric<T>.Normalized(embeddings, normalize: true)
+            : embeddings;
+        if (normalized.Shape[1] != _metaOptNetOptions.EmbeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"The embedding network emits {normalized.Shape[1]}-wide embeddings per example but "
+                + $"EmbeddingDimension is {_metaOptNetOptions.EmbeddingDimension}. EmbeddingDimension is the width "
+                + "of the representation the base learner classifies - the network's per-example output width.");
         }
 
         return normalized;
     }
 
-    /// <summary>
-    /// Converts output to one-hot label matrix.
-    /// </summary>
-    private Matrix<T> ConvertToLabels(TOutput output)
+    #endregion
+
+    #region Test hooks
+
+    /// <summary>One task's query loss and exact gradient from the current state, for gradient checks.</summary>
+    internal (T Loss, Vector<T> Body, Vector<T> Scale) EpisodeGradientForTesting(IMetaLearningTask<T, TInput, TOutput> task)
+        => EpisodeGradient(task);
+
+    /// <summary>One task's query loss from the current state.</summary>
+    internal T EpisodeLossForTesting(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var vec = ConvertToVector(output);
-        if (vec == null)
-        {
-            return new Matrix<T>(1, _metaOptNetOptions.NumClasses);
-        }
+        var episode = Episode(task);
+        var (support, query) = Embed(task, episode);
+        return QueryLoss(support, query, episode, Tensor<T>.FromVector(_logitScale))[0];
+    }
 
-        int numSamples = vec.Length;
-        var labels = new Matrix<T>(numSamples, _metaOptNetOptions.NumClasses);
+    /// <summary>The solved base learner's coefficients for one task.</summary>
+    internal Vector<T> CoefficientsForTesting(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var episode = Episode(task);
+        var (support, _) = Embed(task, episode);
+        using var noGrad = new NoGradScope<T>();
+        return Solve(support, episode).Dual.ToVector();
+    }
 
-        for (int i = 0; i < numSamples; i++)
-        {
-            // Handle negative values by using Math.Abs to ensure non-negative index
-            int rawIdx = (int)Math.Round(NumOps.ToDouble(vec[i]));
-            int classIdx = Math.Abs(rawIdx) % _metaOptNetOptions.NumClasses;
-            for (int c = 0; c < _metaOptNetOptions.NumClasses; c++)
-            {
-                labels[i, c] = c == classIdx ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        return labels;
+    /// <summary>Gets or sets the learned logit scale (for tests).</summary>
+    internal Vector<T> LogitScaleForTesting
+    {
+        get { var copy = new Vector<T>(1); copy[0] = _logitScale[0]; return copy; }
+        set { _logitScale = new Vector<T>(1); _logitScale[0] = value[0]; }
     }
 
     #endregion
 
-    #region Classification
+    #region Helpers
 
-    /// <summary>
-    /// Computes logits using classifier weights.
-    /// </summary>
-    private Vector<T> ComputeLogits(Matrix<T> embeddings, Matrix<T> classifierWeights)
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    private static double[,] ToDoubles(Tensor<T> tensor)
     {
-        var logits = new Vector<T>(embeddings.Rows * classifierWeights.Columns);
-
-        int idx = 0;
-        for (int i = 0; i < embeddings.Rows; i++)
-        {
-            for (int c = 0; c < classifierWeights.Columns; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < Math.Min(embeddings.Columns, classifierWeights.Rows); j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[i, j], classifierWeights[j, c]));
-                }
-                logits[idx++] = sum;
-            }
-        }
-
-        return logits;
+        int rows = tensor.Shape[0], columns = tensor.Shape[1];
+        var values = new double[rows, columns];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++) values[i, j] = Ops.ToDouble(tensor[i * columns + j]);
+        return values;
     }
 
-    /// <summary>
-    /// Scales logits by temperature.
-    /// </summary>
-    private Vector<T> ScaleByTemperature(Vector<T> logits, T temperature)
+    private static Tensor<T> FromDoubles(double[,] values, int rows, int columns)
     {
-        var scaled = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            scaled[i] = NumOps.Divide(logits[i], temperature);
-        }
-        return scaled;
+        var tensor = new Tensor<T>(new[] { rows, columns });
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++) tensor[i * columns + j] = Ops.FromDouble(values[i, j]);
+        return tensor;
     }
 
-    /// <summary>
-    /// Converts a vector to the output type.
-    /// </summary>
-    private TOutput ConvertFromVector(Vector<T> vector)
+    private static Tensor<T> Scalar(Tensor<T> value) => AiDotNetEngine.Current.Reshape(value, new[] { 1 });
+
+    private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
-        if (typeof(TOutput) == typeof(Vector<T>))
+        if (sum is null)
         {
-            return (TOutput)(object)vector;
+            var copy = new Vector<T>(values.Length);
+            for (int i = 0; i < values.Length; i++) copy[i] = values[i];
+            return copy;
         }
 
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(vector);
-        }
-
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)vector.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
+        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
+        return sum;
     }
 
-    #endregion
-
-    #region Gradient Computation
-
-    /// <summary>
-    /// Computes gradients for the encoder.
-    /// </summary>
-    private Vector<T> ComputeEncoderGradients(
-        IMetaLearningTask<T, TInput, TOutput> task,
-        Matrix<T> supportEmbeddings,
-        Matrix<T> queryEmbeddings,
-        Matrix<T> classifierWeights,
-        T loss)
+    private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        // Use base class gradient computation for encoder
-        return ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-    }
-
-    /// <summary>
-    /// Computes gradient with respect to temperature using paper-faithful softmax CE
-    /// (Lee et al. 2019), via finite differences.
-    /// </summary>
-    private T ComputeTemperatureGradient(Vector<T> logits, TOutput expectedOutput, T temperature)
-    {
-        double epsilon = 1e-5;
-        T tempPlus = NumOps.Add(temperature, NumOps.FromDouble(epsilon));
-
-        var scaledBase = ScaleByTemperature(logits, temperature);
-        var scaledPerturbed = ScaleByTemperature(logits, tempPlus);
-
-        var labelMatrix = ConvertToLabels(expectedOutput);
-        int numClasses = Math.Max(1, _metaOptNetOptions.NumClasses);
-        int numSamples = Math.Max(1, logits.Length / numClasses);
-
-        T lossBase = ComputeSoftmaxCrossEntropy(scaledBase, labelMatrix, numSamples, numClasses);
-        T lossPerturbed = ComputeSoftmaxCrossEntropy(scaledPerturbed, labelMatrix, numSamples, numClasses);
-
-        double grad = (NumOps.ToDouble(lossPerturbed) - NumOps.ToDouble(lossBase)) / epsilon;
-        return NumOps.FromDouble(grad);
-    }
-
-    #endregion
-
-    #region Matrix Operations
-
-    /// <summary>
-    /// Multiplies two matrices.
-    /// </summary>
-    private Matrix<T> MatrixMultiply(Matrix<T> a, Matrix<T> b)
-    {
-        // a @ b — vectorized Engine.TensorMatMul
-        var aTensor = Tensor<T>.FromMatrix(a);
-        var bTensor = Tensor<T>.FromMatrix(b);
-        return Engine.TensorMatMul(aTensor, bTensor).ToMatrix();
-    }
-
-    /// <summary>
-    /// Applies softmax to logit matrix.
-    /// </summary>
-    private Matrix<T> ApplySoftmax(Matrix<T> logits)
-    {
-        var result = new Matrix<T>(logits.Rows, logits.Columns);
-        for (int i = 0; i < logits.Rows; i++)
-        {
-            var row = new Vector<T>(logits.Columns);
-            for (int j = 0; j < logits.Columns; j++) row[j] = logits[i, j];
-            var probs = Softmax(row);
-            for (int j = 0; j < logits.Columns; j++) result[i, j] = probs[j];
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Computes the per-sample averaged softmax cross-entropy between flattened logits
-    /// [numSamples × numClasses] and one-hot labels [numSamples, numClasses].
-    /// </summary>
-    private T ComputeSoftmaxCrossEntropy(Vector<T> flatLogits, Matrix<T> oneHotLabels, int numSamples, int numClasses)
-    {
-        if (numSamples <= 0)
-        {
-            return NumOps.Zero;
-        }
-
-        T total = NumOps.Zero;
-        T eps = NumOps.FromDouble(1e-12);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var row = new Vector<T>(numClasses);
-            for (int c = 0; c < numClasses; c++)
-            {
-                int idx = i * numClasses + c;
-                row[c] = idx < flatLogits.Length ? flatLogits[idx] : NumOps.Zero;
-            }
-            var probs = Softmax(row);
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                T y = i < oneHotLabels.Rows && c < oneHotLabels.Columns ? oneHotLabels[i, c] : NumOps.Zero;
-                T p = NumOps.Add(probs[c], eps);
-                total = NumOps.Subtract(total, NumOps.Multiply(y, NumOps.Log(p)));
-            }
-        }
-
-        return NumOps.Divide(total, NumOps.FromDouble(numSamples));
+        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
+        return values;
     }
 
     #endregion

@@ -90,6 +90,20 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     private Vector<T> _alpha;
 
     /// <summary>
+    /// Per-task mean of the training targets. The zero-mean prior models each task's deviations
+    /// from it, which is also what LearnTaskCorrelations measures when it estimates the amplitude.
+    /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T> _taskMeans;
+
+    /// <summary>
+    /// The observation noise variance the model was fitted with: the caller's fixed value, or the
+    /// marginal-likelihood estimate when none was given. A single entry.
+    /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T> _fittedNoiseVariance;
+
+    /// <summary>
     /// Operations for numeric calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
@@ -100,9 +114,15 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     private readonly MatrixDecompositionType _decompositionType;
 
     /// <summary>
-    /// Observation noise variance.
+    /// The caller's fixed observation noise variance, or null to learn it by maximizing the marginal
+    /// likelihood.
     /// </summary>
-    private readonly double _noiseVariance;
+    private readonly double? _noiseVariance;
+
+    /// <summary>
+    /// Gradient steps of the marginal-likelihood hyperparameter search.
+    /// </summary>
+    private readonly int _hyperparameterOptimizationSteps;
 
     /// <summary>
     /// Whether to learn task correlations from data.
@@ -114,9 +134,14 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     /// <param name="kernel">The base kernel for input similarity.</param>
     /// <param name="numTasks">The number of tasks (output dimensions).</param>
-    /// <param name="noiseVariance">Observation noise variance. Default is 1e-4.</param>
-    /// <param name="learnTaskCorrelations">Whether to learn task correlations. Default is true.</param>
+    /// <param name="noiseVariance">Observation noise variance. Null (the default) learns it by
+    /// maximizing the marginal likelihood, as Bonilla et al. (2008) do; a value fixes it.</param>
+    /// <param name="learnTaskCorrelations">Whether to learn the task covariance B. When true (the
+    /// default) B starts at the empirical covariance of the targets and is refined jointly with the
+    /// noise by maximizing the marginal likelihood; when false the tasks are independent.</param>
     /// <param name="decompositionType">Matrix decomposition method. Default is Cholesky.</param>
+    /// <param name="hyperparameterOptimizationSteps">Gradient steps of the marginal-likelihood search.
+    /// Default 100; 0 keeps the starting estimates.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Creates a Multi-Task GP for modeling correlated outputs.
@@ -135,9 +160,10 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     public MultiTaskGaussianProcess(
         IKernelFunction<T> kernel,
         int numTasks,
-        double noiseVariance = 1e-4,
+        double? noiseVariance = null,
         bool learnTaskCorrelations = true,
-        MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky)
+        MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky,
+        int hyperparameterOptimizationSteps = 100)
     {
         if (kernel is null)
             throw new ArgumentNullException(nameof(kernel));
@@ -145,10 +171,13 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             throw new ArgumentException("Must have at least one task.", nameof(numTasks));
         if (noiseVariance < 0)
             throw new ArgumentException("Noise variance must be non-negative.", nameof(noiseVariance));
+        if (hyperparameterOptimizationSteps < 0)
+            throw new ArgumentException("Optimization steps must be non-negative.", nameof(hyperparameterOptimizationSteps));
 
         _kernel = kernel;
         _numTasks = numTasks;
         _noiseVariance = noiseVariance;
+        _hyperparameterOptimizationSteps = hyperparameterOptimizationSteps;
         _learnTaskCorrelations = learnTaskCorrelations;
         _decompositionType = decompositionType;
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -157,6 +186,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         _Y = Matrix<T>.Empty();
         _K = Matrix<T>.Empty();
         _alpha = Vector<T>.Empty();
+        _taskMeans = new Vector<T>(numTasks);
+        _fittedNoiseVariance = new Vector<T>(1);
 
         // Initialize task covariance as identity (independent tasks)
         _taskCovariance = CreateIdentityMatrix(numTasks);
@@ -197,17 +228,43 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         _X = X;
         _Y = Y;
 
-        // Learn task correlations if enabled
+        // The prior is zero-mean, so model each task's deviations from its training mean: away from the
+        // data a prediction then reverts to that mean rather than to zero. (Inside the data this changes
+        // little - a smooth kernel absorbs a constant offset - so it is not a calibration fix.)
+        _taskMeans = ComputeTaskMeans(Y);
+
+        // The empirical task covariance is the starting point of the marginal-likelihood search.
         if (_learnTaskCorrelations)
         {
             LearnTaskCorrelations();
         }
+
+        OptimizeHyperparameters();
 
         // Build combined covariance matrix
         BuildCombinedKernel();
 
         // Solve for alpha
         ComputeAlpha();
+    }
+
+    /// <summary>
+    /// Computes each task's mean over the training rows.
+    /// </summary>
+    private Vector<T> ComputeTaskMeans(Matrix<T> Y)
+    {
+        var means = new Vector<T>(_numTasks);
+        for (int t = 0; t < _numTasks; t++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < Y.Rows; i++)
+            {
+                sum = _numOps.Add(sum, Y[i, t]);
+            }
+            means[t] = _numOps.Divide(sum, _numOps.FromDouble(Y.Rows));
+        }
+
+        return means;
     }
 
     /// <summary>
@@ -231,17 +288,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     {
         int n = _Y.Rows;
 
-        // Compute empirical covariance between tasks
-        var taskMeans = new Vector<T>(_numTasks);
-        for (int t = 0; t < _numTasks; t++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = _numOps.Add(sum, _Y[i, t]);
-            }
-            taskMeans[t] = _numOps.Divide(sum, _numOps.FromDouble(n));
-        }
+        // Compute empirical covariance between tasks, around the means Fit already took.
+        var taskMeans = _taskMeans;
 
         _taskCovariance = new Matrix<T>(_numTasks, _numTasks);
         for (int t1 = 0; t1 < _numTasks; t1++)
@@ -277,6 +325,282 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             System.Diagnostics.Debug.WriteLine($"Task covariance Cholesky failed: {ex.Message}. Using identity.");
             _taskCovariance = CreateIdentityMatrix(_numTasks);
             _taskCovCholesky = CreateIdentityMatrix(_numTasks);
+        }
+    }
+
+    /// <summary>
+    /// Learns the task covariance B and the observation noise by type-II maximum likelihood.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Maximizes log N(y | 0, K) with K = B (x) K_x + (sigma_n^2 + jitter) I, over B = L L^T (L lower
+    /// triangular, diagonal on a log scale) and log sigma_n^2, by Adam on the analytic gradient
+    /// d log p / d theta = 1/2 tr((a a^T - K^-1) dK/dtheta), a = K^-1 y. With W = a a^T - K^-1 and G the
+    /// task-by-task sums of W's blocks against K_x, that gradient is (G L) for L and 1/2 sigma_n^2 tr(W)
+    /// for the log noise. The best point seen is kept. Which of the two is learned follows the
+    /// constructor: a fixed noise is not moved, and with task correlations off B stays the identity.
+    /// </para>
+    /// <para>
+    /// Fixing the noise used to be the only option, at 1e-4 by default. On data whose noise variance is
+    /// 2.5e-3 that made the predictive uncertainty far too narrow: 3 of 10 points inside their 95% band.
+    /// </para>
+    /// </remarks>
+    private void OptimizeHyperparameters()
+    {
+        int n = _X.Rows;
+        int tasks = _numTasks;
+        int size = n * tasks;
+        const double Jitter = 1e-6;
+
+        var inputKernel = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                inputKernel[i, j] = _numOps.ToDouble(_kernel.Calculate(_X.GetRow(i), _X.GetRow(j)));
+            }
+        }
+
+        var targets = new double[size];
+        for (int t = 0; t < tasks; t++)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                targets[t * n + i] = _numOps.ToDouble(_Y[i, t]) - _numOps.ToDouble(_taskMeans[t]);
+            }
+        }
+
+        // Starting point: the current B (empirical, or the identity) and, when the noise is learned, a
+        // tenth of the average task variance.
+        var taskFactor = new double[tasks, tasks];
+        var startingCovariance = new double[tasks, tasks];
+        double averageTaskVariance = 0;
+        for (int a = 0; a < tasks; a++)
+        {
+            for (int b = 0; b < tasks; b++)
+            {
+                startingCovariance[a, b] = _numOps.ToDouble(_taskCovariance[a, b]);
+            }
+
+            averageTaskVariance += startingCovariance[a, a] / tasks;
+        }
+
+        var startingFactor = GaussianProcessEvidence.Cholesky(startingCovariance);
+        for (int a = 0; a < tasks; a++)
+        {
+            for (int b = 0; b <= a; b++)
+            {
+                taskFactor[a, b] = startingFactor is not null ? startingFactor[a, b] : (a == b ? 1.0 : 0.0);
+            }
+        }
+
+        bool learnNoise = !_noiseVariance.HasValue;
+        bool learnTasks = _learnTaskCorrelations;
+        double fixedNoise = _noiseVariance ?? 0.0;
+        double logNoise = learnNoise ? Math.Log(Math.Max(0.1 * averageTaskVariance, 1e-8)) : 0.0;
+
+        // Parameter vector: the lower triangle of L (diagonal as a log) when B is learned, then log noise.
+        var slots = new List<(int Row, int Column)>();
+        if (learnTasks)
+        {
+            for (int a = 0; a < tasks; a++)
+            {
+                for (int b = 0; b <= a; b++)
+                {
+                    slots.Add((a, b));
+                }
+            }
+        }
+
+        int count = slots.Count + (learnNoise ? 1 : 0);
+        var theta = new double[count];
+        for (int s = 0; s < slots.Count; s++)
+        {
+            var (row, column) = slots[s];
+            theta[s] = row == column ? Math.Log(Math.Max(taskFactor[row, row], 1e-8)) : taskFactor[row, column];
+        }
+
+        if (learnNoise)
+        {
+            theta[count - 1] = logNoise;
+        }
+
+        double[,] FactorOf(double[] parameters)
+        {
+            if (!learnTasks)
+                return taskFactor;
+
+            var factor = new double[tasks, tasks];
+            for (int s = 0; s < slots.Count; s++)
+            {
+                var (row, column) = slots[s];
+                factor[row, column] = row == column ? Math.Exp(parameters[s]) : parameters[s];
+            }
+
+            return factor;
+        }
+
+        double NoiseOf(double[] parameters) => learnNoise ? Math.Exp(parameters[count - 1]) : fixedNoise;
+
+        double[,]? CombinedFactor(double[,] factor, double noise, out double[,] covariance)
+        {
+            covariance = new double[tasks, tasks];
+            for (int a = 0; a < tasks; a++)
+            {
+                for (int b = 0; b < tasks; b++)
+                {
+                    double sum = 0;
+                    for (int k = 0; k < tasks; k++)
+                    {
+                        sum += factor[a, k] * factor[b, k];
+                    }
+
+                    covariance[a, b] = sum;
+                }
+            }
+
+            var combined = new double[size, size];
+            for (int a = 0; a < tasks; a++)
+            {
+                for (int b = 0; b < tasks; b++)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        for (int j = 0; j < n; j++)
+                        {
+                            combined[a * n + i, b * n + j] = covariance[a, b] * inputKernel[i, j];
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < size; i++)
+            {
+                combined[i, i] += noise + Jitter;
+            }
+
+            return GaussianProcessEvidence.Cholesky(combined);
+        }
+
+        var best = (double[])theta.Clone();
+        double bestEvidence = double.NegativeInfinity;
+        var firstMoment = new double[count];
+        var secondMoment = new double[count];
+        const double LearningRate = 0.05;
+        const double Beta1 = 0.9;
+        const double Beta2 = 0.999;
+        const double Epsilon = 1e-8;
+        var columns = new[] { targets };
+
+        for (int step = 0; step <= _hyperparameterOptimizationSteps && count > 0; step++)
+        {
+            var factor = FactorOf(theta);
+            double noise = NoiseOf(theta);
+            var lower = CombinedFactor(factor, noise, out _);
+            if (lower is null)
+            {
+                break;
+            }
+
+            double evidence = GaussianProcessEvidence.LogMarginalLikelihood(lower, columns);
+            if (evidence > bestEvidence)
+            {
+                bestEvidence = evidence;
+                best = (double[])theta.Clone();
+            }
+
+            if (step == _hyperparameterOptimizationSteps)
+            {
+                break;
+            }
+
+            // W = a a^T - K^-1.
+            var alpha = GaussianProcessEvidence.Solve(lower, targets);
+            var inverse = GaussianProcessEvidence.Inverse(lower);
+            var gradient = new double[count];
+
+            if (learnTasks)
+            {
+                // G[a, b] = sum_ij W[(a,i),(b,j)] K_x[j,i]; the gradient for L is (G L).
+                var g = new double[tasks, tasks];
+                for (int a = 0; a < tasks; a++)
+                {
+                    for (int b = 0; b < tasks; b++)
+                    {
+                        double sum = 0;
+                        for (int i = 0; i < n; i++)
+                        {
+                            for (int j = 0; j < n; j++)
+                            {
+                                int p = a * n + i;
+                                int q = b * n + j;
+                                sum += (alpha[p] * alpha[q] - inverse[p, q]) * inputKernel[j, i];
+                            }
+                        }
+
+                        g[a, b] = sum;
+                    }
+                }
+
+                for (int s = 0; s < slots.Count; s++)
+                {
+                    var (row, column) = slots[s];
+                    double sum = 0;
+                    for (int k = 0; k < tasks; k++)
+                    {
+                        sum += g[row, k] * factor[k, column];
+                    }
+
+                    // The diagonal is parameterized by its log, so the chain rule multiplies by it.
+                    gradient[s] = row == column ? sum * factor[row, row] : sum;
+                }
+            }
+
+            if (learnNoise)
+            {
+                double trace = 0;
+                for (int i = 0; i < size; i++)
+                {
+                    trace += alpha[i] * alpha[i] - inverse[i, i];
+                }
+
+                gradient[count - 1] = 0.5 * noise * trace;
+            }
+
+            // Adam, ascending the evidence.
+            for (int k = 0; k < count; k++)
+            {
+                firstMoment[k] = Beta1 * firstMoment[k] + (1 - Beta1) * gradient[k];
+                secondMoment[k] = Beta2 * secondMoment[k] + (1 - Beta2) * gradient[k] * gradient[k];
+                double firstHat = firstMoment[k] / (1 - Math.Pow(Beta1, step + 1));
+                double secondHat = secondMoment[k] / (1 - Math.Pow(Beta2, step + 1));
+                theta[k] += LearningRate * firstHat / (Math.Sqrt(secondHat) + Epsilon);
+            }
+        }
+
+        var bestFactor = FactorOf(best);
+        double bestNoise = NoiseOf(best);
+        if (count == 0 || CombinedFactor(bestFactor, bestNoise, out var bestCovariance) is null)
+        {
+            // Nothing to learn, or no point of the search was positive definite: keep the starting B
+            // and the fixed (or starting) noise.
+            _fittedNoiseVariance[0] = _numOps.FromDouble(learnNoise ? Math.Exp(logNoise) : fixedNoise);
+            return;
+        }
+
+        _fittedNoiseVariance[0] = _numOps.FromDouble(bestNoise);
+        if (learnTasks)
+        {
+            _taskCovariance = new Matrix<T>(tasks, tasks);
+            _taskCovCholesky = new Matrix<T>(tasks, tasks);
+            for (int a = 0; a < tasks; a++)
+            {
+                for (int b = 0; b < tasks; b++)
+                {
+                    _taskCovariance[a, b] = _numOps.FromDouble(bestCovariance[a, b]);
+                    _taskCovCholesky[a, b] = _numOps.FromDouble(bestFactor[a, b]);
+                }
+            }
         }
     }
 
@@ -334,8 +658,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             }
         }
 
-        // Add noise to diagonal
-        T noise = _numOps.FromDouble(_noiseVariance);
+        // Add the fitted observation noise to the diagonal
+        T noise = _fittedNoiseVariance[0];
         for (int i = 0; i < totalSize; i++)
         {
             _K[i, i] = _numOps.Add(_K[i, i], noise);
@@ -362,7 +686,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         {
             for (int i = 0; i < n; i++)
             {
-                yFlat[t * n + i] = _Y[i, t];
+                // Deviations from the task mean - what the zero-mean prior describes.
+                yFlat[t * n + i] = _numOps.Subtract(_Y[i, t], _taskMeans[t]);
             }
         }
 
@@ -423,7 +748,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
                     mean = _numOps.Add(mean, contribution);
                 }
             }
-            means[t] = mean;
+            // The prior explains deviations from the task mean; add the mean back.
+            means[t] = _numOps.Add(mean, _taskMeans[t]);
 
             // Variance (simplified - full computation would use Kronecker structure)
             T variance = _numOps.Multiply(_taskCovariance[t, t], kStarStar);
@@ -484,6 +810,8 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         _kernel = kernel;
         if (!_X.IsEmpty && !_Y.IsEmpty)
         {
+            // A new kernel moves the marginal-likelihood optimum, so re-learn from the current estimates.
+            OptimizeHyperparameters();
             BuildCombinedKernel();
             ComputeAlpha();
         }

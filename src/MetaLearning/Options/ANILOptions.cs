@@ -136,10 +136,15 @@ public class ANILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int CheckpointFrequency { get; set; } = 500;
 
     /// <summary>
-    /// Gets or sets whether to use first-order approximation.
+    /// Gets or sets whether to drop the second-order terms of the meta-gradient.
     /// </summary>
-    /// <value>Default is true (ANIL typically uses first-order for efficiency).</value>
-    public bool UseFirstOrder { get; set; } = true;
+    /// <value>Default is false, the paper's exact meta-gradient.</value>
+    /// <remarks>
+    /// "We do not remove second order terms in ANIL (unlike in first-order MAML); second order terms still persist
+    /// through the derivative of the inner loop update for the head parameters" (Raghu et al. 2020, App. C.1).
+    /// True keeps only the query gradient at the adapted head, as first-order MAML does.
+    /// </remarks>
+    public bool UseFirstOrder { get; set; } = false;
 
     #endregion
 
@@ -152,7 +157,7 @@ public class ANILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the dimension of the final feature representation (before head).
+    /// Gets or sets the width of each example's representation the head reads: the body's per-example output width.
     /// </summary>
     /// <value>Default is 512.</value>
     public int FeatureDimension { get; set; } = 512;

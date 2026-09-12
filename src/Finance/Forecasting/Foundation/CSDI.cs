@@ -83,6 +83,16 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
     private int _hiddenDimension;
     private int _numResidualLayers;
     private int _numDiffusionSteps;
+
+    /// <summary>
+    /// Sample paths drawn per prediction, aggregated by median. Tashiro et al.
+    /// (arXiv:2107.03502) define CSDI's deterministic output as "the median of 100 generated
+    /// samples" - a single path is a draw from the predictive distribution, not the estimate.
+    /// </summary>
+    private int _numSamples;
+
+    /// <summary>Seed for the sampling noise; null draws securely and is not reproducible.</summary>
+    private int? _seed;
     private int _numHeads;
     private int _timeEmbeddingDim;
     private double _dropout;
@@ -185,6 +195,8 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         _dropout = options.DropoutRate;
         _betaStart = options.BetaStart;
         _betaEnd = options.BetaEnd;
+        _numSamples = Math.Max(1, options.NumSamples);
+        _seed = options.Seed;
         ComputeNoiseSchedule();
     }
 
@@ -695,55 +707,62 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
     /// <summary>
     /// DDPM reverse process: iteratively denoise from pure noise conditioned on observed values.
     /// </summary>
+    /// <summary>
+    /// Reverse diffusion, drawing <c>_numSamples</c> paths and returning their per-position median.
+    /// </summary>
+    /// <remarks>
+    /// <para>The paths are drawn as ONE BATCH, not in a loop. xt is [S, outputLen] and the packed
+    /// denoiser input is [S, xtLen + condLen + 1], so the reverse process still runs exactly
+    /// _numDiffusionSteps times - each step just carries S rows through the same projections and
+    /// residual layers. That turns S independent sampling runs into S-wide matrix multiplies, which
+    /// is how a batched engine is meant to be fed; a per-sample loop would multiply the layer-call
+    /// count by S and leave every GEMM at batch 1.</para>
+    ///
+    /// <para>The conditioning and the sin(t) encoding are identical across rows - only the noise
+    /// differs - so they are broadcast into each row rather than recomputed.</para>
+    /// </remarks>
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
         var conditioned = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        // Conditioning = raw instance-normalized observed values, flattened to
-        // [1, N]. The packed per-step denoiser input (noisy sample + conditioning
-        // + diffusion-time embedding) is what gets projected to hidden width by
-        // _inputProjection — its intended role per Tashiro et al. 2021 "CSDI" and
-        // the layer-helper layout (input projection -> residual blocks ->
-        // output projection). The conditioning is therefore NOT pre-projected
-        // here: pre-projecting it consumed _inputProjection's resolved input
-        // width on the conditioning shape, so the raw packed input fell straight
-        // through to the residual stack whose BatchNorm channels are sized to
-        // hiddenDimension — the [1, 33] vs [1, 24] broadcast crash.
         var condFlat = conditioned.Rank == 2
             ? conditioned
             : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _sequenceLength;
-        var rand = RandomHelper.CreateSecureRandom();
+        int samples = Math.Max(1, _numSamples);
+        var rand = _seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
-        // Start from pure noise
-        var xt = new Tensor<T>(new[] { 1, outputLen });
-        for (int i = 0; i < outputLen; i++)
+        var xt = new Tensor<T>(new[] { samples, outputLen });
+        for (int i = 0; i < samples * outputLen; i++)
             xt.Data.Span[i] = SampleStandardNormal(rand);
 
-        // Iterative denoising: t = T-1, T-2, ..., 0
+        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
+        int rowLen = outputLen + condLen + 1;
         T eps10 = NumOps.FromDouble(1e-10);
+
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Pack the per-step denoiser input: [noisy sample | conditioning | sin(t)].
-            int xtLen = Math.Min(xt.Length, outputLen);
-            int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condFlat[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var denoisingInput = new Tensor<T>(new[] { samples, rowLen });
+            T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var din = denoisingInput.Data.Span;
+            for (int s = 0; s < samples; s++)
+            {
+                int baseIdx = s * rowLen;
+                for (int i = 0; i < outputLen; i++) din[baseIdx + i] = xt[s * outputLen + i];
+                for (int i = 0; i < condLen; i++) din[baseIdx + outputLen + i] = condFlat[i];
+                din[baseIdx + outputLen + condLen] = sinT;
+            }
 
-            // Project the packed input to hidden width, then run the residual
-            // stack (whose BatchNorm channels are hiddenDimension), then the
-            // output projection back to the flat score vector.
             var eps = denoisingInput;
             if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
             foreach (var layer in _residualLayers) eps = layer.Forward(eps);
             if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
-            // DDPM reverse step
             T alphaT = _alphas[t];
             T betaT = _betas[t];
             T sqrtOneMinusAlphaBarT = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
@@ -751,17 +770,45 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
             T sqrtAlphaT = NumOps.Sqrt(alphaT);
             T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
 
-            for (int i = 0; i < outputLen && i < xt.Length; i++)
+            int epsCols = samples > 0 ? eps.Length / samples : 0;
+            for (int s = 0; s < samples; s++)
             {
-                T epsVal = i < eps.Length ? eps[i] : NumOps.Zero;
-                T meanT = NumOps.Divide(NumOps.Subtract(xt[i], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
-                T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                for (int i = 0; i < outputLen; i++)
+                {
+                    int flat = s * outputLen + i;
+                    if (flat >= xt.Length) break;
+                    int epsIdx = s * epsCols + i;
+                    T epsVal = i < epsCols && epsIdx < eps.Length ? eps[epsIdx] : NumOps.Zero;
+                    T meanT = NumOps.Divide(NumOps.Subtract(xt[flat], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
+                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
+                    xt.Data.Span[flat] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                }
             }
         }
 
-        if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
-        return xt;
+        var median = MedianAcrossSamples(xt, samples, outputLen);
+        if (!addedBatchDim) return Engine.Reshape(median, new[] { 1, outputLen });
+        return median;
+    }
+
+    /// <summary>
+    /// Per-position median over the sample axis - the paper's deterministic estimate. The same
+    /// sample set is what its 5% and 95% prediction intervals come from.
+    /// </summary>
+    private Tensor<T> MedianAcrossSamples(Tensor<T> paths, int samples, int outputLen)
+    {
+        var result = new Tensor<T>(new[] { outputLen });
+        var column = new T[samples];
+        for (int i = 0; i < outputLen; i++)
+        {
+            for (int s = 0; s < samples; s++) column[s] = paths[s * outputLen + i];
+            Array.Sort(column, (a, b) => NumOps.LessThan(a, b) ? -1 : NumOps.LessThan(b, a) ? 1 : 0);
+            result[i] = (samples % 2) == 1
+                ? column[samples / 2]
+                : NumOps.Divide(NumOps.Add(column[samples / 2 - 1], column[samples / 2]), NumOps.FromDouble(2.0));
+        }
+
+        return result;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

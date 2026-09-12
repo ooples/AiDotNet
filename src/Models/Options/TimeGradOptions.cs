@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -53,6 +53,10 @@ public class TimeGradOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public TimeGradOptions()
     {
+        // Seed is INHERITED from ModelOptions and assigned here rather than shadowed with `new`,
+        // so every ModelOptions reader sees the same value. A default makes inference reproducible
+        // out of the box; callers who want fresh draws per call can set it back to null.
+        Seed = 1;
     }
 
     /// <summary>

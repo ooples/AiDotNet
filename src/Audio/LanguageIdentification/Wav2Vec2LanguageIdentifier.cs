@@ -62,10 +62,9 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     /// <inheritdoc />
     /// <remarks>
     /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
-    /// <c>_classifierLayer.Forward(...)</c>, built in InitializeNativeLayers as
-    /// <c>new DenseLayer&lt;T&gt;(numLanguages)</c> from the supported-language list. InitializeLayers
-    /// passes the same <c>_languageIdToCode.Count</c> to the LayerHelper stack. A class count -
-    /// HiddenSize is the pooling-projection width one layer earlier, not the output width.
+    /// <c>_classifierLayer.Forward(...)</c> - the final layer of the shared Wav2Vec2 factory,
+    /// sized by <c>numLanguages: _languageIdToCode.Count</c>. A class count - HiddenSize is the
+    /// pooling-projection width one layer earlier, not the output width.
     /// </remarks>
     protected override int OutputFeatureWidth => _languageIdToCode.Count;
 
@@ -183,57 +182,70 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         (_languageIdToCode, _languageCodeToId, _languageCodeToName) =
             InitializeLanguageMappings(supportedLanguages);
 
-        InitializeNativeLayers(supportedLanguages.Count);
+        // The head is sized from this list, so an architecture declaring a different output width
+        // describes a different model: say so instead of silently building one of the two.
+        LanguageIdentificationDefaults.ValidateHeadWidth(architecture, _languageIdToCode.Count);
+
+        // One stack. InitializeLayers builds it through the shared factory and publishes those exact
+        // instances through Layers, which training, serialization and clone all walk.
+        InitializeLayers();
     }
 
     #endregion
 
     #region Layer Initialization
 
-    private void InitializeNativeLayers(int numLanguages)
+    private void InitializeNativeLayers()
     {
-        // Feature encoder: 7 temporal convolution layers
-        // These process raw waveform and downsample by ~320x total
-        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
-        int[] strides = [5, 2, 2, 2, 2, 2, 2];
-        int[] channels = [512, 512, 512, 512, 512, 512, 512];
+        // Build the default stack from the shared factory and partition it back into the roles the
+        // forward needs. This used to build a second, private copy by hand, so the forward ran on
+        // layers Layers never held and Train's optimizer step reached none of them. The partition
+        // mirrors the factory's layout exactly, including the dropout layers it omits when a rate
+        // is zero, and fails loudly if the two ever drift apart.
+        var built = LayerHelper<T>.CreateDefaultWav2Vec2LanguageIdentifierLayers(
+            Architecture,
+            hiddenSize: _options.HiddenSize,
+            numLayers: _options.NumLayers,
+            numAttentionHeads: _options.NumAttentionHeads,
+            intermediateSize: _options.IntermediateSize,
+            numLanguages: _languageIdToCode.Count,
+            dropoutRate: _options.HiddenDropout,
+            featureEncoderDim: _options.FeatureEncoderDim,
+            featureProjectionDropout: _options.FeatureProjectionDropout).ToList();
 
-        int inputDim = 1; // Raw waveform (mono)
-        for (int i = 0; i < kernelSizes.Length; i++)
+        int index = 0;
+
+        // Feature encoder: a DenseLayer + LayerNormalizationLayer pair per stage.
+        for (int i = 0; i < LayerHelper<T>.Wav2Vec2FeatureEncoderStages * 2; i++)
         {
-            // Using DenseLayer to simulate 1D conv (simplified)
-            // In production, would use actual 1D convolution
-            int outputDim = channels[i];
-            _featureEncoder.Add(new DenseLayer<T>(outputDim,
-                (IActivationFunction<T>)new GELUActivation<T>()));
-            _featureEncoder.Add(new LayerNormalizationLayer<T>());
-            inputDim = outputDim;
+            _featureEncoder.Add(built[index++]);
         }
 
-        // Feature projection
-        _featureProjection.Add(new DenseLayer<T>(_options.HiddenSize,
-            (IActivationFunction<T>)new GELUActivation<T>()));
-        _featureProjection.Add(new DropoutLayer<T>(_options.FeatureProjectionDropout));
-
-        // Transformer encoder layers
-        for (int i = 0; i < _options.NumLayers; i++)
+        // Feature projection, plus its dropout only when that rate is non-zero.
+        _featureProjection.Add(built[index++]);
+        if (_options.FeatureProjectionDropout > 0)
         {
-            // Self-attention (simplified as dense layers)
-            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>());
-
-            // Feed-forward
-            _transformerLayers.Add(new DenseLayer<T>(_options.IntermediateSize,
-                (IActivationFunction<T>)new GELUActivation<T>()));
-            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>());
-            _transformerLayers.Add(new DropoutLayer<T>(_options.HiddenDropout));
+            _featureProjection.Add(built[index++]);
         }
 
-        // Classification head
-        _poolingProjection = new DenseLayer<T>(_options.HiddenSize,
-            (IActivationFunction<T>)new TanhActivation<T>());
-        _classifierLayer = new DenseLayer<T>(numLanguages);
+        // Transformer blocks: attention stand-in + norm, feed-forward pair + norm, and a dropout when
+        // the hidden rate is non-zero.
+        int perBlock = _options.HiddenDropout > 0 ? 6 : 5;
+        for (int i = 0; i < _options.NumLayers * perBlock; i++)
+        {
+            _transformerLayers.Add(built[index++]);
+        }
+
+        // Classification head: tanh pooling projection, then the per-language logits.
+        _poolingProjection = (DenseLayer<T>)built[index++];
+        _classifierLayer = (DenseLayer<T>)built[index++];
+
+        if (index != built.Count)
+        {
+            throw new InvalidOperationException(
+                $"The Wav2Vec2 factory produced {built.Count} layers but the role partition consumed " +
+                $"{index}; the factory layout and this partition have drifted apart.");
+        }
     }
 
     #endregion
@@ -414,19 +426,26 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             throw new InvalidOperationException("Cannot train in ONNX mode.");
 
         SetTrainingMode(true);
-
-        var preprocessed = PreprocessAudio(input);
-        var predicted = ForwardNative(preprocessed);
-
-        var predictedVector = predicted.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape runs the forward, loss, backward and the configured optimizer step. The
+            // previous body computed a loss, discarded it, and asked the optimizer to update Layers -
+            // which was empty, and which had received no gradient.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Runs the same waveform normalization prediction runs, so the objective optimizes the function
+    /// inference evaluates.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => ForwardNative(PreprocessAudio(input));
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
@@ -469,15 +488,11 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             return;
         }
 
-        // Use LayerHelper to create default Wav2Vec2 LID layers
-        Layers.AddRange(LayerHelper<T>.CreateDefaultWav2Vec2LanguageIdentifierLayers(
-            Architecture,
-            hiddenSize: _options.HiddenSize,
-            numLayers: _options.NumLayers,
-            numAttentionHeads: _options.NumAttentionHeads,
-            intermediateSize: _options.IntermediateSize,
-            numLanguages: _languageIdToCode.Count,
-            dropoutRate: _options.HiddenDropout));
+        // Build the topology once and publish those exact instances through Layers. ForwardNative
+        // needs their block roles; parameters, gradients, the optimizer, serialization and clone need
+        // the same instances.
+        InitializeNativeLayers();
+        Layers.AddRange(GetAllLayers());
     }
 
     /// <inheritdoc/>
@@ -509,6 +524,19 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
+        // A caller-supplied architecture is an ordinary custom layer chain; the role-aware
+        // traversal below applies only to the default topology.
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            var customOutput = input;
+            foreach (var layer in Layers)
+            {
+                customOutput = layer.Forward(customOutput);
+            }
+
+            return customOutput;
+        }
+
         var output = input;
 
         // Feature encoder
@@ -558,32 +586,16 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     private Tensor<T> MeanPooling(Tensor<T> input)
     {
         int hiddenSize = _options.HiddenSize;
-
-        // Guard against empty input or zero hidden size
         if (input.Length == 0 || hiddenSize <= 0)
         {
             return new Tensor<T>(new T[Math.Max(hiddenSize, 1)], [Math.Max(hiddenSize, 1)]);
         }
 
-        int timeSteps = input.Length / hiddenSize;
-        if (timeSteps < 1) timeSteps = 1;
-
-        var pooled = new T[hiddenSize];
-        for (int h = 0; h < hiddenSize; h++)
-        {
-            double sum = 0;
-            for (int t = 0; t < timeSteps; t++)
-            {
-                int idx = t * hiddenSize + h;
-                if (idx < input.Length)
-                {
-                    sum += _numOps.ToDouble(input[idx]);
-                }
-            }
-            pooled[h] = _numOps.FromDouble(sum / timeSteps);
-        }
-
-        return new Tensor<T>(pooled, [hiddenSize]);
+        // The mean over time of HiddenSize-wide frames, as an engine reduction. This was a NumOps
+        // scalar loop into a fresh tensor, which the gradient tape cannot see through: the feature
+        // encoder, projection and transformer upstream of it received no gradient at all.
+        var frames = Engine.Reshape(input, new[] { input.Length / hiddenSize, hiddenSize });
+        return Engine.ReduceMean(frames, new[] { 0 }, keepDims: false);
     }
 
     private T[] Softmax(T[] logits)
@@ -644,12 +656,9 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         }
         else
         {
-            string[] defaultLanguages = [
-                "en", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko",
-                "ar", "hi", "tr", "pl", "nl", "sv", "da", "no", "fi", "cs"
-            ];
+            var defaultLanguages = LanguageIdentificationDefaults.CommonLanguageCodes;
 
-            for (int i = 0; i < defaultLanguages.Length; i++)
+            for (int i = 0; i < defaultLanguages.Count; i++)
             {
                 idToCode[i] = defaultLanguages[i];
                 codeToId[defaultLanguages[i]] = i;
@@ -660,41 +669,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     }
 
     private static Dictionary<string, string> GetDefaultLanguageNames()
-    {
-        return new Dictionary<string, string>
-        {
-            ["en"] = "English",
-            ["es"] = "Spanish",
-            ["fr"] = "French",
-            ["de"] = "German",
-            ["it"] = "Italian",
-            ["pt"] = "Portuguese",
-            ["ru"] = "Russian",
-            ["zh"] = "Chinese",
-            ["ja"] = "Japanese",
-            ["ko"] = "Korean",
-            ["ar"] = "Arabic",
-            ["hi"] = "Hindi",
-            ["tr"] = "Turkish",
-            ["pl"] = "Polish",
-            ["nl"] = "Dutch",
-            ["sv"] = "Swedish",
-            ["da"] = "Danish",
-            ["no"] = "Norwegian",
-            ["fi"] = "Finnish",
-            ["cs"] = "Czech",
-            ["el"] = "Greek",
-            ["he"] = "Hebrew",
-            ["th"] = "Thai",
-            ["vi"] = "Vietnamese",
-            ["id"] = "Indonesian",
-            ["ms"] = "Malay",
-            ["uk"] = "Ukrainian",
-            ["ro"] = "Romanian",
-            ["hu"] = "Hungarian",
-            ["bg"] = "Bulgarian"
-        };
-    }
+        => LanguageIdentificationDefaults.CreateDisplayNameMap();
 
     #endregion
 }

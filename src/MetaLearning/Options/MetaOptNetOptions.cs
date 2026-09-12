@@ -148,27 +148,63 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     #region MetaOptNet-Specific Properties
 
     /// <summary>
-    /// Gets or sets the type of convex solver to use.
+    /// Gets or sets the convex base learner.
     /// </summary>
-    /// <value>Default is RidgeRegression.</value>
+    /// <value>Default is SVM, the paper's base learner (MetaOptNet-SVM).</value>
     /// <remarks>
+    /// <para>
+    /// The Crammer and Singer multi-class SVM in its dual form (eq. 10) is the paper's headline learner; ridge
+    /// regression (eq. 11) is the cheaper alternative it compares against, and logistic regression is the third
+    /// convex choice the framework allows. All three are solved numerically and differentiated through their KKT
+    /// conditions.
+    /// </para>
     /// <para><b>For Beginners:</b>
-    /// - <b>RidgeRegression:</b> Simple and fast, works well for most tasks
-    /// - <b>SVM:</b> More powerful but slower, better for hard classification boundaries
+    /// - <b>SVM:</b> the paper's choice, best accuracy, a small quadratic program per task
+    /// - <b>RidgeRegression:</b> a closed form, fastest
+    /// - <b>LogisticRegression:</b> probabilistic scores, solved by Newton's method
     /// </para>
     /// </remarks>
-    public ConvexSolverType SolverType { get; set; } = ConvexSolverType.RidgeRegression;
+    public ConvexSolverType SolverType { get; set; } = ConvexSolverType.SVM;
 
     /// <summary>
-    /// Gets or sets the regularization parameter for the convex solver.
+    /// Gets or sets a regularization parameter that overrides the active solver's own setting.
     /// </summary>
-    /// <value>Default is 1.0.</value>
+    /// <value>Default is null: each solver uses <see cref="SvmCost"/>, <see cref="RidgeLambda"/> or
+    /// <see cref="LogisticLambda"/>.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Regularization prevents overfitting to the support set.
-    /// Higher values mean more regularization (simpler solutions).
-    /// </para>
+    /// <para>The solvers regularize on different scales - the reference implementation uses C = 0.1 for the SVM and
+    /// lambda = 50 for ridge regression - so one shared value cannot serve both. Set this only to force one.</para>
     /// </remarks>
-    public double RegularizationStrength { get; set; } = 1.0;
+    public double? RegularizationStrength { get; set; }
+
+    /// <summary>
+    /// Gets or sets C, the SVM's regularization parameter (eq. 4).
+    /// </summary>
+    /// <value>Default is 0.1, the reference implementation's value.</value>
+    public double SvmCost { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets lambda, the ridge regression regularization (eq. 11).
+    /// </summary>
+    /// <value>Default is 50.0, the reference implementation's value.</value>
+    public double RidgeLambda { get; set; } = 50.0;
+
+    /// <summary>
+    /// Gets or sets the L2 regularization of the logistic regression base learner.
+    /// </summary>
+    /// <value>Default is 1.0. The paper names logistic regression as a choice but reports no value; this one is
+    /// ours.</value>
+    public double LogisticLambda { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the label smoothing applied to the query cross-entropy.
+    /// </summary>
+    /// <value>Default is 0.0 (off). The paper uses 0.1 for miniImageNet with ResNet-12.</value>
+    /// <remarks>
+    /// <para>Smoothing belongs to that benchmark's training recipe rather than to the method, so it is off by
+    /// default. Above zero, the query loss is the cross-entropy against the smoothed label distribution.</para>
+    /// </remarks>
+    public double LabelSmoothing { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the number of output classes.
@@ -177,34 +213,42 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the dimension of the feature embedding.
+    /// Gets or sets the width of each example's embedding: the embedding network's per-example output width.
     /// </summary>
     /// <value>Default is 512.</value>
     public int EmbeddingDimension { get; set; } = 512;
 
     /// <summary>
-    /// Gets or sets whether to normalize embeddings before solving.
+    /// Gets or sets whether to scale each embedding to unit length before solving.
     /// </summary>
-    /// <value>Default is true.</value>
-    public bool NormalizeEmbeddings { get; set; } = true;
+    /// <value>Default is false: the reference implementation's heads read the embeddings as they are.</value>
+    public bool NormalizeEmbeddings { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to use a learned temperature for scaling.
+    /// Gets or sets whether the logit scale of eq. 12 is learned.
     /// </summary>
-    /// <value>Default is true.</value>
+    /// <value>Default is true, as in the reference implementation.</value>
+    /// <remarks>
+    /// <para>The scale multiplies the base learner's logits before the loss. False keeps it at
+    /// <see cref="InitialTemperature"/>.</para>
+    /// </remarks>
     public bool UseLearnedTemperature { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the initial temperature value.
+    /// Gets or sets the starting value of the logit scale of eq. 12.
     /// </summary>
-    /// <value>Default is 1.0.</value>
+    /// <value>Default is 1.0, the reference implementation's initialisation.</value>
+    /// <remarks>
+    /// <para>It multiplies the logits; it used to divide them and was clamped at 0.01, and its gradient was a
+    /// forward difference.</para>
+    /// </remarks>
     public double InitialTemperature { get; set; } = 1.0;
 
     /// <summary>
-    /// Gets or sets the maximum number of iterations for iterative solvers (like SVM).
+    /// Gets or sets the iteration budget of the iterative base learners (SVM and logistic regression).
     /// </summary>
-    /// <value>Default is 100.</value>
-    public int MaxSolverIterations { get; set; } = 100;
+    /// <value>Default is 15, the reference implementation's QP iteration count.</value>
+    public int MaxSolverIterations { get; set; } = 15;
 
     /// <summary>
     /// Gets or sets the convergence tolerance for iterative solvers.
@@ -245,7 +289,11 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     {
         return MetaModel != null &&
                OuterLearningRate > 0 &&
-               RegularizationStrength > 0 &&
+               (RegularizationStrength is null || RegularizationStrength > 0) &&
+               SvmCost > 0 &&
+               RidgeLambda > 0 &&
+               LogisticLambda > 0 &&
+               LabelSmoothing >= 0 && LabelSmoothing < 1 &&
                NumClasses > 0 &&
                EmbeddingDimension > 0 &&
                MetaBatchSize > 0 &&
@@ -281,6 +329,10 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
             UseFirstOrder = UseFirstOrder,
             SolverType = SolverType,
             RegularizationStrength = RegularizationStrength,
+            SvmCost = SvmCost,
+            RidgeLambda = RidgeLambda,
+            LogisticLambda = LogisticLambda,
+            LabelSmoothing = LabelSmoothing,
             NumClasses = NumClasses,
             EmbeddingDimension = EmbeddingDimension,
             NormalizeEmbeddings = NormalizeEmbeddings,

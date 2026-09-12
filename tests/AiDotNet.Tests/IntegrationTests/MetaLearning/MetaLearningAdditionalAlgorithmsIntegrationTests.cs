@@ -153,10 +153,13 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ANIL_MetaTrainAndAdapt_Run()
     {
+        // LinearVectorModel emits one value per example, so the head reads a 1-wide representation. The old
+        // FeatureDimension of 2 only worked because ANIL used to flatten the whole 2-row batch into one "feature
+        // vector" (Raghu et al. 2020 apply the head to each example).
         var model = new LinearVectorModel(2);
         var options = new ANILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
@@ -174,16 +177,18 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.ANIL, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score per class for EACH query example: 2 rows x 2 classes. It used to be one row for the batch.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
     public async Task BOIL_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // One value per example from LinearVectorModel: a 1-wide representation (see ANIL_MetaTrainAndAdapt_Run).
         var options = new BOILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
@@ -202,7 +207,8 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.BOIL, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score per class for EACH query example (Oh et al. 2021 classify each example).
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
@@ -293,9 +299,11 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     public async Task LEO_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the
+        // feature encoder's per-example output width, which LEO now checks.
         var options = new LEOOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             LatentDimension = 2,
             HiddenDimension = 2,
             NumClasses = 2,
@@ -323,10 +331,12 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
     public async Task MetaOptNet_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the
+        // embedding network's per-example output width, which MetaOptNet now checks.
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
         {
             NumClasses = 2,
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             SolverType = ConvexSolverType.RidgeRegression,
             RegularizationStrength = 0.1,
             OuterLearningRate = 0.01,
@@ -402,7 +412,9 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.MANN, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score row per query example: the adapted model returns [rows, classes], which a Vector output
+        // flattens to rows * classes. It used to answer for the first example only, whatever it was handed.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
@@ -431,7 +443,9 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.NTM, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Shape[0]);
+        // One score row per query example, [rows, classes]; it used to return a single row for the batch.
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(options.NumClasses, predictions.Shape[1]);
     }
 
     [Fact(Timeout = 120000)]

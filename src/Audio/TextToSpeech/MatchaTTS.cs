@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Matcha-TTS: A fast TTS architecture with conditional flow matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Shivam Mehta, Ruibo Tu, Jonas Beskow, Eva Szekely, Gustav Eje Henter")]
-public partial class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class MatchaTTS<T> : AlignedTextToMelModelBase<T>, ITextToSpeech<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -59,8 +59,8 @@ public partial class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
     /// <c>LayerHelper.CreateDefaultMatchaTTSLayers</c> ends with the mel projection
     /// <c>new FullyConnectedLayer&lt;T&gt;(numMels, null)</c>, and <c>InitializeLayers</c> passes
-    /// <c>numMels: _options.NumMels</c>. Note the duration predictor's width-1 layer sits mid-chain,
-    /// not at the end, so it is not the output width.
+    /// <c>numMels: _options.NumMels</c>. The duration predictor is a separate branch and does not
+    /// reduce the feature width passed to the decoder.
     /// </remarks>
     protected override int OutputFeatureWidth => _options.NumMels;
 
@@ -178,12 +178,24 @@ public partial class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultMatchaTTSLayers(
-            textEncoderDim: _options.TextEncoderDim, numTextEncoderLayers: _options.NumTextEncoderLayers,
-            numTextEncoderHeads: _options.NumTextEncoderHeads, decoderDim: _options.DecoderDim,
-            numDecoderLayers: _options.NumDecoderLayers, numMels: _options.NumMels,
-            dropoutRate: _options.DropoutRate));
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return; // A user-defined frame stack does not declare a token encoder/decoder boundary.
+        }
+        if (_options.TextEncoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(_options.TextEncoderDim));
+        if (_options.NumTextEncoderHeads <= 0 || _options.TextEncoderDim % _options.NumTextEncoderHeads != 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumTextEncoderHeads), "Encoder width must be divisible by the positive head count.");
+        if (_options.NumTextEncoderLayers < 0) throw new ArgumentOutOfRangeException(nameof(_options.NumTextEncoderLayers));
+        if (_options.NumDecoderLayers < 0) throw new ArgumentOutOfRangeException(nameof(_options.NumDecoderLayers));
+
+        Layers.AddRange(LayerHelper<T>.CreateMatchaTextEncoderLayers(_options.TextEncoderDim,
+            _options.NumTextEncoderLayers, _options.NumTextEncoderHeads, _options.DropoutRate));
+        int decoderStart = Layers.Count;
+        Layers.AddRange(LayerHelper<T>.CreateMatchaMelDecoderLayers(_options.DecoderDim, _options.NumDecoderLayers, _options.NumMels));
+        ConfigureAlignedMelPath(_options.PhonemeVocabSize, _options.TextEncoderDim, _options.NumMels,
+            _options.HopLength, _options.DurationPredictorDim, _options.NumDurationPredictorLayers,
+            _options.DropoutRate, encoderStart: 1, decoderStart: decoderStart);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -205,6 +217,16 @@ public partial class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Trains paired token/mel sequences with explicit lengths and optional monotonic duration
+    /// targets. The inherited frame-level Train overload remains available and unchanged.
+    /// </summary>
+    public T Train(AlignedMelBatch<T> batch)
+    {
+        ThrowIfDisposed();
+        return TrainAlignedMel(batch, _optimizer);
     }
 
     /// <inheritdoc />

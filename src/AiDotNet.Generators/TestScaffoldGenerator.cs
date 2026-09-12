@@ -50,11 +50,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // These are compositional/wrapper patterns that require a user-provided inner model.
     private static readonly string[] ExcludedBaseClasses =
     [
-        "MetaLearnerBase",           // Meta-learning: wraps an IFullModel chosen by the user
-        "MetaLearningModelBase",     // Meta-learning variant with different naming
-        "NeuralProcessBase",         // Neural processes: inherits MetaLearnerBase
+        // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
+        // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
+        "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
         "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
         "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
+        "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
+                                     // Routing these to the RL family was TRIED and measured: 28 of
+                                     // the 33 emitted tests failed, and none of the failures was a
+                                     // model defect. PolicyBase.Train is an intentional no-op whose
+                                     // own doc says "Training is handled by RL algorithms, not
+                                     // directly on the policy", so Training_ShouldChangeParameters
+                                     // can never pass; and ContinuousPolicy/BetaPolicy sample from a
+                                     // Gaussian by design, so Policy_ShouldBeDeterministic and
+                                     // Clone_ShouldProduceSamePolicy compare two draws from a
+                                     // distribution. The family asserts AGENT semantics a policy is
+                                     // specified not to have. Covering these needs a policy-specific
+                                     // base, not a different existing family.
         "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
         "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
         "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
@@ -68,20 +80,128 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                      // VAE invariants where needed.
     ];
 
+    /// <summary>
+    /// Foundation-scale vision-language models whose generated fixture is built with generated
+    /// test-scale options rather than their paper defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At paper scale these are ~7B-parameter models (LLaVA-1.5: VisionDim 1024, DecoderDim and
+    /// ProjectionDim 4096, 24 vision and 32 decoder layers), whose weights alone OOM a CI runner. They
+    /// used to be excluded outright with a note that "manual smaller-config tests cover these models";
+    /// none existed, so all 36 ran no family invariant (#2139).
+    /// </para>
+    /// <para>
+    /// Each takes <c>(architecture, XOptions? options = null, ...)</c>, and the fixture now passes
+    /// <c>ModelTestScale.CreateBoundedOptions(typeof(XOptions))</c>: every width above 32 is divided by
+    /// 32, while layer counts, patch sizes and the architecture's wiring are left as the paper has them.
+    /// Production defaults are untouched; nothing on the shipping construction path calls the scaler.
+    /// </para>
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> FoundationScaleVisionLanguageModels =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "LLaVA15", "LLaVANeXT", "LLaVAOneVision", "LLaVAOneVision15",
+        "LLaVAMed", "LLaVACoT",
+        "Ferret", "FerretV2", "Groma", "Shikra",
+        "AquilaVL", "Aria", "Cambrian1", "Dragonfly", "DragonflyMed",
+        "Eagle", "Eagle25", "Mantis", "Maya",
+        "MiniCPMo", "MiniCPMV", "Molmo", "Monkey", "Moondream",
+        "NVLM", "Ovis", "VILA", "VILAU", "PathVLM", "RadFM",
+        "QVQ72B", "SkyworkR1V", "SkyworkR1V2",
+        "GeoChat", "RSGPT", "SkyEyeGPT",
+    };
+
     // Formerly a list of diffusion variants with non-standard UNet input
     // channels — they're now handled paper-faithfully by
     // DiffusionModelBase.Predict's CanonicalizeGenShape hook, which reads
     // each variant's NoisePredictor.InputChannels and rewrites the
     // generation shape to match. No generator-level exclusion needed.
+    /// <summary>
+    /// Models with no generic constructor shape that the generator nonetheless knows how to build,
+    /// because an explicit constructor pin for each one appears in the constructor table.
+    /// </summary>
+    /// <remarks>
+    /// Every existing pin targets a model that ALREADY passes canConstruct (parameterless,
+    /// architecture-only or vector-only), so a pin alone could never rescue a model whose constructor
+    /// needs something else - a kernel, two architectures that must agree. This set is that missing
+    /// link, and it is deliberately explicit: listing a name here without adding its pin would emit a
+    /// fixture with no way to construct the model, so the two must change together.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> ExplicitlyConstructedClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "MultiOutputGaussianProcess",
+            "MultiTaskGaussianProcess",
+            "WGAN",
+            "ACGAN",
+            "StyleGAN",
+            "Pix2Pix",
+            "PhysicsInformedNeuralNetwork",
+            "MultiFidelityPINN",
+            "Gpt4VisionNeuralNetwork",
+            "ECAPATDNNLanguageIdentifier",
+            "Wav2Vec2LanguageIdentifier",
+            "DomainDecompositionPINN",
+            "DeepRitzMethod",
+            "VariationalPINN",
+            "DeepOperatorNetwork",
+            "FinancialA2CAgent",
+            "FinancialPPOAgent",
+            "FinancialSACAgent",
+            "FinRLAgent",
+            "MultiScalePINN",
+            "InverseProblemPINN",
+            "CodeT5",
+            "NeuralProgramSynthesizer",
+        };
+
     private static readonly string[] ExcludedClassNames = new[]
     {
-        // Internal AutoML wrapper around UNet+VAE+Scheduler+Conditioner.
-        // Even with a parameterless ctor that wires up sensible defaults,
-        // its Predict path requires conditioning input that matches a
-        // specific embedding dim — incompatible with the generic
-        // DiffusionModelTestBase invariants which feed plain random tensors.
-        // AutoML's actual training/trial path covers it via integration tests.
-        "DiffusionAutoMLModel",
+        // A memory buffer for continual learning, not a model: its Predict throws
+        // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
+        // design and Train is empty. It is also generic over three types, so no fixture could pick
+        // TInput/TOutput for it. Covered where it is used, by the continual-learning strategies.
+        "ExperienceReplayBuffer",
+
+        // A knowledge-distillation STRATEGY, not a model: its Predict is the identity (input => input)
+        // and its Train is empty. Its real surface is ComputeFeatureLoss / ComputeFeatureGradient over
+        // student and teacher features, which no model-family fixture can exercise; asserting that
+        // training changes parameters would fail for a reason that is not a defect.
+        "FeatureDistillationStrategy",
+
+        // A meta-learning inner-loop model: Train is ONE gradient step at its learning rate (0.01),
+        // by design ("useful for meta-learning examples and testing"). The Regression family asserts
+        // properties of a FITTED regressor - translation equivariance, near-zero residual mean - which a
+        // single step cannot have; measured, 7 of its invariants failed that way (predicted shift 22.6
+        // against ~1000), none of them a defect. It is exercised by the meta-learners that own it.
+        "LinearVectorModel",
+
+        // Its per-example sibling, the inner model of the classifier meta-learner family: one training step by
+        // design, for the same reason, and exercised by the classifier meta-learners that own it.
+        "LinearEmbeddingModel",
+
+        // A self-supervised EVALUATION harness, not a model: Train is empty and Predict forwards to the
+        // encoder it wraps. It scores an encoder's embeddings by k-nearest-neighbour accuracy; that
+        // encoder is what a model-family fixture would test, and it has its own.
+        "KNNEvaluator",
+
+        // Runs a caller-supplied ONNX graph (constructed from ONNX bytes or a .onnx path). A generated
+        // fixture has no real graph to load, so there is nothing of the adapter's own to test.
+        "OnnxFullModelAdapter",
+
+        // An inference-serving engine, not a trainable model: it owns no layer stack, takes its weights
+        // through SetFromFullWeights and predicts over per-rank paged KV caches. Its behaviour is covered
+        // by the dedicated AiDotNet.Serving.Tests integration suites (single-device equivalence, paged
+        // serving, wiring, GPU paged attention).
+        "TensorParallelPagedModel",
+
+        // A fixed signal transform, not a model: Train does nothing and Predict is Transform, so no
+        // model family's invariants describe it (priority 18 above records why it must not be
+        // routed to NeuralNetwork). ConstantQTransformTests covers its own properties: geometric bin
+        // centres, a tone peaking in its bin, the calibrated magnitude, linearity, silence and
+        // determinism.
+        "ConstantQTransform",
 
         // AutoML ensemble combiner: averages a set of member IFullModels chosen by
         // the AutoML search. It extends ModelBase directly (not SupervisedAutoMLModelBase),
@@ -108,23 +228,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "GoogleCloudTTS",
         "Murf",
         "NVIDIARivaTTS",
-
-        // LLaVA-family VLMs use the LLaVA-1.5 paper-faithful defaults
-        // (visionDim=1024, decoderDim=4096, 24 vision + 32 decoder layers,
-        // mlpIntermediateDim=4096) — that's a ~7B-parameter model. Eagerly
-        // allocating those weights in a sanity-test forward pass requires
-        // ~12 GB at fp64 and OOMs every CI runner. Substituting smaller
-        // defaults would make the auto-test unfaithful to the paper. Manual
-        // smaller-config tests cover these models where needed.
-        "LLaVA15", "LLaVANeXT", "LLaVAOneVision", "LLaVAOneVision15",
-        "LLaVAMed", "LLaVACoT",
-        "Ferret", "FerretV2", "Groma", "Shikra",
-        "AquilaVL", "Aria", "Cambrian1", "Dragonfly", "DragonflyMed",
-        "Eagle", "Eagle25", "Mantis", "Maya",
-        "MiniCPMo", "MiniCPMV", "Molmo", "Monkey", "Moondream",
-        "NVLM", "Ovis", "VILA", "VILAU", "PathVLM", "RadFM",
-        "QVQ72B", "SkyworkR1V", "SkyworkR1V2",
-        "GeoChat", "RSGPT", "SkyEyeGPT",
 
         // Janus / Janus-Pro (DeepSeek): paper-faithful unified understanding +
         // generation VLMs at ~1.5B (Janus, decoderDim=2048) / ~7B (Janus-Pro,
@@ -396,6 +499,187 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    /// <summary>
+    /// The overridable surface of <c>SafetyModuleTestBase</c>. Anything else emitted onto a
+    /// SafetyModule fixture is a member of some model-family base that this base does not have.
+    /// </summary>
+    /// <summary>
+    /// The overridable surface of <c>ObjectDetectorTestBase</c>.
+    /// </summary>
+    /// <remarks>
+    /// Short on purpose. This family has no training invariant - <c>ObjectDetectorBase.Train</c> is
+    /// an empty body - so the per-model training knobs the emission path attaches (iteration
+    /// counts, MoreDataTolerance, memorization budgets) describe a capability the base does not
+    /// have, and each one would be a CS0115.
+    /// <para>
+    /// InputShape and OutputShape are excluded deliberately rather than accidentally. The emission
+    /// path writes them as <c>ResolveModelDeclaredInputShape(...)</c>, which asks the constructed
+    /// model for its ARCHITECTURE - a concept these detectors do not have, since they size
+    /// themselves from an options object. The base's own default is [3, 64, 64], which matches the
+    /// bounded InputSize the family constructor emits, so letting it win is both correct and
+    /// self-consistent.
+    /// </para>
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> VisionDetectorTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "CreateModel",
+        };
+
+    /// <summary>Overridable surface of <c>TensorModuleTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> TensorModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "Width", "BatchSize" };
+
+    /// <summary>Overridable surface of <c>ClassificationMetaLearnerTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ClassificationMetaLearnerTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "FeatureCount", "EmbeddingDimension", "NumWays", "MetaModelFrozenByDesign" };
+
+    /// <summary>
+    /// Classifier meta-learners whose options declare no class count, so the class-count rule cannot find them.
+    /// </summary>
+    /// <remarks>
+    /// Prototypical networks (Snell et al. 2017) take the ways from the labels: one prototype per class present.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> ClassifierMetaLearnersWithoutClassCount =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "ProtoNetsAlgorithm" };
+
+    /// <summary>
+    /// Whether a meta-learner classifies: its options declare a class count, or it is a known classifier that
+    /// infers the ways from the labels.
+    /// </summary>
+    private static bool IsClassifierMetaLearner(INamedTypeSymbol modelClass)
+    {
+        if (ClassifierMetaLearnersWithoutClassCount.Contains(modelClass.Name)) return true;
+        return OptionsIntProperties(modelClass).Any(name => System.Array.IndexOf(MetaLearnerClassCountProperties, name) >= 0);
+    }
+
+    /// <summary>Options widths that are the embedding a classifier consumes per example.</summary>
+    private static readonly string[] ClassifierEmbeddingWidthProperties =
+        { "FeatureDimension", "FeatureDim", "EmbeddingDimension", "EmbeddingDim" };
+
+    /// <summary>Options widths that are the raw input a classifier reads per example.</summary>
+    private static readonly string[] ClassifierInputWidthProperties = { "InputDim", "InputDimension" };
+
+    /// <summary>
+    /// The classifier family's options initializer: class count to NumWays, embedding width to EmbeddingDimension,
+    /// input width to FeatureCount.
+    /// </summary>
+    /// <remarks>
+    /// A classifier's FeatureDimension is the width of the body's output it classifies from (ANIL and BOIL's head
+    /// input, MbPA's key), which here is the embedding - not the raw feature count the scalar family binds it to.
+    /// </remarks>
+    private static string FindClassifierMetaLearnerSizeInitializer(INamedTypeSymbol modelClass)
+    {
+        var assignments = new System.Collections.Generic.List<string>();
+        foreach (var name in OptionsIntProperties(modelClass))
+        {
+            if (System.Array.IndexOf(MetaLearnerClassCountProperties, name) >= 0)
+                assignments.Add($"{name} = NumWays");
+            else if (System.Array.IndexOf(ClassifierEmbeddingWidthProperties, name) >= 0)
+                assignments.Add($"{name} = EmbeddingDimension");
+            else if (System.Array.IndexOf(ClassifierInputWidthProperties, name) >= 0)
+                assignments.Add($"{name} = FeatureCount");
+            else
+            {
+                // CAPACITY HAS TO BE BOUND ON THIS PATH TOO. A classifier meta-learner emits
+                // ClassifierOptionsSizes INSTEAD of MetaLearnerOptionsSizes, not alongside it, so a
+                // capacity bound only in FindMetaLearnerTaskSizeInitializer never reaches one. NTM
+                // declares NumClasses and therefore takes this path, which left its production
+                // 128 x 20 memory and 100-unit controller in the generated fixture and kept it timing
+                // out at the 120-second watchdog after the scale-down had supposedly been applied.
+                foreach (var (capacityName, value) in MetaLearnerMemoryCapacityProperties)
+                {
+                    if (name == capacityName)
+                    {
+                        assignments.Add($"{name} = {value}");
+                        break;
+                    }
+                }
+            }
+        }
+
+        return assignments.Count == 0 ? string.Empty : " { " + string.Join(", ", assignments) + " }";
+    }
+
+    /// <summary>Publicly settable int properties of the options type the single-options constructor takes.</summary>
+    private static System.Collections.Generic.IEnumerable<string> OptionsIntProperties(INamedTypeSymbol modelClass)
+    {
+        foreach (var ctor in modelClass.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public || ctor.Parameters.Length != 1)
+                continue;
+            if (ctor.Parameters[0].Type is not INamedTypeSymbol options) continue;
+
+            var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            for (var walk = options; walk is not null; walk = walk.BaseType)
+            {
+                foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (!seen.Add(property.Name)) continue;
+                    if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+                    if (property.Type.SpecialType != SpecialType.System_Int32) continue;
+                    yield return property.Name;
+                }
+            }
+
+            yield break;
+        }
+    }
+
+    /// <summary>Overridable surface of <c>MetaLearnerTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> MetaLearnerTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "FeatureCount", "NumWays", "MetaModelFrozenByDesign" };
+
+    /// <summary>
+    /// Meta-learners whose paper keeps the meta-model frozen by default and meta-trains other state instead.
+    /// </summary>
+    /// <remarks>
+    /// CAML (Fifty et al., ICLR 2024) runs a frozen pretrained feature extractor and meta-trains only its
+    /// context module; FreezeBackbone defaults to true to match. The family then asserts that the meta-model
+    /// stays put and that the learner's declared state moves, rather than that the meta-model moves.
+    /// SImPa (Nguyen et al., 2020) generates every task's base-network weights from its implicit posterior
+    /// (eq. 10, w_i = G(z; lambda_i)), so the base network owns no persistent weights to meta-train at all.
+    /// Algorithm 1 meta-learns two other things instead: psi, the initialisation of the GENERATOR that each
+    /// task starts from (line 18, lambda_i &lt;- theta), and phi_0, the initialisation of the
+    /// compression-lemma network (line 3). Both are declared state on the learner.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> MetaLearnersFrozenByDesign =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CAMLAlgorithm", "SImPaAlgorithm" };
+
+    /// <summary>Overridable surface of <c>DeepfakeDetectorTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateDetector", "TargetArtifact" };
+
+    /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "FrameCount", "FrameSize", "FrameRate" };
+
+    /// <summary>Overridable surface of <c>NeckTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> NeckTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "InputChannels", "OutputChannels", "TopResolution" };
+
+    /// <summary>Overridable surface of <c>VolatilityModelTestBase</c>: the default factory and the
+    /// simulated-series length. Filtering keeps the generic shape members, which it does not have, out.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> VolatilityModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "CreateModel", "ReturnCount" };
+
+    private static readonly System.Collections.Generic.HashSet<string> SafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "CreateModule",
+            "ContentSize",
+            "ProducesFindings",
+            "RequiresExternalResources",
+            "CreateSafeContent",
+            "CreateRandomContent",
+        };
+
     private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST002",
         title: "Generated scaffold architecture size disagrees with its InputShape",
@@ -406,27 +690,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                        "Make the constructor pin's inputHeight/inputWidth match the emitted InputShape.",
         category: "AiDotNet.TestScaffold",
         defaultSeverity: DiagnosticSeverity.Warning,
-        // OFF BY DEFAULT, and the reason is measured rather than cautious. Enabled, this fires on 46
-        // models, and reviewing them showed most are NOT defects:
-        //   - audio models whose fixture is a mel spectrogram, not an image: HiFiGAN / MelGAN /
-        //     UnivNet / WaveGlow / ParallelWaveGAN / ISTFTNet all read "arch 64x32 vs fixture 80x1",
-        //     which compares spectrogram axes against inputHeight/inputWidth;
-        //   - patch-grid vision-language models, where the architecture legitimately describes the
-        //     TOKEN grid and is therefore smaller than the image by the patch size: BLIP3 /
-        //     InstructBLIP / MiniGPTv2 / Phi4Multimodal at 28x28 for a 112px image (patch 4),
-        //     DeepSeekVL2 / EVACLIP at 8x8 for 112px (patch 14).
-        // Restricting to "architecture LARGER than fixture" was considered and rejected: it catches
-        // only the RoMa / VideoFlow / XMem / RAPIDFlow half of the known instances, and its one new
-        // candidate here (MedSAM2, 128 vs 64) turned out to fail a TRAINING invariant rather than a
-        // shape check, so that refinement is unvalidated.
+        // ON BY DEFAULT, once the models it was reporting were actually fixed. The rule spent its
+        // life Disabled behind a comment claiming 46 firings of which "most are NOT defects".
+        // Re-derived over the emitted fixtures, the real population was ELEVEN - Emotion2Vec, MT3,
+        // BandSplitRNN, MedicalASR, HiFiGAN, ISTFTNet, MelGAN, MultiBandMelGAN, ParallelWaveGAN,
+        // UnivNet, WaveGlow - and all eleven were genuine. Every one pinned an
+        // InputType.TwoDimensional architecture (GetInputShape() = [H, W]) while its fixture fed a
+        // rank-3 mel spectrogram; the architecture simply did not describe the input.
         //
-        // Nothing in the emitted text separates "the architecture describes the input image" from
-        // "the architecture describes a token grid or spectrogram", so an enabled version would add
-        // ~90 mostly-false warnings and train people to ignore it. Kept available deliberately:
-        // enable it (editorconfig / -warnaserror:ADNTEST002) when adding or resizing a spatial model
-        // and check whether the new entry is real. It DOES catch the real defect - verified against a
-        // deliberately reintroduced SlimSAM 32x32-vs-128x128 mismatch, which it reported.
-        isEnabledByDefault: false);
+        // Excusing them was tried first, as a "these axes mean spectrogram bins, not image axes"
+        // domain gate, and it was WRONG. A pinned architecture is not decorative: the sequence-
+        // labeling NER pin in the constructor table records this same class of bug biting for real,
+        // where a 128-vs-100 disagreement made ResolveLazyLayerShapes resolve a lazy BiLSTM against
+        // the DECLARED width and the real forward then threw "Matrix dimensions incompatible". A
+        // silenced mismatch is a live hazard waiting on a lazy layer.
+        //
+        // The fix was therefore in the generator, not in the rule: the conv1d vocoder pin now
+        // declares the [1, 80, T] mel geometry its fixture feeds (Conv1DVocoderMelFrames is the one
+        // source both read), and the generic audio fixture now honours a model-specific constructor
+        // pin through GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize - the mechanism
+        // the vision path already used and audio was never wired to.
+        isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor FloatScaffoldNoOpDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST001",
@@ -2145,14 +2429,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const int TaskGeneration = 2;
     private const int TaskClustering = 8;
 
+    // The message deliberately does NOT name a cause. It used to assert "(missing category/task
+    // metadata)", which is wrong for the overwhelming majority: of the 338 models this fires on,
+    // 325 carry a specific ADNGEN001 reason instead - 224 inherit an excluded compositional base,
+    // 55 have no supported constructor, and 46 resolve to a family whose fixture needs an interface
+    // they do not implement. Most of them do have [ModelCategory] and [ModelTask]. Naming the wrong
+    // cause on every line is worse than naming none, because it sends the reader to fix something
+    // that is not broken.
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
         title: "Model has no test coverage",
-        messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata)",
+        messageFormat: "Model '{0}' has no corresponding test class and no fixture was generated for it. See this model's ADNGEN001 diagnostic for the specific reason; if it has none, it is missing [ModelCategory]/[ModelTask] metadata.",
         category: "AiDotNet.TestCoverage",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Model has no test coverage and lacks sufficient metadata for auto-generation. Add [ModelCategory] and [ModelTask] attributes, or create a manual test class.");
+        description: "Model has no model-family test coverage. The reason a fixture could not be generated is reported separately as ADNGEN001 (excluded base class, unsupported constructor shape, or a family fixture whose required interface the model does not implement). Only when no ADNGEN001 is present is the cause missing [ModelCategory]/[ModelTask] metadata.");
 
     private static readonly DiagnosticDescriptor CoverageSummary = new(
         id: "AIDN041",
@@ -2889,6 +3180,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // Checked BEFORE resolving a family: an excluded base means no fixture whatever
+                // the family, so it is the more specific reason. With this after the family check,
+                // 30 compositional models that also resolve to no family reported the vaguer "no
+                // test family could be resolved" instead - losing the actionable half of the
+                // message. Skip test generation entirely for compositional/wrapper patterns
+                // (meta-learning, distributed, etc.) that cannot be auto-constructed.
+                if (model.InheritsFromExcludedBase)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
+                        "it inherits from a base excluded from generation (compositional or wrapper "
+                        + "pattern that cannot be auto-constructed)"));
+                    continue;
+                }
+
+                // Fail closed: a foundation-scale VLM whose options type has no generated test-scale bound
+                // would otherwise get a fixture that builds it at paper scale (~12 GB of fp64 weights).
+                if (FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    && model.ScaledDimensionOptionsTypeName is null)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
+                        "it is a foundation-scale model whose options type has no generated test-scale bound, "
+                        + "so a fixture would construct it at paper scale"));
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                 {
@@ -2927,20 +3245,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Use constructor call if the model has a zero-arg constructor and is type-compatible.
                 // For models with architecture-only constructors, emit a default architecture.
                 // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
-                // Skip test generation entirely for compositional/wrapper patterns
-                // that can't be auto-constructed (meta-learning, distributed, etc.)
-                if (model.InheritsFromExcludedBase)
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
-                        "it inherits from a base excluded from generation (compositional or wrapper "
-                        + "pattern that cannot be auto-constructed)"));
-                    continue;
-                }
-
+                // The vision detectors have none of the three generic constructor shapes - they take
+                // a single options object - but the family emits that object itself, so they ARE
+                // constructible. Without this they stayed in the "no supported constructor" bucket
+                // while a perfectly good fixture was available.
                 bool canConstruct = (model.HasParameterlessConstructor
                                     || model.HasArchitectureOnlyConstructor
-                                    || model.HasVectorOnlyConstructor) &&
+                                    || model.HasVectorOnlyConstructor
+                                    || (model.ExtendsVisionDetectorBase
+                                        && model.VisionDetectorOptionsType.Length > 0)
+                                    || model.ExtendsTextConditioningBase
+                                    || (model.HasLeadingIntConstructor
+                                        && model.UsesMatrixInput && model.UsesVectorOutput)
+                                    || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.MetaLearning
+                                        or TestFamily.ClassificationMetaLearning
+                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3000,7 +3319,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(
                     UntestedModel,
                     Location.None,
-                    model.ClassName));
+                    // Fully qualified, matching ADNGEN001. The simple name is ambiguous:
+                    // thirteen model names are shared by two classes in different
+                    // namespaces (Document.LayoutAware.LayoutLMv3 is covered while
+                    // VisionLanguage.Document.LayoutLMv3 is not), so a bare 'LayoutLMv3'
+                    // cannot be matched against its ADNGEN001 line or checked by hand.
+                    model.FullyQualifiedName));
             }
 
             // Emit AIDN041 summary
@@ -3025,7 +3349,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             EmitGeneratedConstructorDimensionRoleTests(context, compilation);
         }
 
-        EmitTestCoverageClass(context, testedModels, untestedModels);
+        // Only the compilation that can SEE test classes may publish a coverage figure. Keyed on
+        // isTestProject rather than !modelsFoundFromSource: the latter is also false for any
+        // project that simply declares no models of its own, so a future non-test project
+        // referencing AiDotNet would start publishing a fabricated 0%. Whether tests are in scope
+        // is the actual question, so ask it directly.
+        EmitTestCoverageClass(context, testedModels, untestedModels, canMeasureCoverage: isTestProject);
     }
 
     /// <summary>
@@ -3128,6 +3457,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsNeuralNetworkModel = false;
         bool implementsDiffusionModel = false;
         bool implementsGaussianProcess = false;
+        bool implementsSafetyModule = false;
+        bool extendsVisionDetector = false;
+        string visionDetectorOptions = string.Empty;
+        bool extendsTextConditioning = false;
+        bool extendsNeck = false;
+        bool extendsVideoSafety = false;
+        bool extendsDeepfakeDetector = false;
+        bool extendsMetaLearner = false;
+        bool extendsClassicalVolatility = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
 
@@ -3162,6 +3500,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (display.StartsWith(IGaussianProcessPrefix, System.StringComparison.Ordinal))
             {
                 implementsGaussianProcess = true;
+            }
+            else if (display.StartsWith(ISafetyModulePrefix, System.StringComparison.Ordinal))
+            {
+                implementsSafetyModule = true;
             }
 
             // Detect IFullModel type arguments for input/output types
@@ -3297,6 +3639,36 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (baseName.StartsWith("ThreeDDiffusionModelBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("3DDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsThreeDDiffusion = true;
+            // The three vision detector roots. All are ModelBase<T, Tensor<T>, Tensor<T>> and all
+            // build their own backbone from an options object, so one family covers them.
+            else if (baseName.StartsWith("TextConditioningBase", System.StringComparison.Ordinal))
+                extendsTextConditioning = true;
+            else if (baseName.StartsWith("NeckBase", System.StringComparison.Ordinal))
+                extendsNeck = true;
+            else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
+                extendsVideoSafety = true;
+            else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
+                extendsDeepfakeDetector = true;
+            else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
+                extendsMetaLearner = true;
+            else if (baseName.StartsWith("ClassicalVolatilityModelBase", System.StringComparison.Ordinal))
+                extendsClassicalVolatility = true;
+            else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
+            {
+                extendsVisionDetector = true;
+
+                // Which options type the fixture has to build. The three roots take three
+                // different ones, and all three are plain property-initialised classes, so a
+                // bounded instance is enough to construct any detector under them.
+                visionDetectorOptions =
+                    baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal)
+                        ? "AiDotNet.Models.Options.ObjectDetectionOptions"
+                        : baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal)
+                            ? "AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions"
+                            : "AiDotNet.ComputerVision.OCR.OCROptions";
+            }
             else if (baseName.StartsWith("AnomalyDetectorBase", System.StringComparison.Ordinal))
                 extendsAnomalyDetector = true;
             else if (baseName.StartsWith("SurvivalModelBase", System.StringComparison.Ordinal))
@@ -3321,6 +3693,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
         bool hasVectorOnlyCtor = false;
+        bool hasLeadingIntCtor = false;
         string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
@@ -3373,6 +3746,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     hasVectorOnlyCtor = true;
                 }
 
+                // A leading required int with everything else optional is a construction-time WIDTH
+                // (LinearVectorModel(int inputDim)). It is only safe to supply when the fixture's own
+                // width is known and passed through, which RegressionModelTestBase does via
+                // CreateModel(int featureCount) - so the flag is recorded here and USED only for
+                // Matrix->Vector models, where that hook exists.
+                if (firstParam.Type.SpecialType == SpecialType.System_Int32
+                    && !firstParam.HasExplicitDefaultValue
+                    && restOptional)
+                {
+                    hasLeadingIntCtor = true;
+                }
+
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
                 // Derived types (CodeSynthesisArchitecture<T>, etc.) have incompatible constructors
                 // and need manual test classes — they stay as NotImplementedException.
@@ -3416,6 +3801,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ? RenderClosedOptionsType(declaredOptionsType)
                 : null;
 
+        string metaLearnerOptionsType = extendsMetaLearner ? FindSingleOptionsConstructorType(modelClass) : string.Empty;
+        string metaLearnerOptionsSizes = extendsMetaLearner ? FindMetaLearnerTaskSizeInitializer(modelClass) : string.Empty;
+        bool metaLearnerIsClassifier = extendsMetaLearner && IsClassifierMetaLearner(modelClass);
+        string classifierOptionsSizes = metaLearnerIsClassifier ? FindClassifierMetaLearnerSizeInitializer(modelClass) : string.Empty;
+
         var className = modelClass.Name;
         var info = new ModelTestInfo
         {
@@ -3430,12 +3820,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ImplementsDiffusionModel = implementsDiffusionModel,
             ImplementsDetectionBackbone = implementsDetectionBackbone,
             ImplementsGaussianProcess = implementsGaussianProcess,
+            ImplementsSafetyModule = implementsSafetyModule,
+            ExtendsVisionDetectorBase = extendsVisionDetector,
+            VisionDetectorOptionsType = visionDetectorOptions,
+            ExtendsTextConditioningBase = extendsTextConditioning,
+            ExtendsNeckBase = extendsNeck,
+            ExtendsVideoSafetyModuleBase = extendsVideoSafety,
+            ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
+            ExtendsMetaLearnerBase = extendsMetaLearner,
+            MetaLearnerOptionsType = metaLearnerOptionsType,
+            MetaLearnerOptionsSizes = metaLearnerOptionsSizes,
+            MetaLearnerIsClassifier = metaLearnerIsClassifier,
+            ClassifierOptionsSizes = classifierOptionsSizes,
+            ExtendsClassicalVolatilityBase = extendsClassicalVolatility,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             HasVectorOnlyConstructor = hasVectorOnlyCtor,
+            HasLeadingIntConstructor = hasLeadingIntCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
@@ -3735,6 +4139,113 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// The open options type of a public constructor that takes exactly one generic options object with the
+    /// meta-learner's three type arguments - the shape every meta-learner has - or empty when there is none.
+    /// </summary>
+    private static string FindSingleOptionsConstructorType(INamedTypeSymbol modelClass)
+    {
+        foreach (var ctor in modelClass.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public || ctor.Parameters.Length != 1)
+                continue;
+            if (ctor.Parameters[0].Type is INamedTypeSymbol { IsGenericType: true } options
+                && options.Name.EndsWith("Options", System.StringComparison.Ordinal)
+                && options.TypeArguments.Length == 3)
+            {
+                return GeneratorHelpers.StripGenericSuffix(
+                    options.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>Options properties that are the task's class count, bound to the family base's NumWays.</summary>
+    private static readonly string[] MetaLearnerClassCountProperties = { "NumClasses", "NumWays", "OutputDimension" };
+
+    /// <summary>Options properties that are the input feature width, bound to the family base's FeatureCount.</summary>
+    private static readonly string[] MetaLearnerFeatureWidthProperties = { "FeatureDimension", "FeatureDim", "InputDim" };
+
+    /// <summary>
+    /// Options properties that size an external memory or controller, bound to CI-smoke capacities.
+    /// </summary>
+    /// <remarks>
+    /// These are capacity, not contract: the algorithm reads and writes the same memory whatever its size, so
+    /// shrinking them keeps every structural and default choice while removing the cost. NTM's production
+    /// defaults are a 128 x 20 memory behind a 100-unit controller, and the family base runs four support and
+    /// four query rows through a full addressing step per row - which took the generated fixture past the
+    /// 120-second watchdog. This mirrors the scale-down already applied to HiPPO's recurrent cell.
+    /// SImPa's generator is a hypernetwork emitting one weight per base-network parameter, so the paper's
+    /// 256 and 512 hidden widths put roughly 166,000 weights in it even for a three-parameter base model;
+    /// its compression-lemma estimate then pushes KLMonteCarloSamples draws through that generator once PER
+    /// TASK (Algorithm 1 line 20), which is T x 512 full-width forward passes per meta-training step.
+    /// LatentDimension is deliberately NOT bound here: LEO declares that name too, and its generated fixture
+    /// passes at the current size, so shrinking the widths is enough without perturbing another learner.
+    /// </remarks>
+    private static readonly (string Name, int Value)[] MetaLearnerMemoryCapacityProperties =
+    {
+        ("MemorySize", 8),
+        ("MemoryWidth", 4),
+        ("ControllerHiddenSize", 8),
+        ("GeneratorFirstHiddenWidth", 8),
+        ("GeneratorSecondHiddenWidth", 8),
+        ("KLMonteCarloSamples", 16),
+        ("KLEstimatorSteps", 4),
+        ("KLEstimatorHiddenWidth", 8),
+        ("AdaptationPosteriorSamples", 4),
+    };
+
+    /// <summary>
+    /// The object initializer that binds a meta-learner's options to the task the family base builds: its class
+    /// count to NumWays and its input feature width to FeatureCount, for whichever of those the options declare.
+    /// </summary>
+    /// <remarks>
+    /// Left at their defaults (five classes, 64- or 512-wide features) these disagree with the base's tasks, and
+    /// the algorithm fails on shapes rather than on anything it computes. The meta-learning integration tests set
+    /// the same properties by hand (ANIL and BOIL: FeatureDimension = the inner model's width, NumClasses = ways).
+    /// </remarks>
+    private static string FindMetaLearnerTaskSizeInitializer(INamedTypeSymbol modelClass)
+    {
+        foreach (var ctor in modelClass.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public || ctor.Parameters.Length != 1)
+                continue;
+            if (ctor.Parameters[0].Type is not INamedTypeSymbol options) continue;
+
+            var assignments = new System.Collections.Generic.List<string>();
+            var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            for (var walk = options; walk is not null; walk = walk.BaseType)
+            {
+                foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (!seen.Add(property.Name)) continue;
+                    if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+                    if (property.Type.SpecialType != SpecialType.System_Int32) continue;
+                    if (System.Array.IndexOf(MetaLearnerClassCountProperties, property.Name) >= 0)
+                        assignments.Add($"{property.Name} = NumWays");
+                    else if (System.Array.IndexOf(MetaLearnerFeatureWidthProperties, property.Name) >= 0)
+                        assignments.Add($"{property.Name} = FeatureCount");
+                    else
+                    {
+                        foreach (var (name, value) in MetaLearnerMemoryCapacityProperties)
+                        {
+                            if (property.Name == name)
+                            {
+                                assignments.Add($"{property.Name} = {value}");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return assignments.Count == 0 ? string.Empty : " { " + string.Join(", ", assignments) + " }";
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
     /// Checks if a type inherits from any base class in <see cref="ExcludedBaseClasses"/>,
     /// or matches any class name in <see cref="ExcludedClassNames"/>. The first handles
     /// compositional wrappers (meta-learning, distributed) that can't be auto-constructed.
@@ -3818,12 +4329,105 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         // === TIER 1: Specialized families (check first — most specific) ===
 
+        // Priority 0: SafetyModule
+        //
+        // ISafetyModule<T> is structural, not descriptive, so it is checked before any category:
+        // a content-moderation module answers to confidence calibration, severity ordering and
+        // detection monotonicity, and none of the model families can express those.
+        //
+        // These 70 types were ALL uncovered before this route existed, so nothing can be taken
+        // from a family it currently passes in. They were uncovered for two different reasons and
+        // both are addressed here: the Image/Video/Multimodal ones fell through their descriptive
+        // [ModelCategory(NeuralNetwork)] into a family requiring INeuralNetworkModel, which
+        // SafetyModuleBase<T> : ModelBase<T, Vector<T>, Vector<T>> does not implement, while the
+        // rest resolved to no family at all. AudioSafetyModuleBase and TextSafetyModuleBase stay
+        // out via ExcludedBaseClasses - those genuinely wrap a user-supplied inner model - and
+        // that check runs before this one.
+        //
+        // SafetyModuleTestBase already existed with its invariants written and had ZERO derivers;
+        // ISafetyModulePrefix was likewise declared and never read. This finishes that wiring
+        // rather than inventing a new contract.
+        // Video safety modules are judged on clips. The vector bridge carries one frame, which a temporal
+        // module cannot judge, so they get a base that drives EvaluateVideo (#2139).
+        if (model.ExtendsVideoSafetyModuleBase)
+            return TestFamily.VideoSafetyModule;
+
+        // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
+        // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
+        // an image carrying the artifact it is built to find, and a natural image it must pass (#2139).
+        if (model.ExtendsDeepfakeDetectorBase)
+            return TestFamily.DeepfakeDetector;
+
+        if (model.ImplementsSafetyModule)
+            return TestFamily.SafetyModule;
+
+        // Priority 0b: VisionDetector.
+        //
+        // ObjectDetectorBase / TextDetectorBase / OCRBase are all
+        // ModelBase<T, Tensor<T>, Tensor<T>>, and every one of them declares
+        // [ModelCategory(NeuralNetwork)] descriptively while implementing no INeuralNetworkModel -
+        // so without this they were routed to a family they could never satisfy (YOLOv9,
+        // FasterRCNN) or resolved to no family at all. Structural base check, so it runs before
+        // any category can intercept.
+        if (model.ExtendsVisionDetectorBase)
+            return TestFamily.VisionDetector;
+
+        // Priority 0c: Neck. NeckBase.Predict(Tensor) throws by design - a neck consumes one feature
+        // map per level through Forward(List<Tensor<T>>) - so no single-tensor family can build or
+        // drive one. NeckTestBase feeds the levels itself, from the channel configuration it hands
+        // the factory.
+        if (model.ExtendsNeckBase)
+            return TestFamily.Neck;
+
+        // Priority 0d2: MetaLearning (#2139). A meta-learner wraps an inner model its caller chooses, so no
+        // model family can build one and all of them used to be excluded. MetaLearnerTestBase builds a small
+        // inner network and the episodic tasks, and the fixture names only the algorithm and its options.
+        // Classifier meta-learners work on one embedding per example and score every class per query example,
+        // which the scalar-per-row meta-learner base cannot host: it compared their per-class scores against a
+        // label vector, so they failed on shapes rather than on anything they compute.
+        if (model.ExtendsMetaLearnerBase && model.MetaLearnerOptionsType.Length > 0 && model.MetaLearnerIsClassifier)
+            return TestFamily.ClassificationMetaLearning;
+
+        if (model.ExtendsMetaLearnerBase && model.MetaLearnerOptionsType.Length > 0)
+            return TestFamily.MetaLearning;
+
+        // Priority 0e: Volatility. The GARCH-type models fit a return series (Train ignores its target)
+        // and forecast conditional volatility; they implement IVolatilityModel, not a model interface
+        // any other family can drive, so without this they resolved to no family at all.
+        if (model.ExtendsClassicalVolatilityBase)
+            return TestFamily.Volatility;
+
+        // Priority 0d: TensorModule. Tensor-to-Tensor components whose only required constructor
+        // argument is a width (CenteringMechanism(int dimension), RelationModule(int hiddenDimension)).
+        // They declare [ModelCategory(NeuralNetwork)] descriptively without implementing
+        // INeuralNetworkModel, so the category route could only ever assign them a family they fail.
+        // Restricted to types with NO zero-argument constructor, so nothing already constructible -
+        // and therefore nothing already covered - can be taken from the family it passes in.
+        if (model.UsesTensorInput
+            && model.HasLeadingIntConstructor
+            && !model.HasParameterlessConstructor
+            && !model.ImplementsNeuralNetworkModel
+            && model.TypeParameterCount == 1)
+            return TestFamily.TensorModule;
+
         // Priority 1: GaussianProcess
         if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
             return TestFamily.GaussianProcess;
 
         // Priority 2: TimeSeriesModel
-        if (model.Categories.Contains(CategoryTimeSeriesModel))
+        //
+        // Guarded the same way as the Diffusion and neural-network routes below: the TimeSeries
+        // fixture needs Matrix input and Vector output, so handing it a Tensor-based model assigns
+        // a family that model can never satisfy. The GARCH family (Garch11Model, EGarchModel,
+        // GjrGarchModel) derives from ClassicalVolatilityModelBase, which is
+        // IFullModel<T, Tensor<T>, ...>, and declares [ModelCategory(TimeSeriesModel)] - accurate
+        // documentation that says nothing about the I/O shape a fixture has to build.
+        //
+        // A Tensor-based time-series model falls through to the families below, where a
+        // Tensor-shaped one may fit. This cannot remove coverage: emitting a fixture already
+        // required IsCompatibleWithFamily, which is this same Matrix/Vector condition.
+        if (model.Categories.Contains(CategoryTimeSeriesModel)
+            && model.UsesMatrixInput && model.UsesVectorOutput)
             return TestFamily.TimeSeries;
 
         // Priority 2a: 3D Diffusion (most specific diffusion subtype)
@@ -3843,11 +4447,40 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.LatentDiffusion;
 
         // Priority 4: Diffusion (plain, non-latent)
-        if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
+        //
+        // [ModelCategory(Diffusion)] is often DESCRIPTIVE rather than structural - MatchaTTS,
+        // CosyVoice2 and StyleTTS2 use a diffusion decoder, EmuEdit/MGIE/SmartEdit edit via
+        // diffusion - while the type itself derives from NeuralNetworkBase<T>, which implements
+        // INeuralNetworkModel<T>. Routing on the category alone therefore handed those models to a
+        // fixture requiring IDiffusionModel, which they do not implement, when they demonstrably
+        // satisfy a neural-network family instead. The category is accurate documentation and is
+        // kept; only the family choice changes, so resolution falls through to the audio,
+        // vision-language and other neural-network priorities below and the model is tested as what
+        // it actually is.
+        //
+        // A model that declares the category and is NOT a neural network keeps today's behaviour,
+        // so the informative "requires an interface this type does not implement" message survives
+        // for the cases where implementing IDiffusionModel really is the fix.
+        if (model.ImplementsDiffusionModel
+            || (model.Categories.Contains(CategoryDiffusion) && !model.ImplementsNeuralNetworkModel))
             return TestFamily.Diffusion;
 
         // Priority 5: GAN
-        if (model.Categories.Contains(CategoryGAN))
+        //
+        // The interface condition is the same argument as priority 18: IsCompatibleWithFamily(GAN)
+        // IS ImplementsNeuralNetworkModel, so a type reaching here without it is being assigned a
+        // family it cannot satisfy - an ADNGEN001 no change to the model could clear short of
+        // re-parenting it. [ModelCategory(GAN)] is frequently DESCRIPTIVE ("trained
+        // adversarially") rather than structural: AnoGANDetector and GANomalyDetector derive from
+        // AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, which is precisely the
+        // AnomalyDetector family's contract, and priority 5 was intercepting them ~12 priorities
+        // before they could reach it.
+        //
+        // This cannot remove coverage: emitting a GAN fixture already required the interface.
+        // Measured over the 25 models declaring the category, only those two and GenerativeReplay
+        // (which has no fixture on any path) lack it; the LatentDiffusion-derived Turbo/SDXL
+        // models declare it too but are claimed by priority 4 first and are untouched.
+        if (model.Categories.Contains(CategoryGAN) && model.ImplementsNeuralNetworkModel)
             return TestFamily.GAN;
 
         // Priority 6: EmbeddingModel
@@ -4051,8 +4684,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // === TIER 5: Fallbacks ===
 
-        // Priority 18: Neural network (by interface or Tensor input)
-        if (model.ImplementsNeuralNetworkModel || model.UsesTensorInput)
+        // Priority 18: Neural network (by interface)
+        //
+        // Tensor input is NOT evidence of being a neural network, and using it as such routed
+        // models into a family they can never satisfy. IsCompatibleWithFamily(NeuralNetwork) is
+        // exactly ImplementsNeuralNetworkModel, so a type that reached this line only through the
+        // old `|| model.UsesTensorInput` clause was, by construction, incompatible with the family
+        // it had just been assigned - an unsatisfiable ADNGEN001 that no change to the model could
+        // clear. ConstantQTransform is the clearest case: a signal transform declaring
+        // [ModelCategory(SignalProcessing)] and Tensor input, reported as a NeuralNetwork-family
+        // failure.
+        //
+        // This cannot remove coverage from any model that has it: emitting a fixture already
+        // required IsCompatibleWithFamily, hence the interface, hence the first condition here.
+        // Models that genuinely declare [ModelCategory(NeuralNetwork)] still route at priority 20
+        // and keep the more informative "requires an interface this type does not implement"
+        // message, because for them the family IS right and the interface is what is missing.
+        if (model.ImplementsNeuralNetworkModel)
             return TestFamily.NeuralNetwork;
 
         // Priority 19: Matrix input fallback → Regression
@@ -4268,7 +4916,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
+            // Vision detectors take a single options object and build their own backbone and neck
+            // from it, so one family-level expression constructs all of them - no per-model pin.
+            //
+            // The defaults must be bounded here rather than inherited: ObjectDetectionOptions ships
+            // InputSize = [640, 640], NumClasses = 80 and UsePretrained = true, so an unbounded
+            // fixture would run a CSPDarknet over a 640px image on every invariant AND try to fetch
+            // pretrained weights that are not present in a test environment. Production defaults are
+            // untouched; only what the fixture asks for changes.
+            // The diffusion text conditioners take an ITokenizer and nothing else that matters.
+            // ClipTokenizerFactory.CreateShapeCompatibleForTesting exists precisely for this - a
+            // real BPE tokenizer at a bounded vocabulary - so the fixture uses the repository's own
+            // intended construction path rather than a stub that would not tokenize.
+            if (model.ExtendsTextConditioningBase)
+            {
+                // Bounded size, not the variant: several conditioners have no small variant at all
+                // (ChatGLM3 is 6B only, Gemma's floor is 2B, Qwen2's 1.5B), and at paper scale the
+                // generated suite reached 4 of 8 classes in 18 minutes while one testhost climbed past
+                // 40 GB. The explicit dimension overrides default to each variant's paper values, so
+                // production behaviour is unchanged. numKvHeads exists only on the two GQA models.
+                bool groupedQuery = model.ClassName is "ChatGLM3TextConditioner" or "Qwen2TextConditioner";
+                constructorExpr = $"new {typeName}<double>("
+                    + "AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), "
+                    + "hiddenSize: 16, numLayers: 1, numHeads: 2"
+                    + (groupedQuery ? ", numKvHeads: 2" : string.Empty) + ")";
+            }
+            else if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
+            {
+                string detectorOptions = model.VisionDetectorOptionsType switch
+                {
+                    "AiDotNet.Models.Options.ObjectDetectionOptions" =>
+                        "new AiDotNet.Models.Options.ObjectDetectionOptions<double> { "
+                            + "InputSize = new[] { 64, 64 }, NumClasses = 4, UsePretrained = false }",
+                    "AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions" =>
+                        "new AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double>()",
+                    _ => "new AiDotNet.ComputerVision.OCR.OCROptions<double>()",
+                };
+                constructorExpr = $"new {typeName}<double>({detectorOptions})";
+            }
+            else if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
             {
                 // Production retains fastText's paper-faithful 2,000,000 subword buckets. Its dense
                 // embedding gradient and dense Adam moments make even one test update several GB,
@@ -5044,6 +5730,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
                     "MaxTextLength = 8, DropoutRate = 0.0 }, " +
                     $"optimizer: {smokeAdamWOptimizer})";
+            }
+            else if (model.ClassName == "ECAPATDNNLanguageIdentifier" && model.TypeParameterCount == 1)
+            {
+                // A multi-class classifier, so the harness builds one-hot targets for its
+                // cross-entropy head (a Regression task type would hand it continuous ones).
+                // Four languages, so outputSize 4 is the head the list sizes. All five SE-Res2 blocks
+                // stay; only widths are bounded (16 TDNN channels, 16 mel coefficients, embedding 8).
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new[] { \"en\", \"es\", \"fr\", \"de\" }, " +
+                    "new AiDotNet.Audio.LanguageIdentification.ECAPATDNNOptions { NumMels = 16, " +
+                    "TdnnChannels = 16, EmbeddingDimension = 8 })";
+            }
+            else if (model.ClassName == "Wav2Vec2LanguageIdentifier" && model.TypeParameterCount == 1)
+            {
+                // Four languages as above. One transformer block at width 16, feature-encoder stages
+                // at width 16; dropout off so the invariants see a deterministic forward.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new[] { \"en\", \"es\", \"fr\", \"de\" }, " +
+                    "new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions { HiddenSize = 16, " +
+                    "NumLayers = 1, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16, " +
+                    "HiddenDropout = 0.0, FeatureProjectionDropout = 0.0 })";
             }
             else if (model.ClassName == "ECAPATDNNSpeaker" && model.TypeParameterCount == 1)
             {
@@ -6862,6 +7577,234 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Fingerprinting.ConformerFPOptions { NumMels = 32, " +
                     "EmbeddingDim = 32, HiddenDim = 64, NumLayers = 2, NumAttentionHeads = 4, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "WGAN" && model.TypeParameterCount == 1)
+            {
+                // WGAN takes a generator AND a critic architecture, and the two have to agree with each
+                // other and with the fixture - the size-in-several-places trap. The generic GAN branch
+                // feeds a 16-wide latent (InputShape [16]) and checks a 4-wide sample (OutputShape [4]),
+                // so: generator 16 -> 4, and a critic that consumes that 4-wide sample. WGAN's Predict is
+                // Generator.Predict(input) and its critic scores expectedOutput directly, so these three
+                // numbers are the whole contract.
+                //
+                // The critic emits ONE score per sample - the rule recorded against WGANGP, whose critic
+                // once shared the generator's 64-wide head, scored every input a uniform 1/64, and left
+                // E[D(fake)] - E[D(real)] at exactly 0 so neither network could move.
+                //
+                // OneDimensional routes both through FeedForwardNeuralNetwork in WGAN's own
+                // CreateNetworkForInputType; the 3-D path would demand an image layout the generic GAN
+                // fixture does not feed.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "criticArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 1), " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "ACGAN" && model.TypeParameterCount == 1)
+            {
+                // Generator 16 -> 4 on 13 noise values followed by a one-hot over 3 classes; the
+                // discriminator scores a 4-wide sample with one source logit and three class logits.
+                // One-dimensional, so both are feed-forward sub-networks: AC-GAN's generator input is a
+                // concatenation of noise and labels, which only a flat first layer can take. No explicit
+                // layer lists, so a clone replays fresh layers rather than sharing these.
+                constructorExpr = "new " + typeName + "<double>(generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 16, outputSize: 4), discriminatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 4), numClasses: 3, inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "StyleGAN" && model.TypeParameterCount == 1)
+            {
+                // Mapping 16 -> 8 (Z to W), synthesis 8 -> 4, a discriminator scoring the 4-wide sample.
+                // W is 8 wide so style mixing has layers to split.
+                constructorExpr = "new " + typeName + "<double>(mappingNetworkArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 8), synthesisNetworkArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 4), discriminatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1), latentSize: 16, intermediateLatentSize: 8, inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "Pix2Pix" && model.TypeParameterCount == 1)
+            {
+                // Generator 16 -> 4; the conditional discriminator sees the source and the image being
+                // judged side by side, 16 + 4 = 20 values, and emits one logit.
+                constructorExpr = "new " + typeName + "<double>(generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 16, outputSize: 4), discriminatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 20, outputSize: 1), inputType: AiDotNet.Enums.InputType.OneDimensional)";
+            }
+            else if (model.ClassName == "CodeT5" && model.TypeParameterCount == 1)
+            {
+                // One encoder and one decoder block at width 16; MaxSequenceLength 32 covers the
+                // 32-token fixture the positional encoding is sized for. Dropout off.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + ")";
+            }
+            else if (model.ClassName == "NeuralProgramSynthesizer" && model.TypeParameterCount == 1)
+            {
+                // The same architecture, with a CodeT5 on it as the required code model.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + ", " +
+                    "new AiDotNet.ProgramSynthesis.Engines.CodeT5<double>(" +
+                    "new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<double>(" +
+                    "AiDotNet.ProgramSynthesis.Enums.SynthesisType.Neural, " +
+                    "AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python, " +
+                    "AiDotNet.ProgramSynthesis.Enums.CodeTask.Generation, " +
+                    "numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 2, modelDimension: 16, " +
+                    "feedForwardDimension: 32, maxSequenceLength: 32, vocabularySize: 128, " +
+                    "maxProgramLength: 16, dropoutRate: 0.0)" + "))";
+            }
+            else if (model.ClassName == "MultiScalePINN" && model.TypeParameterCount == 1)
+            {
+                // No IMultiScalePDE implementation exists in src; the fixture uses a two-scale Poisson
+                // problem defined in the test project. 32 collocation points per scale, not 5,000.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "multiScalePDE: new AiDotNet.Tests.Helpers.TwoScalePoissonProblem<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPointsPerScale: 32)";
+            }
+            else if (model.ClassName == "InverseProblemPINN" && model.TypeParameterCount == 1)
+            {
+                // No IInverseProblem implementation exists in src; the fixture uses Poisson with one
+                // unknown source strength, defined in the test project.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "inverseProblem: new AiDotNet.Tests.Helpers.PoissonSourceInverseProblem<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPoints: 64)";
+            }
+            else if (model.ClassName == "DomainDecompositionPINN" && model.TypeParameterCount == 1)
+            {
+                // The PINN pin plus two subdomains split at x0 = 0. They are +/-1000 wide so every
+                // generated input row has an owning subdomain network. Bounds are generic List<double>
+                // with integer literals so the float scaffold's <double> -> <float> rewrite reaches them.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "pdeSpecification: new AiDotNet.PhysicsInformed.PDEs.PoissonEquation<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "subdomains: new System.Collections.Generic.List<AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>> { " +
+                    "new AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>(" +
+                    "new System.Collections.Generic.List<double> { -1000, -1000 }.ToArray(), " +
+                    "new System.Collections.Generic.List<double> { 0, 1000 }.ToArray()), " +
+                    "new AiDotNet.PhysicsInformed.PINNs.SubdomainDefinition<double>(" +
+                    "new System.Collections.Generic.List<double> { 0, -1000 }.ToArray(), " +
+                    "new System.Collections.Generic.List<double> { 1000, 1000 }.ToArray()) }, " +
+                    "numCollocationPointsPerSubdomain: 64)";
+            }
+            else if (model.ClassName == "DeepRitzMethod" && model.TypeParameterCount == 1)
+            {
+                // The 2-D Poisson energy from the constructor docs: 1/2 |grad u|^2 - f u, f = 1.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "energyFunctional: (x, u, g) => 0.5f * (g[0, 0] * g[0, 0] + g[0, 1] * g[0, 1]) - u[0], " +
+                    "numQuadraturePoints: 64)";
+            }
+            else if (model.ClassName == "VariationalPINN" && model.TypeParameterCount == 1)
+            {
+                // The Poisson weak form from the constructor docs: grad u . grad v - f v, f = 1.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "weakFormResidual: (x, u, gu, v, gv) => gu[0, 0] * gv[0, 0] + gu[0, 1] * gv[0, 1] - v[0], " +
+                    "numQuadraturePoints: 64, numTestFunctions: 4)";
+            }
+            else if (model.ClassName == "DeepOperatorNetwork" && model.TypeParameterCount == 1)
+            {
+                // 4 sensors + a 2-D query = input width 6; branch and trunk both project to latent 8.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 6, outputSize: 1), " +
+                    "branchArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 8), " +
+                    "trunkArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 2, outputSize: 8), " +
+                    "latentDimension: 8, numSensors: 4)";
+            }
+            else if (model.ClassName is "PhysicsInformedNeuralNetwork" or "MultiFidelityPINN"
+                     && model.TypeParameterCount == 1)
+            {
+                // inputSize 2 IS the Poisson problem's InputDimension (spatialDimension, default 2);
+                // the fixture reads it back from this architecture rather than restating it. 64
+                // collocation points instead of the 10,000 default: the paper-scale sampling is a
+                // training-quality setting, and the invariants exercise the supervised path.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 2, outputSize: 1), " +
+                    "pdeSpecification: new AiDotNet.PhysicsInformed.PDEs.PoissonEquation<double>(), " +
+                    "boundaryConditions: new AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[0], " +
+                    "numCollocationPoints: 64)";
+            }
+            else if (model.ClassName == "Gpt4VisionNeuralNetwork" && model.TypeParameterCount == 1)
+            {
+                // Every size bounded; production keeps the GPT-4V-scale defaults. imageSize 16 equals
+                // the pinned 16 x 16 architecture, which is where the vision fixture reads its shape.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "architecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 16), " +
+                    "tokenizer: AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), " +
+                    "embeddingDimension: 16, visionEmbeddingDim: 16, maxSequenceLength: 16, " +
+                    "contextWindowSize: 64, imageSize: 16, hiddenDim: 16, numVisionLayers: 1, " +
+                    "numLanguageLayers: 1, numHeads: 2, patchSize: 8, vocabularySize: 49408)";
+            }
+            else if (model.ClassName == "MultiOutputGaussianProcess" && model.TypeParameterCount == 1)
+            {
+                // The only required argument is the covariance kernel. GaussianKernel (the RBF /
+                // squared-exponential kernel, sigma = 1) is the conventional default for a GP, and its
+                // own constructor is zero-argument. The model fits the GP family's single-output data
+                // through its Fit(Matrix, Vector) override.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Kernels.GaussianKernel<double>())";
+            }
+            else if (model.ClassName == "MultiTaskGaussianProcess" && model.TypeParameterCount == 1)
+            {
+                // numTasks: 1 is the honest single-task case, not a workaround: the model's own
+                // single-output Fit(Matrix, Vector) wraps y into a one-column target matrix and "uses
+                // first task only", which is exactly the data the GP family feeds.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Kernels.GaussianKernel<double>(), numTasks: 1)";
+            }
+            else if (model.ClassName == "AnoGANDetector" && model.TypeParameterCount == 1)
+            {
+                // AnoGAN (Schlegl et al. 2017) trains a DCGAN for 100 epochs by default, which the
+                // parameterless fixture inherited: Clone_ShouldProduceSameScores and
+                // Parameters_ShouldBeNonEmpty each blew the 60 s per-test gate while every
+                // assertion was on track to pass. The public constructor exposes latent width,
+                // hidden width and the training budget, so exercise a real adversarial fit at
+                // smoke scale. Production defaults (64 / 128 / 100) are untouched.
+                constructorExpr = $"new {typeName}<double>(latentDim: 8, hiddenDim: 16, epochs: 3, " +
+                    "learningRate: 0.0002, contamination: 0.1, randomSeed: 42)";
+            }
+            else if (model.ClassName == "GANomalyDetector" && model.TypeParameterCount == 1)
+            {
+                // Same 100-epoch default as its AnoGAN sibling (Akcay et al. 2018), bounded the
+                // same way and for the same reason. Production defaults (32 / 64 / 100) untouched.
+                constructorExpr = $"new {typeName}<double>(latentDim: 8, hiddenDim: 16, epochs: 3, " +
+                    "learningRate: 0.0002, contamination: 0.1, randomSeed: 42)";
             }
             else if (model.ClassName == "NBEATSDetector" && model.TypeParameterCount == 1)
             {
@@ -10062,6 +11005,55 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
                     "numClasses: 4, numFrames: 4, numFeatures: 32)";
             }
+            else if (model.ClassName is "FinancialA2CAgent" or "FinancialSACAgent"
+                     && model.TypeParameterCount == 1)
+            {
+                // StateSize = ActionSize = the RL base's StateDim (4). The actor maps state -> action;
+                // A2C's critic maps state -> value, SAC's maps (state, action) -> Q.
+                string criticInputs = model.ClassName == "FinancialSACAgent" ? "8" : "4";
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 4), " +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    $"inputSize: {criticInputs}, outputSize: 1), " +
+                    "new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42 })";
+            }
+            else if (model.ClassName == "FinancialPPOAgent" && model.TypeParameterCount == 1)
+            {
+                // As A2C, with PPO's own options: one epoch of one minibatch.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 4), " +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 4, outputSize: 1), " +
+                    "new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42, NumEpochs = 1, NumMiniBatches = 1 })";
+            }
+            else if (model.ClassName == "FinRLAgent" && model.TypeParameterCount == 1)
+            {
+                // The default algorithm (PPO), which requires the secondary (critic) architecture.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "primaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 4), " +
+                    "options: new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
+                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "WarmupSteps = 0, Seed = 42 }, " +
+                    "secondaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1))";
+            }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
                 // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
@@ -10970,6 +11962,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
             }
+            else if (model.HasLeadingIntConstructor
+                     && !model.HasParameterlessConstructor
+                     && model.UsesMatrixInput && model.UsesVectorOutput
+                     && model.TypeParameterCount <= 1)
+            {
+                // Width = 3, the generated regression fixture's feature count (RegressionModelTestBase
+                // .Features). The CreateModel(int featureCount) override emitted below passes the
+                // invariant's own width instead, so the model and the data it is fed cannot disagree.
+                constructorExpr = model.TypeParameterCount == 0
+                    ? $"new {typeName}(3)"
+                    : $"new {typeName}<double>(3)";
+            }
             else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
             {
                 // A coefficient-backed regression model is only meaningful when its coefficient width
@@ -11287,7 +12291,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the lazy fusion LayerNorm resolves gamma to GetVisionSpatialSize (128) during the
                 // architecture-driven warm-up and the real VisionDim forward throws a gamma/weight
                 // shape mismatch ("Gamma shape (128) does not match ... input shape (1, 4, 1024)").
-                bool isGrounding = model.FullyQualifiedName.Contains("VisionLanguage.Grounding");
+                // Ferret, FerretV2, Groma and Shikra sit in the Grounding namespace but are LLaVA-style: their
+                // stack opens with an image patch embedding, so they take the image input, not grounding tokens.
+                bool isGrounding = model.FullyQualifiedName.Contains("VisionLanguage.Grounding")
+                    && !FoundationScaleVisionLanguageModels.Contains(model.ClassName);
                 bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
                     && !model.ExtendsForecastingModelBase
                     && !isTokenConsumingVlm
@@ -11334,6 +12341,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
                     int spatial = GetVisionSpatialSize(model.ClassName);
                     sizeExpr = $"inputHeight: {spatial}, inputWidth: {spatial}, inputDepth: 3, outputSize: 4";
+                }
+                else if (isAudio && model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
+                {
+                    // A conv1d waveform vocoder is fed a channels-first rank-3 mel spectrogram
+                    // [1, 80, T] by its own fixture branch. The generic audio pin below declares a
+                    // rank-2 64x32 instead, which is not the geometry this model ever sees.
+                    //
+                    // That is not cosmetic. ResolveLazyLayerShapes performs an ARCHITECTURE-DRIVEN
+                    // warm-up, so a lazy layer resolves its weights against the declared shape and
+                    // the real forward then runs on the fixture - the same failure already
+                    // documented for the sequence-labeling NER pin a few lines below, where a
+                    // 128-vs-100 disagreement threw "Matrix dimensions incompatible". Declare what
+                    // the model is actually fed so the two can never diverge.
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 80, inputWidth: "
+                        + Conv1DVocoderMelFrames(model.ClassName).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + ", inputDepth: 1, outputSize: 4";
                 }
                 else if (isAudio)
                 {
@@ -11435,6 +12459,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "RecurrentGemmaLanguageModel" =>
                         ", vocabSize: 256, modelDimension: 32, numLayers: 1, maxSeqLength: 128",
                     "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
+                    // Foundation-scale VLMs: generated test-scale options (see FoundationScaleVisionLanguageModels).
+                    _ when FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                           && model.ScaledDimensionOptionsTypeName is { } boundedOptions =>
+                        $", options: ({boundedOptions})global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({boundedOptions}))",
                     _ => ""
                 };
 
@@ -11535,7 +12563,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measured optimizer divergence documented by HeavyTrainingTimeoutClassNames.
         bool isFloatExcluded = model.ClassName is
             "GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork";
+        // A handful of family bases have NO generic form, so a float scaffold cannot be expressed
+        // against them at all: the base would stay non-generic (over double) while the return type,
+        // constructor and factory were rewritten to float, and the override no longer matches.
+        // Most bases declare both shapes - DiffusionModelTestBase and DiffusionModelTestBase<TNum>,
+        // AudioNNModelTestBase and AudioNNModelTestBase<T> - which is why this stayed hidden: a
+        // model only trips it by being float-scaffolded AND routing to one of the few single-shape
+        // bases. UniVSTModel reaches LatentDiffusionTestBase without a float scaffold and compiles;
+        // MGIE reaches it with one and did not.
+        // SafetyModuleTestBase joins this list for the same reason: it is declared non-generic and
+        // pins ISafetyModule<double>, so appending a <float> argument would not compile.
+        bool baseHasNoGenericForm = baseClassName == "LatentDiffusionTestBase"
+            || baseClassName == "SafetyModuleTestBase"
+            // These two factories are emitted with <double> constructors and a double return type,
+            // so they derive from the double convenience base rather than a <float> form.
+            || baseClassName == "TensorModuleTestBase"
+            || baseClassName == "NeckTestBase"
+            || baseClassName == "VideoSafetyModuleTestBase"
+            || baseClassName == "DeepfakeDetectorTestBase"
+            || baseClassName == "MetaLearnerTestBase"
+            || baseClassName == "ClassificationMetaLearnerTestBase"
+            || baseClassName == "VolatilityModelTestBase";
+        // A non-generic model (LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>)
+        // has no type argument to rewrite, so a float scaffold would declare IFullModel<float, ...>
+        // over a double-only type and fail to compile (CS0266).
         bool useFloat = !isFloatExcluded
+                     && model.TypeParameterCount > 0
+                     && !baseHasNoGenericForm
                      && (Fp32TestClassNames.Contains(model.ClassName)
                          || model.RequestsFloatScaffold
                          || supportsFloatScaffold);
@@ -11729,6 +12783,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keeping this smoke contract comfortably below the per-test CI deadline under shard load.
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 16, 16 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16, 16 };");
+        }
+        else if (model.ClassName == "DiffusionAutoMLModel")
+        {
+            // A latent diffusion model: Predict denoises a latent (the LatentDiffusionTestBase contract), and
+            // its default U-Net has four resolution levels, so a [1, 4] probe became a 1x1 latent the skip
+            // connections could not round-trip (2 against 1 at the first concatenation). 8x8 is the
+            // smallest latent that survives all three downsamplings; 4 is its default latent depth.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 8, 8 };");
         }
         else if (model.ClassName == "VideoGigaGAN")
         {
@@ -12109,7 +13172,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
-                 model.FullyQualifiedName.Contains("VisionLanguage.Grounding"))
+                 model.FullyQualifiedName.Contains("VisionLanguage.Grounding")
+                 // LLaVA-style models in the Grounding namespace open with an image patch embedding; they take
+                 // the generic image input below, in lockstep with the image architecture built for them.
+                 && !FoundationScaleVisionLanguageModels.Contains(model.ClassName))
         {
             // Vision-Language grounding models (OWLViT — Minderer et al. 2022,
             // OWLv2, GroundingDINO — Liu et al. 2023, GroundingDINO15, GLaMM,
@@ -12750,6 +13816,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 16 };");
         }
+        else if (model.ClassName is "StyleGAN" or "Pix2Pix")
+        {
+            // Pinned with dense sub-networks (see their constructor pins): one flat 16-wide sample in, a
+            // 4-wide sample out. Their image-generator categories send them down the vision branch below,
+            // which fed a [3, 128, 128] image to a generator that takes 16 values. Rank 2 like WGAN's and
+            // ACGAN's, because each TrainStep reads Shape[0] as the batch.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+        }
         else if (isVisionModel)
         {
             // The emitted constructor is authoritative. Selecting a second size from the class
@@ -12767,7 +13842,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 else
                     sb.AppendLine($"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ 3, {spatial}, {spatial} }});");
             }
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            // Gpt4Vision returns the pooled image embedding in the language space, embeddingDimension
+            // wide (pinned at 16). The generic [4] declared a training target of the wrong width.
+            sb.AppendLine(model.ClassName == "Gpt4VisionNeuralNetwork"
+                ? "    protected override int[] OutputShape => new[] { 16 };"
+                : "    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale vision / vision-language encoders use the original
             // paper's depth and width defaults (DFNCLIP = ViT-H/14 with
@@ -13563,7 +14642,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                // The generic audio fixture is [1, 64, 32], but a model whose constructor was
+                // pinned per-model carries its own bounded geometry - MedicalASR at 64x16 with
+                // NumMels = 16, Emotion2Vec at 4x16, MT3 at 32x32, BandSplitRNN at 1x64. Emitting
+                // the generic block for those declares one shape in the architecture and feeds
+                // another, which ResolveLazyLayerShapes resolves against the DECLARED one.
+                //
+                // The vision path already closes this gap through
+                // GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize; the mechanism was
+                // simply never wired up for audio. Reuse it rather than adding a second parser.
+                if (TryGetVisionFixtureSpatialSize(constructorExpr, out int audioHeight, out int audioWidth))
+                {
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, {audioHeight}, {audioWidth} }};");
+                }
+                else
+                {
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                }
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
                 if (model.ClassName == "PANNs")
                 {
@@ -13816,6 +14911,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8, 8 };");
             }
+            else if (model.ClassName == "DeepOperatorNetwork")
+            {
+                // One [sensors | query] row, rank 2 as DeepONet requires; one output per row.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 6 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "ACGAN")
+            {
+                // One sample, rank 2, as for WGAN: each TrainStep reads Shape[0] as the batch. (StyleGAN and
+                // Pix2Pix get the same shapes in the vision branch, which claims them first.)
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            }
+            else if (model.ClassName == "WGAN")
+            {
+                // One sample, rank 2: TrainStep reads Shape[0] as the batch, so [16] / [4] were read
+                // as batches of 16 and 4. Widths match the pin (generator 16 -> 4, critic 4 -> 1).
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            }
             else if (model.ClassName == "TabPFNNetwork")
             {
                 // Transformer attention consumes [batch, features], not a bare feature vector.
@@ -13824,10 +14939,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine(model.ClassName == "HamiltonianNeuralNetwork"
+                // PINNs too: their width is the PDE's InputDimension, pinned in the constructor above,
+                // so the fixture derives it from the model instead of restating a generic 16.
+                sb.AppendLine(model.ClassName is "HamiltonianNeuralNetwork" or "PhysicsInformedNeuralNetwork"
+                        or "MultiFidelityPINN" or "DomainDecompositionPINN" or "DeepRitzMethod" or "VariationalPINN"
+                        or "MultiScalePINN" or "InverseProblemPINN"
                     ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
                     : $"    protected override int[] InputShape => new[] {{ {dim} }};");
-                sb.AppendLine(model.ClassName == "QuantumNeuralNetwork"
+                sb.AppendLine(model.ClassName is "QuantumNeuralNetwork" or "PhysicsInformedNeuralNetwork"
+                        or "MultiFidelityPINN" or "DomainDecompositionPINN" or "DeepRitzMethod" or "VariationalPINN"
+                        or "MultiScalePINN" or "InverseProblemPINN"
                     ? "    protected override int[] OutputShape => new[] { 1 };"
                     : model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
@@ -14596,7 +15717,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "TRPOAgent"
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "QMIXAgent"
-                || model.ClassName == "WatkinsQLambdaAgent")
+                || model.ClassName == "WatkinsQLambdaAgent"
+                // The finance A2C / PPO agents (and FinRL, whose default is PPO) run the same
+                // actor-critic policy-gradient algorithms as A2CAgent / PPOAgent above.
+                || model.ClassName == "FinancialA2CAgent"
+                || model.ClassName == "FinancialPPOAgent"
+                || model.ClassName == "FinRLAgent")
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
@@ -15211,7 +16337,55 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
-        sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        // TensorModule and Neck bases OWN the size and pass it to the factory, so the fixture emits a
+        // parameterized factory in place of the parameterless one. A literal size here would be a
+        // second copy of a number the base already holds - the pattern behind every architecture /
+        // fixture disagreement this generator has produced.
+        bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.MetaLearning
+            or TestFamily.ClassificationMetaLearning;
+        if (family == TestFamily.TensorModule)
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
+            sb.AppendLine($"        => new {typeName}<double>(width);");
+        }
+        else if (family == TestFamily.Neck)
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} CreateNeck(int[] inputChannels, int outputChannels)");
+            sb.AppendLine($"        => new {typeName}<double>(inputChannels, outputChannels);");
+        }
+        else if (family == TestFamily.MetaLearning)
+        {
+            // The base builds the inner model and hands it over, so the learner and the tasks the base
+            // feeds it cannot disagree about the network they share.
+            // Matrix in, Vector out: the contract the meta-learning integration tests already run the
+            // algorithms under, with a linear model inside and class indices as targets.
+            const string matrix = "AiDotNet.Tensors.LinearAlgebra.Matrix<double>";
+            const string vector = "AiDotNet.Tensors.LinearAlgebra.Vector<double>";
+            sb.AppendLine($"    protected override {returnTypeCode} CreateLearner(AiDotNet.Interfaces.IFullModel<double, {matrix}, {vector}> innerModel)");
+            sb.AppendLine($"        => new {typeName}<double, {matrix}, {vector}>(new {model.MetaLearnerOptionsType}<double, {matrix}, {vector}>(innerModel){model.MetaLearnerOptionsSizes});");
+            if (MetaLearnersFrozenByDesign.Contains(model.ClassName))
+            {
+                sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
+            }
+        }
+        else if (family == TestFamily.ClassificationMetaLearning)
+        {
+            // Matrix in, one [rows, ways] score tensor out, class indices as a [rows] tensor: the contract the
+            // classifier integration tests run these algorithms under. The base builds the per-row embedding
+            // model; the options bind the class count and the embedding width to it.
+            const string matrix = "AiDotNet.Tensors.LinearAlgebra.Matrix<double>";
+            const string tensor = "AiDotNet.Tensors.LinearAlgebra.Tensor<double>";
+            sb.AppendLine($"    protected override {returnTypeCode} CreateLearner(AiDotNet.Interfaces.IFullModel<double, {matrix}, {tensor}> innerModel)");
+            sb.AppendLine($"        => new {typeName}<double, {matrix}, {tensor}>(new {model.MetaLearnerOptionsType}<double, {matrix}, {tensor}>(innerModel){model.ClassifierOptionsSizes});");
+            if (MetaLearnersFrozenByDesign.Contains(model.ClassName))
+            {
+                sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
+            }
+        }
+        else
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        }
         // TOTEM's vector-quantizer codebook trains cleanly from most draws but sends the parameter
         // L2 to NaN on the first step from some, which surfaced only once it ran alongside sibling
         // classes that had advanced the shared RNG. Pin the scope so the draw no longer depends on
@@ -15221,7 +16395,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             pinInitSeed = true;
         }
 
-        if (pinInitSeed)
+        if (parameterizedFactory)
+        {
+            // Body already emitted above.
+        }
+        else if (pinInitSeed)
         {
             // Init-sensitive models: pin a deterministic per-layer init seed around
             // construction so weight init does NOT depend on how many sibling tests
@@ -15238,6 +16416,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else
         {
             sb.AppendLine(factoryBody);
+        }
+        if (family == TestFamily.Regression
+            && model.HasLeadingIntConstructor
+            && !model.HasParameterlessConstructor
+            && constructorExpr.EndsWith("(3)", System.StringComparison.Ordinal))
+        {
+            // Only RegressionModelTestBase declares the CreateModel(int featureCount) hook, hence the
+            // family gate - emitting it for any other Matrix->Vector base would be a CS0115.
+            string widthConstructor =
+                constructorExpr.Substring(0, constructorExpr.Length - "(3)".Length) + "(featureCount)";
+            sb.AppendLine();
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}(int featureCount)");
+            sb.AppendLine($"        => {widthConstructor};");
         }
         if (model.HasVectorOnlyConstructor)
         {
@@ -15361,30 +16552,57 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Architecture-vs-fixture consistency (ADNTEST002). Both facts are present verbatim in
         // the emitted text, so compare them here rather than waiting for a shard run to surface
-        // the shape error. Only fires when BOTH are unambiguously spatial - a 3-element InputShape
-        // AND an inputHeight/inputWidth pair - so 1-D, sequence and token fixtures never trip it.
-        var archMatch = System.Text.RegularExpressions.Regex.Match(
-            generated, @"inputHeight:\s*(\d+)[\s\S]{0,80}?inputWidth:\s*(\d+)");
-        var shapeMatch = System.Text.RegularExpressions.Regex.Match(
-            generated,
-            // The terminator is REQUIRED. With it optional this matched a PREFIX of a longer
-            // shape - a 4-element [B, C, H, W] fixture matched its first three entries, so the
-            // comparison used [C, H] instead of [H, W] and reported nonsense such as "AVID
-            // fixture [.., 3, 32]". Anchoring to the close brace/bracket restricts this to
-            // genuine 3-element [C, H, W] fixtures, which is the only form the check is valid for.
-            @"InputShape\s*=>\s*(?:ResolveModelDeclaredInputShape\s*\(\s*)?(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])\s*\)?");
-        if (archMatch.Success && shapeMatch.Success)
+        // the shape error. The decision itself lives in ArchitectureFixtureMismatch so it can be
+        // tested against text and domains directly - driving the whole generator would require a
+        // synthetic model that happens to hit one of the hardcoded per-model constructor pins.
+        if (ArchitectureFixtureMismatch.TryDetect(
+                generated, out int archH, out int archW, out int fixtureH, out int fixtureW))
         {
-            int archH = int.Parse(archMatch.Groups[1].Value);
-            int archW = int.Parse(archMatch.Groups[2].Value);
-            int fixtureH = int.Parse(shapeMatch.Groups[1].Value);
-            int fixtureW = int.Parse(shapeMatch.Groups[2].Value);
-            if (archH != fixtureH || archW != fixtureW)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    ArchitectureFixtureSizeMismatchDescriptor, Location.None,
-                    model.ClassName, archH, archW, fixtureH, fixtureW));
-            }
+            context.ReportDiagnostic(Diagnostic.Create(
+                ArchitectureFixtureSizeMismatchDescriptor, Location.None,
+                model.ClassName, archH, archW, fixtureH, fixtureW));
+        }
+
+        // The SafetyModule family shares the emission path with the model families, so it picks up
+        // their per-model overrides - InputShape, OutputShape, iteration counts, tolerances. None of
+        // those members exists on SafetyModuleTestBase, whose surface is deliberately small
+        // (CreateModule plus ContentSize / ProducesFindings / RequiresExternalResources /
+        // CreateSafeContent / CreateRandomContent), so every one of them is a CS0115.
+        //
+        // Filtered by WHITELIST rather than by removing the two members that happened to break the
+        // build: the emission path can attach any per-model override to any model, so a deny-list
+        // would be one rebase away from failing again. Only single-line expression-bodied overrides
+        // are considered - CreateModule is emitted as a two-line block and is never a candidate.
+        // Families whose test base has a deliberately small surface share the model families'
+        // emission path, so they pick up per-model overrides their base never declares - every
+        // one a CS0115. Filtered by WHITELIST of what the base actually has, not by removing the
+        // members that happened to break a build: the emission path can attach any override to
+        // any model, so a deny-list would be one rebase away from failing again.
+        var allowedMembers = family switch
+        {
+            TestFamily.SafetyModule => SafetyModuleTestBaseMembers,
+            TestFamily.VisionDetector => VisionDetectorTestBaseMembers,
+            TestFamily.TensorModule => TensorModuleTestBaseMembers,
+            TestFamily.Neck => NeckTestBaseMembers,
+            TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
+            TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
+            TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
+            TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
+            TestFamily.Volatility => VolatilityModelTestBaseMembers,
+            _ => null,
+        };
+        if (allowedMembers is not null)
+        {
+            // Only single-line expression-bodied overrides are candidates; the factory method is
+            // emitted as a two-line block and is never matched.
+            generated = System.Text.RegularExpressions.Regex.Replace(
+                generated,
+                @"[ \t]*protected override [^\r\n]*?\b(?<member>\w+)\s*=>[^;]*;[ \t]*\r?\n",
+                m => allowedMembers.Contains(m.Groups["member"].Value)
+                    ? m.Value
+                    : string.Empty,
+                System.Text.RegularExpressions.RegexOptions.Multiline,
+                System.TimeSpan.FromSeconds(1));
         }
 
         generated = DropDuplicateOverrides(generated);
@@ -15490,6 +16708,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.GaussianProcess:
                 return model.ImplementsGaussianProcess;
 
+            // Safety modules are asked for ISafetyModule<double> by SafetyModuleTestBase, which
+            // exercises confidence calibration, severity ordering and detection monotonicity
+            // rather than the parameter/shape invariants of the model families.
+            case TestFamily.SafetyModule:
+                return model.ImplementsSafetyModule;
+
+            // The detector bases derive from ModelBase<T, Tensor<T>, Tensor<T>>, which IS
+            // IFullModel<T, Tensor<T>, Tensor<T>> - the contract ObjectDetectorTestBase asks for -
+            // so reaching this family by base type is itself the compatibility proof.
+            case TestFamily.VisionDetector:
+                return model.ExtendsVisionDetectorBase;
+
+            // Both bases construct through a factory they pass the size to, so reaching the family is
+            // the compatibility proof: the routing predicates above are exactly the constructor shape
+            // the factory calls.
+            case TestFamily.TensorModule:
+                return model.UsesTensorInput && model.HasLeadingIntConstructor;
+            case TestFamily.Neck:
+                return model.ExtendsNeckBase;
+            case TestFamily.VideoSafetyModule:
+                return model.ExtendsVideoSafetyModuleBase;
+            case TestFamily.DeepfakeDetector:
+                return model.ExtendsDeepfakeDetectorBase;
+            case TestFamily.MetaLearning:
+            case TestFamily.ClassificationMetaLearning:
+                return model.ExtendsMetaLearnerBase && model.MetaLearnerOptionsType.Length > 0;
+            case TestFamily.Volatility:
+                return model.ExtendsClassicalVolatilityBase;
+
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
             case TestFamily.NonLinearRegression:
@@ -15540,10 +16787,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Check if any test class name contains the model name at a word boundary
         foreach (var testName in testNames)
         {
+            // A class cannot be its own test. Without this, a model whose name ends in "Test" is
+            // admitted to testNames by IsTestCandidate and then reports itself covered - which is
+            // how NeuralStressTest became one of the two "covered" models in a 1816-model report.
+            if (string.Equals(testName, baseName, System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
             int idx = testName.IndexOf(baseName, System.StringComparison.OrdinalIgnoreCase);
             if (idx < 0) continue;
             int afterMatch = idx + baseName.Length;
-            if (afterMatch >= testName.Length) return true;
+
+            // An EMPTY remainder means the candidate's name merely ENDS with the model's name, which
+            // is a coincidence rather than evidence of coverage. This is how the model TEST was
+            // scored covered: "NeuralStressTest".IndexOf("TEST", OrdinalIgnoreCase) lands at 12 and
+            // runs to the end of the string, so an unrelated model's tail vouched for it. Require a
+            // recognised test suffix instead.
+            if (afterMatch >= testName.Length) continue;
+
             string remainder = testName.Substring(afterMatch);
             if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
@@ -17223,15 +18483,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ZeroDerivativeForIdentical { get; set; } = true;
     }
 
+    /// <param name="canMeasureCoverage">
+    /// Whether THIS compilation can see test classes. A source generator's syntax provider only
+    /// observes the compilation it runs in, and the tests live in AiDotNetTests while the models
+    /// live in AiDotNet - so the AiDotNet compilation has no test classes to match against and any
+    /// coverage figure computed there is meaningless. It reported 0.1% (2 of 1816) for exactly that
+    /// reason, and the dependency direction makes it unfixable in place: AiDotNetTests references
+    /// AiDotNet, never the reverse, so the source compilation cannot consume the test assembly's
+    /// symbols. The number is therefore published only from the compilation that can measure it.
+    /// </param>
     private static void EmitTestCoverageClass(
         SourceProductionContext context,
         List<ModelTestInfo> testedModels,
-        List<ModelTestInfo> untestedModels)
+        List<ModelTestInfo> untestedModels,
+        bool canMeasureCoverage)
     {
         var totalCount = testedModels.Count + untestedModels.Count;
         var coveragePercent = totalCount > 0
             ? (testedModels.Count * 100.0 / totalCount)
             : 0.0;
+
+        if (!canMeasureCoverage)
+        {
+            EmitUnmeasurableCoverageClass(context, totalCount);
+            return;
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -17248,6 +18524,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("/// </summary>");
         sb.AppendLine("internal static class TestCoverage");
         sb.AppendLine("{");
+
+        sb.AppendLine("    /// <summary>Whether this compilation could measure test coverage.</summary>");
+        sb.AppendLine("    public const bool IsMeasurable = true;");
+        sb.AppendLine();
 
         sb.AppendLine($"    /// <summary>Total annotated models tracked.</summary>");
         sb.AppendLine($"    public const int TotalModels = {totalCount};");
@@ -17267,7 +18547,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var model in testedModels)
         {
-            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
+            sb.AppendLine($"        \"{EscapeString(model.FullyQualifiedName)}\",");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -17277,10 +18557,60 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var model in untestedModels)
         {
-            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
+            sb.AppendLine($"        \"{EscapeString(model.FullyQualifiedName)}\",");
         }
         sb.AppendLine("    };");
 
+        sb.AppendLine("}");
+
+        context.AddSource("TestCoverage.g.cs", sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits the coverage report for a compilation that cannot measure coverage, stating that
+    /// plainly instead of publishing a fabricated percentage. TotalModels is still real - the model
+    /// census does not depend on seeing tests - so it is kept; the tested/untested split is not,
+    /// and is reported as unknown rather than as zero, which would read as "nothing is covered".
+    /// </summary>
+    private static void EmitUnmeasurableCoverageClass(SourceProductionContext context, int totalCount)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Generated;");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Model census for this compilation. Test coverage is NOT measured here: the");
+        sb.AppendLine("/// generator's syntax provider sees only the compilation it runs in, and the model-family");
+        sb.AppendLine("/// tests live in AiDotNetTests. The real figure is published by the AiDotNetTests");
+        sb.AppendLine("/// compilation and reported by the AIDN041 diagnostic.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal static class TestCoverage");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>Whether this compilation could measure test coverage.</summary>");
+        sb.AppendLine("    public const bool IsMeasurable = false;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Total annotated models tracked. Real: the census needs no test classes.</summary>");
+        sb.AppendLine($"    public const int TotalModels = {totalCount};");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Unknown in this compilation. See AiDotNetTests for the measured value.</summary>");
+        sb.AppendLine("    public const int TestedCount = -1;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Unknown in this compilation. See AiDotNetTests for the measured value.</summary>");
+        sb.AppendLine("    public const int UntestedCount = -1;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Unknown in this compilation. See AiDotNetTests for the measured value.</summary>");
+        sb.AppendLine("    public const double CoveragePercent = -1.0;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Empty: this compilation contains no test classes to attribute coverage to.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> TestedModelNames { get; } = Array.Empty<string>();");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Empty: coverage is not measured in this compilation.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> UntestedModelNames { get; } = Array.Empty<string>();");
         sb.AppendLine("}");
 
         context.AddSource("TestCoverage.g.cs", sb.ToString());
@@ -17656,6 +18986,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ImplementsDetectionBackbone { get; set; }
         public bool ImplementsGaussianProcess { get; set; }
 
+        public bool ImplementsSafetyModule { get; set; }
+
+        public bool ExtendsVisionDetectorBase { get; set; }
+
+        public string VisionDetectorOptionsType { get; set; } = string.Empty;
+
+        public bool ExtendsTextConditioningBase { get; set; }
+
+        public bool ExtendsNeckBase { get; set; }
+
+        /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
+        public bool ExtendsVideoSafetyModuleBase { get; set; }
+
+        /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
+        public bool ExtendsDeepfakeDetectorBase { get; set; }
+
+        /// <summary>True for a meta-learner: a descendant of MetaLearnerBase (neural processes included).</summary>
+        public bool ExtendsMetaLearnerBase { get; set; }
+
+        /// <summary>The meta-learner's options type, taken from its single-options constructor; empty if none.</summary>
+        public string MetaLearnerOptionsType { get; set; } = string.Empty;
+
+        /// <summary>An object initializer binding the options' task sizes to the family base, or empty.</summary>
+        public string MetaLearnerOptionsSizes { get; set; } = string.Empty;
+
+        /// <summary>True for a meta-learner that classifies each query example into one of the task's ways.</summary>
+        public bool MetaLearnerIsClassifier { get; set; }
+
+        /// <summary>The classifier family's options initializer: class count, embedding and input widths.</summary>
+        public string ClassifierOptionsSizes { get; set; } = string.Empty;
+
+        public bool ExtendsClassicalVolatilityBase { get; set; }
+
         // Input type detection (from IFullModel type arguments)
         public bool UsesTensorInput { get; set; }
         public bool UsesMatrixInput { get; set; }
@@ -17678,6 +19041,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// The generated regression fixture supplies a vector matching its three input features.
         /// </summary>
         public bool HasVectorOnlyConstructor { get; set; }
+
+        public bool HasLeadingIntConstructor { get; set; }
 
         /// <summary>
         /// The fully-qualified display name of the architecture parameter type (e.g.,
@@ -17808,6 +19173,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Classification,
         ProbabilisticClassifier,
         Clustering,
+        SafetyModule,
+        VisionDetector,
+        TensorModule,
+        Neck,
+        VideoSafetyModule,
+        DeepfakeDetector,
+        MetaLearning,
+        ClassificationMetaLearning,
+        Volatility,
         NeuralNetwork
     }
 
@@ -17930,6 +19304,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className is "WaveGlow" or "ParallelWaveGAN";
+    }
+
+    /// <summary>
+    /// Mel frame count (the T axis) of a conv1d waveform vocoder's <c>[1, 80, T]</c> fixture.
+    /// </summary>
+    /// <remarks>
+    /// Single source of truth for the fixture emission AND the architecture pin. They were
+    /// independent literals, and they disagreed: every such vocoder declared a rank-2 64x32
+    /// architecture while being fed a rank-3 mel spectrogram.
+    /// </remarks>
+    private static int Conv1DVocoderMelFrames(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+
+        // WaveNet-style stacks preserve T, so they get a longer window.
+        if (IsTimePreservingConv1DVocoder(className)) return 8;
+
+        // Spectral vocoders (513-channel conv_post) need more than a single mel frame for
+        // MoreData_ShouldNotDegrade to train stably; waveform vocoders are fine at T = 1.
+        return SpectralConv1DVocoderOutputChannels(className) > 1 ? 2 : 1;
     }
 
     /// <summary>
@@ -18596,6 +19991,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Classification:        return "ClassificationModelTestBase";
             case TestFamily.ProbabilisticClassifier: return "ProbabilisticClassifierTestBase";
             case TestFamily.Clustering:            return "ClusteringModelTestBase";
+            case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
+            case TestFamily.VisionDetector:        return "ObjectDetectorTestBase";
+            case TestFamily.TensorModule:          return "TensorModuleTestBase";
+            case TestFamily.Neck:                  return "NeckTestBase";
+            case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
+            case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
+            case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
+            case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
+            case TestFamily.Volatility:            return "VolatilityModelTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
         }
@@ -18638,6 +20042,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
+            // SafetyModuleTestBase asks for CreateModule, not CreateModel.
+            case TestFamily.SafetyModule:
+            case TestFamily.VideoSafetyModule:
+                return "CreateModule";
+            case TestFamily.DeepfakeDetector:
+                return "CreateDetector";
+            case TestFamily.Neck:
+                return "CreateNeck";
+            case TestFamily.MetaLearning:
+            case TestFamily.ClassificationMetaLearning:
+                return "CreateLearner";
             default:
                 return "CreateModel";
         }
@@ -18687,6 +20102,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
+            case TestFamily.SafetyModule:
+                return "AiDotNet.Interfaces.ISafetyModule<double>";
+            case TestFamily.VisionDetector:
+            case TestFamily.TensorModule:
+                return "IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
+            case TestFamily.Neck:
+                return "AiDotNet.ComputerVision.Detection.Necks.NeckBase<double>";
+            case TestFamily.VideoSafetyModule:
+                return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
+            case TestFamily.DeepfakeDetector:
+                return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
+            case TestFamily.MetaLearning:
+                return "AiDotNet.Interfaces.IMetaLearner<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, "
+                    + "AiDotNet.Tensors.LinearAlgebra.Vector<double>>";
+            case TestFamily.ClassificationMetaLearning:
+                return "AiDotNet.Interfaces.IMetaLearner<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, "
+                    + "AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
+            case TestFamily.Volatility:
+                return "AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<double>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:

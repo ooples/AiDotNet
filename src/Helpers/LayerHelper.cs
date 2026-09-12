@@ -541,6 +541,50 @@ public static partial class LayerHelper<T>
 
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, outputSize);
 
+        var widths = new int[hiddenLayerCount];
+        for (int i = 0; i < widths.Length; i++) widths[i] = hiddenLayerSize;
+        foreach (var layer in CreateDefaultLayers(architecture, widths, outputSize)) yield return layer;
+    }
+
+    /// <summary>
+    /// Creates a feed-forward network whose hidden layers have the given widths, in order.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerSizes">The width of each hidden layer, input side first.</param>
+    /// <param name="outputSize">Number of output neurons; the architecture's output size when not positive.</param>
+    /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    /// <remarks>
+    /// The uniform count-and-width overload delegates here. A per-layer list is what models that declare
+    /// their hidden layers as sizes need: TradingAgentOptions.HiddenLayers is { 256, 128, 64 }, which one
+    /// count and one width cannot express, so the trading agents ignored it.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int> hiddenLayerSizes,
+        int outputSize = -1)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null) throw new ArgumentNullException(nameof(hiddenLayerSizes));
+
+        // Use architecture's output size if not explicitly provided
+        if (outputSize <= 0)
+        {
+            outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : 1;
+        }
+
+        if (hiddenLayerSizes.Count == 0)
+            throw new ArgumentException("At least one hidden layer width is required.", nameof(hiddenLayerSizes));
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
+        {
+            if (hiddenLayerSizes[i] < 1)
+                throw new ArgumentException(
+                    $"Hidden layer {i} has width {hiddenLayerSizes[i]}; every width must be at least 1.",
+                    nameof(hiddenLayerSizes));
+        }
+
+        if (outputSize < 1)
+            throw new ArgumentException("Output size must be at least 1.", nameof(outputSize));
+
         int inputSize = architecture.CalculatedInputSize;
 
         // Build the layer chain, then chain-resolve shapes from the
@@ -549,13 +593,10 @@ public static partial class LayerHelper<T>
         // until first Forward; chain-resolving here lets callers
         // observe ParameterCount > 0 immediately and matches the
         // pre-lazy contract this helper used to deliver.
-        var layers = new List<ILayer<T>>(hiddenLayerCount + 1)
+        var layers = new List<ILayer<T>>(hiddenLayerSizes.Count + 1);
+        foreach (int width in hiddenLayerSizes)
         {
-            new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>)
-        };
-        for (int i = 0; i < hiddenLayerCount - 1; i++)
-        {
-            layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            layers.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
         }
         // Output activation MUST match the task — the previous unconditional
         // Softmax silently broke every regression / single-output model that
@@ -5736,6 +5777,12 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
+    /// Number of feature-encoder stages in the Wav2Vec2 language-identification stack (seven in the
+    /// paper). Wav2Vec2LanguageIdentifier partitions the factory's output by it.
+    /// </summary>
+    public const int Wav2Vec2FeatureEncoderStages = 7;
+
+    /// <summary>
     /// Creates default Wav2Vec2 layers for spoken language identification.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -5745,6 +5792,9 @@ public static partial class LayerHelper<T>
     /// <param name="intermediateSize">Feed-forward intermediate size (default: 3072).</param>
     /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
     /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <param name="featureEncoderDim">Width of each feature-encoder stage (default: 512).</param>
+    /// <param name="featureProjectionDropout">Dropout after the feature projection; defaults to
+    /// <paramref name="dropoutRate"/> when not given.</param>
     /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
     /// <remarks>
     /// <para>
@@ -5761,29 +5811,28 @@ public static partial class LayerHelper<T>
         int numAttentionHeads = 12,
         int intermediateSize = 3072,
         int numLanguages = 20,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int featureEncoderDim = 512,
+        double? featureProjectionDropout = null)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
 
-        // Feature encoder: 7 temporal convolution layers
-        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
-        int[] channels = [512, 512, 512, 512, 512, 512, 512];
-
-        int inputDim = 1; // Raw waveform
-        for (int i = 0; i < kernelSizes.Length; i++)
+        // Feature encoder. The paper's stages are 1-D convolutions over the raw waveform (kernels
+        // 10,3,3,3,3,2,2; strides 5,2,2,2,2,2,2; 512 channels). These are Dense stand-ins of the same
+        // width, which do not yet model the kernels or the strides.
+        for (int i = 0; i < Wav2Vec2FeatureEncoderStages; i++)
         {
-            int outputDim = channels[i];
-            yield return new DenseLayer<T>(outputDim, geluActivation);
+            yield return new DenseLayer<T>(featureEncoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
-            inputDim = outputDim;
         }
 
-        // Feature projection
+        // Feature projection. Its dropout falls back to the hidden rate when none is given.
+        double projectionDropout = featureProjectionDropout ?? dropoutRate;
         yield return new DenseLayer<T>(hiddenSize, geluActivation);
-        if (dropoutRate > 0)
+        if (projectionDropout > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DropoutLayer<T>(projectionDropout);
         }
 
         // Transformer encoder layers
@@ -10064,7 +10113,7 @@ public static partial class LayerHelper<T>
 
         // Classification head
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
-        yield return new DenseLayer<T>(numClasses);
+        yield return new DenseLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses);
     }
 
     /// <summary>
@@ -13786,7 +13835,7 @@ public static partial class LayerHelper<T>
         // Distribution parameter layers - outputs mu and sigma for Gaussian distribution
         // Mu (mean) projection
         yield return new DenseLayer<T>(
-            outputSize: predictionLength,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : predictionLength,
             activationFunction: null);  // Linear for mean
 
         // Sigma (std) projection - uses softplus implicitly in forward pass for positivity
@@ -13980,7 +14029,7 @@ public static partial class LayerHelper<T>
 
         // Final output projection
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
@@ -15183,7 +15232,7 @@ public static partial class LayerHelper<T>
         //     linearly project to the forecast horizon ===
         yield return new LayerNormalizationLayer<T>();
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -15468,7 +15517,7 @@ public static partial class LayerHelper<T>
         // instead of one per token.
         yield return new LayerNormalizationLayer<T>();
         yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -15539,7 +15588,7 @@ public static partial class LayerHelper<T>
 
         // === Output Projection ===
         // Per-token projection from modelDim to forecast values, then pool across sequence.
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -15903,7 +15952,7 @@ public static partial class LayerHelper<T>
 
         // End-state decoder (the model extracts the final recurrent state before this head).
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
@@ -17417,7 +17466,7 @@ public static partial class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
 
         // Classification head
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -22260,7 +22309,7 @@ public static partial class LayerHelper<T>
         }
 
         // Output projection to codebook
-        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : codebookSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for VALL-E AR stage.</summary>
@@ -22613,6 +22662,21 @@ public static partial class LayerHelper<T>
         int numDecoderLayers = 2, int numMels = 80,
         double dropoutRate = 0.1)
     {
+        foreach (var layer in CreateMatchaTextEncoderLayers(textEncoderDim, numTextEncoderLayers,
+                     numTextEncoderHeads, dropoutRate))
+            yield return layer;
+        foreach (var layer in CreateMatchaMelDecoderLayers(decoderDim, numDecoderLayers, numMels))
+            yield return layer;
+    }
+
+    /// <summary>
+    /// Creates Matcha's existing frame projection and token encoder as one ordered group.
+    /// Aligned token input enters after the initial frame projection, at the encoder width.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMatchaTextEncoderLayers(
+        int textEncoderDim = 192, int numTextEncoderLayers = 6,
+        int numTextEncoderHeads = 2, double dropoutRate = 0.1)
+    {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Text encoder (transformer-based)
@@ -22628,11 +22692,17 @@ public static partial class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Duration predictor
-        yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
-        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
+        // The duration predictor belongs to AlignedTextToMelModelBase's parallel branch.
+    }
 
-        // Flow matching decoder (U-Net blocks)
+    /// <summary>
+    /// Creates the existing framewise mel decoder. This stack is not a complete flow-matching
+    /// U-Net; alignment support does not change that independent architectural limitation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMatchaMelDecoderLayers(
+        int decoderDim = 256, int numDecoderLayers = 2, int numMels = 80)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
         for (int i = 0; i < numDecoderLayers; i++)
         {
@@ -26982,6 +27052,16 @@ public static partial class LayerHelper<T>
         int editingFfnDim = editingDim * 4;
 
         // === Vision Encoder ===
+        //
+        // Input projection FIRST. Without it this stack went straight from the raw input into
+        // attention sized at visionDim, so it silently required a sequence already embedded at
+        // visionDim - while EmuEdit, MGIE and SmartEdit all declare ImageSize in their options and
+        // are constructed with an image architecture. Any image input was rejected outright:
+        // "MultiHeadAttentionLayer was constructed with embeddingDimension=1024 but
+        // input.Shape[^1]=128". Every other default stack here opens with the same projection
+        // (CreateDefaultMatchaTTSLayers starts with FullyConnectedLayer(textEncoderDim)); this one
+        // was missing it, which is why no fixture could drive these three models.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -34756,11 +34836,11 @@ public static partial class LayerHelper<T>
 
         // === Output Projection ===
         yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
+            outputSize: modelDim * (architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon) / 4,
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
     }
 
@@ -36606,7 +36686,7 @@ public static partial class LayerHelper<T>
         // === Forecast Head (default task) ===
         yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon,
             activationFunction: null);
 
         // numClasses is consumed by MOMENT.cs when building the classification
@@ -36776,7 +36856,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -36841,7 +36921,7 @@ public static partial class LayerHelper<T>
         // via a single linear. Weight is [numPatches · hiddenDim, forecastHorizon]
         // = 64·1024 × 96 × 8B ≈ 48 MiB at paper defaults, tractable.
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37190,7 +37270,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37226,7 +37306,7 @@ public static partial class LayerHelper<T>
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
@@ -37628,7 +37708,7 @@ public static partial class LayerHelper<T>
 
         // Forecast head: applied AFTER the model pools the token sequence to a
         // single [B, hiddenDim] vector, producing [B, forecastHorizon].
-        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
+        yield return new DenseLayer<T>(outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : forecastHorizon, activationFunction: null);
     }
 
     /// <summary>

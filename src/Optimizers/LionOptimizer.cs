@@ -411,7 +411,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 

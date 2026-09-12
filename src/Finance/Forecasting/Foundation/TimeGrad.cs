@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -85,6 +85,14 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     private int _numDiffusionSteps;
     private int _denoisingNetworkDim;
     private int _numSamples;
+
+    /// <summary>
+    /// Seed for the reverse-diffusion draws. Inference must be reproducible: sampling from an
+    /// unseeded secure RNG made two Predict calls on identical input disagree, which is a defect
+    /// rather than probabilistic behaviour - the N draws are already averaged into a single point
+    /// forecast, so the randomness is an implementation detail of computing that estimate.
+    /// </summary>
+    private int? _seed;
     private double _dropout;
     private double _betaStart;
     private double _betaEnd;
@@ -189,6 +197,7 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         _numDiffusionSteps = options.NumDiffusionSteps;
         _denoisingNetworkDim = options.DenoisingNetworkDim;
         _numSamples = options.NumSamples;
+        _seed = options.Seed;
         _dropout = options.DropoutRate;
         _betaStart = options.BetaStart;
         _betaEnd = options.BetaEnd;
@@ -479,7 +488,12 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
 
         // Step 2: Generate multiple samples via DDPM reverse process and average
         var sampleAccumulator = new double[_forecastHorizon];
-        var rand = RandomHelper.CreateSecureRandom();
+        // Re-seeded per call, so repeated inference on identical input is identical. Rasul et al.
+        // (2021) draw x_T ~ N(0, I) and denoise; nothing in the method requires the draws to differ
+        // between calls, and the accumulator below averages them into one forecast regardless.
+        var rand = _seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_seed.Value)
+            : RandomHelper.CreateSecureRandom();
         int effectiveSamples = Math.Max(1, _numSamples);
 
         for (int s = 0; s < effectiveSamples; s++)

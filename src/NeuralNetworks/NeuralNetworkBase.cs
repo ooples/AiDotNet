@@ -2907,6 +2907,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Monotonically increasing version counter, incremented when layers are added/removed.
     /// Used by TapeTrainingStep caching to detect structural changes.
     /// </summary>
+    /// <remarks>
+    /// Per-instance cache bookkeeping, not model state: it keys this instance's own plan and layout caches. A
+    /// copy-on-write clone bumps it while adopting the graph, so persisting it made a copy serialize differently from
+    /// its original.
+    /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _layerStructureVersion;
 
     /// <summary>
@@ -5075,8 +5081,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            foreach (var tensor in layer.GetTrainableParameters())
-                Add(tensor);
+            Training.TapeTrainingStep<T>.CollectLayerParameters(layer, allParameters, seen, materializedOnly: true);
         }
         foreach (var tensor in GetExtraTrainableTensors())
             Add(tensor);
@@ -5092,14 +5097,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            foreach (var parameter in layer.GetTrainableParameters())
-            {
-                if (parameter is null || parameter.Length == 0) continue;
-                seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                if (!seen.Add(parameter)) continue;
-                extraParameters ??= [];
-                extraParameters.Add(parameter);
-            }
+            seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            extraParameters ??= [];
+            Training.TapeTrainingStep<T>.CollectLayerParameters(layer, extraParameters, seen, materializedOnly: true);
         }
 
         foreach (var parameter in GetExtraTrainableTensors())
@@ -5111,7 +5111,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             extraParameters.Add(parameter);
         }
 
-        return extraParameters;
+        return extraParameters is { Count: > 0 } ? extraParameters : null;
     }
 
     /// <summary>
@@ -5320,10 +5320,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
     /// </para>
     /// </remarks>
+    // Diagnostic tallies of this instance's own shape propagation, not model state: persisted, they made a copy
+    // serialize differently from its original by however many forward passes each had run.
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedBatched;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedPerSample;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDeclined;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDisagreedBoth;
+    [AiDotNet.Attributes.Scratch]
     private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
@@ -6055,6 +6062,91 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
         }
     }
+    /// <summary>
+    /// Reports when the architecture this model was CONSTRUCTED with does not describe the input
+    /// its first layer actually accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ValidateCustomLayersInternal"/> has carried exactly this check for a long time,
+    /// but every one of its 205 call sites sits inside an <c>Architecture.Layers</c> guard - so it
+    /// runs only when the CALLER supplied the layers, and never on the default path where the model
+    /// builds its own stack from a <c>LayerHelper</c> factory. That is the overwhelmingly common
+    /// case, and it was completely unchecked.
+    /// </para>
+    /// <para>
+    /// The gap is not cosmetic. The architecture is load-bearing even when no factory reads it:
+    /// <c>ResolveLazyLayerShapes</c> performs an architecture-driven warm-up, so a lazy layer
+    /// resolves its weights from the DECLARED shape while the forward runs on whatever the options
+    /// produced. Measured across LayerHelper, 104 factories take a <c>NeuralNetworkArchitecture</c>
+    /// and never read it, so for those models the architecture and the layers are free to disagree
+    /// with nothing to say so.
+    /// </para>
+    /// <para>
+    /// Reporting only, and deliberately so. Escalating to an exception here would fail construction
+    /// for every one of those models at once, and the honest sequence is to make the divergence
+    /// VISIBLE first and clear the backlog against it - the same shadow-comparison discipline the
+    /// contract check above already follows. <see cref="ThrowOnLayerContractMismatch"/> escalates it
+    /// for anyone who wants the strict behaviour today.
+    /// </para>
+    /// </remarks>
+    private void ReportArchitectureLayerDisagreement()
+    {
+        try
+        {
+            if (_architectureAgreementReported) return;
+            if (Layers is null || Layers.Count == 0) return;
+            _architectureAgreementReported = true;
+
+            // A layer-only architecture declares no input of its own - the layers ARE the
+            // declaration - so there is nothing to disagree with.
+            if (Architecture.IsLayerOnly) return;
+
+            if (IsFirstLayerShapeCompatible(Layers[0])) return;
+
+            var firstLayerShape = TryGetLayerShape(Layers[0], static l => l.GetInputShape());
+            var architectureShape = TryGetArchitectureDeclaredInputShape();
+
+            // Either side being unresolved is a lazy layer that has not materialised yet, not a
+            // disagreement. IsFirstLayerShapeCompatible already treats those as compatible; this is
+            // belt and braces so a diagnostic cannot invent a finding out of missing data.
+            if (firstLayerShape is null || architectureShape is null) return;
+
+            var report = new System.Text.StringBuilder();
+            report.Append(GetType().Name)
+                .Append(": the architecture this model was constructed with does not describe the ")
+                .Append("input its first layer accepts (first layer = ")
+                .Append(Layers[0].GetType().Name)
+                .Append(", input shape = ").Append(FormatShape(firstLayerShape))
+                .Append("; architecture input shape = ").Append(FormatShape(architectureShape))
+                .Append("). The layer stack was built without consulting the architecture, so a ")
+                .Append("caller's architecture is silently discarded - and ResolveLazyLayerShapes ")
+                .Append("still resolves lazy weights against the declared shape.");
+
+            if (ThrowOnLayerContractMismatch)
+            {
+                throw new InvalidOperationException(report.ToString());
+            }
+
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // The deliberate escalation above. Everything else is swallowed below.
+            throw;
+        }
+        catch
+        {
+            // A diagnostic must never be the reason a model fails to construct.
+        }
+    }
+
+    /// <summary>One-shot latch so the architecture/layer disagreement is reported once.</summary>
+    private bool _architectureAgreementReported;
+
     /// <summary>One-shot latch so the traced chain validation runs on the FIRST forward only.</summary>
     private bool _chainValidatedFromTrace;
 
@@ -6084,6 +6176,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             trace?.Dispose();
         }
+
+        // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
+        // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
+        // of this method's caller - Layers was still EMPTY, because these stacks materialise during
+        // the forward. A check that runs before the layers exist cannot fail, and would have shipped
+        // as a diagnostic that silently never fired.
+        ReportArchitectureLayerDisagreement();
 
         if (trace is not null)
         {
@@ -7231,10 +7330,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (Architecture?.RandomSeed is not int seed) return;
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
         foreach (var layer in Layers)
         {
-            WireLayerRandomSeedRecursive(layer, seedRng);
+            WireLayerRandomSeedRecursive(layer, seedRng, visited);
         }
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited);
     }
 
     /// <summary>
@@ -7251,14 +7353,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         WireLayerRandomSeeds();
     }
 
-    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng)
+    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited)
     {
+        if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
             baseLayer.RandomSeed = seedRng.Next();
             foreach (var sub in baseLayer.GetSubLayers())
             {
-                WireLayerRandomSeedRecursive(sub, seedRng);
+                WireLayerRandomSeedRecursive(sub, seedRng, visited);
             }
         }
     }
@@ -8401,6 +8504,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int i = 0; i < _layers.Count; i++)
             {
                 _layers[i].SetTrainingMode(isTraining);
+            }
+
+            // Additional registered branches are part of the model's execution mode too.
+            // A composite root propagates to its own registered children through LayerBase.
+            // Allocate no identity set for the ordinary no-extra model path.
+            HashSet<ILayer<T>>? modeRoots = null;
+            foreach (var layer in GetExtraTrainableLayers())
+            {
+                if (layer is null) continue;
+                modeRoots ??= new HashSet<ILayer<T>>(_layers, Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+                if (modeRoots.Add(layer)) layer.SetTrainingMode(isTraining);
             }
         }
 
@@ -12974,6 +13088,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Trains an objective with a branched or multi-input forward without changing the public
+    /// prediction contract. The objective must return one tape-connected scalar and recompute
+    /// its entire forward from the supplied input and target on every invocation.
+    /// </summary>
+    /// <remarks>
+    /// Unlike a precomputed loss, this retains real input/target tensors and a recomputation
+    /// callback for line-search optimizers. Parameter discovery follows the forward so newly
+    /// materialized parameters, including generated additional layer groups, participate in
+    /// this first update. The same instance-wide guard covers forward, backward, and update.
+    /// </remarks>
+    protected T TrainWithCustomObjective(
+        Tensor<T> input,
+        Tensor<T> expected,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeObjective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        if (computeObjective is null) throw new ArgumentNullException(nameof(computeObjective));
+
+        using var trainSentinel = AcquireTrainSentinel();
+        SetTrainingMode(true);
+        try
+        {
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            using var tape = new GradientTape<T>();
+            var lossTensor = RecomputeObjective(input, expected);
+            var trainableParams = CollectModelTrainableTensors();
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+            T lossValue = lossTensor[0];
+            LastLoss = lossValue;
+
+            Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
+            {
+                EnsureLayerRandomSeedsWired();
+                var result = computeObjective(currentInput, currentExpected);
+                if (result is null || result.Length != 1)
+                    throw new InvalidOperationException("A custom training objective must return exactly one scalar loss.");
+                double value = NumOps.ToDouble(result[0]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new InvalidOperationException("A custom training objective must return a finite scalar loss.");
+                return result;
+            }
+
+            Tensor<T> ReadObjective(Tensor<T> objective, Tensor<T> _) => objective;
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                trainableParams, grads, lossValue, input, expected, RecomputeObjective, ReadObjective);
+
+            MarkTrainMutationStarted();
+            opt.Step(context);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            StepSchedulerIfSupported(opt);
+            return lossValue;
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
     /// Variant of <see cref="TrainWithCustomLoss"/> that runs backward+optim
     /// on a loss tensor whose forward pass was already recorded on a
     /// caller-owned <see cref="GradientTape{T}"/>. Use this when the caller
@@ -13049,6 +13224,271 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         StepSchedulerIfSupported(opt);
 
         return lossValue;
+    }
+
+    /// <summary>
+    /// Runs this network's forward on the caller's active gradient tape with the network frozen:
+    /// in evaluation mode, and stepped by nobody unless the caller hands its parameters to
+    /// <see cref="StepOnTape"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is how one network scores another's output during adversarial training: a GAN
+    /// discriminator judging generated samples, a critic scoring them, an auxiliary network reading
+    /// latent codes back. <see cref="Predict"/> cannot do it, because inference opens a
+    /// <see cref="NoGradScope{T}"/>. The score comes back detached and the generator's adversarial
+    /// gradient is exactly zero. Several GANs trained that way and reported a falling loss while the
+    /// generator never learned from its discriminator (#2155).
+    /// </para>
+    /// <para>
+    /// Evaluation mode fixes batch-normalization statistics and disables dropout for the scoring
+    /// pass, holding the scorer at its current iterate while the other network's gradient is taken
+    /// (Goodfellow et al. 2014, section 3). The previous training mode is restored afterwards.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The tensor to score; usually another network's tape-tracked output.</param>
+    /// <returns>This network's output, recorded on the active tape.</returns>
+    internal Tensor<T> ForwardFrozenOnTape(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            return ForwardForTraining(input);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Clamps every trainable parameter into [<paramref name="min"/>, <paramref name="max"/>] in place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is WGAN's Lipschitz weight clipping (Arjovsky et al. 2017, Algorithm 1, line 7). It used to
+    /// round-trip through <see cref="UpdateParameters"/>, and a layer's <c>SetWeights</c> assigns the
+    /// incoming tensor rather than copying into it. So every clip replaced the critic's weight tensors
+    /// with new objects. That orphaned the optimizer's per-tensor state, which is keyed by tensor
+    /// identity, so RMSProp restarted every step. It also pulled the live weights out from under
+    /// anything else holding them.
+    /// </para>
+    /// <para>
+    /// The tensors clamped are exactly the ones the tape optimizer steps. Layer weight caches, such as a
+    /// packed or transposed copy, are invalidated afterwards, as after any optimizer step.
+    /// </para>
+    /// </remarks>
+    internal void ClampTrainableParametersInPlace(T min, T max)
+    {
+        // Element by element through each weight's own storage. Engine.TensorCopy(Engine.TensorClamp(p), p)
+        // wrote an arena temporary back into the weight, and inside a TensorArena that corrupted the next
+        // backward ("Tensor shapes must match. Got [64, 1] and [1, 64]" in WGAN's critic step). The weights are
+        // leaves and the clip happens off the tape, so nothing needs this write recorded.
+        foreach (var parameter in CollectModelTrainableTensors())
+        {
+            var values = parameter.AsWritableSpan();
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (NumOps.LessThan(values[i], min)) values[i] = min;
+                else if (NumOps.GreaterThan(values[i], max)) values[i] = max;
+            }
+        }
+
+        MarkTrainMutationStarted();
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
+
+    /// <summary>
+    /// Adds a leading batch axis of 1 to a single unbatched sample of the given layout, and returns any
+    /// other tensor unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Composite models whose training step reads <c>Shape[0]</c> as the batch size receive single
+    /// samples through <c>Train</c>, and a 4-wide sample read that way is a batch of four. The rank
+    /// that counts as unbatched comes from the sub-network's declared layout, not from guessing.
+    /// </remarks>
+    internal static Tensor<T> WithBatchAxis(Tensor<T> tensor, AiDotNet.Enums.InputType unbatchedLayout)
+    {
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+
+        int unbatchedRank = unbatchedLayout switch
+        {
+            AiDotNet.Enums.InputType.TwoDimensional => 2,
+            AiDotNet.Enums.InputType.ThreeDimensional => 3,
+            _ => 1,
+        };
+        if (tensor.Rank != unbatchedRank) return tensor;
+
+        var batched = new int[tensor.Rank + 1];
+        batched[0] = 1;
+        for (int i = 0; i < tensor.Rank; i++) batched[i + 1] = tensor.Shape[i];
+        return tensor.Reshape(batched);
+    }
+
+    /// <summary>
+    /// Whether this network's final layer squashes its outputs into probabilities: a sigmoid or
+    /// softmax activation.
+    /// </summary>
+    /// <remarks>
+    /// Read from the layer, never from the values. A check that calls a batch "probabilities" when its
+    /// outputs happen to fall inside [0, 1] reads the same network two different ways from one step
+    /// to the next. Anything other than a sigmoid or softmax head is treated as logits.
+    /// </remarks>
+    internal bool FinalLayerEmitsProbabilities()
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0
+            || layers[layers.Count - 1] is not Layers.LayerBase<T> finalLayer)
+        {
+            return false;
+        }
+
+        object? activation = (object?)finalLayer.VectorActivation ?? finalLayer.ScalarActivation;
+        return activation is AiDotNet.ActivationFunctions.SigmoidActivation<T>
+            or AiDotNet.ActivationFunctions.SoftmaxActivation<T>;
+    }
+
+    /// <summary>
+    /// The mean binary cross-entropy of this network's scores against an all-real or all-fake target,
+    /// recorded on the active tape: -log P(real) or -log P(fake) per output, averaged over every output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Logits use the exact identities -log sigmoid(z) = softplus(-z) and -log(1 - sigmoid(z)) =
+    /// softplus(z), which never form a probability that could round to 0 or 1. Probabilities are
+    /// clamped away from 0 and 1 before their logarithm is taken.
+    /// </para>
+    /// <para>
+    /// Averaging over every output is the PatchGAN average when the network emits a map of scores.
+    /// </para>
+    /// </remarks>
+    /// <param name="scores">This network's output for the batch being judged.</param>
+    /// <param name="targetIsReal">True for the "real" target, false for "fake".</param>
+    internal Tensor<T> BinaryCrossEntropyOnTape(Tensor<T> scores, bool targetIsReal)
+    {
+        if (scores is null) throw new ArgumentNullException(nameof(scores));
+
+        Tensor<T> perOutput;
+        if (FinalLayerEmitsProbabilities())
+        {
+            T floor = NumOps.FromDouble(1e-7);
+            var probability = Engine.TensorClamp(scores, floor, NumOps.Subtract(NumOps.One, floor));
+            Tensor<T> likelihood = probability;
+            if (!targetIsReal)
+            {
+                var ones = new Tensor<T>(probability.Shape.ToArray());
+                Engine.TensorFill(ones, NumOps.One);
+                likelihood = Engine.TensorSubtract(ones, probability);
+            }
+
+            perOutput = Engine.TensorNegate(Engine.TensorLog(likelihood));
+        }
+        else
+        {
+            perOutput = Engine.Softplus(targetIsReal ? Engine.TensorNegate(scores) : scores);
+        }
+
+        return Engine.ReduceMean(perOutput, Enumerable.Range(0, perOutput.Shape.Length).ToArray(), keepDims: false);
+    }
+
+    /// <summary>
+    /// Backpropagates one loss recorded on <paramref name="tape"/> into one or more networks and
+    /// steps each with its own optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An adversarial step records several networks on one tape and trains only some of them: the
+    /// generator step runs the generator and a frozen discriminator but steps only the generator.
+    /// Only the listed members' parameters are differentiated, so anything else on the tape stays
+    /// fixed.
+    /// </para>
+    /// <para>
+    /// A loss that trains more than one network can't call
+    /// <see cref="BackwardAndStepOnPrecomputedLoss"/> once per network. Examples are CycleGAN's two
+    /// generators under one cycle-consistency objective, and StyleGAN's mapping and synthesis
+    /// networks under one adversarial loss. A non-persistent tape is consumed by its first gradient
+    /// computation, so the gradient for the union of the members' parameters is taken in one pass.
+    /// Each member then publishes and steps exactly its own share with its own optimizer, since
+    /// members may train at different rates: StyleGAN's mapping network learns 100 times slower.
+    /// </para>
+    /// </remarks>
+    /// <param name="tape">The open tape on which every member's forward was recorded.</param>
+    /// <param name="lossTensor">The scalar loss recorded on <paramref name="tape"/>.</param>
+    /// <param name="members">The networks to train, each with its optimizer; a null optimizer uses
+    /// that network's default.</param>
+    /// <returns>The scalar loss value, also stored as each member's <see cref="LastLoss"/>.</returns>
+    internal static T StepOnTape(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        NeuralNetworkBase<T> network,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        => StepOnTape(tape, lossTensor, new[] { (network, optimizer) });
+
+    /// <inheritdoc cref="StepOnTape(GradientTape{T}, Tensor{T}, NeuralNetworkBase{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
+    internal static T StepOnTape(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members)
+    {
+        if (tape is null) throw new ArgumentNullException(nameof(tape));
+        if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
+        if (members is null) throw new ArgumentNullException(nameof(members));
+        if (members.Count == 0)
+            throw new ArgumentException("At least one network must be trained by the step.", nameof(members));
+
+        var sentinels = new List<TrainSentinel>(members.Count);
+        try
+        {
+            var memberParameters = new IReadOnlyList<Tensor<T>>[members.Count];
+            var union = new List<Tensor<T>>();
+            var seenNetworks = new HashSet<NeuralNetworkBase<T>>();
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network
+                    ?? throw new ArgumentException($"Member {i} has no network.", nameof(members));
+                if (!seenNetworks.Add(network))
+                {
+                    throw new ArgumentException(
+                        $"{network.GetType().Name} is listed twice; each network is stepped once per loss.",
+                        nameof(members));
+                }
+
+                sentinels.Add(network.AcquireTrainSentinel());
+                memberParameters[i] = network.CollectModelTrainableTensors();
+                union.AddRange(memberParameters[i]);
+            }
+
+            var gradients = tape.ComputeGradients(lossTensor, union, false);
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network;
+                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+
+                // The gradient dictionary holds every member's tensors; publishing looks up only this
+                // network's own, so each member's gradient surface reports exactly its share.
+                network.PublishParameterGradients(gradients);
+                network.LastLoss = lossValue;
+
+                var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                    memberParameters[i], gradients, lossValue);
+                network.MarkTrainMutationStarted();
+                optimizer.Step(context);
+                network.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+                StepSchedulerIfSupported(optimizer);
+            }
+
+            return lossValue;
+        }
+        finally
+        {
+            for (int i = sentinels.Count - 1; i >= 0; i--)
+                sentinels[i].Dispose();
+        }
     }
 
     /// <summary>
@@ -15557,7 +15997,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 CopyGeneratedLayerAliasesTo(largeBase);
                 CompleteDeclaredStateRestore(largeBase, largeDeclaredStateEnvelope);
                 largeBase.InvalidateParameterCountCache();
-                largeBase.SetTrainingMode(false);
+                // The original's mode, as on every other clone path (see TryDeepCopyCopyOnWrite).
+                largeBase.SetTrainingMode(IsTrainingMode);
                 // The per-layer parameter copy above skips non-trainable stochastic layers
                 // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
                 // explicitly — see CopyLayerRandomSeedsTo.
@@ -16179,7 +16620,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         CompleteDeclaredStateRestore(copyBase, copyOnWriteDeclaredStateEnvelope);
         copyBase.InvalidateParameterCountCache();
         copyBase.OnParametersRestored();
-        copyBase.SetTrainingMode(false);
+        // A copy is in the mode its original is in, as the serialize roundtrip path restores it and as PyTorch's
+        // copy.deepcopy keeps module.training. Forcing inference mode here made the copy serialize differently from
+        // the original depending only on which clone path ran.
+        copyBase.SetTrainingMode(IsTrainingMode);
 
         // Opt-in clone diagnostics compare the complete generated/base state manifest after every
         // adoption step. This deliberately lives behind the same environment switch as rejection

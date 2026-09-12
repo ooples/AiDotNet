@@ -1,4 +1,4 @@
-using AiDotNet.Augmentation.Image;
+﻿using AiDotNet.Augmentation.Image;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -446,9 +446,6 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (TextDetectorBase<T>)MemberwiseClone();
 
     #endregion
 }

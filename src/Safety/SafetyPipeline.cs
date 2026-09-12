@@ -101,6 +101,14 @@ public class SafetyPipeline<T>
                 continue;
             }
 
+            // A vector is one frame. A video module that needs several cannot judge it, so it is left out of
+            // this report (and out of modulesRun) rather than counted as having found nothing; EvaluateVideo
+            // gives it the clip.
+            if (module is Video.VideoSafetyModuleBase<T> { MinimumFrames: > 1 })
+            {
+                continue;
+            }
+
             modulesRun.Add(module.ModuleName);
             var findings = module.Evaluate(content);
             allFindings.AddRange(findings);

@@ -104,7 +104,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         _options = options;
         _architecture = architecture;
 
-        EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
+        EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize, options.HiddenLayers);
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());

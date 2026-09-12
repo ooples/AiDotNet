@@ -141,18 +141,21 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
 
         // Use the provided loss function if available, otherwise fall back to MSE
         var loss = lossFunction ?? DefaultLossFunction;
+
+        // dL/dprediction already carries the loss's own reduction (MSE's 1/n). The chain rule through
+        // y = X w + b adds nothing more: it used to divide by the row count a second time, so the model
+        // reported 1/n of its loss's gradient and every learner stepping on it moved n times too slowly.
         var lossGradient = loss.ComputeGradient(predictions, target);
 
-        double scale = 1.0 / count;
         for (int r = 0; r < count; r++)
         {
             double error = lossGradient[r];
             for (int c = 0; c < _inputDim && c < input.Columns; c++)
             {
-                gradients[c] += scale * error * input[r, c];
+                gradients[c] += error * input[r, c];
             }
 
-            gradients[_inputDim] += scale * error;
+            gradients[_inputDim] += error;
         }
 
         return gradients;

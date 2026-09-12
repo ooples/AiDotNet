@@ -1,4 +1,4 @@
-; Unshipped analyzer release
+﻿; Unshipped analyzer release
 ; Diagnostic prefixes remain split by generator until the final generator-refactor PR can
 ; renumber them atomically: AIDN (shipped rules), ADN00xx (layer state), ADNSHAPE
 ; (shape contracts), ADNTEST (scaffold correctness), and ADNGEN (coverage gaps).
@@ -34,7 +34,7 @@ ADN0055 | AiDotNet.Serialization | Warning | LayerStateGenerator, [LayerState] l
 ADN0056 | AiDotNet.Serialization | Error | LayerStateGenerator, [LayerState] is only supported on a class deriving from LayerBase
 ADN0057 | AiDotNet.Serialization | Info | LayerStateGenerator, Optional constructor parameter is pinned to its default in the generated factory
 ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
-ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
+ADNTEST002 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
 ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
@@ -81,5 +81,6 @@ AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidation
 AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter axis cannot be proven resolved
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
+AIDN106 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
 AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
 AIDN100 | AiDotNet.ParameterAutomation | Error | ParameterUpdateInPlaceAnalyzer, Trainable parameter reassigned to an Engine result in UpdateParameters

@@ -36,8 +36,9 @@ public enum RelationModuleType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Stacks the two feature maps spatially and applies 2D convolution layers
-    /// to learn local patterns that indicate similarity.
+    /// For embedding vectors, the two embeddings are two channels of a one-dimensional signal: width-3 filters with
+    /// zero padding, ReLU, and an average over positions give the pair representation. The paper's relation module
+    /// convolves the depth-concatenated feature maps of an image embedding the same way.
     /// </para>
     /// <para><b>For Beginners:</b> This is useful for image data where spatial
     /// patterns matter. It's like overlaying two images and looking for patterns
@@ -51,8 +52,9 @@ public enum RelationModuleType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Uses attention to compute weighted relationships between different parts
-    /// of the feature embeddings.
+    /// Cross-attention of the query over the sample: the projected query attends to one token per embedding position
+    /// (the position's value times a learned vector, plus a learned position embedding), and the read-out with the
+    /// projected query goes through a ReLU layer.
     /// </para>
     /// <para><b>For Beginners:</b> This allows the network to focus on the most
     /// important parts of each example when comparing them, rather than treating
@@ -66,8 +68,9 @@ public enum RelationModuleType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Applies transformer-style multi-head self-attention for computing relations,
-    /// allowing complex feature interactions.
+    /// One self-attention block over two tokens - the projected sample and query plus segment embeddings - with a
+    /// residual feed-forward layer, mean-pooled over the tokens. Single-headed and one layer deep, without layer
+    /// normalisation.
     /// </para>
     /// <para><b>For Beginners:</b> This uses the same powerful attention mechanism
     /// found in models like GPT and BERT, allowing very sophisticated comparisons

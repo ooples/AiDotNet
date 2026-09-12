@@ -77,7 +77,9 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
         _chainingDistances = ComputeChainingDistances(_trainingDistanceMatrix);
 
         // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // The threshold is calibrated on leave-one-out training scores: each training point's neighbourhood
+        // excludes the point itself (PyOD's decision_scores_).
+        var trainingScores = ScoreAnomaliesInternal(X, scoringTrainingData: true);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
@@ -85,26 +87,18 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// IN-SAMPLE SCORING REQUIRES THE SAME INSTANCE, not an equal one. The training path is selected
-    /// by <see cref="object.ReferenceEquals(object, object)"/> against the matrix passed to Fit, so
-    /// that each training point can exclude ITSELF from its own neighbourhood.
-    /// </para>
-    /// <para>
-    /// Pass a value-identical copy and it takes the query path instead: every point keeps itself as a
-    /// zero-distance neighbour, the chain cost collapses toward zero, and scores come out far lower
-    /// than the in-sample call produced. The contamination threshold chosen during Fit was calibrated
-    /// with self-exclusion, so the two are not comparable and <c>Predict</c> can label a training
-    /// point differently than Fit did.
-    /// </para>
+    /// Every row is scored against the whole training set, as PyOD's decision_function does: a row equal to a
+    /// training point keeps that point as a zero-distance neighbour. The result depends only on the values. It
+    /// used to take the leave-one-out path only when handed the very matrix instance Fit saw, so an equal copy -
+    /// or a clone of the detector - scored the same data differently.
     /// </remarks>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        return ScoreAnomaliesInternal(X, scoringTrainingData: false);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool scoringTrainingData)
     {
         ValidateInput(X);
 
@@ -120,7 +114,6 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
                 $"{nameof(COFDetector<T>)} is not fitted: the training data is missing.");
 
         var scores = new Vector<T>(X.Rows);
-        bool scoringTrainingData = ReferenceEquals(X, _trainingData);
         var distanceMatrix = scoringTrainingData
             ? trainingDistanceMatrix
             : ComputeDistanceMatrix(X, trainingData);

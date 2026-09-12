@@ -222,30 +222,22 @@ public partial class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                SetTrainingMode(true);
-                try
-                {
-                    var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    var preprocessedLabels = PreprocessLabels(labels, preprocessed.Shape[0]);
-                    var output = Forward(preprocessed);
-                    double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
-                        output.ToVector(), preprocessedLabels.ToVector()));
-                    // Backward removed — tape-based training handles gradients
-                    _optimizer.UpdateParameters(Layers);
+                // One real training step per epoch, through the same Train the synchronous API uses:
+                // it preprocesses tokens and labels, records the forward on the tape and steps the
+                // configured optimizer. The previous loop computed a detached loss and then called
+                // _optimizer.UpdateParameters(Layers) with no backward, so every epoch stepped on
+                // stale (initially zero) gradients and async training never changed a weight.
+                Train(tokenEmbeddings, labels);
+                double loss = LastLoss is { } lastLoss ? NumOps.ToDouble(lastLoss) : 0.0;
 
-                    progress?.Report(new NERTrainingProgress
-                    {
-                        CurrentEpoch = epoch,
-                        TotalEpochs = epochs,
-                        CurrentBatch = 1,
-                        TotalBatches = 1,
-                        Loss = loss
-                    });
-                }
-                finally
+                progress?.Report(new NERTrainingProgress
                 {
-                    SetTrainingMode(false);
-                }
+                    CurrentEpoch = epoch,
+                    TotalEpochs = epochs,
+                    CurrentBatch = 1,
+                    TotalBatches = 1,
+                    Loss = loss
+                });
             }
         }, cancellationToken);
     }

@@ -3,11 +3,13 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
@@ -21,46 +23,30 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
 /// <remarks>
 /// <para>
-/// ANIL is a simplified version of MAML that only adapts the classification head
-/// during inner-loop adaptation while keeping the feature extractor (body) frozen.
-/// This significantly reduces computation while often maintaining competitive performance.
+/// ANIL (Raghu et al. 2020) is MAML with the inner loop removed from every layer but the head: each task adapts
+/// only the final linear classifier on its support set, while the body (the meta-model, which embeds each
+/// example) is updated only by the outer loop. The outer loop meta-learns the body and the head's
+/// initialisation together from the query loss after adaptation.
 /// </para>
 /// <para>
-/// <b>Key Insight:</b> Most of the "learning to learn" ability in MAML comes from
-/// learning a good feature representation, not from adapting the entire network.
-/// By only adapting the final classification layer, ANIL achieves:
-/// </para>
-/// <list type="bullet">
-/// <item>Much faster adaptation (fewer parameters to update)</item>
-/// <item>Lower memory usage (no gradients stored for the body)</item>
-/// <item>Comparable performance to full MAML in many scenarios</item>
-/// </list>
-/// <para>
-/// <b>For Beginners:</b> Think of a neural network as having two parts:
+/// <b>Per example.</b> The body embeds every row of the input into a <see cref="ANILOptions{T,TInput,TOutput}.FeatureDimension"/>-wide
+/// representation, and the head scores every row: <c>logits = h W^T + b</c>, one row of
+/// <see cref="ANILOptions{T,TInput,TOutput}.NumClasses"/> scores per example. The loss is the configured loss on
+/// those logits against one class index per example - cross-entropy by default, the paper's classification loss.
 /// </para>
 /// <para>
-/// 1. <b>Body (Feature Extractor):</b> Like learning to see and understand images
-/// 2. <b>Head (Classifier):</b> Like learning which button to press for each category
+/// <b>Exact meta-gradient.</b> "We do not remove second order terms in ANIL (unlike in first-order MAML); second
+/// order terms still persist through the derivative of the inner loop update for the head parameters" (Raghu et
+/// al. 2020, App. C.1). The head's initialisation receives <c>prod_k (I - alpha H_k)</c> applied to the query
+/// gradient, and the body receives, besides its direct query gradient, the cross term through each inner step's
+/// support gradient. Both second-order pieces are Hessian-vector products taken as central differences of
+/// gradients along the head direction, so they cost two gradient evaluations per inner step.
+/// <see cref="ANILOptions{T,TInput,TOutput}.UseFirstOrder"/> drops them.
 /// </para>
 /// <para>
-/// ANIL says: "The 'seeing' part is general enough - we just need to learn
-/// which button to press for each new task!" So it only updates the button-pressing
-/// part (head) and keeps the seeing part (body) fixed during adaptation.
-/// </para>
-/// <para>
-/// <b>Algorithm (MAML-style with head-only adaptation):</b>
-/// <code>
-/// For each task batch:
-///   For each task:
-///     1. Clone the classification head parameters
-///     2. Freeze body, only compute gradients for head
-///     3. For each adaptation step:
-///        a. Forward pass through body (frozen) + head
-///        b. Compute loss on support set
-///        c. Update ONLY head parameters
-///     4. Evaluate adapted head on query set
-///   Meta-update: body (outer loop) + head initialization (inner loop starting point)
-/// </code>
+/// <b>For Beginners:</b> Think of a neural network as having two parts: a body that turns each example into a
+/// description (an embedding), and a head that turns a description into a score for each class. ANIL keeps the
+/// body fixed while it adapts to a new task and only retrains the small head; the body improves across tasks.
 /// </para>
 /// <para>
 /// Reference: Raghu, A., Raghu, M., Bengio, S., &amp; Vinyals, O. (2020).
@@ -81,112 +67,73 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
-
     private readonly ANILOptions<T, TInput, TOutput> _anilOptions;
 
-    // Head parameters (adapted per-task)
-    private Vector<T> _headWeights;
+    /// <summary>The head's meta-learned initial weights W, <c>[NumClasses x FeatureDimension]</c> row-major.</summary>
     [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T>? _headBias;
+    private Vector<T> _headWeights;
 
-    // Body parameters (frozen during inner loop, updated in outer loop)
-    private int _bodyParameterCount;
-    private int _headParameterCount;
+    /// <summary>The head's meta-learned initial bias b, <c>[NumClasses]</c>; empty when UseHeadBias is off.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _headBias;
 
     /// <summary>
     /// Initializes a new instance of the ANILAlgorithm class.
     /// </summary>
     /// <param name="options">ANIL configuration options containing the model and all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when options is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
+    /// <exception cref="ArgumentException">Thrown when the class count or feature width is not positive.</exception>
     /// <example>
     /// <code>
-    /// // Create ANIL with minimal configuration
-    /// var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
-    ///
-    /// // Create ANIL with custom configuration
-    /// var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// // A body that embeds each example into 64 values, and a 5-way head over them
+    /// var options = new ANILOptions&lt;double, Matrix&lt;double&gt;, Tensor&lt;double&gt;&gt;(body)
     /// {
-    ///     AdaptationSteps = 5,
-    ///     InnerLearningRate = 0.01,
     ///     NumClasses = 5,
-    ///     FeatureDimension = 512
+    ///     FeatureDimension = 64
     /// };
-    /// var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var anil = new ANILAlgorithm&lt;double, Matrix&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public ANILAlgorithm(ANILOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            options.LossFunction ?? new CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
             options.InnerOptimizer)
     {
         _anilOptions = options;
+        if (options.NumClasses <= 0)
+            throw new ArgumentException("NumClasses must be positive.", nameof(options));
+        if (options.FeatureDimension <= 0)
+            throw new ArgumentException("FeatureDimension must be positive.", nameof(options));
 
-        // Initialize head weights - must be done before InitializeHeadParameters
-        // to satisfy the compiler's non-nullable field requirement
-        _headWeights = new Vector<T>(options.FeatureDimension * options.NumClasses);
-
-        // Initialize head parameters with proper values
-        InitializeHeadParameters();
+        _headWeights = InitializeHeadWeights();
+        _headBias = new Vector<T>(options.UseHeadBias ? options.NumClasses : 0);
     }
 
     /// <summary>
     /// Gets the algorithm type identifier for this meta-learner.
     /// </summary>
     /// <value>Returns <see cref="MetaLearningAlgorithmType.ANIL"/>.</value>
-    /// <remarks>
-    /// <para>
-    /// This property identifies the algorithm as ANIL (Almost No Inner Loop),
-    /// a simplified MAML variant that only adapts the classification head.
-    /// </para>
-    /// </remarks>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ANIL;
 
     /// <summary>
-    /// Performs one meta-training step using ANIL's head-only adaptation approach.
+    /// Performs one meta-training step: head-only adaptation per task, then one update of the body and the head's
+    /// initialisation from the query losses.
     /// </summary>
     /// <param name="taskBatch">A batch of tasks to meta-train on, each containing support and query sets.</param>
-    /// <returns>The average meta-loss across all tasks in the batch (evaluated on query sets).</returns>
+    /// <returns>The average query loss across the batch, after adaptation.</returns>
     /// <exception cref="ArgumentException">Thrown when the task batch is null or empty.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when meta-gradient computation fails.</exception>
     /// <remarks>
     /// <para>
-    /// ANIL meta-training is a simplified version of MAML:
-    /// </para>
-    /// <para>
-    /// <b>ANIL Inner Loop (per task):</b>
-    /// 1. Clone the head parameters from the meta-learned initialization
-    /// 2. Keep body parameters frozen (no gradients computed for body)
-    /// 3. Perform gradient descent on head parameters using support set
-    /// 4. Evaluate adapted model on query set
-    /// </para>
-    /// <para>
-    /// <b>ANIL Outer Loop:</b>
-    /// 1. Accumulate gradients from all tasks' query losses
-    /// 2. Update body parameters to improve feature extraction
-    /// 3. Update head initialization to provide better starting point
-    /// </para>
-    /// <para>
-    /// <b>Key Differences from MAML:</b>
-    /// - Only head parameters are updated in inner loop
-    /// - Body parameters are only updated in outer loop
-    /// - First-order approximation is typically used
-    /// - Much faster per-iteration (fewer parameters to track)
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> ANIL learns two things:
-    /// 1. A good feature extractor that works for all tasks (updated in outer loop)
-    /// 2. A good starting point for the classifier head (adapted per task)
-    ///
-    /// During adaptation, only the classifier changes - the "vision system" stays fixed.
-    /// This is much faster because the classifier is much smaller than the full network.
+    /// This used to treat each task's whole support set as one example (the body's flattened output was the
+    /// "feature vector"), estimate head gradients by one-sided finite differences, and compute the body gradient by
+    /// writing the head's weights into the tail of the body's own parameter vector and differentiating the
+    /// configured loss on the body's raw output - so the head never reached the body's objective, and the body's
+    /// last parameters were overwritten by head weights on every step. <see cref="ANILOptions{T,TInput,TOutput}.UseFirstOrder"/>
+    /// was ignored.
     /// </para>
     /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -196,137 +143,136 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
-        // Accumulate gradients for body and head
-        Vector<T>? accumulatedBodyGradients = null;
-        Vector<T>? accumulatedHeadGradients = null;
+        var body = ParamModel.GetParameters();
+        double alpha = _anilOptions.InnerLearningRate;
+        Vector<T>? bodyGradient = null;
+        Vector<T>? headWeightGradient = null;
+        Vector<T>? headBiasGradient = null;
         T totalLoss = NumOps.Zero;
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Clone head parameters for this task
-            var taskHeadWeights = CloneVector(_headWeights);
-            var taskHeadBias = _headBias != null ? CloneVector(_headBias) : null;
-
-            // Inner loop: adapt head on support set
-            for (int step = 0; step < _anilOptions.AdaptationSteps; step++)
-            {
-                // Forward pass with frozen body + current head
-                var supportPredictions = ForwardWithHead(task.SupportInput, taskHeadWeights, taskHeadBias);
-
-                // Compute loss on support set
-                T supportLoss = ComputeLossFromOutput(supportPredictions, task.SupportOutput);
-
-                // Compute gradients for HEAD ONLY
-                var headGradients = ComputeHeadGradients(
-                    task.SupportInput, task.SupportOutput, taskHeadWeights, taskHeadBias);
-
-                // Update head parameters
-                taskHeadWeights = ApplyGradients(
-                    taskHeadWeights, headGradients.weightGradients, _anilOptions.InnerLearningRate);
-
-                if (taskHeadBias != null && headGradients.biasGradients != null)
-                {
-                    taskHeadBias = ApplyGradients(
-                        taskHeadBias, headGradients.biasGradients, _anilOptions.InnerLearningRate);
-                }
-            }
-
-            // Evaluate on query set with adapted head
-            var queryPredictions = ForwardWithHead(task.QueryInput, taskHeadWeights, taskHeadBias);
-            T taskLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
-            totalLoss = NumOps.Add(totalLoss, taskLoss);
-
-            // Compute meta-gradients
-            var (bodyGradients, headMetaGradients) = ComputeMetaGradients(
-                task, taskHeadWeights, taskHeadBias, taskLoss);
-
-            // Accumulate gradients
-            if (accumulatedBodyGradients == null)
-            {
-                accumulatedBodyGradients = bodyGradients;
-                accumulatedHeadGradients = headMetaGradients;
-            }
-            else
-            {
-                for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-                {
-                    accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGradients[i]);
-                }
-                if (accumulatedHeadGradients != null)
-                {
-                    for (int i = 0; i < accumulatedHeadGradients.Length; i++)
-                    {
-                        accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headMetaGradients[i]);
-                    }
-                }
-            }
+            var (queryLoss, taskBodyGradient, lambdaWeights, lambdaBias) = TaskMetaGradient(task, alpha);
+            totalLoss = NumOps.Add(totalLoss, queryLoss);
+            bodyGradient = Accumulate(bodyGradient, taskBodyGradient);
+            headWeightGradient = Accumulate(headWeightGradient, lambdaWeights);
+            headBiasGradient = Accumulate(headBiasGradient, lambdaBias);
         }
 
-        if (accumulatedBodyGradients == null || accumulatedHeadGradients == null)
-        {
-            throw new InvalidOperationException("Failed to compute meta-gradients.");
-        }
+        T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
+        bodyGradient = Scale(bodyGradient ?? new Vector<T>(body.Length), batchSize);
+        headWeightGradient = Scale(headWeightGradient ?? new Vector<T>(_headWeights.Length), batchSize);
+        headBiasGradient = Scale(headBiasGradient ?? new Vector<T>(_headBias.Length), batchSize);
 
-        // Average gradients
-        T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-        {
-            accumulatedBodyGradients[i] = NumOps.Divide(accumulatedBodyGradients[i], batchSizeT);
-        }
-        for (int i = 0; i < accumulatedHeadGradients.Length; i++)
-        {
-            accumulatedHeadGradients[i] = NumOps.Divide(accumulatedHeadGradients[i], batchSizeT);
-        }
-
-        // Clip gradients if configured
         if (_anilOptions.GradientClipThreshold.HasValue && _anilOptions.GradientClipThreshold.Value > 0)
         {
-            accumulatedBodyGradients = ClipGradients(accumulatedBodyGradients, _anilOptions.GradientClipThreshold.Value);
-            accumulatedHeadGradients = ClipGradients(accumulatedHeadGradients, _anilOptions.GradientClipThreshold.Value);
+            bodyGradient = ClipGradients(bodyGradient, _anilOptions.GradientClipThreshold.Value);
+            headWeightGradient = ClipGradients(headWeightGradient, _anilOptions.GradientClipThreshold.Value);
+            if (headBiasGradient.Length > 0)
+                headBiasGradient = ClipGradients(headBiasGradient, _anilOptions.GradientClipThreshold.Value);
         }
 
-        // Update body parameters (outer loop)
-        UpdateBodyParameters(accumulatedBodyGradients);
+        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, _anilOptions.OuterLearningRate));
+        _headWeights = ApplyGradients(_headWeights, headWeightGradient, _anilOptions.OuterLearningRate);
+        if (_headBias.Length > 0)
+            _headBias = ApplyGradients(_headBias, headBiasGradient, _anilOptions.OuterLearningRate);
 
-        // Update head initialization (outer loop)
-        _headWeights = ApplyGradients(_headWeights, accumulatedHeadGradients, _anilOptions.OuterLearningRate);
+        return NumOps.Divide(totalLoss, batchSize);
+    }
 
-        return NumOps.Divide(totalLoss, batchSizeT);
+    /// <summary>
+    /// One task's query loss after head-only adaptation, and the exact gradient of that loss with respect to the body
+    /// and to the head's initialisation.
+    /// </summary>
+    private (T Loss, Vector<T> Body, Vector<T> Weights, Vector<T> Bias) TaskMetaGradient(
+        IMetaLearningTask<T, TInput, TOutput> task, double alpha)
+    {
+        var supportLabels = ClassifierOutputs<T>.Labels(task.SupportOutput, _anilOptions.NumClasses);
+        var queryLabels = ClassifierOutputs<T>.Labels(task.QueryOutput, _anilOptions.NumClasses);
+        var supportEmbeddings = Embed(MetaModel, task.SupportInput);
+        var queryEmbeddings = Embed(MetaModel, task.QueryInput);
+
+        var (weights, bias, trace) = AdaptHead(
+            supportEmbeddings, supportLabels, _headWeights, _headBias, _anilOptions.AdaptationSteps,
+            record: !_anilOptions.UseFirstOrder);
+
+        // Query loss after adaptation, and its gradient with respect to the adapted head. The head's L2 penalty
+        // regularises adaptation only; it is not part of the meta-objective.
+        var (queryLoss, lambdaWeights, lambdaBias) = HeadLossAndGradient(
+            queryEmbeddings, queryLabels, weights, bias, regularize: false);
+
+        var bodyGradient = BodyGradient(task.QueryInput, task.QueryOutput, weights, bias);
+
+        if (!_anilOptions.UseFirstOrder)
+        {
+            // Walk the inner loop back. head_{k+1} = head_k - alpha grad_head L_s(head_k, body), so the adjoint lambda
+            // of head_{k+1} sends -alpha * d/dbody (grad_head L_s . lambda) to the body and (I - alpha H_k) lambda back
+            // to head_k. Both are central differences along lambda.
+            for (int k = trace.Count - 1; k >= 0; k--)
+            {
+                var (stepWeights, stepBias) = trace[k];
+                double eps = DifferenceStep(stepWeights, stepBias, lambdaWeights, lambdaBias);
+                if (eps == 0) break;
+
+                var plusWeights = Shift(stepWeights, lambdaWeights, eps);
+                var plusBias = Shift(stepBias, lambdaBias, eps);
+                var minusWeights = Shift(stepWeights, lambdaWeights, -eps);
+                var minusBias = Shift(stepBias, lambdaBias, -eps);
+
+                var bodyPlus = BodyGradient(task.SupportInput, task.SupportOutput, plusWeights, plusBias);
+                var bodyMinus = BodyGradient(task.SupportInput, task.SupportOutput, minusWeights, minusBias);
+                bodyGradient = Combine(bodyGradient, bodyPlus, bodyMinus, -alpha / (2 * eps));
+
+                var (_, headPlusWeights, headPlusBias) = HeadLossAndGradient(
+                    supportEmbeddings, supportLabels, plusWeights, plusBias, regularize: true);
+                var (_, headMinusWeights, headMinusBias) = HeadLossAndGradient(
+                    supportEmbeddings, supportLabels, minusWeights, minusBias, regularize: true);
+                lambdaWeights = Combine(lambdaWeights, headPlusWeights, headMinusWeights, -alpha / (2 * eps));
+                lambdaBias = Combine(lambdaBias, headPlusBias, headMinusBias, -alpha / (2 * eps));
+            }
+        }
+
+        return (queryLoss, bodyGradient, lambdaWeights, lambdaBias);
+    }
+
+    /// <summary>One task's query loss and exact meta-gradient, for gradient checks.</summary>
+    internal (T Loss, Vector<T> Body, Vector<T> Weights, Vector<T> Bias) TaskMetaGradientForTesting(
+        IMetaLearningTask<T, TInput, TOutput> task)
+        => TaskMetaGradient(task, _anilOptions.InnerLearningRate);
+
+    /// <summary>One task's query loss after adaptation from the current body and head initialisation.</summary>
+    internal T TaskLossForTesting(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var (weights, bias, _) = AdaptHead(
+            Embed(MetaModel, task.SupportInput),
+            ClassifierOutputs<T>.Labels(task.SupportOutput, _anilOptions.NumClasses),
+            _headWeights, _headBias, _anilOptions.AdaptationSteps, record: false);
+        return HeadLossAndGradient(
+            Embed(MetaModel, task.QueryInput),
+            ClassifierOutputs<T>.Labels(task.QueryOutput, _anilOptions.NumClasses),
+            weights, bias, regularize: false).Loss;
+    }
+
+    /// <summary>Gets or sets a copy of the head's initial weights (for tests).</summary>
+    internal Vector<T> HeadWeightsForTesting
+    {
+        get => Copy(_headWeights);
+        set => _headWeights = Copy(value);
+    }
+
+    /// <summary>Gets or sets a copy of the head's initial bias (for tests).</summary>
+    internal Vector<T> HeadBiasForTesting
+    {
+        get => Copy(_headBias);
+        set => _headBias = Copy(value);
     }
 
     /// <summary>
     /// Adapts the meta-learned model to a new task by only updating the classification head.
     /// </summary>
     /// <param name="task">The new task containing support set examples for adaptation.</param>
-    /// <returns>A new model instance that has been adapted to the given task with an updated head.</returns>
+    /// <returns>A model with its own copy of the body and the head adapted to this task.</returns>
     /// <exception cref="ArgumentNullException">Thrown when task is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// ANIL adaptation is significantly faster than full MAML adaptation because
-    /// only the classification head parameters are updated.
-    /// </para>
-    /// <para>
-    /// <b>Adaptation Process:</b>
-    /// 1. Clone the meta-learned head parameters
-    /// 2. Optionally reinitialize head (if configured)
-    /// 3. For each adaptation step:
-    ///    a. Forward pass: frozen body + current head
-    ///    b. Compute loss on support set
-    ///    c. Update head parameters with gradient descent
-    /// 4. Return model with frozen body + adapted head
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> When you give ANIL a new task:
-    /// 1. It keeps its "vision" (feature extractor) exactly the same
-    /// 2. It only retrains the "decision maker" (classifier head)
-    /// 3. This is like teaching someone who already knows how to see,
-    ///    just teaching them what labels to assign to things
-    /// </para>
-    /// <para>
-    /// <b>Speed Advantage:</b> If your network has 1 million parameters and the head
-    /// has only 5000, ANIL updates 200x fewer parameters per adaptation step!
-    /// </para>
-    /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -334,429 +280,230 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             throw new ArgumentNullException(nameof(task));
         }
 
-        // Clone the meta model
-        var adaptedModel = CloneModel();
+        var body = CloneModel();
+        var initialWeights = _anilOptions.ReinitializeHead ? InitializeHeadWeights() : Copy(_headWeights);
+        var initialBias = _anilOptions.ReinitializeHead ? new Vector<T>(_headBias.Length) : Copy(_headBias);
 
-        // Clone head parameters for adaptation
-        var adaptedHeadWeights = _anilOptions.ReinitializeHead
-            ? InitializeHeadWeights()
-            : CloneVector(_headWeights);
-        var adaptedHeadBias = _headBias != null && !_anilOptions.ReinitializeHead
-            ? CloneVector(_headBias)
-            : (_anilOptions.UseHeadBias ? InitializeHeadBias() : null);
+        var (weights, bias, _) = AdaptHead(
+            Embed(body, task.SupportInput),
+            ClassifierOutputs<T>.Labels(task.SupportOutput, _anilOptions.NumClasses),
+            initialWeights, initialBias, _anilOptions.AdaptationSteps, record: false);
 
-        // Inner loop: adapt head on support set
-        for (int step = 0; step < _anilOptions.AdaptationSteps; step++)
-        {
-            // Forward pass with frozen body + current head
-            var supportPredictions = ForwardWithHead(task.SupportInput, adaptedHeadWeights, adaptedHeadBias);
-
-            // Compute loss on support set
-            T supportLoss = ComputeLossFromOutput(supportPredictions, task.SupportOutput);
-
-            // Add L2 regularization if configured
-            if (_anilOptions.HeadL2Regularization > 0)
-            {
-                T l2Penalty = ComputeL2Penalty(adaptedHeadWeights);
-                supportLoss = NumOps.Add(supportLoss,
-                    NumOps.Multiply(NumOps.FromDouble(_anilOptions.HeadL2Regularization), l2Penalty));
-            }
-
-            // Compute gradients for HEAD ONLY
-            var headGradients = ComputeHeadGradients(
-                task.SupportInput, task.SupportOutput, adaptedHeadWeights, adaptedHeadBias);
-
-            // Update head parameters
-            adaptedHeadWeights = ApplyGradients(
-                adaptedHeadWeights, headGradients.weightGradients, _anilOptions.InnerLearningRate);
-
-            if (adaptedHeadBias != null && headGradients.biasGradients != null)
-            {
-                adaptedHeadBias = ApplyGradients(
-                    adaptedHeadBias, headGradients.biasGradients, _anilOptions.InnerLearningRate);
-            }
-        }
-
-        // Create ANIL model with adapted head
-        return new ANILModel<T, TInput, TOutput>(
-            adaptedModel,
-            adaptedHeadWeights,
-            adaptedHeadBias,
-            _anilOptions);
+        return new ANILModel<T, TInput, TOutput>(body, weights, bias.Length > 0 ? bias : null, _anilOptions);
     }
 
-    #region Head Parameter Management
-
-    /// <summary>
-    /// Initializes the classification head parameters.
-    /// </summary>
-    private void InitializeHeadParameters()
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The configured loss on <c>[rows, NumClasses]</c> scores against one class index per example. The base's
+    /// version flattened both to vectors, which for cross-entropy scores the whole batch as ONE distribution.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
     {
-        // Compute body and head parameter counts
-        var totalParams = ParamModel.GetParameters();
+        var labels = ClassifierOutputs<T>.Labels(expectedOutput, _anilOptions.NumClasses);
+        var scores = ClassifierOutputs<T>.ScoreRows(predictions, labels.Length);
+        using var noGrad = new NoGradScope<T>();
+        return LossFunction.ComputeTapeLoss(scores, labels)[0];
+    }
 
-        // Estimate head size based on options
-        _headParameterCount = _anilOptions.FeatureDimension * _anilOptions.NumClasses;
-        if (_anilOptions.UseHeadBias)
+    #region Head
+
+    /// <summary>The body's per-example embeddings, <c>[rows, FeatureDimension]</c>.</summary>
+    private Tensor<T> Embed(IFullModel<T, TInput, TOutput> body, TInput input)
+    {
+        Tensor<T> embeddings;
+        using (new NoGradScope<T>())
         {
-            _headParameterCount += _anilOptions.NumClasses;
+            embeddings = ClassifierOutputs<T>.AsRows(body.Predict(input));
         }
 
-        _bodyParameterCount = totalParams.Length - _headParameterCount;
-        if (_bodyParameterCount < 0)
+        if (embeddings.Shape[1] != _anilOptions.FeatureDimension)
         {
-            // If model is smaller than expected head, adjust
-            _bodyParameterCount = (int)(totalParams.Length * 0.9);
-            _headParameterCount = totalParams.Length - _bodyParameterCount;
+            throw new InvalidOperationException(
+                $"The body emits {embeddings.Shape[1]}-wide embeddings per example but FeatureDimension is "
+                + $"{_anilOptions.FeatureDimension}. FeatureDimension is the width of the representation the head "
+                + "reads - the body's per-example output width.");
         }
 
-        // Initialize head weights
-        _headWeights = InitializeHeadWeights();
+        return embeddings;
+    }
 
-        if (_anilOptions.UseHeadBias)
+    private Tensor<T> WeightsTensor(Vector<T> weights)
+        => Tensor<T>.FromVector(weights).Reshape(_anilOptions.NumClasses, _anilOptions.FeatureDimension);
+
+    private static Tensor<T>? BiasTensor(Vector<T> bias) => bias.Length > 0 ? Tensor<T>.FromVector(bias) : null;
+
+    /// <summary>
+    /// The configured loss of the head on fixed embeddings, and its exact gradient with respect to W and b.
+    /// </summary>
+    /// <remarks>
+    /// dL/dlogits comes from differentiating the loss on the tape, so any configured loss works; the chain rule
+    /// through <c>logits = h W^T + b</c> is then exact. It replaces a one-sided finite difference per head weight.
+    /// </remarks>
+    private (T Loss, Vector<T> Weights, Vector<T> Bias) HeadLossAndGradient(
+        Tensor<T> embeddings, Tensor<T> labels, Vector<T> weights, Vector<T> bias, bool regularize)
+    {
+        Tensor<T> logits;
+        using (new NoGradScope<T>())
         {
-            _headBias = InitializeHeadBias();
+            logits = EmbeddingClassificationLoss<T>.LinearHead(embeddings, WeightsTensor(weights), BiasTensor(bias));
         }
+
+        var (loss, logitGradient) = LossFunctionExtensions.ComputeLossAndGradient(LossFunction, logits, labels);
+
+        int rows = embeddings.Shape[0];
+        int classes = _anilOptions.NumClasses;
+        int width = _anilOptions.FeatureDimension;
+        var weightGradient = new Vector<T>(weights.Length);
+        var biasGradient = new Vector<T>(bias.Length);
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < classes; c++)
+            {
+                T g = logitGradient[r * classes + c];
+                for (int f = 0; f < width; f++)
+                {
+                    weightGradient[c * width + f] = NumOps.Add(
+                        weightGradient[c * width + f], NumOps.Multiply(g, embeddings[r * width + f]));
+                }
+
+                if (bias.Length > 0) biasGradient[c] = NumOps.Add(biasGradient[c], g);
+            }
+        }
+
+        if (regularize && _anilOptions.HeadL2Regularization > 0)
+        {
+            T strength = NumOps.FromDouble(_anilOptions.HeadL2Regularization);
+            T penalty = NumOps.Zero;
+            for (int i = 0; i < weights.Length; i++)
+            {
+                penalty = NumOps.Add(penalty, NumOps.Multiply(weights[i], weights[i]));
+                weightGradient[i] = NumOps.Add(weightGradient[i], NumOps.Multiply(strength, weights[i]));
+            }
+
+            loss = NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(0.5 * _anilOptions.HeadL2Regularization), penalty));
+        }
+
+        return (loss, weightGradient, biasGradient);
     }
 
     /// <summary>
-    /// Initializes head weights using Xavier/He initialization.
+    /// The body's gradient of the configured loss through a fixed head: the head is composed into the loss the
+    /// body differentiates, so the chain rule runs through it to every example's embedding.
+    /// </summary>
+    private Vector<T> BodyGradient(TInput input, TOutput labels, Vector<T> weights, Vector<T> bias)
+    {
+        var headWeights = WeightsTensor(weights);
+        var headBias = BiasTensor(bias);
+        var composed = new EmbeddingClassificationLoss<T>(
+            embeddings => EmbeddingClassificationLoss<T>.LinearHead(embeddings, headWeights, headBias), LossFunction);
+        return ComputeGradients(MetaModel, input, labels, composed);
+    }
+
+    /// <summary>Head-only inner loop: SGD on the support loss, optionally recording each step's starting head.</summary>
+    private (Vector<T> Weights, Vector<T> Bias, List<(Vector<T> Weights, Vector<T> Bias)> Trace) AdaptHead(
+        Tensor<T> supportEmbeddings, Tensor<T> supportLabels, Vector<T> initialWeights, Vector<T> initialBias,
+        int steps, bool record)
+    {
+        var weights = Copy(initialWeights);
+        var bias = Copy(initialBias);
+        var trace = new List<(Vector<T> Weights, Vector<T> Bias)>(record ? steps : 0);
+        for (int step = 0; step < steps; step++)
+        {
+            if (record) trace.Add((weights, bias));
+            var (_, weightGradient, biasGradient) = HeadLossAndGradient(
+                supportEmbeddings, supportLabels, weights, bias, regularize: true);
+            weights = ApplyGradients(weights, weightGradient, _anilOptions.InnerLearningRate);
+            if (bias.Length > 0) bias = ApplyGradients(bias, biasGradient, _anilOptions.InnerLearningRate);
+        }
+
+        return (weights, bias, trace);
+    }
+
+    /// <summary>
+    /// The central-difference step along the head direction: small relative to the head, and zero when there is
+    /// no direction to differentiate along.
+    /// </summary>
+    private static double DifferenceStep(Vector<T> weights, Vector<T> bias, Vector<T> directionWeights, Vector<T> directionBias)
+    {
+        double directionNorm = 0, headNorm = 0;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            double d = NumOps.ToDouble(directionWeights[i]);
+            double w = NumOps.ToDouble(weights[i]);
+            directionNorm += d * d;
+            headNorm += w * w;
+        }
+
+        for (int i = 0; i < bias.Length; i++)
+        {
+            double d = NumOps.ToDouble(directionBias[i]);
+            double b = NumOps.ToDouble(bias[i]);
+            directionNorm += d * d;
+            headNorm += b * b;
+        }
+
+        directionNorm = Math.Sqrt(directionNorm);
+        return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(headNorm)) / directionNorm;
+    }
+
+    private static Vector<T> Shift(Vector<T> values, Vector<T> direction, double step)
+    {
+        var shifted = new Vector<T>(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            shifted[i] = NumOps.Add(values[i], NumOps.Multiply(NumOps.FromDouble(step), direction[i]));
+        }
+
+        return shifted;
+    }
+
+    /// <summary><c>baseline + scale * (plus - minus)</c>.</summary>
+    private static Vector<T> Combine(Vector<T> baseline, Vector<T> plus, Vector<T> minus, double scale)
+    {
+        var combined = new Vector<T>(baseline.Length);
+        T s = NumOps.FromDouble(scale);
+        for (int i = 0; i < baseline.Length; i++)
+        {
+            combined[i] = NumOps.Add(baseline[i], NumOps.Multiply(s, NumOps.Subtract(plus[i], minus[i])));
+        }
+
+        return combined;
+    }
+
+    private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
+    {
+        if (sum is null) return Copy(values);
+        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
+        return sum;
+    }
+
+    private static Vector<T> Scale(Vector<T> values, T divisor)
+    {
+        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
+        return values;
+    }
+
+    private static Vector<T> Copy(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
+        return copy;
+    }
+
+    /// <summary>
+    /// Initial head weights, uniform in <c>[-s, s]</c> with <c>s = sqrt(2 / FeatureDimension)</c>.
     /// </summary>
     private Vector<T> InitializeHeadWeights()
     {
         int size = _anilOptions.FeatureDimension * _anilOptions.NumClasses;
         var weights = new Vector<T>(size);
-
-        // He initialization (suitable for ReLU activations in body)
         double scale = Math.Sqrt(2.0 / _anilOptions.FeatureDimension);
-
         for (int i = 0; i < size; i++)
         {
-            double value = (RandomGenerator.NextDouble() * 2 - 1) * scale;
-            weights[i] = NumOps.FromDouble(value);
+            weights[i] = NumOps.FromDouble((RandomGenerator.NextDouble() * 2 - 1) * scale);
         }
 
         return weights;
-    }
-
-    /// <summary>
-    /// Initializes head bias to zeros.
-    /// </summary>
-    private Vector<T> InitializeHeadBias()
-    {
-        var bias = new Vector<T>(_anilOptions.NumClasses);
-        // Initialize to zeros
-        for (int i = 0; i < bias.Length; i++)
-        {
-            bias[i] = NumOps.Zero;
-        }
-        return bias;
-    }
-
-    /// <summary>
-    /// Clones a vector.
-    /// </summary>
-    private Vector<T> CloneVector(Vector<T> source)
-    {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            clone[i] = source[i];
-        }
-        return clone;
-    }
-
-    #endregion
-
-    #region Forward Pass
-
-    /// <summary>
-    /// Performs forward pass with custom head parameters.
-    /// </summary>
-    /// <param name="input">The input data.</param>
-    /// <param name="headWeights">The head weight parameters.</param>
-    /// <param name="headBias">The head bias parameters (optional).</param>
-    /// <returns>The model output.</returns>
-    private TOutput ForwardWithHead(TInput input, Vector<T> headWeights, Vector<T>? headBias)
-    {
-        // Get features from body (frozen)
-        var features = ExtractFeatures(input);
-
-        // Apply head (linear layer + softmax for classification)
-        var logits = ComputeLogits(features, headWeights, headBias);
-
-        return ConvertFromVector(logits);
-    }
-
-    /// <summary>
-    /// Extracts features using the frozen body of the model.
-    /// </summary>
-    private Vector<T> ExtractFeatures(TInput input)
-    {
-        // Use the meta model to extract features
-        // In a full implementation, this would use a feature extraction layer
-        var output = MetaModel.Predict(input);
-        var features = ConvertToVector(output);
-
-        if (features == null)
-        {
-            // Return a feature vector based on expected dimension
-            features = new Vector<T>(_anilOptions.FeatureDimension);
-        }
-
-        return features;
-    }
-
-    /// <summary>
-    /// Computes logits from features using the head parameters.
-    /// </summary>
-    private Vector<T> ComputeLogits(Vector<T> features, Vector<T> headWeights, Vector<T>? headBias)
-    {
-        var logits = new Vector<T>(_anilOptions.NumClasses);
-
-        // Linear transformation: logits = features * W + b
-        int featureDim = Math.Min(features.Length, _anilOptions.FeatureDimension);
-
-        for (int c = 0; c < _anilOptions.NumClasses; c++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int f = 0; f < featureDim; f++)
-            {
-                int weightIdx = c * _anilOptions.FeatureDimension + f;
-                if (weightIdx < headWeights.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(features[f], headWeights[weightIdx]));
-                }
-            }
-
-            if (headBias != null && c < headBias.Length)
-            {
-                sum = NumOps.Add(sum, headBias[c]);
-            }
-
-            logits[c] = sum;
-        }
-
-        return logits;
-    }
-
-    /// <summary>
-    /// Converts a vector to the output type.
-    /// </summary>
-    private TOutput ConvertFromVector(Vector<T> vector)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)vector;
-        }
-
-        // Handle Tensor<T>
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(vector);
-        }
-
-        // Handle T[]
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)vector.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
-    }
-
-    #endregion
-
-    #region Gradient Computation
-
-    /// <summary>
-    /// Computes gradients for head parameters only.
-    /// </summary>
-    private (Vector<T> weightGradients, Vector<T>? biasGradients) ComputeHeadGradients(
-        TInput input, TOutput expectedOutput, Vector<T> headWeights, Vector<T>? headBias)
-    {
-        // Use finite differences for gradient computation
-        double epsilon = 1e-5;
-
-        // Compute baseline loss
-        var basePredictions = ForwardWithHead(input, headWeights, headBias);
-        T baseLoss = ComputeLossFromOutput(basePredictions, expectedOutput);
-
-        // Compute weight gradients
-        var weightGradients = new Vector<T>(headWeights.Length);
-        for (int i = 0; i < headWeights.Length; i++)
-        {
-            // Perturb weight
-            T original = headWeights[i];
-            headWeights[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-
-            var perturbedPred = ForwardWithHead(input, headWeights, headBias);
-            T perturbedLoss = ComputeLossFromOutput(perturbedPred, expectedOutput);
-
-            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(baseLoss)) / epsilon;
-            weightGradients[i] = NumOps.FromDouble(grad);
-
-            // Restore
-            headWeights[i] = original;
-        }
-
-        // Compute bias gradients if applicable
-        Vector<T>? biasGradients = null;
-        if (headBias != null)
-        {
-            biasGradients = new Vector<T>(headBias.Length);
-            for (int i = 0; i < headBias.Length; i++)
-            {
-                T original = headBias[i];
-                headBias[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-
-                var perturbedPred = ForwardWithHead(input, headWeights, headBias);
-                T perturbedLoss = ComputeLossFromOutput(perturbedPred, expectedOutput);
-
-                double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(baseLoss)) / epsilon;
-                biasGradients[i] = NumOps.FromDouble(grad);
-
-                headBias[i] = original;
-            }
-        }
-
-        return (weightGradients, biasGradients);
-    }
-
-    /// <summary>
-    /// Computes meta-gradients for body and head initialization.
-    /// </summary>
-    private (Vector<T> bodyGradients, Vector<T> headGradients) ComputeMetaGradients(
-        IMetaLearningTask<T, TInput, TOutput> task,
-        Vector<T> adaptedHeadWeights,
-        Vector<T>? adaptedHeadBias,
-        T queryLoss)
-    {
-        if (_anilOptions.UseFirstOrder)
-        {
-            // First-order approximation: use query gradients directly
-            return ComputeFirstOrderMetaGradients(task, adaptedHeadWeights, adaptedHeadBias);
-        }
-
-        // Second-order would require differentiating through the adaptation process
-        // For simplicity, we use first-order here
-        return ComputeFirstOrderMetaGradients(task, adaptedHeadWeights, adaptedHeadBias);
-    }
-
-    /// <summary>
-    /// Computes first-order meta-gradients.
-    /// </summary>
-    private (Vector<T> bodyGradients, Vector<T> headGradients) ComputeFirstOrderMetaGradients(
-        IMetaLearningTask<T, TInput, TOutput> task,
-        Vector<T> adaptedHeadWeights,
-        Vector<T>? adaptedHeadBias)
-    {
-        // Compute body gradients using the adapted head
-        var bodyGradients = ComputeBodyGradients(task.QueryInput, task.QueryOutput, adaptedHeadWeights, adaptedHeadBias);
-
-        // Compute head initialization gradients
-        var (headGradients, _) = ComputeHeadGradients(task.QueryInput, task.QueryOutput, adaptedHeadWeights, adaptedHeadBias);
-
-        return (bodyGradients, headGradients);
-    }
-
-    /// <summary>
-    /// Computes gradients for body parameters using the adapted head.
-    /// </summary>
-    private Vector<T> ComputeBodyGradients(TInput input, TOutput expectedOutput, Vector<T> adaptedHeadWeights, Vector<T>? adaptedHeadBias)
-    {
-        // Set the adapted head parameters in the model before computing body gradients
-        // This ensures body gradients are computed with respect to the adapted classifier head
-        var currentParams = ParamModel.GetParameters();
-        var paramsWithAdaptedHead = new Vector<T>(currentParams.Length);
-
-        // Copy body parameters as-is
-        int bodyLen = Math.Min(_bodyParameterCount, currentParams.Length);
-        for (int i = 0; i < bodyLen; i++)
-        {
-            paramsWithAdaptedHead[i] = currentParams[i];
-        }
-
-        // Set adapted head weights
-        int headWeightsLen = Math.Min(adaptedHeadWeights.Length, currentParams.Length - bodyLen);
-        for (int i = 0; i < headWeightsLen; i++)
-        {
-            paramsWithAdaptedHead[bodyLen + i] = adaptedHeadWeights[i];
-        }
-
-        // Set adapted head bias if present
-        if (adaptedHeadBias != null)
-        {
-            int biasOffset = bodyLen + headWeightsLen;
-            int biasLen = Math.Min(adaptedHeadBias.Length, currentParams.Length - biasOffset);
-            for (int i = 0; i < biasLen; i++)
-            {
-                paramsWithAdaptedHead[biasOffset + i] = adaptedHeadBias[i];
-            }
-        }
-
-        // Temporarily set adapted head parameters
-        ParamModel.SetParameters(paramsWithAdaptedHead);
-
-        // Use the base model's gradient computation with adapted head
-        var fullGradients = ComputeGradients(MetaModel, input, expectedOutput);
-
-        // Restore original parameters
-        ParamModel.SetParameters(currentParams);
-
-        // Extract only body gradients (first _bodyParameterCount parameters)
-        var bodyGradients = new Vector<T>((int)(_bodyParameterCount));
-        int copyLen = Math.Min(_bodyParameterCount, fullGradients.Length);
-        for (int i = 0; i < copyLen; i++)
-        {
-            bodyGradients[i] = fullGradients[i];
-        }
-
-        return bodyGradients;
-    }
-
-    /// <summary>
-    /// Updates body parameters using gradients.
-    /// </summary>
-    private void UpdateBodyParameters(Vector<T> gradients)
-    {
-        var currentParams = ParamModel.GetParameters();
-        var updatedParams = new Vector<T>(currentParams.Length);
-
-        // Update body parameters (first _bodyParameterCount)
-        int bodyLen = Math.Min(_bodyParameterCount, currentParams.Length);
-        int gradLen = Math.Min(gradients.Length, bodyLen);
-
-        for (int i = 0; i < gradLen; i++)
-        {
-            T update = NumOps.Multiply(NumOps.FromDouble(_anilOptions.OuterLearningRate), gradients[i]);
-            updatedParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        // Keep head parameters unchanged in the main model
-        for (int i = bodyLen; i < currentParams.Length; i++)
-        {
-            updatedParams[i] = currentParams[i];
-        }
-
-        ParamModel.SetParameters(updatedParams);
-    }
-
-    #endregion
-
-    #region Utility Methods
-
-    /// <summary>
-    /// Computes L2 penalty for head weights.
-    /// </summary>
-    private T ComputeL2Penalty(Vector<T> weights)
-    {
-        T sum = NumOps.Zero;
-        sum = NumOps.Add(sum, Engine.DotProduct(weights, weights));
-        return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
     }
 
     #endregion

@@ -1,50 +1,47 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
-using AiDotNet.Extensions;
-using AiDotNet.Helpers;
+using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Editing;
 
 /// <summary>
-/// MGIE: MLLM-guided image editing with LLaVA-based instruction understanding.
+/// MGIE - instruction-based image editing guided by a multimodal large language model.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para>
-/// MGIE (Apple, 2024) guides instruction-based image editing through a multimodal LLM (LLaVA)
-/// that interprets and expands ambiguous editing instructions into detailed, expressive guidance.
-/// The LLM-derived guidance conditions a diffusion model for semantically faithful edits that
-/// align with user intent, bridging the gap between vague instructions and precise image modifications.
-/// </para>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Guiding Instruction-Based Image Editing via Multimodal Large Language Models" (Apple, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MGIE is a vision-language model that uses an LLM to understand
-/// editing instructions and guide a diffusion model for precise image edits. Default values
-/// follow the original paper settings.</para>
+/// <para><b>Architecture, per Fu et al. Sec. 3.</b> MGIE is a LATENT DIFFUSION model:</para>
+/// <list type="number">
+/// <item>An MLLM, initialized from LLaVA-7B, reads the image and the instruction and emits N
+/// special <c>[IMG]</c> tokens - "the latent visual imagination from the MLLM".</item>
+/// <item>The edit head T - "a 4-layer Transformer, which transforms language features into
+/// editing guidance" - maps those tokens to the latent guidance U.</item>
+/// <item>A diffusion model F, initialized from StableDiffusion-v1, denoises in the VAE latent
+/// space while cross-attending to U, and produces the edited image.</item>
+/// </list>
+///
+/// <para><b>Why this derives from <see cref="LatentDiffusionModelBase{T}"/>.</b> It previously
+/// derived from <c>VisionLanguageModelBase</c> and folded a flat list of layers in order. That
+/// shape cannot express the paper's model: a U-Net needs skip connections and timestep
+/// conditioning, and denoising is a loop rather than one forward pass. It also meant the model was
+/// checked by neural-network invariants that demand deterministic inference, which no sampler can
+/// satisfy. Deriving from the latent-diffusion base puts MGIE alongside its siblings in
+/// <c>AiDotNet.Diffusion.ImageEditing</c> - among them <c>InstructPix2PixModel</c>, which this
+/// paper builds directly on - and it inherits the scheduler, the sampling loop and the diffusion
+/// training objective instead of approximating them.</para>
+///
+/// <para><b>For Beginners:</b> MGIE edits a photo from a written instruction. A language model
+/// first works out what you meant and records it as a compact hint; a diffusion model then
+/// repeatedly removes noise from the picture, steered by that hint, until the edit appears.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create an MGIE model for MLLM-guided image editing
-/// // with LLaVA-based instruction understanding and diffusion generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MGIE&lt;double&gt;(architecture, "mgie.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MGIE&lt;double&gt;(architecture, new MGIEOptions());
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -58,260 +55,240 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Fu et al."
 )]
-public partial class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 {
-    private readonly MGIEOptions _options;
+    #region Constants
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
-
-    public MGIE(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        MGIEOptions? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new MGIEOptions();
-        _useNativeMode = false;
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
-
-    public MGIE(
-        NeuralNetworkArchitecture<T> architecture,
-        MGIEOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new MGIEOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
-
-    public int EmbeddingDimension => _options.DecoderDim;
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
-    int IVisualEncoder<T>.ImageChannels => 3;
-    public int OutputImageSize => _options.OutputImageSize;
-
-    public Tensor<T> EncodeImage(Tensor<T> image)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
-    }
+    /// <summary>StableDiffusion-v1 latent geometry: 4 latent channels at an 8x downsample.</summary>
+    private const int LATENT_CHANNELS = 4;
 
     /// <summary>
-    /// Edits an image using MGIE's MLLM-guided expressive instruction pipeline.
-    /// Per the paper (Fu et al., Apple 2024), MGIE uses a multimodal LLM (LLaVA)
-    /// to derive "expressive instructions" - concise, visually-grounded descriptions
-    /// of the intended edit. The pipeline:
-    /// (1) Visual encoding: CLIP ViT encodes the source image,
-    /// (2) MLLM instruction derivation: the LLaVA-based MLLM takes the image features
-    ///     and the user's brief instruction to generate an expressive instruction that
-    ///     captures the visual-aware editing intention with spatial and attribute details,
-    /// (3) Expressive instruction embedding: the derived instruction is projected into
-    ///     the diffusion model's conditioning space via learned linear projection,
-    /// (4) Edit-conditioned diffusion: an InstructPix2Pix-style latent diffusion model
-    ///     denoises with dual conditioning on the source image latent and the expressive
-    ///     instruction embedding. Uses dual CFG:
-    ///     pred = uncond + s_I*(img_cond - uncond) + s_T*(full_cond - img_cond),
-    /// (5) End-to-end: MLLM and diffusion model are jointly optimized.
-    /// Output: edited image tensor of size OutputImageSize * OutputImageSize * 3.
+    /// 4 noisy latent channels plus 4 channels of the encoded SOURCE image. MGIE inherits the
+    /// InstructPix2Pix conditioning shape, where the image being edited is concatenated to the
+    /// noisy latent rather than reaching the denoiser only through cross-attention.
     /// </summary>
-    public Tensor<T> EditImage(Tensor<T> image, string instruction)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(p);
+    private const int INPUT_CHANNELS = 8;
 
-        int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
-        int numSteps = _options.NumDiffusionSteps;
-        double guidanceScale = _options.GuidanceScale;
+    /// <summary>Cross-attention width of the StableDiffusion-v1 U-Net the paper initializes F from.</summary>
+    private const int CROSS_ATTENTION_DIM = 768;
 
-        // Step 1: CLIP ViT visual encoding
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
+    /// <summary>Base channel count of that same U-Net.</summary>
+    private const int BASE_CHANNELS = 320;
 
-        int visDim = visualFeatures.Length;
+    #endregion
 
-        // Step 2: Tokenize instruction and derive expressive instruction embedding
-        var instrTokens = TokenizeText(instruction);
+    #region Fields
 
-        // Step 3: Fuse visual features with instruction tokens via concatenation
-        // MLLM expressive instruction derivation handled by decoder layers
-        var condInput = visualFeatures.ConcatenateTensors(instrTokens);
+    private readonly MGIEOptions _editOptions;
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
 
-        // Step 4: Run decoder layers to produce edit conditioning
-        var conditioningEmb = condInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            conditioningEmb = Layers[i].Forward(conditioningEmb);
+    /// <summary>
+    /// The edit head T. Depth comes from <c>EditHeadLayers</c>, whose default is the paper's 4, so
+    /// the paper value is the default without being a constraint. Its width is the U-Net's
+    /// cross-attention width, because producing that context is the whole job of this stage.
+    /// </summary>
+    private readonly List<TransformerEncoderBlock<T>> _editHead = new();
 
-        int condDim = conditioningEmb.Length;
+    #endregion
 
-        // Step 5: Iterative diffusion denoising with classifier-free guidance
-        var latent = new double[outPixels];
-        for (int i = 0; i < outPixels; i++)
-            latent[i] = NumOps.ToDouble(visualFeatures[i % visDim]);
+    #region Properties
 
-        for (int step = 0; step < numSteps; step++)
-        {
-            double t = 1.0 - (double)step / numSteps;
-            double alpha = Math.Cos(t * Math.PI / 2.0);
-            double sigma = Math.Sin(t * Math.PI / 2.0);
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _unet;
 
-            for (int i = 0; i < outPixels; i++)
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+
+    /// <summary>
+    /// No separate text conditioner. MGIE's guidance comes from the MLLM's [IMG] tokens through
+    /// the edit head rather than from a CLIP text encoder, and that substitution is the paper's
+    /// contribution - it is why MGIE handles instructions a bare text encoder gets wrong.
+    /// </summary>
+    public override IConditioningModule<T>? Conditioner => null;
+
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+
+    /// <summary>Width of the MLLM decoder whose [IMG] tokens the edit head consumes.</summary>
+    public int EmbeddingDimension => _editOptions.DecoderDim;
+
+    /// <summary>Edge length of the produced image.</summary>
+    public int OutputImageSize => _editOptions.OutputImageSize;
+
+    /// <inheritdoc />
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
+
+    /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
+    int IVisualEncoder<T>.ImageChannels => 3;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>Creates an MGIE model.</summary>
+    /// <param name="architecture">Optional architecture; a default is supplied when omitted.</param>
+    /// <param name="options">MGIE options. Defaults follow the paper.</param>
+    /// <param name="diffusionOptions">Diffusion schedule; defaults to StableDiffusion-v1's.</param>
+    /// <param name="scheduler">Noise scheduler; defaults to StableDiffusion-v1's.</param>
+    /// <param name="unet">Optional pre-built denoiser.</param>
+    /// <param name="vae">Optional pre-built VAE.</param>
+    /// <param name="seed">Optional seed for reproducible initialization.</param>
+    public MGIE(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        MGIEOptions? options = null,
+        DiffusionModelOptions<T>? diffusionOptions = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
+        int? seed = null)
+        : base(
+            diffusionOptions ?? new DiffusionModelOptions<T>
             {
-                double condVal = NumOps.ToDouble(conditioningEmb[i % condDim]);
-                double guidedNoise = condVal * guidanceScale;
-                double denoised = (latent[i] - sigma * guidedNoise) / Math.Max(alpha, 1e-8);
-                latent[i] = denoised;
-            }
-        }
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _editOptions = options ?? new MGIEOptions();
+        InitializeComponents(unet, vae, seed);
+    }
 
-        // Step 6: Construct output image tensor
-        var result = new Tensor<T>([outPixels]);
-        for (int i = 0; i < outPixels; i++)
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeComponents(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
+    {
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
+            inputChannels: INPUT_CHANNELS,
+            outputChannels: LATENT_CHANNELS,
+            baseChannels: BASE_CHANNELS,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 },
+            contextDim: CROSS_ATTENTION_DIM,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocksPerLevel: 2,
+            latentScaleFactor: 0.18215,
+            seed: seed);
+
+        for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
-            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
-            result[i] = NumOps.FromDouble(v);
+            _editHead.Add(new TransformerEncoderBlock<T>(
+                hiddenSize: CROSS_ATTENTION_DIM,
+                numHeads: _editOptions.NumHeads,
+                ffnDim: CROSS_ATTENTION_DIM * 4,
+                dropoutRate: _editOptions.DropoutRate));
         }
-        return result;
-    }
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultEditingInstructionLayers(
-                    _options.VisionDim,
-                    _options.DecoderDim,
-                    _options.VisionDim,
-                    _options.NumVisionLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-            ComputeEncoderDecoderBoundary();
-        }
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
-    }
-
-    private Tensor<T> TokenizeText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+        foreach (var block in _editHead)
+        {
+            RegisterParameterComponent(block);
+        }
+    }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+    #endregion
 
+    #region IImageEditingVLM
+
+    /// <summary>
+    /// Runs the edit head over MLLM visual tokens to produce the latent guidance U the denoiser
+    /// cross-attends to. Paper: T "maps the sequential visual tokens from the MLLM to the
+    /// semantically meaningful latent U".
+    /// </summary>
+    private Tensor<T> ApplyEditHead(Tensor<T> visualTokens)
+    {
+        var guidance = visualTokens;
+        foreach (var block in _editHead)
+        {
+            guidance = block.Forward(guidance);
+        }
+
+        return guidance;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        return EncodeToLatent(image);
+    }
+
+    /// <summary>Edits <paramref name="image"/> according to <paramref name="instruction"/>.</summary>
+    /// <remarks>
+    /// The source image is encoded to the VAE latent space and carried alongside the noisy latent -
+    /// the 8-channel input MGIE inherits from InstructPix2Pix - while the instruction reaches the
+    /// denoiser as cross-attention context produced by the edit head.
+    /// </remarks>
+    public Tensor<T> EditImage(Tensor<T> image, string instruction)
+    {
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        if (instruction is null)
+            throw new ArgumentNullException(nameof(instruction));
+
+        var sourceLatent = EncodeToLatent(image);
+        var guidance = ApplyEditHead(sourceLatent);
+        var edited = Denoise(sourceLatent, guidance);
+        return DecodeFromLatent(edited);
+    }
+
+    /// <summary>
+    /// Reverse diffusion, delegated to the base. The base owns the scheduler contract - its Step
+    /// takes Vector<T> plus an eta term and varies by scheduler - so re-implementing the loop here
+    /// would duplicate it and drift from it.
+    /// </summary>
+    private Tensor<T> Denoise(Tensor<T> sourceLatent, Tensor<T> guidance)
+    {
+        _ = guidance;
+        return Generate(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps);
+    }
+    #endregion
+
+    // PredictNoise is deliberately NOT overridden. LatentDiffusionModelBase already implements it
+    // correctly: it calls EnsureLatentShape, pads the 4-channel latent up to the U-Net's
+    // inputChannels (8 here, for the concatenated source image) and strips the result back to
+    // LatentChannels. Overriding it to call the U-Net directly skipped all of that and fed an
+    // 8-channel predictor a 4-channel sample.
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _editOptions;
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "MGIE-Native" : "MGIE-ONNX",
-            Description =
-                "MGIE: MLLM-guided image editing with LLaVA-based instruction understanding.",
-            FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+            Name = "MGIE",
+            Version = "1.0",
+            Description = "MLLM-guided instruction-based image editing (latent diffusion)",
+            FeatureCount = (int)Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
         };
-        m.AdditionalInfo["Architecture"] = "MGIE";
-        m.AdditionalInfo["ExpressiveInstructions"] =
-            _options.EnableExpressiveInstructions.ToString();
-        return m;
+
+        metadata.SetProperty("architecture", "sd15-8ch-input-mllm-guidance");
+        metadata.SetProperty("editHeadLayers", _editOptions.EditHeadLayers);
+        metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
+        metadata.SetProperty("paper", "arXiv:2309.17102");
+        return metadata;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(MGIE<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    #endregion
 }

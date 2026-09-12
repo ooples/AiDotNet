@@ -21,10 +21,11 @@ namespace AiDotNet.MetaLearning.Options;
 /// <para><b>For Beginners:</b> Relation Networks learns how to compare examples:
 ///
 /// 1. Encode all examples (support and query) with a feature encoder
-/// 2. For each query, concatenate with each support example's features
-/// 3. Pass concatenated features through a relation module (neural network)
-/// 4. The relation module outputs a similarity score
-/// 5. Apply softmax to get class probabilities
+/// 2. Sum each class's support embeddings into one class feature
+/// 3. Concatenate each class feature with each query's features and pass the pair through a relation module
+/// 4. The relation module outputs a relation score between 0 and 1
+/// 5. The class with the highest score is the prediction; training pushes the true class's score to 1 and the
+///    others to 0 with mean squared error
 ///
 /// Instead of using predefined distances (like Euclidean), it learns a neural
 /// network to measure "how related" two examples are.
@@ -53,8 +54,8 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
     #region Optional Properties with Defaults
 
     /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses cross-entropy loss internally).
+    /// Gets or sets the loss that scores the relation scores against the match indicators.
+    /// Default: null, which uses mean squared error - the paper's objective, eq. 2.
     /// </summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
@@ -148,16 +149,27 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
     #region Relation Network-Specific Properties
 
     /// <summary>
-    /// Gets or sets the type of relation module architecture.
+    /// Gets or sets the relation module's architecture.
     /// </summary>
-    /// <value>Default is Concatenate.</value>
+    /// <value>Default is Concatenate, the paper's module.</value>
+    /// <remarks>
+    /// <para>See <see cref="RelationModuleType"/>. Every architecture ends in the paper's sigmoid unit and is trained on
+    /// the same relation loss.</para>
+    /// </remarks>
     public RelationModuleType RelationType { get; set; } = RelationModuleType.Concatenate;
 
     /// <summary>
-    /// Gets or sets the aggregation method for combining multiple support example scores.
+    /// Gets or sets how a class's support examples meet a query.
     /// </summary>
-    /// <value>Default is Mean.</value>
-    public RelationAggregationMethod AggregationMethod { get; set; } = RelationAggregationMethod.Mean;
+    /// <value>Default is EmbeddingSum, the paper's K-shot rule.</value>
+    /// <remarks>
+    /// <para>
+    /// <see cref="RelationAggregationMethod.EmbeddingSum"/> sums each class's embeddings and computes one relation
+    /// per class (Sung et al. 2018, section 3.2). The other methods compute one relation per support example and
+    /// pool them per class. The default used to be Mean, whose per-example relations are not the paper's.
+    /// </para>
+    /// </remarks>
+    public RelationAggregationMethod AggregationMethod { get; set; } = RelationAggregationMethod.EmbeddingSum;
 
     /// <summary>
     /// Gets or sets the number of output classes.
@@ -166,51 +178,65 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets whether to use multi-head relation.
+    /// Gets or sets whether to average several independently initialised relation modules.
     /// </summary>
     /// <value>Default is false.</value>
+    /// <remarks>
+    /// <para>An extension: <see cref="NumHeads"/> relation modules of the configured architecture, each with its own
+    /// weights, whose relation scores are averaged. All are trained on the same loss.</para>
+    /// </remarks>
     public bool UseMultiHeadRelation { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the number of heads for multi-head relation.
+    /// Gets or sets the number of relation modules averaged when <see cref="UseMultiHeadRelation"/> is on.
     /// </summary>
     /// <value>Default is 4.</value>
     public int NumHeads { get; set; } = 4;
 
     /// <summary>
-    /// Gets or sets whether to apply feature transformation before relation.
+    /// Gets or sets whether to apply a learned linear map to the embeddings before pairing them.
     /// </summary>
     /// <value>Default is false.</value>
+    /// <remarks>
+    /// <para>An extension: embeddings <c>h</c> become <c>A h</c> before class features are formed and paired, with
+    /// <c>A</c> starting at the identity - the paper's pairing - and trained on the relation loss.</para>
+    /// </remarks>
     public bool ApplyFeatureTransform { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the dimension for feature concatenation.
+    /// Gets or sets the width of the relation module's pair representation.
     /// </summary>
-    /// <value>Default is 0 (first feature dimension).</value>
-    public int ConcatenationDimension { get; set; } = 0;
+    /// <value>Default is 8, the width of the relation module's hidden layer in the paper's Figure 2.</value>
+    public int RelationHiddenDimension { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the hidden dimension for the relation module.
-    /// </summary>
-    /// <value>Default is 64.</value>
-    public int RelationHiddenDimension { get; set; } = 64;
-
-    /// <summary>
-    /// Gets or sets the L2 regularization strength for the feature encoder.
+    /// Gets or sets the weight decay of the embedding module.
     /// </summary>
     /// <value>Default is 0.0 (no regularization).</value>
+    /// <remarks>
+    /// <para>Adds <c>lambda * theta</c> to the embedding module's gradient - the gradient of
+    /// <c>(lambda / 2) ||theta||^2</c>. It used to be added to the reported loss only and changed no update.</para>
+    /// </remarks>
     public double FeatureEncoderL2Reg { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets the L2 regularization strength for the relation module.
+    /// Gets or sets the weight decay of the relation modules.
     /// </summary>
     /// <value>Default is 0.0 (no regularization).</value>
+    /// <remarks>
+    /// <para>Adds <c>lambda * phi</c> to the relation modules' gradient. The paper uses weight decay on its zero-shot
+    /// embedding layers.</para>
+    /// </remarks>
     public double RelationModuleL2Reg { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets the dropout rate for the relation module.
+    /// Gets or sets the dropout rate of the relation module's pair representation while meta-training.
     /// </summary>
     /// <value>Default is 0.0 (no dropout).</value>
+    /// <remarks>
+    /// <para>An extension: inverted dropout on the representation that feeds the sigmoid unit, one mask per episode
+    /// and head. Adaptation and prediction never drop anything. Must be in [0, 1).</para>
+    /// </remarks>
     public double RelationDropout { get; set; } = 0.0;
 
     #endregion
@@ -242,6 +268,8 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
                OuterLearningRate > 0 &&
                NumClasses > 0 &&
                RelationHiddenDimension > 0 &&
+               (!UseMultiHeadRelation || NumHeads >= 1) &&
+               RelationDropout >= 0 && RelationDropout < 1 &&
                MetaBatchSize > 0 &&
                NumMetaIterations > 0;
     }
@@ -276,7 +304,6 @@ public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLea
             UseMultiHeadRelation = UseMultiHeadRelation,
             NumHeads = NumHeads,
             ApplyFeatureTransform = ApplyFeatureTransform,
-            ConcatenationDimension = ConcatenationDimension,
             RelationHiddenDimension = RelationHiddenDimension,
             FeatureEncoderL2Reg = FeatureEncoderL2Reg,
             RelationModuleL2Reg = RelationModuleL2Reg,
