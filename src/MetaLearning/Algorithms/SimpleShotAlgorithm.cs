@@ -96,8 +96,13 @@ public partial class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <summary>
     /// Cached feature mean for CL2N normalization, computed from training features.
     /// </summary>
+    /// <remarks>
+    /// Empty until meta-training computes it. It used to be null, which the parameter registry reads as a slot not
+    /// yet fitted, so the learner's whole parameter surface - GetParameters, Serialize, every copy - threw
+    /// ParameterLayoutNotReadyException before the first meta-training step.
+    /// </remarks>
     [Buffer]
-    private Vector<T>? _featureMean;
+    private Vector<T> _featureMean = new Vector<T>(0);
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SimpleShot;
@@ -254,7 +259,7 @@ public partial class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
         string normType = _simpleShotOptions.NormalizationType.ToUpperInvariant();
 
-        if (normType == "CL2N" && _featureMean != null)
+        if (normType == "CL2N" && _featureMean.Length > 0)
         {
             // Center: subtract mean
             var centered = new Vector<T>(features.Length);
