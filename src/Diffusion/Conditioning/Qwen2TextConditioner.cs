@@ -34,18 +34,17 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    public Qwen2TextConditioner(
-        ITokenizer tokenizer,
-        Qwen2Variant variant = Qwen2Variant.OnePointFiveB,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public Qwen2TextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        Qwen2TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new Qwen2TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new Qwen2TextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -63,7 +62,7 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
             _ => "Qwen/Qwen2-1.5B",
         };
         var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
-        return new Qwen2TextConditioner<T>(tokenizer, variant);
+        return new Qwen2TextConditioner<T>(tokenizer, options: new Qwen2TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

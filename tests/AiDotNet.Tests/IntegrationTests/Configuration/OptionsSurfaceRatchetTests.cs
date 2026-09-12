@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 71;
+    private const int Baseline = 53;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -107,7 +107,15 @@ public class OptionsSurfaceRatchetTests
     /// classical non-neural regressors.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 92;
+    /// <para>
+    /// 92 to 74 with the variant/inChannels cluster: 4 detection backbones and 8 diffusion text
+    /// conditioners. Unlike the earlier clusters these models had NO options parameter at all, so
+    /// one was added and twelve options classes created; the backbone ones are named
+    /// <c>ResNetBackboneOptions</c> / <c>EfficientNetBackboneOptions</c> because the bare names
+    /// already belong to the separate <c>ResNetNetwork</c> and <c>EfficientNetNetwork</c>
+    /// classifiers.
+    /// </para>
+    private const int ConstructorBaseline = 74;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
