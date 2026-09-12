@@ -70,11 +70,14 @@ internal static class FlashAttention<T>
         bool is4D = query.Shape.Length == 4;
         int seqLenQ = is4D ? query.Shape[2] : query.Shape[1];
         int seqLenKV = is4D ? key.Shape[2] : key.Shape[1];
-        if (queryOffset < 0 || queryOffset + seqLenQ > seqLenKV)
+        // A noncausal cross-attention query is not a window into the key sequence:
+        // learned queries may outnumber memory tokens. Preserve window bounds for causal
+        // attention or an explicit nonzero offset; subtraction prevents overflow.
+        if (queryOffset < 0 || ((config.UseCausalMask || queryOffset != 0) && queryOffset > seqLenKV - seqLenQ))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(queryOffset),
-                $"queryOffset ({queryOffset}) must satisfy 0 <= queryOffset and queryOffset + seqLenQ ({seqLenQ}) <= seqLenKV ({seqLenKV}).");
+                $"queryOffset ({queryOffset}) must be nonnegative and, for causal attention or a nonzero offset, queryOffset + seqLenQ ({seqLenQ}) must not exceed seqLenKV ({seqLenKV}).");
         }
 
         var tensorsConfig = MapConfig(config, queryOffset);

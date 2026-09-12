@@ -11,6 +11,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -268,6 +269,9 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     // transient per-Generate denoise arena (see the warmup in Generate). Stops the first Generate
     // from allocating model-lifetime weights into that arena, which frees them on dispose.
     private bool _lazyWeightsWarmed;
+    // A conditional forward can materialize cross-attention weights which an unconditional
+    // forward does not visit. Its first warmup therefore has a separate lifetime boundary.
+    private bool _conditionedWeightsWarmed;
 
     // ── Copy-on-write weight sharing (cheap Clone of large models) ───────────────────────────────
     //
@@ -861,6 +865,28 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     }
 
     protected virtual Tensor<T> Generate(int[] shape, int numInferenceSteps, int? seed, Vector<T>? initialSample)
+        => GenerateCore(shape, numInferenceSteps, seed, initialSample, conditionalPrediction: null);
+
+    /// <summary>
+    /// Samples with an explicit conditional predictor while retaining the shared scheduler,
+    /// inference scopes and per-step arena lifecycle. The supplied noise is unit Gaussian;
+    /// a scheduler's optional input-scaling capability is applied to the evolving latent only.
+    /// </summary>
+    /// <remarks>
+    /// Construct conditioning tensors outside this call and keep the predictor's component graph
+    /// stable for this model instance. The callback receives a normalized noisy latent; it must
+    /// attach any unscaled source channels and return a prediction with the original latent shape.
+    /// The ordinary generation route remains unchanged and still uses its compiled predictor.
+    /// </remarks>
+    protected Tensor<T> GenerateConditioned(int[] shape, int numInferenceSteps, int? seed,
+        Vector<T>? standardNoise, Func<Tensor<T>, int, Tensor<T>> conditionalPrediction)
+    {
+        if (conditionalPrediction is null) throw new ArgumentNullException(nameof(conditionalPrediction));
+        return GenerateCore(shape, numInferenceSteps, seed, standardNoise, conditionalPrediction);
+    }
+
+    private Tensor<T> GenerateCore(int[] shape, int numInferenceSteps, int? seed,
+        Vector<T>? initialSample, Func<Tensor<T>, int, Tensor<T>>? conditionalPrediction)
     {
         ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
 
@@ -871,6 +897,14 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
 
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
+
+        var inputScaling = conditionalPrediction is null ? null : _scheduler as INoiseSchedulerInputScaling<T>;
+        if (inputScaling is not null)
+            sample = Engine.Multiply(sample, inputScaling.InitialNoiseSigma);
+        else if (conditionalPrediction is not null && initialSample is not null)
+            // A caller-supplied standard-noise vector is an input, not the loop's writable buffer.
+            // Scaling already creates owned storage; schedulers without that capability need it too.
+            sample = new Vector<T>(initialSample.ToArray());
 
         // Pre-allocate reusable tensor for the denoising loop to avoid
         // creating a new Tensor per step (50 allocations → 1)
@@ -889,16 +923,21 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // once here with a single warmup forward OUTSIDE the arena so they land on the GC heap
         // (or an outer, longer-lived arena) and survive. One forward, one time per model; the
         // denoise loop's per-step arena recycling below is unchanged.
-        if (!_lazyWeightsWarmed)
+        if (conditionalPrediction is null ? !_lazyWeightsWarmed : !_conditionedWeightsWarmed)
         {
             int warmupTimestep = 0;
             foreach (var t in _scheduler.Timesteps) { warmupTimestep = t; break; }
             sample.AsSpan().CopyTo(sampleTensor.AsWritableSpan());
             using (InferenceMode.Enter())
             {
-                PredictNoiseStep(sampleTensor, warmupTimestep);
+                if (conditionalPrediction is null)
+                    PredictNoiseStep(sampleTensor, warmupTimestep);
+                else
+                    conditionalPrediction(inputScaling?.ScaleModelInput(sampleTensor, warmupTimestep) ?? sampleTensor,
+                        warmupTimestep);
             }
-            _lazyWeightsWarmed = true;
+            if (conditionalPrediction is null) _lazyWeightsWarmed = true;
+            else _conditionedWeightsWarmed = true;
         }
 
         // Forward caching allocator (Tensors #661 consumer wiring, second boundary
@@ -943,7 +982,9 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
-            var noisePrediction = PredictNoiseStep(sampleTensor, timestep);
+            var noisePrediction = conditionalPrediction is null
+                ? PredictNoiseStep(sampleTensor, timestep)
+                : conditionalPrediction(inputScaling?.ScaleModelInput(sampleTensor, timestep) ?? sampleTensor, timestep);
 
             // Copy prediction to pre-allocated vector (avoids ToVector() allocation).
             // Fail fast on length mismatch — silently truncating or leaving stale
@@ -2241,6 +2282,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
         var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
         var parameterSet = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var excludedParameters = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var stack = new Stack<object>();
         stack.Push(root);
 
@@ -2249,6 +2291,31 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             var current = stack.Pop();
             if (!visited.Add(current)) continue;
             bool isTraversalRoot = ReferenceEquals(current, root);
+
+            // Nested owners declare live tensors and frozen children. Reflecting through them
+            // would discover a second, contradictory surface. Keep the existing root/layer walk.
+            if (current is IParameterChunkSource<T> chunkSource &&
+                current is not DiffusionModelBase<T> && current is not Interfaces.ITrainableLayer<T>)
+            {
+                foreach (var chunk in chunkSource.GetParameterStateChunks())
+                {
+                    var parameter = chunk.SourceTensor;
+                    if (parameter.Length == 0) continue;
+                    if (chunk.Role == ParameterSlotRole.Trainable)
+                    {
+                        if (!chunk.IsWritableInPlace && ReferenceEquals(parameter, chunk.Tensor))
+                            throw new InvalidOperationException("A trainable parameter chunk must identify its live source tensor, not only a detached snapshot.");
+                        if (parameterSet.Add(parameter)) allParams.Add(parameter);
+                    }
+                    else if (chunk.Role != ParameterSlotRole.Alias)
+                    {
+                        // The child may also be reachable outside its declared owner. Honor its
+                        // frozen/non-optimizer role regardless of field/stack visitation order.
+                        excludedParameters.Add(parameter);
+                    }
+                }
+                continue;
+            }
 
             if (current is Interfaces.ITrainableLayer<T> trainable)
             {
@@ -2319,9 +2386,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
                 }
             }
         }
+
+        allParams.RemoveAll(excludedParameters.Contains);
     }
 
     private static bool IsTrainableWalkCandidate(object value) =>
+        value is IParameterChunkSource<T> ||
         value is Interfaces.ITrainableLayer<T> ||
         value is System.Collections.IEnumerable ||
         CanContainTrainableLayers(value.GetType());

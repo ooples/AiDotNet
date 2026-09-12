@@ -34,6 +34,20 @@ public sealed class ClonePlan
         IReadOnlyList<ClonePlanEntry> entries,
         IReadOnlyList<string>? constructorParameters = null,
         IReadOnlyList<IReadOnlyList<string>>? constructorCandidates = null)
+        : this(type, entries, constructorParameters, constructorCandidates, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a plan with optional declaring-member-aware bindings. The original four-argument
+    /// constructor remains available for existing compiled callers and legacy plans.
+    /// </summary>
+    public ClonePlan(
+        Type type,
+        IReadOnlyList<ClonePlanEntry> entries,
+        IReadOnlyList<string>? constructorParameters,
+        IReadOnlyList<IReadOnlyList<string>>? constructorCandidates,
+        IReadOnlyList<IReadOnlyList<CloneConstructorArgumentBinding>>? constructorBindings)
     {
         Type = type ?? throw new ArgumentNullException(nameof(type));
         Entries = entries ?? throw new ArgumentNullException(nameof(entries));
@@ -42,7 +56,32 @@ public sealed class ClonePlan
             ?? (ConstructorParameters.Count > 0
                 ? new[] { ConstructorParameters }
                 : Array.Empty<IReadOnlyList<string>>());
+        ConstructorBindings = SnapshotBindings(constructorBindings);
     }
+
+    private static IReadOnlyList<IReadOnlyList<CloneConstructorArgumentBinding>> SnapshotBindings(
+        IReadOnlyList<IReadOnlyList<CloneConstructorArgumentBinding>>? bindings)
+    {
+        if (bindings is null) return Array.Empty<IReadOnlyList<CloneConstructorArgumentBinding>>();
+        var outer = new IReadOnlyList<CloneConstructorArgumentBinding>[bindings.Count];
+        for (int i = 0; i < outer.Length; i++)
+        {
+            var candidate = bindings[i]
+                ?? throw new ArgumentException("Explicit constructor binding lists cannot contain null candidates.", nameof(bindings));
+            var inner = new CloneConstructorArgumentBinding[candidate.Count];
+            for (int j = 0; j < inner.Length; j++)
+                inner[j] = candidate[j]
+                    ?? throw new ArgumentException("Explicit constructor candidates cannot contain null bindings.", nameof(bindings));
+            outer[i] = Array.AsReadOnly(inner);
+        }
+        return Array.AsReadOnly(outer);
+    }
+
+    /// <summary>
+    /// Explicit argument bindings for plans whose selected members would be ambiguous by name.
+    /// Empty retains the legacy constructor-plan behavior.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<CloneConstructorArgumentBinding>> ConstructorBindings { get; }
 
     /// <summary>
     /// Gets every constructor the type can be rebuilt through, widest first.

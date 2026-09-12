@@ -24,7 +24,7 @@ namespace AiDotNet.Models;
 /// a constructor convention verified only at test time.
 /// </para>
 /// </remarks>
-public static class CloneEngine
+public static partial class CloneEngine
 {
     /// <summary>
     /// Stands in a recorded constructor for "pass this parameter's declared default".
@@ -218,6 +218,11 @@ public static class CloneEngine
 
         var type = source.GetType();
         var plan = CloneRegistry.GetPlan(type);
+        if (plan.ConstructorBindings.Count > 0)
+        {
+            RestoreBoundConstructorConfiguration(source, destination, plan);
+            return;
+        }
         var restored = new HashSet<string>(StringComparer.Ordinal);
         foreach (var candidate in plan.ConstructorCandidates)
         {
@@ -319,6 +324,9 @@ public static class CloneEngine
     /// </remarks>
     private static object Construct(Type type, ClonePlan plan, object source)
     {
+        if (plan.ConstructorBindings.Count > 0)
+            return ConstructFromBindings(type, plan, source);
+
         // A type with recorded constructor parameters is rebuilt by CALLING that constructor with
         // its carried configuration, not by allocating and assigning. That matters because a
         // constructor derives things from its arguments -- weight buffers sized from InputSize,

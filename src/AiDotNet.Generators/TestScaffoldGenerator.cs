@@ -3821,6 +3821,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
             ScaledDimensionOptionsTypeName = scaledDimensionOptionsTypeName,
+            NativeJointEditingOptionsTypeName = declaredOptionsType is not null && HasNativeJointEditingSurface(modelClass)
+                ? RenderClosedOptionsType(declaredOptionsType) : null,
             ScaledDimensionProperties = scaledDimensionProperties,
             ConstrainedOptionsTypeName = constrainedOptionsTypeName,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
@@ -4114,6 +4116,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return originalDef.MetadataName == "Vector`1"
             && originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.Tensors.LinearAlgebra";
     }
+
+    /// <summary>
+    /// Recognizes the public, typed joint image/instruction guidance boundary in source and metadata.
+    /// </summary>
+    private static bool HasNativeJointEditingSurface(INamedTypeSymbol modelClass)
+        // Use the public typed boundary: private component fields disappear from the ordinary
+        // metadata view used by the real test project. Source-only discovery is not enough.
+        => modelClass.GetMembers("EncodeEditGuidance").OfType<IMethodSymbol>().Any(method =>
+            method.DeclaredAccessibility == Accessibility.Public && method.Parameters.Length == 2
+            && method.ReturnType is INamedTypeSymbol output && output.OriginalDefinition.MetadataName == "Tensor`1"
+            && output.ContainingNamespace.ToDisplayString() == "AiDotNet.Tensors.LinearAlgebra"
+            && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, method.ReturnType)
+            && method.Parameters[1].Type is INamedTypeSymbol tokens
+            && tokens.OriginalDefinition.MetadataName == "IReadOnlyList`1"
+            && tokens.ContainingNamespace.ToDisplayString() == "System.Collections.Generic"
+            && tokens.TypeArguments[0].SpecialType == SpecialType.System_Int32);
 
     /// <summary>
     /// The open options type of a public constructor that takes exactly one generic options object with the
@@ -6697,6 +6715,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 3), " +
                     "new AiDotNet.Video.Options.MoGOptions { NumFeatures = 8, NumResBlocks = 1 })";
+            }
+            else if (model.NativeJointEditingOptionsTypeName is { } jointEditingOptions && model.TypeParameterCount == 1)
+            {
+                // Real multimodal latent editors own three independently sized stacks: the native
+                // image/language encoder, the query mapper, and U-Net/VAE. Keep all of them present
+                // through their public options/injection seams. The latent fixture and public edit
+                // fixture use the same eight-pixel geometry; production defaults are untouched.
+                constructorExpr = $"new {typeName}<double>(options: new {jointEditingOptions} {{ " +
+                    "ImageSize = 8, VisionPatchSize = 2, OutputImageSize = 8, " +
+                    "VisionDim = 8, DecoderDim = 8, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, VocabSize = 64, MaxSequenceLength = 64, " +
+                    "EditHiddenDim = 8, EditNumHeads = 2, EditTokenCount = 2, EditQueryCount = 3, " +
+                    "EditHeadLayers = 1, NumDiffusionSteps = 2, MaxGenerationLength = 2, " +
+                    "EnableExpressiveInstructions = false, DropoutRate = 0, Seed = 42 }, " +
+                    "diffusionOptions: new AiDotNet.Models.Options.DiffusionModelOptions<double> { " +
+                    "DefaultInferenceSteps = 2, TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, " +
+                    "BetaSchedule = AiDotNet.Enums.BetaSchedule.ScaledLinear, Seed = 42 }, " +
+                    "unet: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double>(" +
+                    "inputChannels: 8, outputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1 }, " +
+                    "numResBlocks: 1, attentionResolutions: new[] { 1 }, contextDim: 768, numHeads: 2, inputHeight: 8, seed: 42), " +
+                    "vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(inputChannels: 3, latentChannels: 4, " +
+                    "baseChannels: 32, channelMultipliers: new[] { 1 }, numResBlocksPerLevel: 1, seed: 42), seed: 42)";
             }
             else if (model.ClassName == "UniVSTModel" && model.TypeParameterCount == 1)
             {
@@ -12702,6 +12742,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+        }
+        else if (model.NativeJointEditingOptionsTypeName is not null)
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 8, 8 };");
         }
         else if (model.ClassName == "UniVSTModel")
         {
@@ -18963,6 +19008,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Options type whose declared dimensions must be bounded by the test scaler.</summary>
         public string? ScaledDimensionOptionsTypeName { get; set; }
+
+        /// <summary>Options of a model exposing the typed native joint-edit guidance boundary.</summary>
+        public string? NativeJointEditingOptionsTypeName { get; set; }
 
         /// <summary>Typed dimension members emitted into the generated bounding invariant.</summary>
         public List<string> ScaledDimensionProperties { get; set; } = new List<string>();
