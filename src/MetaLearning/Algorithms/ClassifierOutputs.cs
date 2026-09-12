@@ -162,7 +162,22 @@ internal static class ClassifierOutputs<T>
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var logProbabilities = engine.TensorLog(engine.TensorClampMin(probabilities, Ops.FromDouble(1e-12)));
-        return loss.ComputeTapeLoss(logProbabilities, labels)[0];
+
+        // The target is one-hot rather than a vector of class indices. A loss defined over indices - cross
+        // entropy with logits - accepts both forms, but one defined over a same-shape target - categorical
+        // cross-entropy, or the squared error that every model's DefaultLossFunction returns - subtracts the
+        // two elementwise and threw "Tensor shapes must match. Got [rows, classes] and [rows]". One-hot is the
+        // form every loss here understands, and for the index-consuming case it is the same number:
+        // -sum_c y_c log p_c collapses to -log p(true class).
+        int classes = logProbabilities.Shape.Length > 1 ? logProbabilities.Shape[1] : 1;
+        var oneHot = new Tensor<T>(new[] { labels.Length, classes });
+        for (int row = 0; row < labels.Length; row++)
+        {
+            int column = (int)Math.Round(Ops.ToDouble(labels[row]));
+            if (column >= 0 && column < classes) oneHot[row * classes + column] = Ops.One;
+        }
+
+        return loss.ComputeTapeLoss(logProbabilities, oneHot)[0];
     }
 
     /// <summary>
