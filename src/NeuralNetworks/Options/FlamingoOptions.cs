@@ -105,6 +105,24 @@ public class FlamingoOptions : VisionLanguageModelOptions
         }
     }
 
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        Require(VisionDim, nameof(VisionDim));
+        Require(MaxImagesInContext, nameof(MaxImagesInContext));
+        var defaults = new FlamingoOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(LmHiddenDim, defaults.LmHiddenDim, nameof(LmHiddenDim));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
+        RequireNativeDefaultForOnnx(NumLmLayers, defaults.NumLmLayers, nameof(NumLmLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(NumPerceiverLayers, defaults.NumPerceiverLayers, nameof(NumPerceiverLayers));
+        RequireNativeDefaultForOnnx(NumPerceiverTokens, defaults.NumPerceiverTokens, nameof(NumPerceiverTokens));
+        RequireNativeDefaultForOnnx(LearningRate, defaults.LearningRate, nameof(LearningRate));
+    }
+
     /// <summary>
     /// Gets or sets the language model backbone.
     /// </summary>

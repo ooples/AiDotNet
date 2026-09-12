@@ -93,6 +93,13 @@ public sealed class OnnxGraphSignature
             if (!Inputs.ContainsKey(input)) throw Conflict($"does not accept the supplied input '{input}'");
     }
 
+    internal bool CanSupplyInputSet(params string[] suppliedInputs)
+    {
+        var supplied = new HashSet<string>(suppliedInputs, StringComparer.Ordinal);
+        return Inputs.Values.All(input => input.HasDefaultValue || supplied.Contains(input.Name))
+            && supplied.All(Inputs.ContainsKey);
+    }
+
     internal void RequireInput(string name, TensorElementType elementType, params int[] dimensions)
     {
         var input = RequireTensorInput(name, elementType, dimensions.Length);
@@ -207,6 +214,16 @@ internal static class OnnxEmbeddingContract
         return null;
     }
 
+    internal static void Validate(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output,
+        int width, OnnxEmbeddingLayouts layouts, OnnxModelRole role)
+    {
+        var dimensions = output.Dimensions;
+        int rank = dimensions.Length;
+        string? mismatch = FindMismatch(rank, rank > 1 ? dimensions[0] : (int?)null,
+            rank == 3 ? dimensions[1] : (int?)null, rank > 0 ? dimensions[rank - 1] : (int?)null, width, layouts);
+        if (mismatch is not null) throw new InvalidOperationException($"ONNX {role} output {mismatch}.");
+    }
+
     internal static AiDotNet.Tensors.LinearAlgebra.Vector<T> Read<T>(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output,
         int width, OnnxEmbeddingLayouts layouts, OnnxModelRole role)
     {
@@ -243,12 +260,9 @@ internal static class OnnxEmbeddingContract
     internal static AiDotNet.Tensors.LinearAlgebra.Tensor<T> ReadSequenceTensor<T>(
         Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output, int width, OnnxModelRole role)
     {
+        Validate(output, width, OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures, role);
         var dimensions = output.Dimensions;
         int rank = dimensions.Length;
-        string? mismatch = FindMismatch(rank, rank > 1 ? dimensions[0] : (int?)null,
-            rank == 3 ? dimensions[1] : (int?)null, rank > 0 ? dimensions[rank - 1] : (int?)null,
-            width, OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures);
-        if (mismatch is not null) throw new InvalidOperationException($"ONNX {role} output {mismatch}.");
         var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         int tokens = rank == 3 ? dimensions[1] : 1;
         var features = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(new[] { tokens, width });

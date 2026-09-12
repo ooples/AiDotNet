@@ -16,6 +16,7 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         ContextTokenFeatures, BatchedTokenFeatures, EmptyTokenFeatures, SpatialTokenFeatures
     }
     internal enum TextInputKind { TokensAndMask, TokensOnly }
+    internal enum QueryInputKind { ImageOnly, TextOnly, DefaultedBoth, RequiredBoth }
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "aidotnet-onnx-contract-" + Guid.NewGuid().ToString("N"));
     private int _nextFile;
@@ -163,6 +164,77 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         builder.AddOp("Identity", new[] { "inputs_embeds" }, new[] { "last_hidden_state" });
         builder.AddOutput(TensorInfo("last_hidden_state", TensorProto.Types.DataType.Float, new[] { 1, -1, width }));
         string path = Path.Combine(_directory, "language-" + _nextFile++ + ".onnx");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) builder.WriteTo(stream);
+        return path;
+    }
+
+    internal string WriteQueryTransformer(QueryInputKind kind = QueryInputKind.ImageOnly,
+        int width = 4, int visionWidth = 4, int queries = 2, int context = 8,
+        bool dynamicInputs = false, bool preserveVisionTokens = false, bool extraRequiredInput = false,
+        int batch = 1)
+    {
+        var builder = new OnnxGraphBuilder(new OnnxExportOptions { OpsetVersion = 17 });
+        bool image = kind != QueryInputKind.TextOnly;
+        bool text = kind != QueryInputKind.ImageOnly;
+        bool defaults = kind == QueryInputKind.DefaultedBoth;
+        if (image)
+        {
+            builder.AddInput(TensorInfo("encoder_hidden_states", TensorProto.Types.DataType.Float,
+                new[] { 1, dynamicInputs ? -1 : 2, visionWidth }));
+            if (defaults)
+            {
+                // AddFloatInitializer generates a new name; an overridable initializer
+                // must instead use the exact graph input name.
+                var initial = new TensorProto { Name = "encoder_hidden_states", DataType = (int)TensorProto.Types.DataType.Float };
+                initial.Dims.Add(new long[] { 1, 2, visionWidth });
+                initial.FloatData.Add(new float[2 * visionWidth]);
+                builder.AddInitializer(initial);
+            }
+            var sum = builder.AddOp("ReduceSum", new[] { "encoder_hidden_states" }, new[] { "vision_sum" });
+            sum.Attribute.Add(new AttributeProto { Name = "keepdims", Type = AttributeProto.Types.AttributeType.Int, I = 0 });
+        }
+        if (text)
+        {
+            foreach (string name in new[] { "input_ids", "attention_mask" })
+            {
+                builder.AddInput(TensorInfo(name, TensorProto.Types.DataType.Int64, new[] { 1, dynamicInputs ? -1 : context }));
+                if (defaults)
+                {
+                    var initial = new TensorProto { Name = name, DataType = (int)TensorProto.Types.DataType.Int64 };
+                    initial.Dims.Add(new long[] { 1, context });
+                    initial.Int64Data.Add(new long[context]);
+                    builder.AddInitializer(initial);
+                }
+                AddFloatCast(builder, name, "float_" + name);
+            }
+            builder.AddOp("Mul", new[] { "float_input_ids", "float_attention_mask" }, new[] { "masked_text" });
+            var sum = builder.AddOp("ReduceSum", new[] { "masked_text" }, new[] { "text_sum" });
+            sum.Attribute.Add(new AttributeProto { Name = "keepdims", Type = AttributeProto.Types.AttributeType.Int, I = 0 });
+        }
+        if (extraRequiredInput)
+            builder.AddInput(TensorInfo("unsupported_required_input", TensorProto.Types.DataType.Float, new[] { 1 }));
+        if (preserveVisionTokens)
+        {
+            if (!image) throw new ArgumentException("An identity vision-query fixture requires image input.", nameof(kind));
+            builder.AddOp("Identity", new[] { "encoder_hidden_states" }, new[] { "query_features" });
+            builder.AddOutput(TensorInfo("query_features", TensorProto.Types.DataType.Float,
+                new[] { 1, dynamicInputs ? -1 : 2, visionWidth }));
+        }
+        else
+        {
+            string sumName = image ? "vision_sum" : "text_sum";
+            if (image && text)
+            {
+                builder.AddOp("Add", new[] { "vision_sum", "text_sum" }, new[] { "joint_sum" });
+                sumName = "joint_sum";
+            }
+            int[] shape = { batch, queries, width };
+            string offsets = builder.AddFloatInitializer("offsets",
+                Enumerable.Range(1, batch * queries * width).Select(value => (float)value).ToArray(), shape);
+            builder.AddOp("Add", new[] { sumName, offsets }, new[] { "query_features" });
+            builder.AddOutput(TensorInfo("query_features", TensorProto.Types.DataType.Float, shape));
+        }
+        string path = Path.Combine(_directory, "query-" + _nextFile++ + ".onnx");
         using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) builder.WriteTo(stream);
         return path;
     }

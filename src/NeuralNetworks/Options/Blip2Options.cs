@@ -94,7 +94,8 @@ public class Blip2Options : VisionLanguageModelOptions
     /// <remarks>
     /// <para><b>For Beginners:</b> These are trainable queries that summarize image information,
     /// not words in a caption. More queries increase the native query-state size. This option
-    /// does not change the query-token layout expected by a loaded ONNX graph.</para>
+    /// does not resize a loaded ONNX graph: an image-query export must produce exactly this
+    /// many tokens. Text-only exports have no visual-query count and reject nondefault overrides.</para>
     /// </remarks>
     public int NumQueryTokens { get; set; }
 
@@ -126,6 +127,23 @@ public class Blip2Options : VisionLanguageModelOptions
         Require(NumHeads, nameof(NumHeads));
         Require(NumLmDecoderLayers, nameof(NumLmDecoderLayers));
         Require(VocabSize, nameof(VocabSize));
+    }
+
+    /// <summary>Validates host dimensions and rejects overrides of opaque native-only internals.</summary>
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        Require(VisionDim, nameof(VisionDim));
+        Require(NumQueryTokens, nameof(NumQueryTokens));
+        var defaults = new Blip2Options();
+        RequireNativeDefaultForOnnx(QformerHiddenDim, defaults.QformerHiddenDim, nameof(QformerHiddenDim));
+        RequireNativeDefaultForOnnx(LmHiddenDim, defaults.LmHiddenDim, nameof(LmHiddenDim));
+        RequireNativeDefaultForOnnx(NumQformerLayers, defaults.NumQformerLayers, nameof(NumQformerLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(NumLmDecoderLayers, defaults.NumLmDecoderLayers, nameof(NumLmDecoderLayers));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
     }
 
     /// <summary>
