@@ -284,8 +284,6 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7,
         SAM2Options? options = null)
         // SAM 2 (Ravi et al. 2024, §D) inherits SAM's mask supervision: "a linear combination of focal
         // and dice loss" in a 20:1 ratio, focal at the RetinaNet gamma=2 / alpha=0.25 the original SAM
@@ -300,9 +298,9 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        if (memoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryBankSize));
-        _memoryBankSize = memoryBankSize;
+        _modelSize = _options.ModelSize;
+        if (_options.MemoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(options));
+        _memoryBankSize = _options.MemoryBankSize;
         _useNativeMode = true;
         _onnxModelPath = null;
         _optimizer = optimizer;

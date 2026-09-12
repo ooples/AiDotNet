@@ -17443,7 +17443,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Compilation compilation)
     {
         const string roleAttribute = "AiDotNet.Attributes.ModelDimensionRoleAttribute";
-        var candidates = new List<(INamedTypeSymbol Type, IMethodSymbol Constructor)>();
+        var candidates = new List<INamedTypeSymbol>();
         CollectConstructorDimensionRoles(
             compilation.Assembly.GlobalNamespace,
             roleAttribute,
@@ -17463,10 +17463,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         candidates = candidates
-            .GroupBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                + "\0" + candidate.Constructor.Parameters.Length)
+            .GroupBy(candidate => candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
             .Select(group => group.First())
-            .OrderBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            .OrderBy(candidate => candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 System.StringComparer.Ordinal)
             .ToList();
         if (candidates.Count == 0) return;
@@ -17481,30 +17480,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         foreach (var candidate in candidates)
         {
-            string typeName = candidate.Type.IsGenericType
-                ? candidate.Type.ConstructUnboundGenericType()
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                : candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            string methodName = ToGeneratedIdentifier(
-                candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            string typeName = candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string methodName = ToGeneratedIdentifier(typeName)
                 + "_PreservesDeclaredAttentionGeometry";
 
+            // The published values now live on the options object rather than in constructor
+            // parameter defaults, so the test reads them off a default-constructed instance. That
+            // is also stronger than the parameter-default version it replaces: a parameter default
+            // is a compile-time constant, whereas this exercises whatever the parameterless
+            // constructor actually assigns, including values a family base sets.
             sb.AppendLine("    [Xunit.Fact]");
             sb.AppendLine($"    public void {methodName}()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var constructors = typeof({typeName}).GetConstructors();");
-            sb.AppendLine("        var constructor = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(constructors, candidate =>");
-            sb.AppendLine("            global::System.Linq.Enumerable.Count(candidate.GetParameters(), parameter =>");
-            sb.AppendLine("                global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter) is not null) == 2));");
-            sb.AppendLine("        var parameters = constructor.GetParameters();");
-            sb.AppendLine("        var dimension = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
-            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine($"        var options = new {typeName}();");
+            sb.AppendLine($"        var properties = typeof({typeName}).GetProperties();");
+            sb.AppendLine("        var dimension = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(properties, property =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(property)?.Role");
             sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionDimension));");
-            sb.AppendLine("        var heads = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
-            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine("        var heads = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(properties, property =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(property)?.Role");
             sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionHeadCount));");
-            sb.AppendLine("        int scaledDimension = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(dimension.DefaultValue));");
-            sb.AppendLine("        int scaledHeads = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(heads.DefaultValue));");
+            sb.AppendLine("        int scaledDimension = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(dimension.GetValue(options)));");
+            sb.AppendLine("        int scaledHeads = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(heads.GetValue(options)));");
             sb.AppendLine("        int aligned = global::AiDotNet.Testing.ModelTestScale.AlignDimensionToDivisor(scaledDimension, scaledHeads);");
             sb.AppendLine("        Xunit.Assert.True(aligned > 0 && scaledHeads > 0 && aligned % scaledHeads == 0);");
             sb.AppendLine("    }");
@@ -17518,7 +17515,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static void CollectConstructorDimensionRoles(
         INamespaceSymbol ns,
         string roleAttribute,
-        List<(INamedTypeSymbol Type, IMethodSymbol Constructor)> candidates)
+        List<INamedTypeSymbol> candidates)
     {
         foreach (var member in ns.GetMembers())
         {
@@ -17529,13 +17526,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
 
             if (member is not INamedTypeSymbol type) continue;
-            foreach (var constructor in type.InstanceConstructors)
+            if (type.IsAbstract || type.IsGenericType) continue;
+            if (type.DeclaredAccessibility != Accessibility.Public) continue;
+            if (!type.InstanceConstructors.Any(c =>
+                c.DeclaredAccessibility == Accessibility.Public && c.Parameters.Length == 0))
             {
-                if (constructor.DeclaredAccessibility != Accessibility.Public) continue;
-                int roles = constructor.Parameters.Count(parameter => parameter.GetAttributes().Any(
-                    attribute => attribute.AttributeClass?.ToDisplayString() == roleAttribute));
-                if (roles == 2) candidates.Add((type, constructor));
+                continue;
             }
+
+            // The annotated properties are declared once on EmbeddingModelOptions, so EVERY
+            // descendant inherits the annotation -- including Word2Vec, GloVe and FastText, which
+            // have no attention mechanism at all, never assign NumHeads, and therefore fail a
+            // divisibility check against 0. The attribute names each property's ROLE correctly;
+            // what it cannot express is whether a given model HAS attention. That is what
+            // TransformerEmbeddingOptions marks: it is the family base that actually assigns both
+            // values (768 / 12), and its seven descendants -- BGE, ColBERT, Instructor,
+            // Matryoshka, SGPT, SimCSE, SPLADE -- are exactly the models the invariant applies to.
+            //
+            // Skipping types whose NumHeads happens to be 0 would be the wrong fix: it would make
+            // the test silently vacuous for any attention model that forgot to set it, which is
+            // precisely the defect worth catching.
+            bool attentionFamily = false;
+            for (INamedTypeSymbol? t = type.BaseType; t is not null; t = t.BaseType)
+            {
+                if (t.ToDisplayString() == "AiDotNet.NeuralNetworks.Options.TransformerEmbeddingOptions")
+                {
+                    attentionFamily = true;
+                    break;
+                }
+            }
+
+            if (!attentionFamily) continue;
+
+            int roles = 0;
+            for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
+            {
+                roles += t.GetMembers().OfType<IPropertySymbol>().Count(
+                    property => property.GetAttributes().Any(
+                        attribute => attribute.AttributeClass?.ToDisplayString() == roleAttribute));
+            }
+
+            if (roles == 2) candidates.Add(type);
         }
     }
 

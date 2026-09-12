@@ -4173,7 +4173,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         // Arrange - Use simplified constructor
         int numEdges = 100;
         int maxAdjacent = 4;
-        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+        var meshCnn = new MeshCNN<float>(new MeshCNNOptions { NumClasses = 4, InputFeatures = 5 });
 
         // Create edge adjacency: each edge has up to maxAdjacent neighboring edges
         var edgeAdjacency = new int[numEdges, maxAdjacent];
@@ -4206,7 +4206,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         // guard the [0, features] input reshapes to a degenerate [1, 0, channels]
         // tensor that fails downstream in pooling with an opaque error.
         int maxAdjacent = 4;
-        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+        var meshCnn = new MeshCNN<float>(new MeshCNNOptions { NumClasses = 4, InputFeatures = 5 });
         var edgeAdjacency = new int[4, maxAdjacent];
         meshCnn.SetEdgeAdjacency(edgeAdjacency);
 
@@ -4223,7 +4223,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     public async Task MeshCNN_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
-        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+        var meshCnn = new MeshCNN<float>(new MeshCNNOptions { NumClasses = 4, InputFeatures = 5 });
 
         // Act
         int parameterCount = (int)meshCnn.ParameterCount;

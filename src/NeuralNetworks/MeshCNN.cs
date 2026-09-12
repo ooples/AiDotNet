@@ -153,20 +153,17 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="MeshCNN{T}"/> class with simple parameters.
     /// </summary>
     /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="inputFeatures">Number of input features per edge. Default is 5.</param>
     /// <param name="lossFunction">The loss function. Defaults based on task type if null.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a MeshCNN with default architecture settings.</para>
     /// </remarks>
     public MeshCNN(
         int numClasses,
-        int inputFeatures = 5,
         ILossFunction<T>? lossFunction = null)
         : this(
             new MeshCNNOptions
             {
-                NumClasses = numClasses,
-                InputFeatures = inputFeatures
+                NumClasses = numClasses
             },
             null,
             lossFunction)

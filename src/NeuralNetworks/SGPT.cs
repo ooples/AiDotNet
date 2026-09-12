@@ -91,10 +91,8 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the SGPT model.
         /// </summary>
-        /// <param name="embeddingDimension">The dimension of the embeddings (default: 768).</param>
         /// <param name="maxSequenceLength">The maximum length of input sequences (default: 1024).</param>
         /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
         /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
         /// <param name="poolingStrategy">The strategy used to aggregate outputs (default: Mean, though research often uses last token).</param>
         /// <param name="lossFunction">Optional loss function.</param>
@@ -104,8 +102,6 @@ namespace AiDotNet.NeuralNetworks
         SGPTOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        [ModelDimensionRole(ModelDimensionRole.AttentionDimension)] int embeddingDimension = 768,
-        [ModelDimensionRole(ModelDimensionRole.AttentionHeadCount)] int numHeads = 12,
         ILossFunction<T>? lossFunction = null)
             : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
@@ -114,7 +110,7 @@ namespace AiDotNet.NeuralNetworks
             Options = _options;
             _vocabSize = _options.VocabSize;
             _numLayers = _options.NumLayers;
-            _numHeads = numHeads;
+            _numHeads = _options.NumHeads;
             _feedForwardDim = _options.FeedForwardDim;
 
             InitializeLayersCore(false);

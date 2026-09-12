@@ -1,4 +1,5 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
 using AiDotNet.Document.OCR.TextDetection;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -40,7 +41,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -48,7 +49,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +61,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("CRAFT", meta.Name);
         Assert.NotNull(meta.AdditionalInfo);
@@ -70,7 +71,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         var summary = model.GetModelSummary();
         Assert.Contains("CRAFT", summary);
     }
@@ -184,7 +185,7 @@ public class OCRTextDetectionTests
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
-            new CRAFT<double>(arch, imageSize: 64),
+            new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 }),
             new DBNet<double>(arch, options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 }),
             new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 }),
             new PSENet<double>(arch, options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 }),

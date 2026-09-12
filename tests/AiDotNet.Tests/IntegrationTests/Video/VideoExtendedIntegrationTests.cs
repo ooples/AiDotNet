@@ -38,8 +38,9 @@ public class VideoExtendedIntegrationTests
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: height, inputWidth: width, inputDepth: depth);
 
-    private static SAM2Options CreateSam2SmokeOptions() => new()
+    private static SAM2Options CreateSam2SmokeOptions(SAM2ModelSize modelSize = SAM2ModelSize.Base) => new()
     {
+        ModelSize = modelSize,
         HieraEmbeddingDimension = 16,
         HieraStageDepths = [1, 1, 1, 1],
         HieraInitialHeadCount = 1,
@@ -622,7 +623,7 @@ public class VideoExtendedIntegrationTests
         await Task.Yield();
         var arch = CreateArch(height: 64, width: 64);
         var model = new SAM2<double>(
-            arch, modelSize: SAM2ModelSize.Small, options: CreateSam2SmokeOptions());
+            arch, options: CreateSam2SmokeOptions(SAM2ModelSize.Small));
         Assert.True(model.SupportsTraining);
     }
 
@@ -632,7 +633,7 @@ public class VideoExtendedIntegrationTests
         await Task.Yield();
         var arch = CreateArch(height: 32, width: 32);
         using var model = new SAM2<double>(
-            arch, modelSize: SAM2ModelSize.Tiny, options: CreateSam2SmokeOptions());
+            arch, options: CreateSam2SmokeOptions(SAM2ModelSize.Tiny));
         var input = new Tensor<double>([2, 3, 32, 32]);
         for (int i = 0; i < input.Length; i++)
         {

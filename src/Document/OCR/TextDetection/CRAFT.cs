@@ -128,8 +128,6 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </summary>
     public CRAFT(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 768,
-        int backboneChannels = 512,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
@@ -145,11 +143,11 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _backboneChannels = backboneChannels;
+        _backboneChannels = options.BackboneChannels;
         _upscaleChannels = options.UpscaleChannels;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
+        ImageSize = options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -170,8 +168,6 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </para>
     /// </remarks>
     public CRAFT(NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 768,
-        int backboneChannels = 512,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
@@ -182,11 +178,11 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         Options = _options;
 
         _useNativeMode = true;
-        _backboneChannels = backboneChannels;
+        _backboneChannels = options.BackboneChannels;
         _upscaleChannels = options.UpscaleChannels;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
+        ImageSize = options.ImageSize;
 
         InitializeLayers();
     }

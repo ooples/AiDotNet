@@ -130,12 +130,29 @@ public class OptionsSurfaceRatchetTests
     /// parameter whose options property already existed, not a detector disagreement.
     /// </para>
     /// <para>
-    /// The 21 that remain are genuine gaps, not a floor: DGCNN (knnK, useDropout, dropoutRate)
-    /// and CRAFT (imageSize, backboneChannels) lead the list, and both already have an options
-    /// class to move the values onto.
+    /// 21 to 0, closing this measure. The 21 reduced to exactly two shapes, both of which read as
+    /// working configurability. Four probabilistic forecasters (CSDI, DiffusionTS, ScoreGrad,
+    /// TSDiff) reconciled parameter and options with
+    /// <c>_numFeatures = numFeatures &gt; 0 ? numFeatures : _options.NumFeatures;</c> — so the
+    /// options value applied ONLY when a caller passed zero or less, and the parameter's own
+    /// default of 1 shadowed it for everyone else. The other six (DGCNN, PointNet,
+    /// PointNetPlusPlus, GaussianSplatting, MeshCNN, SpiralNet) had convenience constructors
+    /// forwarding scalars into an options object initializer, applying the parameter copy last.
+    /// Every one of those 11 defaults was checked against its options property and matched, so the
+    /// removals changed no behaviour. Parameters with no default (numClasses, samplingRates) and
+    /// collaborators (lossFunction, optimizer) stayed: a parameter with no default is a required
+    /// input, not a duplicated value.
+    /// </para>
+    /// <para>
+    /// Zero here means no in-scope model constructor declares a tunable defaulted parameter. It
+    /// does NOT mean issue #2090 is closed — this counts one of six defect forms. The unread
+    /// ratchet still stands at 97, <c>UncoveredBaseline</c> at 81, and the forms with no detector
+    /// at all (hardcoded literals shadowing an option, constructors disagreeing about a default,
+    /// bare optimizers, factories discarding tuned parameters, doc examples that cannot compile)
+    /// remain findable only by reading code.
     /// </para>
     /// </remarks>
-    private const int ConstructorBaseline = 21;
+    private const int ConstructorBaseline = 0;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
@@ -230,8 +247,28 @@ public class OptionsSurfaceRatchetTests
         // actually emit them. It previously computed byType and then asserted only
         // `byType.Count >= 0` — always true, with nothing written anywhere — so it reported
         // nothing at all while reading as though it did.
-        _output.WriteLine($"{gaps.Count} remaining gaps across {byType.Count} model types.");
+        _output.WriteLine($"NAME-CREDITED ({nameof(Baseline)}): {gaps.Count} gaps across "
+            + $"{byType.Count} model types.");
         foreach (var group in byType)
+        {
+            _output.WriteLine($"  {group.Key} ({group.Count()}): "
+                + string.Join(", ", group.Select(g => g.ParameterName).OrderBy(n => n, StringComparer.Ordinal)));
+        }
+
+        // Once the name-credited count reaches zero this report goes silent, which is exactly when
+        // the remaining work becomes invisible: the STRICT measure is what still has entries, and
+        // it was only ever printed by ConstructorBaseline's failure message — so it could not be
+        // read at all while that test was passing. Report both.
+        var strict = MeasureRemaining();
+        var strictByType = strict.GroupBy(g => g.TypeName)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .ToList();
+
+        _output.WriteLine(string.Empty);
+        _output.WriteLine($"STRICT ({nameof(ConstructorBaseline)}): {strict.Count} parameters across "
+            + $"{strictByType.Count} model types.");
+        foreach (var group in strictByType)
         {
             _output.WriteLine($"  {group.Key} ({group.Count()}): "
                 + string.Join(", ", group.Select(g => g.ParameterName).OrderBy(n => n, StringComparer.Ordinal)));
