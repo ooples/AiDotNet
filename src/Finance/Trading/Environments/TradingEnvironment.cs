@@ -58,7 +58,15 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     protected readonly int WindowSize;
     protected readonly int NumAssets;
     protected readonly T InitialCapital;
-    protected readonly double TransactionCost;
+    /// <summary>
+    /// Cost per unit of trade value actually in force.
+    /// </summary>
+    /// <remarks>
+    /// Seeded from the constructor's <c>transactionCost</c> argument and REPLACED (never added to) by
+    /// <see cref="ApplyAgentOverrides"/> when an agent supplies its own. Not readonly for exactly that
+    /// reason; there is only ever one cost in force.
+    /// </remarks>
+    protected double TransactionCost;
     protected readonly bool AllowShortSelling;
     protected readonly bool RandomStart;
     protected readonly int MaxEpisodeLength;
@@ -166,6 +174,38 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
         OnReset();
 
         return BuildObservation(_currentStep);
+    }
+
+    /// <summary>
+    /// Applies an agent's friction settings to this environment, where the agent's value REPLACES the
+    /// environment's own.
+    /// </summary>
+    /// <param name="options">The agent's options. Only the properties it actually set are applied.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence, in one sentence:</b> an option left <c>null</c> means "unset" and the environment keeps
+    /// the value it was constructed with; an option that is set REPLACES that value. The two are never summed,
+    /// so a cost or penalty configured in both places is applied exactly once.
+    /// </para>
+    /// <para>
+    /// This exists because the agent and the environment are separate objects with no other seam between
+    /// them: <c>TradingAgentOptions.TransactionCost</c> looks authoritative but the environment is what
+    /// actually charges the cost. Rather than leave the agent-side setting silently unread, or add it on top
+    /// of the environment's (which would charge twice), calling this makes the agent's value win explicitly.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Configure frictions in whichever place is convenient. If you set them on the
+    /// agent, they win; if you leave them alone, whatever the environment was built with applies.
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        if (options.TransactionCost is double transactionCost)
+        {
+            TransactionCost = transactionCost;
+        }
     }
 
     /// <summary>

@@ -412,6 +412,19 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
+        // Structural compatibility is decided HERE, against the agent's real current shape, and before a
+        // single byte of it is mutated. It cannot move later: the V2 topology read below deliberately
+        // RESHAPES components to the checkpoint's own topology, so by the time the flat vector is applied
+        // the counts always agree and a genuinely incompatible checkpoint has already been absorbed.
+        // Opt-in, so the sparse and tabular agents that rely on exactly that reshaping are unaffected.
+        string? incompatibility = DescribeIncompatibleCheckpoint(count, ParameterCount);
+        if (incompatibility is not null && count != ParameterCount)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name} cannot load this checkpoint: it holds {count} parameters but this agent "
+                + $"has {ParameterCount}. {incompatibility}");
+        }
+
         // Keys and shapes are state, not values. Recreate them before generated state and the flat
         // vector are restored so sparse/tabular sources expose the same slots as the checkpoint.
         if (magic == AgentSerializationMagicV2)
@@ -429,6 +442,32 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
 
         SetParameters(parameters);
     }
+
+    /// <summary>
+    /// Lets an agent explain, in its own terms, why a checkpoint's parameter layout no longer matches it.
+    /// </summary>
+    /// <param name="savedParameterCount">Parameter count found in the checkpoint.</param>
+    /// <param name="currentParameterCount">Parameter count this agent now has.</param>
+    /// <returns>
+    /// A sentence appended to the mismatch error, or <c>null</c> to say nothing — the default, which leaves
+    /// restore behaviour exactly as it was.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Returning non-null turns a layout mismatch into an immediate, specific failure instead of a generic
+    /// length error raised while the parameter registry is folding components. Override it when an agent has
+    /// gained or lost networks and an older checkpoint therefore cannot be loaded: the reader of that
+    /// exception is someone holding a file they believed was still valid, and what they need to know is what
+    /// changed and whether anything can be recovered.
+    /// </para>
+    /// <para>
+    /// It is deliberately opt-in. Restore is shared by every agent in the library, including tabular and
+    /// sparse ones whose component sizes are materialized from the payload itself, so the base must not
+    /// assume a count difference is always an error.
+    /// </para>
+    /// </remarks>
+    protected virtual string? DescribeIncompatibleCheckpoint(int savedParameterCount, long currentParameterCount)
+        => null;
 
     private const int AgentSerializationMagicV1 = unchecked((int)0xA1D0A63E);
     private const int AgentSerializationMagicV2 = unchecked((int)0xA1D0A63F);

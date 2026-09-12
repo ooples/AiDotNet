@@ -209,16 +209,23 @@ public class TradingAgentOptions<T> : ModelOptions
     public required T InitialCapital { get; set; }
 
     /// <summary>
-    /// Transaction cost as a fraction of trade value.
+    /// Transaction cost as a fraction of trade value, as an OVERRIDE of the environment's own cost.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Cost to execute a trade (broker fees, slippage).
-    /// 0.001 means 0.1% of the trade value is lost to costs.
-    /// This discourages excessive trading.
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>transactionCost</c> constructor argument binds and this option changes nothing. When set, it
+    /// REPLACES the environment's value — it is not added to it — the moment the environment is handed these
+    /// options via <c>TradingEnvironment.ApplyAgentOverrides</c>. There is exactly one cost in force either
+    /// way, so a cost can never be charged twice.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Cost to execute a trade (broker fees, slippage). 0.001 means 0.1% of the trade
+    /// value is lost to costs, which discourages excessive trading. Leave it null to use whatever cost the
+    /// environment was built with; set it to run the same environment at a different cost.
     /// </para>
     /// </remarks>
-    public double TransactionCost { get; set; } = 0.001;
+    public double? TransactionCost { get; set; }
 
     /// <summary>
     /// Maximum position size as a fraction of portfolio.
@@ -359,7 +366,7 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("WarmupSteps cannot be negative.", nameof(WarmupSteps));
         if (HiddenLayers is null || Array.Exists(HiddenLayers, size => size <= 0))
             throw new ArgumentException("HiddenLayers must be non-null with positive widths.", nameof(HiddenLayers));
-        if (TransactionCost < 0)
+        if (TransactionCost is double transactionCost && (transactionCost < 0 || double.IsNaN(transactionCost)))
             throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
         if (!(RewardScale > 0.0) || double.IsNaN(RewardScale) || double.IsInfinity(RewardScale))
             throw new ArgumentException("RewardScale must be a positive, finite number.", nameof(RewardScale));

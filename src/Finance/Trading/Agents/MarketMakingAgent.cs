@@ -526,6 +526,35 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Every market-making checkpoint saved before this agent gained its critic is now unloadable, and this
+    /// is what says so. It is a hard failure with no migration path on purpose: the saved policy was
+    /// produced by an update that regressed the policy onto its own quotes and never read the reward, so it
+    /// holds no learned value information worth carrying forward. Loading part of it would silently
+    /// resurrect a policy that never learned anything — precisely the defect this agent was repaired for.
+    /// </para>
+    /// </remarks>
+    protected override string? DescribeIncompatibleCheckpoint(int savedParameterCount, long currentParameterCount)
+    {
+        if (savedParameterCount == currentParameterCount)
+        {
+            return null;
+        }
+
+        string shapeHint = savedParameterCount == _policyNetwork.GetParameters().Length
+            ? " That is exactly the size of the policy network on its own — the shape this agent had before "
+              + "it gained a critic — so this is almost certainly a pre-critic checkpoint."
+            : string.Empty;
+
+        return shapeHint
+            + " MarketMakingAgent now trains a Q(s,a) critic alongside a target critic and a target policy, "
+            + "so the saved parameter layout no longer matches. There is no migration: the saved policy was "
+            + "trained by an update that regressed the policy onto its own quotes and never read the reward, "
+            + "so it contains no learned value information. Retrain the agent from scratch.";
+    }
+
     #endregion
 
     #region Model Metadata
@@ -554,7 +583,9 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AgentType", "MarketMaking" },
-                { "MaxInventory", _mmOptions.MaxInventory },
+                { "MaxInventory", _mmOptions.MaxInventory.HasValue
+                    ? _mmOptions.MaxInventory.Value
+                    : (object)"unset (the environment's limit binds)" },
                 { "BaseSpread", _mmOptions.BaseSpread },
                 { "ParameterCount", ParameterCount }
             }

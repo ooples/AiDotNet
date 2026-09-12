@@ -93,6 +93,9 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </summary>
     private int _updateCount;
 
+    /// <summary>Which head supplies the policy's standard deviation. Fixed at construction.</summary>
+    private readonly SacActorHead _actorHead;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -128,7 +131,28 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
+        _actorHead = options is FinancialSACAgentOptions<T> headOptions
+            ? headOptions.ActorHead
+            : SacActorHead.StateIndependentLogStd;
+
+        // The paper's head predicts the spread from the state, which needs two outputs per action dimension:
+        // [mu_0..mu_{A-1} | logStd_0..logStd_{A-1}]. The default head keeps the historical ActionSize width.
+        int actorOutputWidth = _actorHead == SacActorHead.StateConditionedGaussian
+            ? options.ActionSize * 2
+            : options.ActionSize;
+
+        if (_actorHead == SacActorHead.StateConditionedGaussian
+            && actorArchitecture.OutputSize != actorOutputWidth)
+        {
+            throw new ArgumentException(
+                $"SacActorHead.StateConditionedGaussian needs an actor architecture with {actorOutputWidth} outputs "
+                + $"(2 * ActionSize: {options.ActionSize} means followed by {options.ActionSize} log standard "
+                + $"deviations), but this architecture has {actorArchitecture.OutputSize}. Either widen the actor "
+                + "architecture or use SacActorHead.StateIndependentLogStd, which keeps the ActionSize width.",
+                nameof(actorArchitecture));
+        }
+
+        EnsureDefaultLayers(actorArchitecture, options.StateSize, actorOutputWidth);
         EnsureDefaultLayers(criticArchitecture, options.StateSize + options.ActionSize, 1);
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
@@ -168,9 +192,60 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <summary>
     /// Current per-dimension policy standard deviations, <c>exp(logStd)</c>.
     /// </summary>
+    /// <remarks>
+    /// For <see cref="SacActorHead.StateConditionedGaussian"/> the spread depends on the state, so this
+    /// returns the state-independent fallback only; use <see cref="PolicyStandardDeviationsFor"/> instead.
+    /// </remarks>
     public double[] CurrentPolicyStandardDeviations => CurrentLogStandardDeviations()
         .Select(Math.Exp)
         .ToArray();
+
+    /// <summary>Which head this agent was built with.</summary>
+    public SacActorHead ActorHead => _actorHead;
+
+    private bool UsesStateConditionedHead => _actorHead == SacActorHead.StateConditionedGaussian;
+
+    /// <summary>
+    /// The policy's standard deviation in a given state — the quantity that can differ between a calm market
+    /// and a volatile one when <see cref="SacActorHead.StateConditionedGaussian"/> is in use.
+    /// </summary>
+    /// <remarks>
+    /// With the state-independent head this returns the same vector for every state, by construction.
+    /// </remarks>
+    public double[] PolicyStandardDeviationsFor(Vector<T> state)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (!UsesStateConditionedHead)
+        {
+            return CurrentPolicyStandardDeviations;
+        }
+
+        var output = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        var logStds = LogStandardDeviationsFromRow(output, rowOffset: 0, TradingOptions.ActionSize);
+        var stds = new double[logStds.Length];
+        for (int i = 0; i < logStds.Length; i++)
+        {
+            stds[i] = Math.Exp(logStds[i]);
+        }
+
+        return stds;
+    }
+
+    /// <summary>
+    /// Reads the clamped log standard deviations out of one row of a state-conditioned actor output, whose
+    /// layout is <c>[means | logStds]</c>.
+    /// </summary>
+    private double[] LogStandardDeviationsFromRow(Vector<T> actorOutput, int rowOffset, int actionDim)
+    {
+        var logStds = new double[actionDim];
+        for (int j = 0; j < actionDim; j++)
+        {
+            double raw = NumOps.ToDouble(actorOutput[rowOffset + actionDim + j]);
+            logStds[j] = MathPolyfill.Clamp(raw, MinLogStandardDeviation, MaxLogStandardDeviation);
+        }
+
+        return logStds;
+    }
 
     /// <summary>
     /// Evaluates the twin critics at a state-action pair, returning <c>(Q1, Q2)</c>.
@@ -229,7 +304,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         var logStds = new double[_logStd.Length];
         for (int i = 0; i < logStds.Length; i++)
         {
-            logStds[i] = Math.Clamp(NumOps.ToDouble(_logStd[i]), MinLogStandardDeviation, MaxLogStandardDeviation);
+            logStds[i] = MathPolyfill.Clamp(NumOps.ToDouble(_logStd[i]), MinLogStandardDeviation, MaxLogStandardDeviation);
         }
 
         return logStds;
@@ -267,6 +342,17 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <summary>Step size for the log-std ascent and the temperature update.</summary>
     private const double PolicySpreadLearningRate = 1e-3;
 
+    /// <summary>
+    /// Step size for the state-conditioned spread target.
+    /// </summary>
+    /// <remarks>
+    /// Larger than <see cref="PolicySpreadLearningRate"/> on purpose. The state-independent spread is a
+    /// parameter this agent writes directly, so a small step lands exactly; the state-conditioned spread is
+    /// a network OUTPUT that has to be chased by an MSE step averaged over the batch, so a target that moves
+    /// by 1e-3 is indistinguishable from the target it already predicts and the head would never separate.
+    /// </remarks>
+    private const double StateConditionedSpreadStep = 0.05;
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -284,11 +370,37 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        int actionDim = TradingOptions.ActionSize;
+        var output = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
 
-        return training
-            ? AddGaussianExplorationNoise(action, CurrentPolicyStandardDeviations)
-            : action;
+        // Only the leading ActionSize outputs are the action; the state-conditioned head appends the spread.
+        var mean = new Vector<T>(actionDim);
+        for (int i = 0; i < actionDim; i++)
+        {
+            mean[i] = output[i];
+        }
+
+        if (!training)
+        {
+            return mean;
+        }
+
+        double[] standardDeviations;
+        if (UsesStateConditionedHead)
+        {
+            var logStds = LogStandardDeviationsFromRow(output, rowOffset: 0, actionDim);
+            standardDeviations = new double[actionDim];
+            for (int i = 0; i < actionDim; i++)
+            {
+                standardDeviations[i] = Math.Exp(logStds[i]);
+            }
+        }
+        else
+        {
+            standardDeviations = CurrentPolicyStandardDeviations;
+        }
+
+        return AddGaussianExplorationNoise(mean, standardDeviations);
     }
 
     #endregion
@@ -356,21 +468,29 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         //   y  = r + gamma * (1 - done) * ( min(Q1'(s',a'), Q2'(s',a')) - alpha * log pi(a'|s') )
         // The entropy term is what makes this SAC rather than TD3: the bootstrap is the SOFT value, so
         // the critics learn the value of acting AND staying stochastic.
-        var nextMeans = _actor.Predict(nextStates).ToVector();
+        // With the state-conditioned head the actor emits [means | logStds] per row, so the spread used for
+        // a' and for log pi(a'|s') is the one the network predicts FOR THAT STATE, not a global constant.
+        int actorWidth = UsesStateConditionedHead ? actionDim * 2 : actionDim;
+        var nextOutputs = _actor.Predict(nextStates).ToVector();
         var nextStateActionsData = new T[n * stateActionDim];
         var nextLogProbs = new double[n];
         for (int i = 0; i < n; i++)
         {
+            int row = i * actorWidth;
+            double[] rowLogStds = UsesStateConditionedHead
+                ? LogStandardDeviationsFromRow(nextOutputs, row, actionDim)
+                : logStds;
+
             var nextMean = new Vector<T>(actionDim);
             var nextAction = new Vector<T>(actionDim);
             for (int j = 0; j < actionDim; j++)
             {
-                nextMean[j] = nextMeans[(i * actionDim) + j];
-                double noise = Math.Exp(logStds[j]) * NextStandardNormal();
+                nextMean[j] = nextOutputs[row + j];
+                double noise = Math.Exp(rowLogStds[j]) * NextStandardNormal();
                 nextAction[j] = NumOps.Add(nextMean[j], NumOps.FromDouble(noise));
             }
 
-            nextLogProbs[i] = GaussianLogProbability(nextAction, nextMean, logStds);
+            nextLogProbs[i] = GaussianLogProbability(nextAction, nextMean, rowLogStds);
             for (int j = 0; j < stateDim; j++)
             {
                 nextStateActionsData[(i * stateActionDim) + j] = batch[i].NextState[j];
@@ -423,25 +543,57 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         // grad_a Q is estimated by central differences over the ONLINE critics (the library's DDPG agent
         // uses the same construction), turned into a regression target a + step * grad_a Q, and realised
         // through the actor's own MSE step, which supplies grad_theta mu by backpropagation.
-        var means = _actor.Predict(states).ToVector();
+        var actorOutputs = _actor.Predict(states).ToVector();
+        var means = new Vector<T>(n * actionDim);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < actionDim; j++)
+            {
+                means[(i * actionDim) + j] = actorOutputs[(i * actorWidth) + j];
+            }
+        }
+
         var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
 
         T maxPosition = TradingOptions.MaxPositionSize;
         T minPosition = NumOps.Negate(maxPosition);
-        var actorTargetData = new T[n * actionDim];
+        var actorTargetData = new T[n * actorWidth];
         for (int i = 0; i < n; i++)
         {
+            double[] rowLogStds = UsesStateConditionedHead
+                ? LogStandardDeviationsFromRow(actorOutputs, i * actorWidth, actionDim)
+                : logStds;
+
             for (int j = 0; j < actionDim; j++)
             {
                 int flat = (i * actionDim) + j;
                 T ascended = NumOps.Add(
                     means[flat],
                     NumOps.FromDouble(ActorPolicyGradientStep * actionGradients[flat]));
-                actorTargetData[flat] = MathHelper.Clamp<T>(ascended, minPosition, maxPosition);
+                actorTargetData[(i * actorWidth) + j] = MathHelper.Clamp<T>(ascended, minPosition, maxPosition);
+
+                if (!UsesStateConditionedHead)
+                {
+                    continue;
+                }
+
+                // The spread half needs a target of its own or it never receives a gradient: an MSE step
+                // only moves outputs that appear in the target. Ascend the SAME objective the
+                // state-independent spread ascends, but PER SAMPLE:
+                //   d/dlogStd_j (Q + alpha*H) = alpha - |dQ/da_j| * std_j.
+                // Where the critic barely depends on the action (a state whose value is unclear) the second
+                // term is small and the spread grows; where value depends sharply on the action it shrinks.
+                double std = Math.Exp(rowLogStds[j]);
+                double spreadGradient = alpha - (Math.Abs(actionGradients[flat]) * std);
+                double ascendedLogStd = MathPolyfill.Clamp(
+                    rowLogStds[j] + (StateConditionedSpreadStep * spreadGradient),
+                    MinLogStandardDeviation,
+                    MaxLogStandardDeviation);
+                actorTargetData[(i * actorWidth) + actionDim + j] = NumOps.FromDouble(ascendedLogStd);
             }
         }
 
-        var actorTargets = new Tensor<T>([n, actionDim], new Vector<T>(actorTargetData));
+        var actorTargets = new Tensor<T>([n, actorWidth], new Vector<T>(actorTargetData));
         _actor.Train(states, actorTargets);
         T actorLoss = _actor.GetLastLoss();
 
@@ -450,7 +602,12 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         //   d/dlogStd_j  E[Q] = E[ dQ/da_j * exp(logStd_j) * eps_j ]   and   d/dlogStd_j  H = 1.
         // Estimating the first term at eps = 0 leaves the entropy term, which is the part that actually
         // trades spread against value; alpha sets the exchange rate.
-        UpdatePolicySpread(actionGradients, logStds, alpha, n, actionDim);
+        // Only for the state-independent head: with the paper's head the spread IS a network output and was
+        // just given its own regression target above, so writing _logStd here as well would do nothing.
+        if (!UsesStateConditionedHead)
+        {
+            UpdatePolicySpread(actionGradients, logStds, alpha, n, actionDim);
+        }
 
         // ---- 5. Temperature ----
         if (TradingOptions.AutoTuneAlpha)
@@ -547,7 +704,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
             double std = Math.Exp(logStds[j]);
             double gradient = alpha - (sensitivity * std);
-            double updated = Math.Clamp(
+            double updated = MathPolyfill.Clamp(
                 logStds[j] + (PolicySpreadLearningRate * gradient),
                 MinLogStandardDeviation,
                 MaxLogStandardDeviation);
@@ -579,7 +736,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         double logAlpha = NumOps.ToDouble(_logAlpha);
         double gradient = -Math.Exp(logAlpha) * (averageLogProb + targetEntropy);
         logAlpha -= PolicySpreadLearningRate * gradient;
-        _logAlpha = NumOps.FromDouble(Math.Clamp(logAlpha, -20.0, 4.0));
+        _logAlpha = NumOps.FromDouble(MathPolyfill.Clamp(logAlpha, -20.0, 4.0));
     }
 
     #endregion

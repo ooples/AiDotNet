@@ -73,4 +73,20 @@ public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
     /// </para>
     /// </remarks>
     public double TargetEntropyRatio { get; set; } = -1.0;
+
+    /// <summary>
+    /// Where the policy's standard deviation comes from. Defaults to
+    /// <see cref="AiDotNet.Enums.SacActorHead.StateIndependentLogStd"/>, which keeps the actor's output width
+    /// at <c>ActionSize</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set this to <see cref="AiDotNet.Enums.SacActorHead.StateConditionedGaussian"/> for the head described
+    /// in the SAC paper (Haarnoja et al. 2018), where the network predicts the spread from the state.
+    /// <b>That widens the actor's required output size to <c>2 * ActionSize</c></b>, so an architecture built
+    /// for <c>ActionSize</c> outputs will be rejected with a message saying so — which is why the
+    /// non-breaking head is the default rather than the paper's.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Enums.SacActorHead ActorHead { get; set; } = AiDotNet.Enums.SacActorHead.StateIndependentLogStd;
 }
