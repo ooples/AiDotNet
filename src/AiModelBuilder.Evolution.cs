@@ -569,7 +569,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return await RunEvolutionAsync(
             effective, task, variation, genomeCodec, selection, refiner, migration, observer, checkpointStore,
             genomeDistance, archiveFactory, winnerModelFactory, seeds, EvolutionRunSummary.DefaultEliteCount,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken, _evolutionRunControl).ConfigureAwait(false);
     }
 
     /// <summary>Casts the configured seeds to the genome type this run uses.</summary>
@@ -603,6 +603,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="seeds">The starting candidates.</param>
     /// <param name="maxElites">How many elites the summary retains.</param>
     /// <param name="cancellationToken">Propagated into the run.</param>
+    /// <param name="control">Optional one-run graceful-stop handle.</param>
     /// <returns>The redacted summary and the engine's own typed result.</returns>
     private static async Task<EvolutionRunOutcome> RunEvolutionAsync<TGenome>(
         EvolutionOptions options,
@@ -619,7 +620,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory,
         IReadOnlyList<TGenome> seeds,
         int maxElites,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvolutionRunControl? control = null)
     {
         EvolutionRunLocations locations = ResolveEvolutionLocations(options);
         EvolutionTraceObserver<TGenome>? tracer = null;
@@ -656,6 +658,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 genomeCodec,
                 genomeDistance);
 
+            using IDisposable? controlRegistration = control?.Attach(engine.RequestStop);
             DateTimeOffset started = DateTimeOffset.UtcNow;
             EvolutionRunResult<TGenome> run = await engine.RunAsync(seeds, cancellationToken).ConfigureAwait(false);
             DateTimeOffset finished = DateTimeOffset.UtcNow;
@@ -759,7 +762,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             if (programOptions.ResourceAccounting is { } resources)
                 task = new ResourceMeteredEvolutionTask<ProgramGenome>(task, resources.Ledger, new[] { resources.MaximumEvaluationCostUnits });
 
-            string? runRoot = programOptions.Engine.OutputDirectory;
+            string? runRoot = ResolveEvolutionLocations(options).OutputDirectory;
 
             // Per-proposal audit trail. The sink writes beneath the run directory, bounded and redacted, and stays
             // uncreated unless the caller turned it on.
@@ -806,6 +809,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     ? outputObserver
                     : new FanOutEvolutionObserver<ProgramGenome>(outputObserver, artifactObserver);
 
+            if (_programEvolutionObserver is { } callerObserver)
+                programObserver = programObserver is null ? callerObserver : new FanOutEvolutionObserver<ProgramGenome>(programObserver, callerObserver);
+
+            IEvolutionArchive<ProgramGenome> CreateProgramArchive(int island)
+            {
+                IEvolutionArchive<ProgramGenome> archive = options.CreateArchive<ProgramGenome>();
+                outputObserver?.AddArchive(archive);
+                if (_programEvolutionObserver is IProgramEvolutionArchiveObserver archiveObserver)
+                    archiveObserver.AddArchive(archive);
+                return archive;
+            }
+
             EvolutionRunOutcome outcome = await RunEvolutionAsync(
                 options,
                 task,
@@ -817,25 +832,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 programObserver,
                 null,
                 genomeDistance,
-                null,
+                CreateProgramArchive,
                 null,
                 programOptions.CreateSeedGenomes(),
                 programOptions.IncludeEliteSourceCount,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken, _evolutionRunControl).ConfigureAwait(false);
 
             var typedRun = (EvolutionRunResult<ProgramGenome>)outcome.RunResult;
 
-            // The observer cannot see the archives during the run, because the engine owns them and its events carry
-            // candidates rather than archive views. The final result does expose them, so the run-end write happens
-            // here with the full frontier available.
-            if (outputObserver is not null && programOptions.RunOutput is { WriteAtRunEnd: true })
+            if (outputObserver?.LastError is not null)
             {
-                foreach (IEvolutionArchiveView<ProgramGenome> island in typedRun.Islands)
+                // File-system messages can contain private paths. Keep the failure visible without leaking them.
+                outcome.Summary.RetainedFailures.Add(new EvolutionFailureSummary
                 {
-                    outputObserver.AddArchive(island);
-                }
-
-                outputObserver.WriteNow();
+                    Code = "program_output_incomplete",
+                    Message = "One or more configured program outputs could not be retained.",
+                    IsRedacted = true
+                });
             }
 
             ProgramEvolutionResult programResult = ProgramEvolutionResult.Create(
@@ -1136,29 +1149,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         public ProgramEvolutionResult? ProgramResult { get; }
 
         public IFullModel<T, TInput, TOutput>? WinningModel { get; }
-    }
-
-    /// <summary>Delivers each run event to two observers, so a caller's observer and the trace writer coexist.</summary>
-    /// <typeparam name="TGenome">The candidate type being evolved.</typeparam>
-    private sealed class FanOutEvolutionObserver<TGenome> : IEvolutionObserver<TGenome>
-    {
-        private readonly IEvolutionObserver<TGenome> _first;
-        private readonly IEvolutionObserver<TGenome> _second;
-
-        public FanOutEvolutionObserver(IEvolutionObserver<TGenome> first, IEvolutionObserver<TGenome> second)
-        {
-            _first = first;
-            _second = second;
-        }
-
-        /// <inheritdoc/>
-        public async ValueTask OnEventAsync(
-            EvolutionEvent<TGenome> evolutionEvent,
-            CancellationToken cancellationToken = default)
-        {
-            await _first.OnEventAsync(evolutionEvent, cancellationToken).ConfigureAwait(false);
-            await _second.OnEventAsync(evolutionEvent, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     /// <inheritdoc/>

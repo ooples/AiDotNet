@@ -33,7 +33,7 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 /// one wiring step is registering the archives, which you do inside the archive factory you already pass to the
 /// engine so the observer knows where to look for the best program.</para>
 /// </remarks>
-public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
+public sealed class ProgramRunOutputObserver : IProgramEvolutionArchiveObserver
 {
     private const int MaxNoteLength = 256;
 

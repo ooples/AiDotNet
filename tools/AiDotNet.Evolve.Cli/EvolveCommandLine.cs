@@ -27,9 +27,11 @@ internal static class EvolveCommandLine
     /// <param name="output">Where normal output goes.</param>
     /// <param name="error">Where diagnostics go.</param>
     /// <param name="cancellationToken">Stops a run in progress.</param>
+    /// <param name="control">Optional one-run graceful-stop control, distinct from cancellation.</param>
     /// <returns>The process exit code.</returns>
     public static async Task<int> ExecuteAsync(
-        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default,
+        EvolutionRunControl? control = null)
     {
         if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
         {
@@ -42,7 +44,8 @@ internal static class EvolveCommandLine
             string command = args[0].ToLowerInvariant();
             string[] known = command switch
             {
-                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best" },
+                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best", "session" },
+                "inspect" or "pause" or "cancel" => new[] { "session" },
                 "validate" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume" },
                 "schema" or "docs" => new[] { "out" },
                 "benchmark-program" => new[] { "worker", "output", "runs", "measurements" },
@@ -52,8 +55,9 @@ internal static class EvolveCommandLine
             Arguments rest = Arguments.Parse(args.Skip(1).ToArray(), known);
             return command switch
             {
-                "run" => await RunAsync(rest, output, error, cancellationToken).ConfigureAwait(false),
+                "run" => await RunAsync(rest, output, error, cancellationToken, control).ConfigureAwait(false),
                 "validate" => Validate(rest, output, error),
+                "inspect" or "pause" or "cancel" => await ControlAsync(command, rest, output, cancellationToken).ConfigureAwait(false),
                 "benchmark-program" => await ProgramBenchmark.RunAsync(rest.Require("worker"), rest.Require("output"),
                     rest.TryGet("runs", out string runs) ? ParseInt32(runs, "runs") : 4,
                     rest.TryGet("measurements", out string measurements) ? ParseInt32(measurements, "measurements") : 3,
@@ -94,7 +98,7 @@ internal static class EvolveCommandLine
 
     /// <summary>Loads a configuration file, runs the search it describes, and reports the outcome.</summary>
     private static async Task<int> RunAsync(
-        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken)
+        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken, EvolutionRunControl? control)
     {
         string configPath = arguments.Require("config");
         YamlModelConfig config = YamlConfigLoader.LoadFromFile(configPath);
@@ -110,24 +114,33 @@ internal static class EvolveCommandLine
                 "written in code. Use the library directly for that.");
 
         ApplyOverrides(options, arguments);
-        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(configPath);
-        builder.ConfigureEvolution(options);
+        if (options.OutputDirectory is not null) config.ProgramEvolution.Engine.OutputDirectory = options.OutputDirectory;
+        var builder = AiModelBuilder<double, Matrix<double>, Vector<double>>.FromConfiguration(config);
+        control ??= new EvolutionRunControl();
+        using var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var inspection = new RunInspection(control, runCancellation);
+        builder.WithEvolutionControl(control).ObserveProgramEvolution(inspection);
+        await using var service = arguments.TryGet("session", out string session)
+            ? new LocalRunControl(session, inspection.Handle) : null;
 
         AiModelResult<double, Matrix<double>, Vector<double>> result;
         try
         {
-            result = await builder.BuildAsync(cancellationToken).ConfigureAwait(false);
+            result = await builder.BuildAsync(runCancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            await inspection.FinishAsync(null).ConfigureAwait(false);
             throw;
         }
         catch (Exception exception)
         {
+            await inspection.FinishAsync(null).ConfigureAwait(false);
             throw new RunFailedException(exception);
         }
 
         EvolutionRunSummary? summary = result.EvolutionSummary;
+        await inspection.FinishAsync(summary).ConfigureAwait(false);
         if (summary is null)
         {
             error.WriteLine("The run produced no evolution summary.");
@@ -136,6 +149,13 @@ internal static class EvolveCommandLine
 
         if (arguments.Has("json")) output.WriteLine(JsonConvert.SerializeObject(summary, Formatting.Indented));
         else PrintSummary(output, summary, result.ProgramEvolution?.BestProgram?.Source, arguments.Has("show-best"));
+        if (service is not null) error.WriteLine(JsonConvert.SerializeObject(inspection.Read()));
+        return ExitSuccess;
+    }
+
+    private static async Task<int> ControlAsync(string command, Arguments arguments, TextWriter output, CancellationToken token)
+    {
+        output.WriteLine(await LocalRunControl.SendAsync(arguments.Require("session"), command, token).ConfigureAwait(false));
         return ExitSuccess;
     }
 
@@ -272,7 +292,10 @@ internal static class EvolveCommandLine
         output.WriteLine("aidotnet-evolve - run an evolution search described by a YAML configuration file.");
         output.WriteLine();
         output.WriteLine("  run       --config <file> [--run-id <id>] [--seed <n>] [--max-evaluations <n>]");
-        output.WriteLine("            [--output <dir>] [--resume] [--json] [--show-best]");
+        output.WriteLine("            [--output <dir>] [--resume] [--json] [--show-best] [--session <name>]");
+        output.WriteLine("  inspect | pause | cancel --session <name>  current-user-only live control");
+        output.WriteLine("            pause drains the batch and exits; resumability requires a verified checkpoint.");
+        output.WriteLine("            Resume with run --config <same file> --resume and the same run id/output/budget.");
         output.WriteLine("  validate  --config <file>   load the file, validate it, and print what it resolved to");
         output.WriteLine("  schema    [--out <path>]    write the JSON schema an editor validates the file against");
         output.WriteLine("  docs      [--out <path>]    write the markdown reference for every setting");
