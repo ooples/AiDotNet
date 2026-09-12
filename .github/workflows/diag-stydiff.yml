@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       iterations:
-        description: 'Clone-vs-original iterations to run'
+        description: 'Clone-vs-original iterations PER SWEEP CELL (cells = MDOP x contention)'
         required: false
-        default: '50'
+        default: '10'
       procs:
         description: 'DOTNET_PROCESSOR_COUNT override (empty = runner default)'
         required: false
@@ -85,7 +85,7 @@ jobs:
         run: |
           dotnet run --project tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj \
             -c Release --no-build \
-            -- --iterations "${{ github.event.inputs.iterations || '50' }}" \
+            -- --iterations "${{ github.event.inputs.iterations || '10' }}" \
             2>&1 | tee probe-output.txt
 
       - name: Upload probe output

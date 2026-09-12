@@ -42,7 +42,8 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        int iterations = ArgInt(args, "--iterations", 50);
+        int iterations = ArgInt(args, "--iterations", 10);
+        string sweep = ArgStr(args, "--mdop-sweep", "1,2,4,8");
 
         ConfigureLikeTestAssembly();
         PrintBanner(iterations);
@@ -51,57 +52,36 @@ internal static class Program
         var rng = RandomHelper.CreateSeededRandom(42);
         var input = CreateRandomTensor(InputShape, rng);
 
-        int cloneDiverged = 0, selfDiverged = 0, warmMatched = 0;
-        double worstCloneDiff = 0.0, worstSelfDiff = 0.0;
+        LocaliseOnce(input);
 
-        for (int iter = 0; iter < iterations; iter++)
+        Console.WriteLine("=== MDOP x CONTENTION SWEEP ===");
+        Console.WriteLine("Run #1 (clean process, MDOP=ProcessorCount, no contention) gave 0/50 on this");
+        Console.WriteLine("same runner, so the untested variables are the managed BlasManaged GEMM's");
+        Console.WriteLine("partition count and CPU contention. FoundationScaleCpuFixture.Dispose restores");
+        Console.WriteLine("MDOP to whatever a PREVIOUS collection left, so its value when StyDiff runs in");
+        Console.WriteLine("a real shard is load-dependent -- this sweep covers that range directly.");
+        Console.WriteLine();
+        Console.WriteLine($"{"MDOP",5} {"burners",8} {"iters",6} {"P1!=C1",7} {"P1!=P2",7} {"P2!=C1",7} "
+            + $"{"worst|P1-C1|",14} {"worst|P1-P2|",14}");
+
+        bool anyDivergence = false;
+        foreach (int mdop in ParseInts(sweep))
         {
-            using var arena = TensorArena.Create();
-            using var model = CreateModel();
-
-            var p1 = model.Predict(input);
-            using var clone = (IDiffusionModel<float>)model.Clone();
-            var c1 = clone.Predict(input);
-            var p2 = model.Predict(input);
-
-            var cloneCmp = Compare(p1, c1);
-            var selfCmp = Compare(p1, p2);
-            var warmCmp = Compare(p2, c1);
-
-            if (cloneCmp.MaxDiff > worstCloneDiff) worstCloneDiff = cloneCmp.MaxDiff;
-            if (selfCmp.MaxDiff > worstSelfDiff) worstSelfDiff = selfCmp.MaxDiff;
-
-            if (cloneCmp.MaxDiff > 0) cloneDiverged++;
-            if (selfCmp.MaxDiff > 0) selfDiverged++;
-            if (warmCmp.MaxDiff == 0) warmMatched++;
-
-            bool interesting = cloneCmp.MaxDiff > 0 || selfCmp.MaxDiff > 0;
-            if (interesting)
+            foreach (int burners in new[] { 0, Environment.ProcessorCount, Environment.ProcessorCount * 2 })
             {
-                Console.WriteLine($"--- iteration {iter}: DIVERGENCE ---");
-                Report("P1-vs-C1 (the test assertion)", cloneCmp, p1);
-                Report("P1-vs-P2 (same model twice)  ", selfCmp, p1);
-                Report("P2-vs-C1 (warm orig vs clone)", warmCmp, p2);
-
-                if (iter == 0 || cloneDiverged == 1)
-                    LocaliseByStage(model, clone, input);
-            }
-            else if (iter == 0)
-            {
-                Console.WriteLine($"iteration 0: all three comparisons bit-identical "
-                    + $"(maxAbs |out|={cloneCmp.RefMax.ToString("R", CultureInfo.InvariantCulture)})");
-                LocaliseByStage(model, clone, input);
+                var cell = RunCell(mdop, burners, iterations, input);
+                anyDivergence |= cell.CloneDiverged > 0 || cell.SelfDiverged > 0;
+                Console.WriteLine($"{mdop,5} {burners,8} {iterations,6} {cell.CloneDiverged,7} "
+                    + $"{cell.SelfDiverged,7} {cell.WarmDiverged,7} "
+                    + $"{cell.WorstClone.ToString("R", CultureInfo.InvariantCulture),14} "
+                    + $"{cell.WorstSelf.ToString("R", CultureInfo.InvariantCulture),14}");
             }
         }
 
         Console.WriteLine();
-        Console.WriteLine("=== SUMMARY ===");
-        Console.WriteLine($"iterations                 : {iterations}");
-        Console.WriteLine($"P1!=C1 (clone diverged)    : {cloneDiverged}");
-        Console.WriteLine($"P1!=P2 (same model twice)  : {selfDiverged}");
-        Console.WriteLine($"P2==C1 (warm orig == clone): {warmMatched}");
-        Console.WriteLine($"worst |P1-C1|              : {worstCloneDiff.ToString("R", CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"worst |P1-P2|              : {worstSelfDiff.ToString("R", CultureInfo.InvariantCulture)}");
+        Console.WriteLine(anyDivergence
+            ? "RESULT: divergence REPRODUCED -- per-iteration dumps above locate it."
+            : "RESULT: no divergence in any cell.");
         Console.WriteLine("=== done ===");
         return 0;
     }
@@ -120,8 +100,12 @@ internal static class Program
         Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
 
         AiDotNetEngine.SetDeterministicMode(true);
-        if (AiDotNetEngine.Current is not CpuEngine)
-            AiDotNetEngine.ResetToCpu();
+
+        // ResetToCpu() alone did NOT stick on a GPU-equipped box (the banner still
+        // reported DirectGpuTensorEngine), which would have compared the GPU path
+        // rather than the CPU path the failing test runs. Pin the engine outright,
+        // as tools/DiffusionTraceProbe/Program.cs:36 does.
+        AiDotNetEngine.Current = new CpuEngine();
 
         // NOTE: the diffusion base and the FoundationScaleSerial fixture both RAISE
         // this back to ProcessorCount, overriding ModuleInitializer's cap of 1. The
@@ -322,6 +306,138 @@ internal static class Program
             + $" maxAbs={cmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
             + $" maxRel={cmp.MaxRel.ToString("R", CultureInfo.InvariantCulture)}"
             + $" refMax={cmp.RefMax.ToString("R", CultureInfo.InvariantCulture)}");
+    }
+
+    private readonly struct Cell
+    {
+        public int CloneDiverged { get; init; }
+        public int SelfDiverged { get; init; }
+        public int WarmDiverged { get; init; }
+        public double WorstClone { get; init; }
+        public double WorstSelf { get; init; }
+    }
+
+    /// <summary>
+    /// One sweep cell: a fixed managed-GEMM partition count and a fixed number of
+    /// CPU burner threads, over N clone comparisons. P1-vs-P2 is reported alongside
+    /// P1-vs-C1 deliberately — if the same model predicted twice diverges, the defect
+    /// is contention-dependent nondeterminism, not clone fidelity.
+    /// </summary>
+    private static Cell RunCell(int mdop, int burners, int iterations, Tensor<float> input)
+    {
+        CpuParallelSettings.MaxDegreeOfParallelism = mdop;
+
+        using var cts = new System.Threading.CancellationTokenSource();
+        var threads = StartBurners(burners, cts.Token);
+
+        int cloneDiverged = 0, selfDiverged = 0, warmDiverged = 0;
+        double worstClone = 0.0, worstSelf = 0.0;
+
+        try
+        {
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                using var arena = TensorArena.Create();
+                using var model = CreateModel();
+
+                var p1 = model.Predict(input);
+                using var clone = (IDiffusionModel<float>)model.Clone();
+                var c1 = clone.Predict(input);
+                var p2 = model.Predict(input);
+
+                var cloneCmp = Compare(p1, c1);
+                var selfCmp = Compare(p1, p2);
+                var warmCmp = Compare(p2, c1);
+
+                if (cloneCmp.MaxDiff > worstClone) worstClone = cloneCmp.MaxDiff;
+                if (selfCmp.MaxDiff > worstSelf) worstSelf = selfCmp.MaxDiff;
+                if (cloneCmp.MaxDiff > 0) cloneDiverged++;
+                if (selfCmp.MaxDiff > 0) selfDiverged++;
+                if (warmCmp.MaxDiff > 0) warmDiverged++;
+
+                if (cloneCmp.MaxDiff > 0 || selfCmp.MaxDiff > 0)
+                {
+                    Console.WriteLine($"  --- DIVERGENCE mdop={mdop} burners={burners} iter={iter} ---");
+                    Report("P1-vs-C1 (the test assertion)", cloneCmp, p1);
+                    Report("P1-vs-P2 (same model twice)  ", selfCmp, p1);
+                    Report("P2-vs-C1 (warm orig vs clone)", warmCmp, p2);
+                    LocaliseByStage(model, clone, input);
+                }
+            }
+        }
+        finally
+        {
+            cts.Cancel();
+            foreach (var t in threads)
+                t.Join();
+        }
+
+        return new Cell
+        {
+            CloneDiverged = cloneDiverged, SelfDiverged = selfDiverged,
+            WarmDiverged = warmDiverged, WorstClone = worstClone, WorstSelf = worstSelf,
+        };
+    }
+
+    private static System.Threading.Thread[] StartBurners(
+        int count, System.Threading.CancellationToken token)
+    {
+        var threads = new System.Threading.Thread[Math.Max(0, count)];
+        for (int i = 0; i < threads.Length; i++)
+        {
+            var t = new System.Threading.Thread(() =>
+            {
+                double acc = 0.0;
+                while (!token.IsCancellationRequested)
+                {
+                    for (int k = 0; k < 200_000; k++) acc += k * 0.5;
+                }
+
+                if (double.IsNaN(acc)) Console.Write(string.Empty);
+            })
+            {
+                IsBackground = true,
+            };
+            t.Start();
+            threads[i] = t;
+        }
+
+        return threads;
+    }
+
+    private static void LocaliseOnce(Tensor<float> input)
+    {
+        using var arena = TensorArena.Create();
+        using var model = CreateModel();
+        model.Predict(input);
+        using var clone = (IDiffusionModel<float>)model.Clone();
+        clone.Predict(input);
+        LocaliseByStage(model, clone, input);
+    }
+
+    private static int[] ParseInts(string csv)
+    {
+        var parts = csv.Split(',', StringSplitOptions.RemoveEmptyEntries
+            | StringSplitOptions.TrimEntries);
+        var result = new System.Collections.Generic.List<int>(parts.Length);
+        foreach (var p in parts)
+        {
+            if (int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) && v > 0)
+                result.Add(v);
+        }
+
+        return result.Count > 0 ? result.ToArray() : [Environment.ProcessorCount];
+    }
+
+    private static string ArgStr(string[] args, string name, string fallback)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.Ordinal))
+                return args[i + 1];
+        }
+
+        return fallback;
     }
 
     private static int ArgInt(string[] args, string name, int fallback)
