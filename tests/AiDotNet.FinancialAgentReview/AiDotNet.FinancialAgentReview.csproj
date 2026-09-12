@@ -17,6 +17,7 @@
   <ItemGroup>
     <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" Link="GlobalUsings.cs" />
     <Compile Include="../AiDotNet.Tests/ModuleInitializer.cs" Link="ModuleInitializer.cs" />
+    <Compile Include="../AiDotNet.FinancialSharedReview/FinancialSharedReviewTestFramework.cs" Link="FinancialSharedReviewTestFramework.cs" />
     <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" Link="LicenseTestSupport.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialAgentTestKit.cs" Link="FinancialAgentTestKit.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialAgentDeterminismTests.cs" Link="FinancialAgentDeterminismTests.cs" />
