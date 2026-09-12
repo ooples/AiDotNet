@@ -95,6 +95,7 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// (an undefined score, which <see cref="MeanAveragePrecision"/> excludes from its average).</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The two lists describe a different number of images.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="iouThreshold"/> is not finite or is outside [0, 1].</exception>
     public double AveragePrecision(
         IReadOnlyList<IReadOnlyList<Detection<T>>> predictions,
         IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth,
@@ -120,12 +121,14 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// <returns>mAP in [0, 1], or 0 when the ground truth contains no detections at all.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The two lists describe a different number of images.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="iouThreshold"/> is not finite or is outside [0, 1].</exception>
     public double MeanAveragePrecision(
         IReadOnlyList<IReadOnlyList<Detection<T>>> predictions,
         IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth,
         double iouThreshold = 0.5)
     {
         ValidateAligned(predictions, groundTruth);
+        ValidateIoUThreshold(iouThreshold);
 
         var classes = GetGroundTruthClasses(groundTruth);
 
@@ -160,6 +163,10 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// ranges spanning several batches may compute it once per batch. No all-pairs IoU matrix or
     /// range-sized collection of matching states is allocated. AP retains only true-positive
     /// points, bounding per-batch state by the number of ground-truth boxes, not false positives.
+    /// An endpoint numerically on the grid is included using a scale-aware floating-point
+    /// tolerance. If its reconstructed value overshoots the maximum only by arithmetic
+    /// roundoff, that final threshold is capped at the requested maximum; off-grid maxima
+    /// are not appended as additional thresholds.
     /// </remarks>
     /// <param name="predictions">Predicted detections, one list per image.</param>
     /// <param name="groundTruth">Ground-truth detections, one list per image.</param>
@@ -189,14 +196,7 @@ public class ObjectDetectionMetrics<T> where T : struct
 
         // Derive the count first rather than accumulating threshold += step, so floating-point
         // drift cannot silently drop or duplicate the final threshold.
-        double lastThresholdIndex = Math.Floor(((maxIoU - minIoU) / step) + 1e-9);
-        if (lastThresholdIndex >= int.MaxValue)
-        {
-            throw new ArgumentOutOfRangeException(nameof(step), step,
-                "IoU step produces more thresholds than an Int32 count can represent.");
-        }
-
-        int thresholdCount = (int)lastThresholdIndex + 1;
+        var (thresholdCount, lastThreshold) = GetThresholdGrid(minIoU, maxIoU, step);
         ValidateAligned(predictions, groundTruth);
         var preparedClasses = GetGroundTruthClasses(groundTruth)
             .Select(classIndex => PrepareClass(predictions, groundTruth, classIndex)).ToArray();
@@ -215,7 +215,8 @@ public class ObjectDetectionMetrics<T> where T : struct
             var classSums = new double[batchCount];
             for (int i = 0; i < batchCount; i++)
             {
-                thresholds[i] = minIoU + ((firstThreshold + i) * step);
+                int index = firstThreshold + i;
+                thresholds[i] = index == thresholdCount - 1 ? lastThreshold : minIoU + (index * step);
             }
 
             foreach (var prepared in preparedClasses)
@@ -248,6 +249,52 @@ public class ObjectDetectionMetrics<T> where T : struct
     // Both comparisons are false for NaN; infinities also fall outside this finite interval.
     private static bool IsUnitInterval(double value) => value >= 0.0 && value <= 1.0;
 
+    private static void ValidateIoUThreshold(double iouThreshold)
+    {
+        if (!IsUnitInterval(iouThreshold))
+        {
+            throw new ArgumentOutOfRangeException(nameof(iouThreshold), iouThreshold,
+                "IoU threshold must be finite and within [0, 1].");
+        }
+    }
+
+    private static (int Count, double Last) GetThresholdGrid(double minimum, double maximum, double step)
+    {
+        // double.Epsilon is the smallest subnormal, not the machine rounding epsilon.
+        const double machineEpsilon = 2.2204460492503131e-16;
+        double rawLastIndex = (maximum - minimum) / step;
+        double nearestInteger = Math.Round(rawLastIndex);
+        double quotientTolerance = 16 * machineEpsilon * Math.Max(1, Math.Abs(rawLastIndex));
+        bool endpointOnGrid = Math.Abs(rawLastIndex - nearestInteger) <= quotientTolerance;
+        double lastIndex = endpointOnGrid ? nearestInteger : Math.Floor(rawLastIndex);
+        if (lastIndex >= int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(step), step,
+                "IoU step produces more thresholds than an Int32 count can represent.");
+        }
+
+        double distance = lastIndex * step;
+        double lastThreshold = minimum + distance;
+        if (lastThreshold > maximum)
+        {
+            double endpointTolerance = 32 * machineEpsilon * Math.Max(Math.Abs(maximum), Math.Abs(minimum) + Math.Abs(distance));
+            if (endpointOnGrid && lastThreshold - maximum <= endpointTolerance)
+            {
+                // For example, .1 + 2*.1 rounds above .3. Never pass that larger value
+                // to the matcher, and never manufacture an endpoint for an off-grid range.
+                lastThreshold = maximum;
+            }
+            else
+            {
+                // A genuine overshoot is outside the requested range, not a reason to clamp
+                // a new off-grid threshold into it. Only an included last index can overshoot.
+                lastIndex--;
+                lastThreshold = minimum + lastIndex * step;
+            }
+        }
+        return ((int)lastIndex + 1, lastThreshold);
+    }
+
     /// <summary>
     /// Computes the raw (uninterpolated) precision-recall curve for one class, in descending
     /// confidence order. Point <c>i</c> is the precision and recall achieved when the top
@@ -260,6 +307,7 @@ public class ObjectDetectionMetrics<T> where T : struct
     /// <returns>Parallel precision and recall arrays. Both are empty when the class has no predictions.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The two lists describe a different number of images.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="iouThreshold"/> is not finite or is outside [0, 1].</exception>
     public (double[] Precision, double[] Recall) PrecisionRecallCurve(
         IReadOnlyList<IReadOnlyList<Detection<T>>> predictions,
         IReadOnlyList<IReadOnlyList<Detection<T>>> groundTruth,
@@ -275,6 +323,7 @@ public class ObjectDetectionMetrics<T> where T : struct
         out int groundTruthCount)
     {
         ValidateAligned(predictions, groundTruth);
+        ValidateIoUThreshold(iouThreshold);
 
         var prepared = PrepareClass(predictions, groundTruth, classIndex);
         groundTruthCount = prepared.GroundTruthCount;

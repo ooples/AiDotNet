@@ -23,6 +23,7 @@
     <None Include="../../tests/AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/DetectionModelTestBase.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ObjectDetectionTestBase.cs" />
+    <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ObjectDetectionPositiveFixture.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/OCRTestBase.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/TextDetectionTestBase.cs" />
     <Compile Include="../../tests/AiDotNet.Tests/ModelFamilyTests/Base/ModelTestHelpers.cs" />

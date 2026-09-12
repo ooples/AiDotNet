@@ -191,12 +191,15 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
             "Text polygon encloses zero area, so every IoU against it is zero and the region can never be scored as a match.");
     }
 
-    private static void AssertBoxGeometricallyValid(TextRegion<T> region)
+    internal static void AssertBoxGeometricallyValid(TextRegion<T> region)
     {
         Assert.NotNull(region.Box);
         var (xMin, yMin, xMax, yMax) = region.Box.ToXYXY();
-        Assert.False(double.IsNaN(xMin) || double.IsNaN(yMin) || double.IsNaN(xMax) || double.IsNaN(yMax),
-            "Text region box has a NaN coordinate.");
+        foreach (double coordinate in new[] { xMin, yMin, xMax, yMax })
+        {
+            Assert.False(double.IsNaN(coordinate) || double.IsInfinity(coordinate),
+                "Text region box has a non-finite coordinate.");
+        }
         Assert.True(xMax > xMin, $"Text region box has inverted or zero width: {xMin} to {xMax}.");
         Assert.True(yMax > yMin, $"Text region box has inverted or zero height: {yMin} to {yMax}.");
     }
