@@ -112,6 +112,48 @@ public class LEOExactGradientTests
         }
     }
 
+    /// <summary>
+    /// The analytic gradient and the central difference must be taken of the SAME function, which means the
+    /// two code paths the check uses have to agree on the objective before any gradient is compared.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="LEOAlgorithm{T, TInput, TOutput}.EpisodeGradientForTesting"/> differentiates the objective
+    /// with the feature embeddings ON THE TAPE.
+    /// <see cref="LEOAlgorithm{T, TInput, TOutput}.EpisodeLossForTesting"/> evaluates it through
+    /// <c>Embed</c>, which runs the feature encoder inside a <c>NoGradScope</c>. Both draw their sampling
+    /// noise and dropout masks from the same fixed seed, so they are meant to be the same number.
+    /// </para>
+    /// <para>
+    /// Nothing asserted that. A central difference of one objective compared against the analytic gradient
+    /// of a different one disagrees no matter how correct the gradient math is, and that is precisely what
+    /// a finite difference converging cleanly across h = 1e-3 to 1e-7 beside a stubbornly different
+    /// analytic value looks like. This check says whether the gradient comparison is valid at all, so a
+    /// failure here means the objective differs under grad mode and every gradient mismatch downstream is
+    /// a consequence rather than a cause.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheGradientPathAndTheLossPathAgreeOnTheObjective(bool training)
+    {
+        var learner = CreateLearner(o =>
+        {
+            o.UseRelationEncoder = true;
+            o.ShareEncoder = true;
+            o.FineTuningSteps = 2;
+            o.EntropyWeight = 0.1;
+            o.EncoderPenaltyWeight = 0;
+        });
+        var task = CreateTask(seed: 3);
+
+        double onTape = learner.EpisodeGradientForTesting(task, training).Loss;
+        double throughEmbed = learner.EpisodeLossForTesting(task, training);
+
+        Assert.Equal(throughEmbed, onTape, 10);
+    }
+
     [Theory]
     [InlineData(true, true, true, 2)]
     [InlineData(true, true, false, 2)]
@@ -415,31 +457,44 @@ public class LEOExactGradientTests
         var (_, body, _, _, _, _, _) = learner.EpisodeGradientForTesting(task, training: true);
         double Loss() => learner.EpisodeLossForTesting(task, training: true);
         var model = learner.GetMetaModel();
-        var start = model.GetParameters().ToArray();
 
-        double[] steps = { 1e-3, 1e-4, 1e-5, 1e-6, 1e-7 };
+        double[] steps = { 1e-4, 1e-5, 1e-6, 1e-7 };
         var report = new System.Text.StringBuilder();
-        report.AppendLine("leo-h-sweep: analytic | differences at h = 1e-3, 1e-4, 1e-5, 1e-6, 1e-7");
+        report.AppendLine("leo-h-sweep: analytic | central differences at h = 1e-4, 1e-5, 1e-6, 1e-7");
+        var unstable = new System.Collections.Generic.List<string>();
 
         for (int i = 0; i < Math.Min(body.Length, 3); i++)
         {
             int index = i;
-            report.Append($"  body[{i}] analytic {body[i]:G10}");
-            foreach (double h in steps)
+            var measured = new double[steps.Length];
+            for (int s = 0; s < steps.Length; s++)
             {
-                double numeric = CentralDifference(Loss, delta =>
+                measured[s] = CentralDifference(Loss, delta =>
                 {
-                    var shifted = (double[])start.Clone();
+                    // INCREMENTAL, exactly as CheckVector shifts. CentralDifference applies +h, then -2h,
+                    // then +h, so each shift must be relative to the CURRENT parameters. Rebuilding from a
+                    // captured starting vector instead evaluates f(x + h) against f(x - 2h), a stencil that
+                    // converges to 1.5 f'(x) and reports a 50% error belonging entirely to the probe.
+                    var shifted = model.GetParameters().ToArray();
                     shifted[index] += delta;
                     model.SetParameters(new Vector<double>(shifted));
-                }, h);
-                report.Append($" | {numeric:G10}");
+                }, steps[s]);
             }
 
-            model.SetParameters(new Vector<double>(start));
+            report.Append($"  body[{i}] analytic {body[i]:G10}");
+            foreach (double m in measured) report.Append($" | {m:G10}");
             report.AppendLine();
+
+            // A central difference that still moves as h shrinks is measuring its own truncation error, and
+            // nothing it says about the analytic gradient can be trusted. One that settles is a usable
+            // reading, which is what makes a remaining disagreement meaningful.
+            double coarsest = measured[0], finest = measured[measured.Length - 1];
+            if (Math.Abs(finest - coarsest) > 1e-6 + 1e-3 * Math.Abs(finest))
+            {
+                unstable.Add($"body[{index}] moved from {coarsest:G10} at h=1e-4 to {finest:G10} at h=1e-7");
+            }
         }
 
-        Assert.True(false, report.ToString());
+        Assert.True(unstable.Count == 0, report.ToString() + string.Join("; ", unstable));
     }
 }
