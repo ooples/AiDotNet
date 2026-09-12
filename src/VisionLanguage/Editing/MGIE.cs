@@ -79,7 +79,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 
     #region Fields
 
-    private readonly MGIEOptions _options;
+    private readonly MGIEOptions _editOptions;
     private UNetNoisePredictor<T> _unet;
     private StandardVAE<T> _vae;
 
@@ -111,13 +111,13 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <summary>Width of the MLLM decoder whose [IMG] tokens the edit head consumes.</summary>
-    public int EmbeddingDimension => _options.DecoderDim;
+    public int EmbeddingDimension => _editOptions.DecoderDim;
 
     /// <summary>Edge length of the produced image.</summary>
-    public int OutputImageSize => _options.OutputImageSize;
+    public int OutputImageSize => _editOptions.OutputImageSize;
 
     /// <inheritdoc />
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
 
     /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
     int IVisualEncoder<T>.ImageChannels => 3;
@@ -153,7 +153,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        _options = options ?? new MGIEOptions();
+        _editOptions = options ?? new MGIEOptions();
         InitializeComponents(unet, vae, seed);
     }
 
@@ -180,13 +180,13 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             latentScaleFactor: 0.18215,
             seed: seed);
 
-        for (int i = 0; i < _options.EditHeadLayers; i++)
+        for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
             _editHead.Add(new TransformerEncoderBlock<T>(
                 hiddenSize: CROSS_ATTENTION_DIM,
-                numHeads: _options.NumHeads,
+                numHeads: _editOptions.NumHeads,
                 ffnDim: CROSS_ATTENTION_DIM * 4,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _editOptions.DropoutRate));
         }
     }
 
@@ -256,7 +256,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     private Tensor<T> Denoise(Tensor<T> sourceLatent, Tensor<T> guidance)
     {
         _ = guidance;
-        return Generate(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps);
+        return Generate(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps);
     }
     #endregion
 
@@ -269,7 +269,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     #region Metadata
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
+    public override ModelOptions GetOptions() => _editOptions;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -284,7 +284,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
         };
 
         metadata.SetProperty("architecture", "sd15-8ch-input-mllm-guidance");
-        metadata.SetProperty("editHeadLayers", _options.EditHeadLayers);
+        metadata.SetProperty("editHeadLayers", _editOptions.EditHeadLayers);
         metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("paper", "arXiv:2309.17102");
         return metadata;
