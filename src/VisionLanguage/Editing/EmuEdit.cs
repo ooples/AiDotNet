@@ -76,7 +76,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
 
     #region Fields
 
-    private readonly EmuEditOptions _options;
+    private readonly EmuEditOptions _editOptions;
     private UNetNoisePredictor<T> _unet;
     private StandardVAE<T> _vae;
 
@@ -107,13 +107,13 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <summary>Width of the decoder whose tokens the edit head consumes.</summary>
-    public int EmbeddingDimension => _options.DecoderDim;
+    public int EmbeddingDimension => _editOptions.DecoderDim;
 
     /// <summary>Edge length of the produced image.</summary>
-    public int OutputImageSize => _options.OutputImageSize;
+    public int OutputImageSize => _editOptions.OutputImageSize;
 
     /// <inheritdoc />
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
 
     /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
     int IVisualEncoder<T>.ImageChannels => 3;
@@ -149,7 +149,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        _options = options ?? new EmuEditOptions();
+        _editOptions = options ?? new EmuEditOptions();
         InitializeComponents(unet, vae, seed);
     }
 
@@ -176,13 +176,13 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
             latentScaleFactor: 0.18215,
             seed: seed);
 
-        for (int i = 0; i < _options.EditHeadLayers; i++)
+        for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
             _editHead.Add(new TransformerEncoderBlock<T>(
                 hiddenSize: CROSS_ATTENTION_DIM,
-                numHeads: _options.NumHeads,
+                numHeads: _editOptions.NumHeads,
                 ffnDim: CROSS_ATTENTION_DIM * 4,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _editOptions.DropoutRate));
         }
     }
 
@@ -231,7 +231,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
 
         var sourceLatent = EncodeToLatent(image);
         _ = ApplyEditHead(sourceLatent);
-        var edited = Generate(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps);
+        var edited = Generate(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps);
         return DecodeFromLatent(edited);
     }
 
@@ -244,7 +244,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
     #region Metadata
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
+    public override ModelOptions GetOptions() => _editOptions;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -260,7 +260,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
 
         metadata.SetProperty("architecture", "emu-16ch-latent-task-embedding");
         metadata.SetProperty("latentChannels", LATENT_CHANNELS);
-        metadata.SetProperty("editHeadLayers", _options.EditHeadLayers);
+        metadata.SetProperty("editHeadLayers", _editOptions.EditHeadLayers);
         metadata.SetProperty("paper", "arXiv:2311.10089");
         return metadata;
     }
