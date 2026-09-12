@@ -580,6 +580,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 assignments.Add($"{name} = EmbeddingDimension");
             else if (System.Array.IndexOf(ClassifierInputWidthProperties, name) >= 0)
                 assignments.Add($"{name} = FeatureCount");
+            else
+            {
+                // CAPACITY HAS TO BE BOUND ON THIS PATH TOO. A classifier meta-learner emits
+                // ClassifierOptionsSizes INSTEAD of MetaLearnerOptionsSizes, not alongside it, so a
+                // capacity bound only in FindMetaLearnerTaskSizeInitializer never reaches one. NTM
+                // declares NumClasses and therefore takes this path, which left its production
+                // 128 x 20 memory and 100-unit controller in the generated fixture and kept it timing
+                // out at the 120-second watchdog after the scale-down had supposedly been applied.
+                foreach (var (capacityName, value) in MetaLearnerMemoryCapacityProperties)
+                {
+                    if (name == capacityName)
+                    {
+                        assignments.Add($"{name} = {value}");
+                        break;
+                    }
+                }
+            }
         }
 
         return assignments.Count == 0 ? string.Empty : " { " + string.Join(", ", assignments) + " }";
@@ -622,9 +639,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// CAML (Fifty et al., ICLR 2024) runs a frozen pretrained feature extractor and meta-trains only its
     /// context module; FreezeBackbone defaults to true to match. The family then asserts that the meta-model
     /// stays put and that the learner's declared state moves, rather than that the meta-model moves.
+    /// SImPa (Nguyen et al., 2020) generates every task's base-network weights from its implicit posterior
+    /// (eq. 10, w_i = G(z; lambda_i)), so the base network owns no persistent weights to meta-train at all.
+    /// Algorithm 1 meta-learns two other things instead: psi, the initialisation of the GENERATOR that each
+    /// task starts from (line 18, lambda_i &lt;- theta), and phi_0, the initialisation of the
+    /// compression-lemma network (line 3). Both are declared state on the learner.
     /// </remarks>
     private static readonly System.Collections.Generic.HashSet<string> MetaLearnersFrozenByDesign =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "CAMLAlgorithm" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CAMLAlgorithm", "SImPaAlgorithm" };
 
     /// <summary>Overridable surface of <c>DeepfakeDetectorTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
@@ -4152,12 +4175,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// defaults are a 128 x 20 memory behind a 100-unit controller, and the family base runs four support and
     /// four query rows through a full addressing step per row - which took the generated fixture past the
     /// 120-second watchdog. This mirrors the scale-down already applied to HiPPO's recurrent cell.
+    /// SImPa's generator is a hypernetwork emitting one weight per base-network parameter, so the paper's
+    /// 256 and 512 hidden widths put roughly 166,000 weights in it even for a three-parameter base model;
+    /// its compression-lemma estimate then pushes KLMonteCarloSamples draws through that generator once PER
+    /// TASK (Algorithm 1 line 20), which is T x 512 full-width forward passes per meta-training step.
+    /// LatentDimension is deliberately NOT bound here: LEO declares that name too, and its generated fixture
+    /// passes at the current size, so shrinking the widths is enough without perturbing another learner.
     /// </remarks>
     private static readonly (string Name, int Value)[] MetaLearnerMemoryCapacityProperties =
     {
         ("MemorySize", 8),
         ("MemoryWidth", 4),
         ("ControllerHiddenSize", 8),
+        ("GeneratorFirstHiddenWidth", 8),
+        ("GeneratorSecondHiddenWidth", 8),
+        ("KLMonteCarloSamples", 16),
+        ("KLEstimatorSteps", 4),
+        ("KLEstimatorHiddenWidth", 8),
+        ("AdaptationPosteriorSamples", 4),
     };
 
     /// <summary>
