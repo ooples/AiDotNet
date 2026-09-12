@@ -303,17 +303,35 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
 
     // ── Compiled-inference plan cache (float pure-dense fast path) ────────────
     private AiDotNet.Tensors.Engines.Compilation.CompiledMlp? _compiledMlpPlan;
-    private float[][]? _compiledMlpWeightRefs;   // backing arrays the plan was built from
+    /// <summary>
+    /// The tensor's own, privatized backing array, or false when it has none (a non-simple layout,
+    /// where GetDataArray returns a snapshot the plan must not pin).
+    /// </summary>
+    private static bool TryGetLiveArray(Tensor<T> tensor, out float[] array)
+    {
+        if (tensor.GetDataArray() is float[] liveArray &&
+            ReferenceEquals(liveArray, tensor.GetLiveBackingArrayOrNull()))
+        {
+            array = liveArray;
+            return true;
+        }
+        array = Array.Empty<float>();
+        return false;
+    }
+
+    private float[][]? _compiledMlpWeightRefs;   // live weight arrays the plan was built from
+    private float[]?[]? _compiledMlpBiasRefs;    // live bias arrays the plan was built from
     private int _compiledMlpMaxBatch;
 
     /// <summary>
     /// Runs the pure-dense float stack through the cached <c>CompiledMlp</c> plan.
     /// Returns false when the input shape isn't a contiguous rank-1/2 batch the plan
-    /// can replay (caller then uses <c>MlpForward</c>). The plan is (re)built when it's
-    /// absent, the batch exceeds the buffers it was sized for, or any layer's weight
-    /// backing array was reallocated — the same frozen-weights-during-inference contract
-    /// as the MlpForward path (which likewise relies on SgemmWithCachedB's
-    /// identity-keyed pack), plus a reallocation guard the cached plan requires.
+    /// can replay, or when a weight or bias has no live backing array to pin (caller then
+    /// uses <c>MlpForward</c>). The plan is (re)built when it's absent, the batch exceeds
+    /// the buffers it was sized for, or any layer's weight OR bias backing array was
+    /// reallocated. In-place parameter updates need no rebuild: the plan reads the pinned
+    /// live arrays on every run, and SgemmWithCachedB re-validates its packed weights
+    /// against a content fingerprint.
     /// </summary>
     private bool TryCompiledMlpPredict(
         Tensor<T> input,
@@ -332,44 +350,75 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
         int inFeatures = input.Shape[input.Rank - 1];
         if (batch < 1) return false;
 
+        // The plan keeps REFERENCES to these arrays and reads them on every Run, so it is only
+        // correct while each array is the live storage of its tensor. Two things broke that:
+        //  - GetDataArray() returns a ToArray() SNAPSHOT for any non-simple layout; a snapshot
+        //    pinned into the plan never sees a later optimizer write. Only the live backing array
+        //    is safe to pin, and a tensor without one takes the tensor-based MlpForward instead.
+        //  - Training can REPLACE a bias's storage while keeping the weight arrays. The rebuild
+        //    check used to compare weight identities only, so after AiModelBuilder training the
+        //    plan kept the pre-replacement bias arrays: Predict disagreed with the layer-by-layer
+        //    forward (and with a fresh clone holding the same parameters) by ~1e-2, and
+        //    BuilderJitValueStabilityTests saw the JIT and eager paths disagree.
+        // GetDataArray() is still the accessor: it privatizes a copy-on-write share before handing
+        // the array out, exactly as this path always did. Pinning a still-shared array instead
+        // would let a later in-place optimizer step on this network write through into a clone
+        // taken before it (measured: a pre-BuildAsync DeepCopy drifted by ~5e-3).
         int layerCount = weights.Count;
         var wRefs = new float[layerCount][];
+        var bRefs = new float[]?[layerCount];
         for (int i = 0; i < layerCount; i++)
-            wRefs[i] = (float[])(object)weights[i].GetDataArray();
+        {
+            if (!TryGetLiveArray(weights[i], out var liveWeights)) return false;
+            wRefs[i] = liveWeights;
+            var bias = biases[i];
+            if (bias is null) continue;
+            if (!TryGetLiveArray(bias, out var liveBias)) return false;
+            bRefs[i] = liveBias;
+        }
         if (wRefs[0].Length < (long)inFeatures * weights[0].Shape[1]) return false;
 
+        var cachedWeights = _compiledMlpWeightRefs;
+        var cachedBiases = _compiledMlpBiasRefs;
         bool rebuild = _compiledMlpPlan is null
             || batch > _compiledMlpMaxBatch
-            || _compiledMlpWeightRefs is null
-            || _compiledMlpWeightRefs.Length != layerCount;
-        if (!rebuild)
+            || cachedWeights is null
+            || cachedWeights.Length != layerCount
+            || cachedBiases is null
+            || cachedBiases.Length != layerCount;
+        if (!rebuild && cachedWeights is not null && cachedBiases is not null)
         {
             for (int i = 0; i < layerCount; i++)
-                if (!ReferenceEquals(_compiledMlpWeightRefs![i], wRefs[i])) { rebuild = true; break; }
+            {
+                if (!ReferenceEquals(cachedWeights[i], wRefs[i])
+                    || !ReferenceEquals(cachedBiases[i], bRefs[i]))
+                {
+                    rebuild = true;
+                    break;
+                }
+            }
         }
 
         if (rebuild)
         {
             var inF = new int[layerCount];
             var outF = new int[layerCount];
-            var bArrs = new float[]?[layerCount];
             for (int i = 0; i < layerCount; i++)
             {
                 inF[i] = weights[i].Shape[0];
                 outF[i] = weights[i].Shape[1];
-                var b = biases[i];
-                bArrs[i] = b is null ? null : (float[])(object)b.GetDataArray();
             }
             // Size buffers for at least this batch; grow (never shrink) so cycling
             // batch sizes doesn't thrash. maxBatch caps the ping-pong scratch.
             int maxBatch = Math.Max(batch, _compiledMlpMaxBatch);
             _compiledMlpPlan = Tensors.Engines.Compilation.CompiledMlp.Create(
-                wRefs, bArrs, inF, outF, hiddenActivation, outputActivation, maxBatch);
+                wRefs, bRefs, inF, outF, hiddenActivation, outputActivation, maxBatch);
             _compiledMlpWeightRefs = wRefs;
+            _compiledMlpBiasRefs = bRefs;
             _compiledMlpMaxBatch = maxBatch;
         }
 
-        var plan = _compiledMlpPlan!;
+        var plan = _compiledMlpPlan ?? throw new InvalidOperationException("The compiled MLP plan was not initialized.");
         if (inFeatures != plan.InputFeatures) return false;
 
         var inputArr = (float[])(object)input.GetDataArray();
