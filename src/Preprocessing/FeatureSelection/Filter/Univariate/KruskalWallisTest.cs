@@ -118,7 +118,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 sumRankSq += (groupRankSum * groupRankSum) / group.Count;
             }
 
-            double H = (12.0 / ((double)n * (n + 1))) * sumRankSq - 3 * (n + 1);
+            double H = (12.0 / ((double)n * (n + 1))) * sumRankSq - 3.0 * (n + 1);
 
             // Tie correction
             var tieGroups = new Dictionary<double, int>();
