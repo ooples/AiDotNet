@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
@@ -113,6 +114,11 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// Path to the language model ONNX model file.
     /// </summary>
     private readonly string? _languageModelPath;
+
+    private readonly string _visionOutputName = string.Empty;
+    private readonly string _queryOutputName = string.Empty;
+    private readonly bool _onnxSupportsImageQueries;
+    private readonly bool _onnxSupportsTextQueries;
 
     #endregion
 
@@ -310,8 +316,11 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 
     #region IBlip2Model Properties
 
-    /// <inheritdoc/>
-    public int NumQueryTokens => _numQueryTokens;
+    /// <summary>Gets the configured visual-query count, validated against an image-query export.</summary>
+    /// <exception cref="NotSupportedException">The ONNX export only supports text queries.</exception>
+    public int NumQueryTokens => !_useNativeMode && !_onnxSupportsImageQueries
+        ? throw new NotSupportedException("The ONNX Q-Former export has no visual-query operation or query-token count.")
+        : _numQueryTokens;
 
     /// <inheritdoc/>
     public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
@@ -341,6 +350,12 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// to load the correct tokenizer, or use <see cref="Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName"/>
     /// to get the model name for your backbone.
     /// </para>
+    /// <para>VisionDim and EmbeddingDimension describe observable graph output widths,
+    /// not inferred native layer widths. The Q-Former export must already produce shared
+    /// embedding features: this wrapper does not load a separate ONNX projection head.
+    /// An export may support image queries, text queries, or both through defaulted inputs.
+    /// Native-only architecture overrides are rejected. These embedding contracts do not
+    /// establish compatibility or quality of a separate language-generation export.</para>
     /// </remarks>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
@@ -356,8 +371,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                1.0)
     {
         _options = options ?? new Blip2Options();
-        _options.Validate();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
 
         // Validate ONNX model paths
@@ -382,14 +396,18 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _qformerHiddenDim = 768;
-        _numQformerLayers = 12;
-        _numHeads = 12;
-        _numQueryTokens = 32;
-        _patchSize = 14; // ViT-G uses 14x14 patches
-        _vocabularySize = 30522; // BERT vocabulary size
-        _visionHiddenDim = 1408; // ViT-G hidden dimension
-        _lmHiddenDim = _languageModelBackbone == LanguageModelBackbone.OPT ? 2560 : 2048; // OPT-2.7B or Flan-T5-XL
+        _qformerHiddenDim = _options.QformerHiddenDim;
+        _numQformerLayers = _options.NumQformerLayers;
+        _numHeads = _options.NumHeads;
+        _numQueryTokens = _options.NumQueryTokens;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _visionHiddenDim = _options.VisionDim;
+        _lmHiddenDim = _options.LmHiddenDim;
+        _numLmDecoderLayers = _options.NumLmDecoderLayers;
+
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? qformer = null;
@@ -401,13 +419,46 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             qformer = new InferenceSession(qformerPath);
             languageModel = new InferenceSession(languageModelPath);
 
+            var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionEncoder);
+            var queryGraph = new OnnxGraphSignature(OnnxModelRole.QueryTransformer, qformer);
+            // The generation export/projection contract is separate from these embedding
+            // operations. Publishing its signature does not infer native language-model depth.
+            var languageGraph = new OnnxGraphSignature(OnnxModelRole.LanguageModel, languageModel);
+            visionGraph.RequireInputSet("pixel_values");
+            visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            _visionOutputName = visionGraph.RequireEmbeddingOutput(_visionHiddenDim, OnnxEmbeddingLayouts.TokenFeatures);
+
+            _onnxSupportsImageQueries = queryGraph.CanSupplyInputSet("encoder_hidden_states");
+            _onnxSupportsTextQueries = queryGraph.CanSupplyInputSet("input_ids", "attention_mask");
+            if (!_onnxSupportsImageQueries && !_onnxSupportsTextQueries)
+                throw new ArgumentException("ONNX Q-Former requires inputs that neither the image nor the text operation can supply.", nameof(options));
+            if (_onnxSupportsImageQueries)
+            {
+                var visionShape = visionGraph.Outputs[_visionOutputName].Dimensions;
+                queryGraph.RequireInputAxes("encoder_hidden_states", OnnxTensors.TensorElementType.Float,
+                    1, visionShape[1], _visionHiddenDim);
+            }
+            else if (_numQueryTokens != new Blip2Options().NumQueryTokens)
+            {
+                throw new ArgumentException("ONNX text-only Q-Former cannot honor NumQueryTokens; it has no visual-query operation.", nameof(options));
+            }
+            if (_onnxSupportsTextQueries)
+            {
+                queryGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+                queryGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            }
+            var layouts = _onnxSupportsImageQueries ? OnnxEmbeddingLayouts.TokenFeatures
+                : OnnxEmbeddingLayouts.TokenFeatures | OnnxEmbeddingLayouts.BatchedVector;
+            _queryOutputName = queryGraph.RequireEmbeddingOutput(_embeddingDimension, layouts);
+            if (_onnxSupportsImageQueries && queryGraph.Outputs[_queryOutputName].Dimensions[1] is int actualQueries
+                && actualQueries != _numQueryTokens)
+                throw new ArgumentException($"ONNX Q-Former produces {actualQueries} visual queries, conflicting with NumQueryTokens {_numQueryTokens}.", nameof(options));
+            OnnxConfiguration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, queryGraph, languageGraph);
+
             _visionEncoder = visionEncoder;
             _qformer = qformer;
             _languageModel = languageModel;
-
-            // Tokenizer is required for ONNX mode - must match the language model backbone
-            Guard.NotNull(tokenizer);
-            _tokenizer = tokenizer;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
@@ -416,16 +467,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         }
         catch
         {
-            try
-            {
-                visionEncoder?.Dispose();
-                qformer?.Dispose();
-                languageModel?.Dispose();
-            }
-            catch
-            {
-                // Swallow disposal exceptions
-            }
+            // Attempt every release while preserving the original construction error.
+            try { languageModel?.Dispose(); } catch { }
+            try { qformer?.Dispose(); } catch { }
+            try { visionEncoder?.Dispose(); } catch { }
 
             throw;
         }
@@ -1266,11 +1311,26 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// </summary>
     private Vector<T> GetTextEmbeddingOnnx(string text)
     {
+        if (!_onnxSupportsTextQueries)
+            throw new NotSupportedException("The ONNX Q-Former export does not support the text-query input set.");
         if (_qformer is null)
             throw new InvalidOperationException("Q-Former ONNX session not initialized.");
 
-        var encoded = _tokenizer.Encode(text);
+        var encoded = _tokenizer.Encode(text, new EncodingOptions
+        {
+            MaxLength = _maxSequenceLength, Padding = true, Truncation = true, AddSpecialTokens = true
+        });
         var inputIds = encoded.TokenIds;
+
+        var attentionMask = encoded.AttentionMask is not null
+            ? encoded.AttentionMask.ToArray()
+            : Enumerable.Repeat(1, inputIds.Count).ToArray();
+        if (inputIds.Count == 0 || inputIds.Count > _maxSequenceLength || attentionMask.Length != inputIds.Count)
+            throw new InvalidOperationException("ONNX tokenizer must return matching nonempty token and mask sequences within the configured context.");
+        var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        var graph = configuration.Graphs[OnnxModelRole.QueryTransformer];
+        graph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, inputIds.Count);
+        graph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, attentionMask.Length);
 
         // Create input tensor
         var inputIdsTensor = new OnnxTensors.DenseTensor<long>([1, inputIds.Count]);
@@ -1278,10 +1338,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         {
             inputIdsTensor[0, i] = inputIds[i];
         }
-
-        var attentionMask = encoded.AttentionMask is not null
-            ? encoded.AttentionMask.ToArray()
-            : Enumerable.Repeat(1, inputIds.Count).ToArray();
 
         var attentionMaskTensor = new OnnxTensors.DenseTensor<long>([1, inputIds.Count]);
         for (int i = 0; i < inputIds.Count; i++)
@@ -1295,46 +1351,20 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor)
         };
 
-        using var results = _qformer.Run(inputs);
+        using var results = _qformer.Run(inputs, new[] { _queryOutputName });
         var output = results.First().AsTensor<float>();
+        OnnxEmbeddingContract.Validate(output, _embeddingDimension,
+            OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures, OnnxModelRole.QueryTransformer);
 
-        // Extract embedding from Q-Former output
-        // Q-Former outputs shape: [batch_size, num_query_tokens, hidden_size]
-        // We use mean pooling over query tokens for the embedding
+        // Preserve mean pooling for text, without truncating a mismatched graph width.
+        // Text sequence length is not a claim about the number of learned visual queries.
         var embedding = new Vector<T>(_embeddingDimension);
-
-        if (output.Rank == 3)
+        int tokens = output.Rank == 3 ? output.Dimensions[1] : 1;
+        for (int column = 0; column < _embeddingDimension; column++)
         {
-            // 3D tensor: [batch, num_query_tokens, hidden_size]
-            int numQueryTokens = (int)output.Dimensions[1];
-            int hiddenSize = (int)output.Dimensions[2];
-            int embDim = Math.Min(_embeddingDimension, hiddenSize);
-
-            // Mean pool over query tokens
-            for (int i = 0; i < embDim; i++)
-            {
-                double sum = 0;
-                for (int q = 0; q < numQueryTokens; q++)
-                {
-                    sum += output[0, q, i];
-                }
-                embedding[i] = NumOps.FromDouble(sum / numQueryTokens);
-            }
-        }
-        else if (output.Rank == 2)
-        {
-            // 2D tensor: [batch, hidden_size] - direct extraction
-            int hiddenSize = (int)output.Dimensions[1];
-            int embDim = Math.Min(_embeddingDimension, hiddenSize);
-            for (int i = 0; i < embDim; i++)
-            {
-                embedding[i] = NumOps.FromDouble(output[0, i]);
-            }
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Unexpected Q-Former output rank: {output.Rank}. Expected 2 or 3 dimensions.");
+            double sum = 0;
+            for (int token = 0; token < tokens; token++) sum += output.GetValue(token * _embeddingDimension + column);
+            embedding[column] = NumOps.FromDouble(sum / tokens);
         }
 
         return VectorHelper.Normalize(embedding);
@@ -1345,6 +1375,8 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// </summary>
     private Tensor<T> ExtractQFormerFeaturesOnnx(Tensor<T> image)
     {
+        if (!_onnxSupportsImageQueries)
+            throw new NotSupportedException("The ONNX Q-Former export does not support visual queries.");
         if (_visionEncoder is null || _qformer is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
@@ -1355,12 +1387,13 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             NamedOnnxValue.CreateFromTensor("pixel_values", imageInput)
         };
 
-        OnnxTensors.Tensor<float> visionOutput;
-        using (var visionResults = _visionEncoder.Run(visionInputs))
-        {
-            visionOutput = visionResults.First().AsTensor<float>().Clone() as OnnxTensors.DenseTensor<float>
-                ?? throw new InvalidOperationException("Failed to get vision encoder output.");
-        }
+        // Keep the first result alive through the second Run; no full feature clone is needed.
+        using var visionResults = _visionEncoder.Run(visionInputs, new[] { _visionOutputName });
+        var visionOutput = visionResults.First().AsTensor<float>();
+        OnnxEmbeddingContract.Validate(visionOutput, _visionHiddenDim, OnnxEmbeddingLayouts.TokenFeatures, OnnxModelRole.ImageEncoder);
+        var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        configuration.Graphs[OnnxModelRole.QueryTransformer].RequireInput("encoder_hidden_states",
+            OnnxTensors.TensorElementType.Float, visionOutput.Dimensions.ToArray());
 
         // Run Q-Former with vision features
         var qformerInputs = new List<NamedOnnxValue>
@@ -1368,23 +1401,11 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             NamedOnnxValue.CreateFromTensor("encoder_hidden_states", visionOutput)
         };
 
-        using var qformerResults = _qformer.Run(qformerInputs);
+        using var qformerResults = _qformer.Run(qformerInputs, new[] { _queryOutputName });
         var qformerOutput = qformerResults.First().AsTensor<float>();
-
-        // Convert to Tensor<T>
-        int numQueries = (int)qformerOutput.Dimensions[1];
-        int hiddenDim = (int)qformerOutput.Dimensions[2];
-
-        var result = Tensor<T>.CreateDefault([numQueries, hiddenDim], NumOps.Zero);
-        for (int q = 0; q < numQueries; q++)
-        {
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                result[q, d] = NumOps.FromDouble(qformerOutput[0, q, d]);
-            }
-        }
-
-        return result;
+        if (qformerOutput.Rank != 3 || qformerOutput.Dimensions[1] != _numQueryTokens)
+            throw new InvalidOperationException($"ONNX Q-Former output must contain NumQueryTokens {_numQueryTokens} visual queries.");
+        return OnnxEmbeddingContract.ReadSequenceTensor<T>(qformerOutput, _embeddingDimension, OnnxModelRole.QueryTransformer);
     }
 
     /// <summary>
@@ -1808,6 +1829,8 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     {
         if (image.Shape.Length != 3 && image.Shape.Length != 4)
             throw new ArgumentException($"Image tensor must have 3 or 4 dimensions, got {image.Shape.Length}.");
+        if (!_useNativeMode && image.Rank == 4 && image.Shape[0] != 1)
+            throw new ArgumentException("ONNX image encoder requires a single image, not a batch.", nameof(image));
 
         bool is3D = image.Shape.Length == 3;
         int channels = is3D ? image.Shape[0] : image.Shape[1];
@@ -2067,7 +2090,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -2091,6 +2114,17 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             },
             ModelData = SerializeForMetadata()
         };
+        if (!_useNativeMode)
+        {
+            foreach (string nativeOnly in new[] { "QFormerHiddenDim", "VisionHiddenDim", "LmHiddenDim",
+                "NumQformerLayers", "NumHeads", "NumLmDecoderLayers", "VocabularySize" })
+                metadata.AdditionalInfo.Remove(nativeOnly);
+            if (!_onnxSupportsImageQueries) metadata.AdditionalInfo.Remove("NumQueryTokens");
+            metadata.AdditionalInfo["VisionFeatureDimension"] = _visionHiddenDim;
+            metadata.AdditionalInfo[nameof(OnnxConfiguration)] = OnnxConfiguration
+                ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+        }
+        return metadata;
     }
 
     /// <inheritdoc/>

@@ -10,6 +10,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
@@ -72,6 +73,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
 
     private readonly InferenceSession? _visionEncoder;
     private readonly InferenceSession? _languageModel;
+    private readonly string _visionOutputName = string.Empty;
     private readonly string? _visionEncoderPath;
     private readonly string? _languageModelPath;
 
@@ -159,6 +161,12 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     /// <summary>
     /// Initializes a new instance using ONNX models.
     /// </summary>
+    /// <remarks>
+    /// The vision graph's input geometry and feature width are validated independently
+    /// of native patch/layer options. This two-file wrapper does not load a perceiver
+    /// resampler: validating and exposing its graph signatures does not supply the
+    /// missing pretrained perceiver or language-generation implementation.
+    /// </remarks>
     public FlamingoNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string visionEncoderPath,
@@ -170,8 +178,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
-        _options.Validate();
-        _options.Validate();
+        _options.ValidateOnnx();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -190,15 +197,15 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _imageSize = _options.ImageSize;
         _numPerceiverTokens = _options.NumPerceiverTokens;
         _maxImagesInContext = _options.MaxImagesInContext;
-        _visionHiddenDim = 1024;
-        _lmHiddenDim = 2048;
-        _numVisionLayers = 24;
-        _numLmLayers = 32;
-        _numHeads = 16;
-        _patchSize = 14;
-        _vocabularySize = 32000;
-        _languageModelBackbone = LanguageModelBackbone.Chinchilla;
-        _numPerceiverLayers = 6;
+        _visionHiddenDim = _options.VisionDim;
+        _lmHiddenDim = _options.LmHiddenDim;
+        _numVisionLayers = _options.VisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _languageModelBackbone = _options.LanguageModelBackbone;
+        _numPerceiverLayers = _options.NumPerceiverLayers;
         // 1e-3 is the CODEBASE Adam default, chosen deliberately rather than taken from the paper.
         // Alayrac et al. 2022 specify their schedule in section 3 and Appendix B, and it is not a
         // single constant: a linear warm-up to 1e-4 over the first 5000 steps, then cosine decay,
@@ -206,7 +213,9 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         // from the middle of that schedule would look like a citation while reproducing none of it,
         // so the framework default is used and the deviation is stated here instead. Callers
         // reproducing the paper should pass their own optimizer with the published schedule.
-        _learningRate = 1e-3;
+        _learningRate = _options.LearningRate;
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? languageModel = null;
@@ -215,19 +224,26 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         {
             visionEncoder = new InferenceSession(visionEncoderPath);
             languageModel = new InferenceSession(languageModelPath);
+            var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionEncoder);
+            var languageGraph = new OnnxGraphSignature(OnnxModelRole.LanguageModel, languageModel);
+            visionGraph.RequireInputSet("pixel_values");
+            visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
+            string visionOutput = visionGraph.RequireEmbeddingOutput(_visionHiddenDim,
+                OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.TokenFeatures);
+            var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
+                _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, languageGraph);
             _visionEncoder = visionEncoder;
             _languageModel = languageModel;
-            // Tokenizer is required for ONNX mode - must match the language model backbone
-            Guard.NotNull(tokenizer);
-            _tokenizer = tokenizer;
+            _visionOutputName = visionOutput;
+            OnnxConfiguration = configuration;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }
         catch
         {
-            visionEncoder?.Dispose();
-            languageModel?.Dispose();
+            try { languageModel?.Dispose(); } catch { }
+            try { visionEncoder?.Dispose(); } catch { }
             throw;
         }
     }
@@ -794,6 +810,9 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             throw new InvalidOperationException("Vision encoder not initialized.");
         }
 
+        if (image.Rank != 3 || image.Shape[0] != 3 || image.Shape[1] != _imageSize || image.Shape[2] != _imageSize)
+            throw new ArgumentException($"ONNX image must have shape [3,{_imageSize},{_imageSize}].", nameof(image));
+
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
@@ -817,25 +836,8 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             NamedOnnxValue.CreateFromTensor("pixel_values", inputTensor)
         };
 
-        using var results = _visionEncoder.Run(inputs);
-        var output = results.First().AsEnumerable<float>().ToArray();
-
-        int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
-        var features = Tensor<T>.CreateDefault([numPatches, _visionHiddenDim], NumOps.Zero);
-
-        for (int i = 0; i < numPatches && i * _visionHiddenDim < output.Length; i++)
-        {
-            for (int j = 0; j < _visionHiddenDim; j++)
-            {
-                int outputIdx = i * _visionHiddenDim + j;
-                if (outputIdx < output.Length)
-                {
-                    features[i, j] = NumOps.FromDouble(output[outputIdx]);
-                }
-            }
-        }
-
-        return features;
+        using var results = _visionEncoder.Run(inputs, new[] { _visionOutputName });
+        return OnnxEmbeddingContract.ReadSequenceTensor<T>(results.First().AsTensor<float>(), _visionHiddenDim, OnnxModelRole.ImageEncoder);
     }
 
     private Tensor<T> ExtractPerceiverFeaturesNative(Tensor<T> visionFeatures)
@@ -1151,6 +1153,23 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        if (!_useNativeMode)
+        {
+            var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
+            return new ModelMetadata<T>
+            {
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    [nameof(OnnxConfiguration)] = configuration,
+                    ["ImageSize"] = _imageSize,
+                    ["EmbeddingDimension"] = _embeddingDimension,
+                    ["VisionFeatureDimension"] = _visionHiddenDim,
+                    ["MaxSequenceLength"] = _maxSequenceLength,
+                    ["MaxImagesInContext"] = _maxImagesInContext,
+                    ["UseNativeMode"] = false
+                }
+            };
+        }
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
