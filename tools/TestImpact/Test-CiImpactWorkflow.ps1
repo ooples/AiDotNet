@@ -658,11 +658,36 @@ Assert-Contract ($map.Contains('-CoverageRequirementsFile $requirements')) `
 # only its own three classes). They run in one gating heavy shard now; losing any of them silently
 # returns it to never running.
 $surveys = Get-ShardEntry 'Sweep - Layer and Model Contract Surveys'
+# Get-ShardEntry emits nothing when that shard is absent, and PowerShell treats the resulting
+# AutomationNull as an EMPTY COLLECTION on the left of -match: the assertions below would then hand
+# Assert-Contract an Object[] and terminate the whole contract instead of reporting. Normalising to an
+# empty string makes a missing or renamed survey shard fail cleanly with the messages below.
+if ($null -eq $surveys) { $surveys = '' }
 Assert-Contract ([bool] $surveys) 'the contract-survey sweeps have no shard and would never run'
 Assert-Contract ($surveys -match '(?m)^    heavy: true\s*$') 'the contract-survey shard is not on the heavy path'
 Assert-Contract ($surveys -match '(?m)^    hangTimeout: 35min\s*$') 'the contract-survey shard lost its 35-minute hang timeout'
 foreach ($survey in @('LayerOverrideRedundancyTests', 'LayerParameterSurfaceTests', 'ContractShadowSweepTests', 'ModelBaseCoverageTests')) {
     Assert-Contract ($surveys -and $surveys.Contains("FullyQualifiedName~$survey")) "the survey sweep '$survey' is no longer selected by any shard"
+}
+
+# THE INVENTORY LIST IS CLOSED. Every 'Sweep - ' and 'Conformance - ' entry must be one this contract
+# knows about, so a new worker-backed sweep cannot land in the manifest with nothing asserting its
+# filter, heavy, hangTimeout, mustCover, coverageIncludeDirectory or env - which is exactly how the two
+# model-shape sweeps first arrived. The contract-survey shard is exempt by EXACT name because it has its
+# own dedicated assertions immediately above; renaming it makes this check fire, so the exemption cannot
+# rot into an unconditional escape hatch.
+$expectedInventoryNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($expected in $expectedInventoryShards) { [void] $expectedInventoryNames.Add([string] $expected.Name) }
+[void] $expectedInventoryNames.Add('Sweep - Layer and Model Contract Surveys')
+foreach ($inventoryEntry in $shardEntries) {
+    $entryName = ($inventoryEntry -split '\r?\n', 2)[0].Trim()
+    if ($entryName -notmatch '^(?:Sweep|Conformance) - ') { continue }
+    Assert-Contract ($expectedInventoryNames.Contains($entryName)) `
+        ("inventory shard '$entryName' is not in the contract's expected inventory list. A new " +
+         "'Sweep - ' or 'Conformance - ' shard must be added to `$expectedInventoryShards in " +
+         'tools/TestImpact/Test-CiImpactWorkflow.ps1 in the same commit that adds it to ' +
+         '.github/test-shards.yml, so its filter, heavy, hangTimeout, mustCover, ' +
+         'coverageIncludeDirectory and env stay guarded like every other inventory shard.')
 }
 
 $shardRun = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'

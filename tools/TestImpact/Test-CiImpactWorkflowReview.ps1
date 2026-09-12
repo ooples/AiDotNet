@@ -174,6 +174,32 @@ foreach ($shape in @('Sweep - Model shape law', 'Sweep - Model shape discovery')
     }
 }
 
+# The inventory list is closed (see Test-CiImpactWorkflow.ps1). Prove it two ways: an unknown 'Sweep - '
+# or 'Conformance - ' entry must be rejected by name, and the contract-survey exemption must be an exact
+# name match rather than a blanket escape hatch, so renaming that shard has to make the check fire.
+$surveyAnchor = '  - name: Sweep - Layer and Model Contract Surveys'
+if (-not $manifest.Contains($surveyAnchor)) { throw 'Missing survey shard anchor for closed-list controls.' }
+foreach ($fake in @('Sweep - Something', 'Conformance - Something')) {
+    $fakeEntry = "  - name: $fake" + [Environment]::NewLine +
+        '    project: tests/AiDotNet.Tests/AiDotNetTests.csproj' + [Environment]::NewLine +
+        '    framework: net10.0' + [Environment]::NewLine +
+        "    filter: 'FullyQualifiedName~SomethingTests'" + [Environment]::NewLine +
+        '    heavy: true' + [Environment]::NewLine +
+        '    hangTimeout: 35min' + [Environment]::NewLine
+    $cases += [pscustomobject]@{
+        Name = ($fake -replace '[^A-Za-z0-9]+', '-') + '-not-in-expected-inventory'
+        Reason = "inventory shard '$fake' is not in the contract's expected inventory list"
+        Content = $workflow
+        ManifestContent = $manifest.Replace($surveyAnchor, $fakeEntry + $surveyAnchor)
+    }
+}
+$cases += [pscustomobject]@{
+    Name = 'survey-shard-renamed-loses-exemption'
+    Reason = "inventory shard 'Sweep - Layer and Model Contract Surveys RENAMED' is not in the contract's expected inventory list"
+    Content = $workflow
+    ManifestContent = $manifest.Replace($surveyAnchor, $surveyAnchor + ' RENAMED')
+}
+
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ('aidotnet-ci-contract-review-' + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
