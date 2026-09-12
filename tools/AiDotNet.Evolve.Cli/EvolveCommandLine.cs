@@ -44,7 +44,8 @@ internal static class EvolveCommandLine
             string command = args[0].ToLowerInvariant();
             string[] known = command switch
             {
-                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best", "session" },
+                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best", "session", "preflight-max-tests" },
+                "preflight" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "preflight-max-tests" },
                 "inspect" or "pause" or "cancel" => new[] { "session" },
                 "validate" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume" },
                 "schema" or "docs" => new[] { "out" },
@@ -57,6 +58,7 @@ internal static class EvolveCommandLine
             {
                 "run" => await RunAsync(rest, output, error, cancellationToken, control).ConfigureAwait(false),
                 "validate" => Validate(rest, output, error),
+                "preflight" => await PreflightAsync(rest, output, cancellationToken).ConfigureAwait(false),
                 "inspect" or "pause" or "cancel" => await ControlAsync(command, rest, output, cancellationToken).ConfigureAwait(false),
                 "benchmark-program" => await ProgramBenchmark.RunAsync(rest.Require("worker"), rest.Require("output"),
                     rest.TryGet("runs", out string runs) ? ParseInt32(runs, "runs") : 4,
@@ -96,9 +98,7 @@ internal static class EvolveCommandLine
         }
     }
 
-    /// <summary>Loads a configuration file, runs the search it describes, and reports the outcome.</summary>
-    private static async Task<int> RunAsync(
-        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken, EvolutionRunControl? control)
+    private static (YamlModelConfig Config, AiModelBuilder<double, Matrix<double>, Vector<double>> Builder) LoadProgramRun(Arguments arguments)
     {
         string configPath = arguments.Require("config");
         YamlModelConfig config = YamlConfigLoader.LoadFromFile(configPath);
@@ -116,6 +116,27 @@ internal static class EvolveCommandLine
         ApplyOverrides(options, arguments);
         if (options.OutputDirectory is not null) config.ProgramEvolution.Engine.OutputDirectory = options.OutputDirectory;
         var builder = AiModelBuilder<double, Matrix<double>, Vector<double>>.FromConfiguration(config);
+        return (config, builder);
+    }
+
+    private static int PreflightLimit(Arguments arguments) => arguments.TryGet("preflight-max-tests", out string maximum)
+        ? ParseInt32(maximum, "preflight-max-tests") : 256;
+
+    private static async Task<int> PreflightAsync(Arguments arguments, TextWriter output, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var (_, builder) = LoadProgramRun(arguments);
+        var report = await builder.PreflightProgramEvolutionAsync(PreflightLimit(arguments), token).ConfigureAwait(false);
+        output.WriteLine(JsonConvert.SerializeObject(report, Formatting.Indented));
+        return report.IsReady ? ExitSuccess : ExitRunFailed;
+    }
+
+    /// <summary>Loads one configuration document, preflights its first seed, then runs and reports the search.</summary>
+    private static async Task<int> RunAsync(
+        Arguments arguments, TextWriter output, TextWriter error, CancellationToken cancellationToken, EvolutionRunControl? control)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var (_, builder) = LoadProgramRun(arguments);
         control ??= new EvolutionRunControl();
         using var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var inspection = new RunInspection(control, runCancellation);
@@ -126,6 +147,14 @@ internal static class EvolveCommandLine
         AiModelResult<double, Matrix<double>, Vector<double>> result;
         try
         {
+            error.WriteLine("Preflight checks one seed before search. Its correctness and additional fitness costs are separate from the search evaluation budget.");
+            var preflight = await builder.PreflightProgramEvolutionAsync(PreflightLimit(arguments), runCancellation.Token).ConfigureAwait(false);
+            error.WriteLine(JsonConvert.SerializeObject(preflight));
+            if (!preflight.IsReady)
+            {
+                await inspection.FinishAsync(null).ConfigureAwait(false);
+                return ExitRunFailed;
+            }
             result = await builder.BuildAsync(runCancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -150,8 +179,12 @@ internal static class EvolveCommandLine
         if (arguments.Has("json")) output.WriteLine(JsonConvert.SerializeObject(summary, Formatting.Indented));
         else PrintSummary(output, summary, result.ProgramEvolution?.BestProgram?.Source, arguments.Has("show-best"));
         if (service is not null) error.WriteLine(JsonConvert.SerializeObject(inspection.Read()));
-        return ExitSuccess;
+        return RunExitCode(summary);
     }
+
+    internal static int RunExitCode(EvolutionRunSummary summary) =>
+        summary.StopReason is EvolutionStopReason.CandidateFailure or EvolutionStopReason.NoCandidates ||
+        (summary.ArchiveCount == 0 && summary.StopReason != EvolutionStopReason.Canceled) ? ExitRunFailed : ExitSuccess;
 
     private static async Task<int> ControlAsync(string command, Arguments arguments, TextWriter output, CancellationToken token)
     {
@@ -293,6 +326,8 @@ internal static class EvolveCommandLine
         output.WriteLine();
         output.WriteLine("  run       --config <file> [--run-id <id>] [--seed <n>] [--max-evaluations <n>]");
         output.WriteLine("            [--output <dir>] [--resume] [--json] [--show-best] [--session <name>]");
+        output.WriteLine("            [--preflight-max-tests <1..4096>] first-seed preflight runs before search (default 256 public tests)");
+        output.WriteLine("  preflight --config <file> [--preflight-max-tests <1..4096>] execute only the seed/setup checks");
         output.WriteLine("  inspect | pause | cancel --session <name>  current-user-only live control");
         output.WriteLine("            pause drains the batch and exits; resumability requires a verified checkpoint.");
         output.WriteLine("            Resume with run --config <same file> --resume and the same run id/output/budget.");
@@ -305,7 +340,7 @@ internal static class EvolveCommandLine
         output.WriteLine("Any ${NAME} in the file is replaced by that environment variable, and ${NAME:-value}");
         output.WriteLine("supplies a default, so an API key stays out of a file you commit.");
         output.WriteLine();
-        output.WriteLine("Exit codes: 0 success, 1 usage or configuration error, 2 cancelled, 3 no result.");
+        output.WriteLine("Exit codes: 0 success, 1 usage or configuration error, 2 cancelled, 3 preflight/run failed or no usable result.");
     }
 
     /// <summary>A minimal <c>--name value</c> and <c>--flag</c> parser.</summary>

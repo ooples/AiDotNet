@@ -697,8 +697,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <exception cref="InvalidOperationException">No chat client, or no way to score a candidate, was configured.</exception>
     private async Task<EvolutionRunOutcome> RunProgramEvolutionAsync(CancellationToken cancellationToken)
     {
-        ProgramEvolutionOptions programOptions = _programEvolutionOptions
-            ?? throw new InvalidOperationException("ConfigureProgramEvolution has not been called.");
+        ProgramEvolutionOptions programOptions = (_programEvolutionOptions
+            ?? throw new InvalidOperationException("ConfigureProgramEvolution has not been called.")).Clone();
 
         IChatClient<T>? configuredClient = _chatClient;
         if (programOptions.CustomVariation is null && configuredClient is null)
@@ -870,8 +870,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>Validated run settings with at least one archive descriptor.</returns>
     private EvolutionOptions ResolveProgramEvolutionOptions(ProgramEvolutionOptions programOptions)
     {
-        EvolutionOptions options = _evolutionOptions
-            ?? EvolutionOptions.FromEngineOptions(programOptions.Engine).SnapshotAndValidate();
+        EvolutionOptions options = (_evolutionOptions
+            ?? EvolutionOptions.FromEngineOptions(programOptions.Engine)).SnapshotAndValidate();
 
         // Configuring novelty has to reach the engine's archive-side gate, which is the only place a near-duplicate
         // can be refused BEFORE it costs an evaluation. The engine's threshold is off by default, so without this

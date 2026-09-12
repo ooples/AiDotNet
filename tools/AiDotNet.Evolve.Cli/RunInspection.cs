@@ -135,8 +135,8 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
         {
             if (!_finished && command == "pause")
             {
-                control.RequestStop();
-                _state = "stop-requested"; // Not paused until the final committed checkpoint is verified.
+                if (control.RequestStop())
+                    _state = "stop-requested"; // Not paused until the final committed checkpoint is verified.
             }
             else if (!_finished && command == "cancel")
             {

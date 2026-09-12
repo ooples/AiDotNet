@@ -1,8 +1,44 @@
 # Evolution CLI — US24 implementation in progress
 
 This repository tool is not added to the core NuGet dependency graph. US24 is
-**not complete**: executable seed preflight, durable inspection/export bundles,
+**not complete**: coordinated-provider preflight, durable inspection/export bundles,
 provider/model telemetry, backend queues and optional dashboard work remain.
+
+## Seed preflight and budgets
+
+`preflight --config experiment.yaml` executes setup checks and the first seed only.
+`run` performs the same preflight before search. Both accept
+`--preflight-max-tests <1..4096>` (default 256 public input/output cases).
+
+Preflight validates positive search budgets, configured proposal/evaluation
+services, source bounds, output write access and seed archive placement. Resume
+also checks the checkpoint file's integrity; full compatibility is still verified
+by the engine before search. It makes no proposal request or model health-check
+call. It does execute the configured seed/evaluator, whose runner must provide an
+appropriate containment boundary.
+
+`Completed` alone does not pass correctness: the seed must achieve maximize-one
+with no violations or declared reused measurement. Input/output fitness can supply
+that check; scripts and custom fitness require explicit correctness or public
+input/output examples. A seed with the wrong fitness direction or missing archive
+coordinates is also refused. This checks public examples, not a held-out suite, and
+does not automatically install an independent correctness gate on future script-
+scored proposals. That integration remains unfinished.
+
+The preflight allowance is **separate from** `MaxEvaluationAttempts`: at most one
+correctness evaluation and one additional fitness evaluation. A built-in evaluator
+may dispatch once per public test, subject to its configured runner limits. Opaque
+custom evaluators must enforce their own resource limits. Preflight is not an API
+spending cap or enforcement of the search engine's evaluation grace-period policy.
+The report keeps correctness and additional fitness costs separate; arbitrary
+providers may use different units. Do not add unlike units or interpret them as
+money. An exception without a receipt leaves consumption unknown.
+
+Resource-accounted/persistent-fitness preflight is explicitly refused until
+coordinated reservations are implemented. There is no silent bypass. A failed
+preflight returns exit 3 without starting search; token cancellation returns 2.
+Search fail-fast/no-candidate outcomes and runs without a usable archive also
+return 3. A successful graceful stop remains distinct from token cancellation.
 
 ## Live control
 
@@ -78,14 +114,25 @@ provide a credential-reviewed export bundle.
 
 ## Current verification
 
-The full .NET 10 facade integration suite passed **978 tests**, with no skips, using
+The full .NET 10 facade integration suite passed **989 tests**, with no skips, using
 the built AiDotNet assembly and explicit local Evolution US10 source dependency
 `255feb24369702a32ea9db7a3f8a0b7a847d2762`. New tests cover batch drain, 2→4 evaluation
 checkpoint resume, trace delivery despite observer failure, fatal exception
 preservation, parsed configuration snapshots, checkpoint winner files and sanitized
-output failure reporting. The actual CLI/worker project suite passed **62 tests**
+output failure reporting. The actual CLI/worker project suite passed **71 tests**
 with no skips. Tests are maintained in `tests/AiDotNet.Evolve.Cli.Tests`; the lifecycle test sends a real
 local pipe pause during an evaluation and resumes the resulting engine checkpoint.
+
+The original 978-test control slice used a default analyzer-enabled library build.
+The later preflight iteration used `RunAnalyzersDuringBuild=false`; final default-
+analyzer and cross-target validation remain required. Initial compiler failures
+and the earlier incorrect-seed behavior were retained, not discarded.
+
+An actual CLI/Python smoke used `print(6)` against expected `7`. The old CLI exited
+0 and saved that wrong program with quality 0. With preflight it exits 3, reports
+one correctness cost unit and writes no winner. `print(7)` passes, records its
+separate one-unit preflight, and completes a one-evaluation search. Both use an
+empty manual model queue: no model response or paid API call is needed.
 
 This is local implementation evidence, not hosted CI approval, package publication,
 cross-platform pipe certification, competitor superiority or completion of US24.
