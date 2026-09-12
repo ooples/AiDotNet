@@ -5,38 +5,40 @@ name: DIAG StyDiff clone flake
 # diag/** triggers no other workflow (ci-proof/** would trigger the full
 # sonarcloud.yml matrix), and this file exists only on the diag branch.
 #
-# RUN 5 — supersedes run 4, and is a strict superset of it.
+# RUN 6 — chase the DETERMINISTIC case, cheaply.
 #
-# Phase 0 is the new part and the decisive one: a DETERMINISTIC test of the
-# mechanism the test's own comments blame. DiffusionModelTestBase.cs:191-197 and
-# StyDiffModelTests.cs:16-19 both attribute the divergence to the clone taking a
-# "cold packed-weight" path. InferenceWeightCache.InvalidateAll() is public, so
-# instead of waiting for the rare race we FORCE that asymmetry and ask whether it
-# can produce a divergence at all:
-#     A baseline         original warm, clone warm (what the test does)
-#     B cold-clone       original warm, clone COLD
-#     C cold-both        both COLD
-#     D cold-original    original COLD, clone warm (reverse asymmetry)
-# Either outcome is a result: divergence localises the mechanism; a clean sweep
-# REFUTES the packed-weight explanation those comments assert.
+# A wider scan of 40 failed CI runs turned up FOUR distinct clone assertions, and
+# one of them is not flaky at all:
 #
-# All four arms are clean on Windows — but Windows has never reproduced this
-# flake at all (it takes the Winograd Conv2D arm and has 128 cores), so the arms
-# are only decisive on ubuntu-latest.
+#   ModelFamily - Diffusion D-I, 6 runs across 2026-09-06/07/08, BIT-IDENTICAL:
+#     Clone() output[2] = -4.626447E+000 differs from -4.626425E+000
+#     by 2.241135E-005, exceeds its own tolerance 1.601435E-005  (= base 1.3e-6 rtol)
+#   -> InstantStyleModelTests. Same index, same values, same diff to 7 digits.
 #
-# Established by the earlier runs on this same runner:
-#   run 1  50 iterations, clean process ....................... 0 divergence
-#          Conv2D vs Conv2DInto measured on Linux -> differing=0, killing the
-#          ConvolutionalLayer.cs:1503 platform-fork theory at Tensors 0.130.3
-#   run 2  MDOP {1,2,4,8} x burners {0,4,8}, 120 comparisons ... 0 divergence
-#   run 3  cancelled (fresh process per loop + wrong GC mode)
-#   run 4  superseded by this run
+#   ModelFamily - Diffusion Step-Sync (StyDiff, rtol 1.5e-5) hits a DIFFERENT
+#   element every time: output[311], output[347], output[58]. That one is the
+#   genuinely intermittent case.
 #
-# The real failures, recovered from CI history rather than guessed:
-#   2026-09-11 StyDiff      output[58] diff 2.012402E-005 > allowed 1.137707E-005
-#              (= 1e-5 + 1.5e-5*|expected| -> the override is ACTIVE and STILL fails)
-#   2026-09-08 InstantStyle output[2]  diff 2.241135E-005 > allowed 1.601435E-005
-#              (= 1e-5 + 1.3e-6*|expected| -> the BASE tolerance; NOT StyDiff-only)
+# A deterministic divergence is directly localisable, so this run targets it.
+# Locally on Windows the InstantStyle clone is bit-identical (0/3) — but the value
+# itself is platform-dependent (Windows output[2]=-4.626414 vs Linux -4.626425),
+# a ~1.1e-5 gap of the same order as the divergence. So this must run on Linux.
+#
+# This run is PROBE-ONLY and therefore cheap: no test-project build (~13 min saved)
+# and no test loops (~50 min saved). It also adds the discriminator the suite has
+# never had — comparing clone PARAMETERS, not just output:
+#   parameters identical -> compute-path difference
+#   parameters differ    -> a real clone weight-fidelity bug
+#
+# Earlier runs, all on this same runner:
+#   run 1  50 iterations, clean process ................. 0 divergence; also proved
+#          Conv2D vs Conv2DInto agree on Linux at Tensors 0.130.3
+#   run 2  MDOP {1,2,4,8} x burners {0,4,8} ............. 0 divergence
+#   run 3  cancelled (fresh process per loop, wrong GC mode)
+#   run 4  cancelled (superseded)
+#   run 5  cancelled (its Phase 0 arms are inert — invalidating InferenceWeightCache
+#          costs 0.96-1.08x, so that cache is not engaged on this path — and its
+#          Phase 1 filtered Step-Sync, which cannot reach InstantStyle)
 
 on:
   push:
@@ -44,14 +46,10 @@ on:
       - 'diag/**'
   workflow_dispatch:
     inputs:
-      probe_iterations:
-        description: 'Iterations per packed-weight arm'
+      iterations:
+        description: 'Iterations for the InstantStyle deterministic probe'
         required: false
-        default: '8'
-      loop_minutes:
-        description: 'Minutes looping the real shard Clone tests'
-        required: false
-        default: '38'
+        default: '6'
 
 permissions: read-all
 
@@ -64,15 +62,12 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   AIDOTNET_DISABLE_GPU: 1
-  # The failing shard is in $heavyShards, which run
-  # "Workstation GC (DOTNET_gcServer=0) + serial collections".
-  DOTNET_gcServer: 0
 
 jobs:
-  repro:
-    name: Packed-weight arms + real-shard loop (ubuntu-latest)
+  probe:
+    name: InstantStyle deterministic probe (ubuntu-latest)
     runs-on: ubuntu-latest
-    timeout-minutes: 95
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -83,7 +78,6 @@ jobs:
           sudo rm -rf /opt/ghc /usr/local/.ghcup || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/share/swift /usr/local/share/boost || true
-          sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
           df -h /
 
       - name: Setup .NET 10.0
@@ -101,81 +95,32 @@ jobs:
 
       - name: Report runner topology
         run: |
-          echo "nproc : $(nproc)"; uname -a; ldd --version | head -1; free -g
-
-      - name: Restore dependencies
-        run: dotnet restore
+          echo "nproc : $(nproc)"; uname -a; ldd --version | head -1
 
       - name: Build source generator
-        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
 
       - name: Build probe
-        run: dotnet build tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj -c Release --no-restore -m:4
+        run: dotnet build tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj -c Release -m:4
 
-      - name: Phase 0 — packed-weight cache arms (DETERMINISTIC mechanism test)
+      - name: Run probe (InstantStyle deterministic case first)
         run: |
           mkdir -p diag-out
           dotnet run --project tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj \
             -c Release --no-build \
-            -- --iterations "${{ github.event.inputs.probe_iterations || '8' }}" --mdop-sweep "4" \
-            2>&1 | tee diag-out/phase0-arms.txt
-
-      - name: Build test project (net10.0)
-        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-restore -f net10.0 -m:4
-
-      - name: Serialize collections like a heavy shard
-        run: |
-          cfg=tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json
-          if [ -f "$cfg" ]; then
-            jq '.parallelizeAssembly=false | .parallelizeTestCollections=false | .maxParallelThreads=1' \
-              "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
-            cat "$cfg"
-          else
-            echo "::warning::runner config not found at $cfg"
-          fi
-
-      - name: Phase 1 — loop the real shard's Clone tests in one process each
-        if: always()
-        env:
-          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
-        run: |
-          set +e
-          mkdir -p diag-out
-          SHARD='FullyQualifiedName~ModelFamilyTests.Diffusion&(FullyQualifiedName~Diffusion.Step|FullyQualifiedName~Diffusion.Stitch|FullyQualifiedName~Diffusion.Streaming|FullyQualifiedName~Diffusion.Sty|FullyQualifiedName~Diffusion.SUPIR|FullyQualifiedName~Diffusion.Swift|FullyQualifiedName~Diffusion.Sync)'
-          minutes="${{ github.event.inputs.loop_minutes || '38' }}"
-          deadline=$(( $(date +%s) + (minutes * 60) ))
-          runs=0; fails=0
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            runs=$((runs + 1))
-            dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
-              --no-build --no-restore \
-              --filter "(${SHARD})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus&FullyQualifiedName~Clone_ShouldProduceIdenticalOutput" \
-              > current.txt 2>&1
-            if grep -aq "Clone() output\[" current.txt; then
-              fails=$((fails + 1))
-              echo "::warning::CLONE DIVERGENCE on loop ${runs}"
-              {
-                echo "########## loop ${runs} ##########"
-                grep -aE "Clone\(\) output\[|\[FAIL\]" current.txt | head -40
-              } >> diag-out/failures.txt
-            fi
-            rm -f current.txt
-          done
-          echo "PHASE 1: ${runs} clone-only shard runs, ${fails} with a divergence" | tee -a diag-out/summary.txt
+            -- --iterations "${{ github.event.inputs.iterations || '6' }}" --mdop-sweep "4" \
+            2>&1 | tee diag-out/probe-output.txt
 
       - name: Report
         if: always()
         run: |
-          echo "===== PHASE 0 ARMS ====="
-          sed -n '/PACKED-WEIGHT CACHE ARMS/,/^$/p' diag-out/phase0-arms.txt 2>/dev/null || echo "(none)"
-          echo "===== PHASE 1 SUMMARY ====="; cat diag-out/summary.txt 2>/dev/null || echo "(none)"
-          echo "===== DIVERGENCES ====="
-          cat diag-out/failures.txt 2>/dev/null || echo "(none captured - did NOT reproduce)"
+          echo "===== INSTANTSTYLE (deterministic case) ====="
+          sed -n '/INSTANTSTYLE/,/^=== PACKED/p' diag-out/probe-output.txt 2>/dev/null || echo "(none)"
 
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: stydiff-repro-output
+          name: stydiff-probe-output
           path: diag-out/
           if-no-files-found: warn

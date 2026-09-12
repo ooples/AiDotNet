@@ -48,6 +48,7 @@ internal static class Program
         ConfigureLikeTestAssembly();
         PrintBanner(iterations);
         ProbeConvolutionPlatformArms();
+        ProbeInstantStyle(Math.Max(3, iterations));
 
         var rng = RandomHelper.CreateSeededRandom(42);
         var input = CreateRandomTensor(InputShape, rng);
@@ -228,6 +229,132 @@ internal static class Program
             Console.WriteLine($"    repeat probe failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// InstantStyle is the DETERMINISTIC case, and it is the one worth chasing.
+    ///
+    /// CI history shows the identical assertion in 6 separate runs across 4 days
+    /// (2026-09-06, 09-07 x4, 09-08), always the ModelFamily - Diffusion D-I shard:
+    ///
+    ///   Clone() output[2] = -4.626447E+000 differs from -4.626425E+000
+    ///   by 2.241135E-005, which exceeds its own tolerance 1.601435E-005
+    ///
+    /// Same element, same two values, same diff to seven digits, every time — that is
+    /// not a race. (StyDiff by contrast hits a different element each run: 311, 347, 58.)
+    /// A deterministic divergence can be localised directly, so this reproduces the
+    /// fixture exactly as InstantStyleModelTests.cs:30-43 declares it.
+    /// </summary>
+    private static void ProbeInstantStyle(int iterations)
+    {
+        Console.WriteLine("=== INSTANTSTYLE — deterministic CI signature ===");
+        Console.WriteLine("  expected from CI: output[2] original=-4.626425E+000 clone=-4.626447E+000");
+
+        int[] shape = [1, 4, 8, 8];
+        var rng = RandomHelper.CreateSeededRandom(42);
+        var input = CreateRandomTensor(shape, rng);
+
+        for (int i = 0; i < iterations; i++)
+        {
+            using var arena = TensorArena.Create();
+            using var model = CreateInstantStyleModel();
+
+            var p1 = model.Predict(input);
+            using var clone = (IDiffusionModel<float>)model.Clone();
+            CompareParameters($"iter {i} InstantStyle weights", model, clone);
+            var c1 = clone.Predict(input);
+            var p2 = model.Predict(input);
+
+            var cloneCmp = Compare(p1, c1);
+            var selfCmp = Compare(p1, p2);
+
+            string o2 = p1.Length > 2 ? p1[2].ToString("R", CultureInfo.InvariantCulture) : "n/a";
+            string c2 = c1.Length > 2 ? c1[2].ToString("R", CultureInfo.InvariantCulture) : "n/a";
+            Console.WriteLine($"  iter {i}: P1-vs-C1 maxAbs="
+                + $"{cloneCmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
+                + $" differing={cloneCmp.DiffCount}/{p1.Length} atIndex={cloneCmp.Index}"
+                + $" | P1-vs-P2 maxAbs={selfCmp.MaxDiff.ToString("R", CultureInfo.InvariantCulture)}"
+                + $" | output[2] orig={o2} clone={c2}");
+
+            if (cloneCmp.MaxDiff > 0)
+            {
+                Report("  InstantStyle P1-vs-C1", cloneCmp, p1);
+                LocaliseByStage(model, clone, input);
+                break;
+            }
+        }
+
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// THE DISCRIMINATOR THE SUITE NEVER HAD.
+    ///
+    /// DiffusionModelTestBase only ever compares clone OUTPUT (Clone_ShouldProduce-
+    /// IdenticalOutput) — unlike NeuralNetworkModelTestBase, which also asserts
+    /// AssertCloneOwnsIndependentParameterStorage. So for all 241 diffusion fixtures
+    /// "the clone carries different weights" has never actually been ruled out, and an
+    /// output delta cannot distinguish:
+    ///
+    ///   parameters IDENTICAL -> same weights, so the delta is a COMPUTE-PATH difference
+    ///   parameters DIFFER    -> a real clone weight-fidelity bug (and deterministic,
+    ///                           which is exactly InstantStyle's signature)
+    /// </summary>
+    private static void CompareParameters(string label, IDiffusionModel<float> a, IDiffusionModel<float> b)
+    {
+        // Some model families deliberately refuse a flat parameter vector
+        // ("use WriteParameters/ReadParameters"). That is an opt-out, not a finding —
+        // and it must not crash a CI probe run.
+        AiDotNet.Tensors.LinearAlgebra.Vector<float> pa, pb;
+        try
+        {
+            pa = a.GetParameters();
+            pb = b.GetParameters();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  {label}: parameter comparison unavailable ({ex.GetType().Name}: {ex.Message})");
+            return;
+        }
+
+        if (pa.Length != pb.Length)
+        {
+            Console.WriteLine($"  {label}: PARAMETER COUNT MISMATCH {pa.Length} vs {pb.Length}");
+            return;
+        }
+
+        int diffCount = 0, firstIdx = -1;
+        double maxAbs = 0.0;
+        for (int i = 0; i < pa.Length; i++)
+        {
+            double d = Math.Abs((double)pa[i] - pb[i]);
+            if (d > 0)
+            {
+                diffCount++;
+                if (firstIdx < 0) firstIdx = i;
+                if (d > maxAbs) maxAbs = d;
+            }
+        }
+
+        Console.WriteLine(diffCount == 0
+            ? $"  {label}: parameters IDENTICAL ({pa.Length}) -> any output delta is COMPUTE-PATH"
+            : $"  {label}: parameters DIFFER {diffCount}/{pa.Length} firstIndex={firstIdx} "
+              + $"maxAbs={maxAbs.ToString("R", CultureInfo.InvariantCulture)} "
+              + $"orig={pa[firstIdx].ToString("R", CultureInfo.InvariantCulture)} "
+              + $"clone={pb[firstIdx].ToString("R", CultureInfo.InvariantCulture)} "
+              + "-> CLONE WEIGHT-FIDELITY BUG");
+    }
+
+    private static IDiffusionModel<float> CreateInstantStyleModel()
+        => new AiDotNet.Diffusion.StyleTransfer.InstantStyleModel<float>(
+            predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+                architecture: null, inputChannels: 4, outputChannels: 4,
+                baseChannels: 32, channelMultipliers: [1, 2],
+                numResBlocks: 1, attentionResolutions: [2], contextDim: 64, seed: 42),
+            vae: new AiDotNet.Diffusion.VAE.StandardVAE<float>(
+                inputChannels: 3, latentChannels: 4,
+                baseChannels: 16, channelMultipliers: [1, 2],
+                numResBlocksPerLevel: 1, seed: 42),
+            seed: 42);
 
     private static IDiffusionModel<float> CreateModel()
         => new AiDotNet.Diffusion.StyleTransfer.StyDiffModel<float>(
@@ -426,22 +553,67 @@ internal static class Program
     private static void ProbePackCacheArms(Tensor<float> input, int iterations)
     {
         Console.WriteLine("=== PACKED-WEIGHT CACHE ARMS (deterministic cold/warm forcing) ===");
+
+        // VALIDITY CHECK FIRST. If the diffusion forward never engages the pack
+        // cache, InvalidateAll() is a no-op and every arm below is INERT — a clean
+        // sweep would then mean "the probe did nothing", not "the packed-weight
+        // explanation is refuted". A live pack cache has to re-pack after an
+        // invalidate, so a cold predict must be measurably slower than a warm one.
+        {
+            using var arena = TensorArena.Create();
+            using var model = CreateModel();
+            model.Predict(input);                       // warm everything up
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            model.Predict(input);
+            double warmMs = sw.Elapsed.TotalMilliseconds;
+
+            InferenceWeightCache.InvalidateAll();
+            sw.Restart();
+            model.Predict(input);
+            double coldMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
+            model.Predict(input);
+            double rewarmMs = sw.Elapsed.TotalMilliseconds;
+
+            double ratio = warmMs > 0 ? coldMs / warmMs : 0.0;
+            Console.WriteLine($"  validity: warm={warmMs:F1}ms  afterInvalidate={coldMs:F1}ms  "
+                + $"rewarm={rewarmMs:F1}ms  cold/warm={ratio:F2}x");
+            Console.WriteLine(ratio > 1.15
+                ? "  -> pack cache appears LIVE on this path (invalidate costs time); arms are meaningful."
+                : "  -> NO measurable re-pack cost; the arms below may be INERT for this model.");
+        }
+
         Console.WriteLine($"{"arm",-22} {"iters",6} {"diverged",9} {"worstAbs",16}");
 
-        foreach (var arm in new[] { "A-baseline", "B-cold-clone", "C-cold-both", "D-cold-original" })
+        foreach (var arm in new[]
+                 {
+                     "A-baseline", "B-cold-clone", "C-cold-both", "D-cold-original",
+                     "E-polluted", "F-polluted-cold-clone",
+                 })
         {
             int diverged = 0;
             double worst = 0.0;
 
             for (int i = 0; i < iterations; i++)
             {
+                // The real shard runs ~7 sibling model classes in ONE process before
+                // StyDiff. Every clean-room run so far lacked that, and it is the last
+                // untested variable: recycled pool buffers carry residue from those
+                // models, so a partially-written rent reads different garbage for the
+                // original than for the clone. Same class as Tensors #755 ("zero the
+                // unwritten tail ... rented UNINITIALIZED from AutoTensorCache, a tail
+                // left dirty by an earlier op").
+                if (arm[0] is 'E' or 'F') PolluteProcess(4);
+
                 using var arena = TensorArena.Create();
                 using var model = CreateModel();
 
                 if (arm is "C-cold-both" or "D-cold-original") InferenceWeightCache.InvalidateAll();
                 var p1 = model.Predict(input);
 
-                if (arm is "B-cold-clone" or "C-cold-both") InferenceWeightCache.InvalidateAll();
+                if (arm is "B-cold-clone" or "C-cold-both" or "F-polluted-cold-clone")
+                    InferenceWeightCache.InvalidateAll();
                 using var clone = (IDiffusionModel<float>)model.Clone();
                 var c1 = clone.Predict(input);
 
@@ -459,6 +631,35 @@ internal static class Program
         }
 
         Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Dirties the process the way a real shard does: build several sibling models at
+    /// DIFFERENT widths, run a forward through each, and drop them. Their scratch
+    /// buffers go back to the shared pool carrying residue, so the next model's rents
+    /// are no longer freshly-zeroed GC memory. This is the single environmental
+    /// difference between the failing shard and every clean-room run that found nothing.
+    /// </summary>
+    private static void PolluteProcess(int models)
+    {
+        int[] widths = [16, 24, 32, 48];
+        for (int i = 0; i < models; i++)
+        {
+            int w = widths[i % widths.Length];
+            using var arena = TensorArena.Create();
+            using var m = new AiDotNet.Diffusion.StyleTransfer.StyDiffModel<float>(
+                predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+                    inputChannels: 4, outputChannels: 4, baseChannels: w,
+                    channelMultipliers: [1, 2, 4], numResBlocks: 1,
+                    attentionResolutions: [1, 2], contextDim: 768, seed: 7 + i),
+                vae: new AiDotNet.Diffusion.VAE.StandardVAE<float>(
+                    inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                    channelMultipliers: [1, 2], numResBlocksPerLevel: 1, seed: 7 + i),
+                seed: 7 + i);
+
+            var rng = RandomHelper.CreateSeededRandom(100 + i);
+            m.Predict(CreateRandomTensor(InputShape, rng));
+        }
     }
 
     private static void LocaliseOnce(Tensor<float> input)
