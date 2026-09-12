@@ -259,4 +259,17 @@ public class CompressionLemmaKLEstimator<T>
         double learningRate = 1e-2,
         Random? rng = null)
         => Math.Max(0.0, Maximize(posteriorSamples, priorSamples, steps, learningRate, rng));
+
+    /// <summary>Creates an independent estimator with the same architecture and the same weights.</summary>
+    /// <remarks>
+    /// Same reason as <see cref="ImplicitPosteriorGenerator{T}.Clone"/>: the clone engine deep-copies a
+    /// field by probing for a parameterless <c>Clone()</c>, and without one this estimator stays shared
+    /// between a learner and its copy, so <see cref="Maximize"/> on either would move both.
+    /// </remarks>
+    public CompressionLemmaKLEstimator<T> Clone()
+    {
+        var copy = new CompressionLemmaKLEstimator<T>(_inputDim, _hidden);
+        copy.SetParameters(_omega);
+        return copy;
+    }
 }

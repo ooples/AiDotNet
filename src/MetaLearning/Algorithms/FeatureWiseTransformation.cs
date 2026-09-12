@@ -152,6 +152,30 @@ public sealed class FeatureWiseTransformation<T>
         BiasHyperparameters = bias;
     }
 
+    /// <summary>Creates an independent transformation holding copies of the same hyper-parameters.</summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the clone engine cannot duplicate a field holding a transformation: it is not a
+    /// sub-model, not a collection, and carries no other contract the engine recognises, so the engine
+    /// gives up and leaves the field SHARED with its source. Two learners then write their learned
+    /// theta_gamma and theta_beta into one object, and meta-training a copy retrains the original.
+    /// </para>
+    /// <para>
+    /// Both vectors are COPIED rather than handed over, because <see cref="SetHyperparameters"/> stores
+    /// the references it is given: passing this instance's own vectors would move the sharing down one
+    /// level rather than removing it.
+    /// </para>
+    /// </remarks>
+    public FeatureWiseTransformation<T> Clone()
+    {
+        var random = AiDotNet.Models.ModelStateRegistry<double>.CopyRandom(_random)
+            ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
+        var copy = new FeatureWiseTransformation<T>(FeatureDimension, 0.0, 0.0, random);
+        copy.SetHyperparameters(ScaleHyperparameters.Clone(), BiasHyperparameters.Clone());
+        return copy;
+    }
+
     /// <summary>
     /// The standard deviation actually used for channel <paramref name="channel"/>'s scale term,
     /// i.e. <c>softplus(theta_gamma_c)</c>.
