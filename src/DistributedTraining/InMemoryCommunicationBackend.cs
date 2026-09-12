@@ -103,15 +103,25 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     // Key format: "{environmentId}_msg_{sourceRank}_{destRank}_{tag}"
     private static readonly Dictionary<string, Queue<Vector<T>>> _messageQueues = new();
 
-    /// <summary>Live backends per environment, so the LAST one out can clear undelivered state.</summary>
+    /// <summary>Lifecycle state for the current generation of an environment.</summary>
     /// <remarks>
-    /// An undelivered queue is deliberately preserved while a peer might still receive from it (see
-    /// ClearEnvironmentState). That guard had no exit: once every backend had shut down, a non-empty
-    /// queue survived indefinitely, and the next session reusing the same environmentId -- including
-    /// the default "default" -- could dequeue a message from the previous one. Counting live backends
-    /// gives the guard a terminating condition.
+    /// A generation remains open while ranks that have not participated may still arrive. Once an
+    /// already-seen rank initializes after the environment becomes quiescent, that is the next
+    /// generation and any abandoned payload from the previous one must be discarded.
     /// </remarks>
-    private static readonly Dictionary<string, int> _activeBackends = new();
+    private sealed class EnvironmentLifecycle
+    {
+        public EnvironmentLifecycle(int worldSize)
+        {
+            WorldSize = worldSize;
+        }
+
+        public int WorldSize { get; }
+        public int ActiveBackends { get; set; }
+        public HashSet<int> ParticipatingRanks { get; } = new();
+    }
+
+    private static readonly Dictionary<string, EnvironmentLifecycle> _environmentLifecycles = new();
 
     private const int BarrierTimeoutMs = 30000; // 30 seconds
     private const int MessageTimeoutMs = 30000; // 30 seconds for point-to-point
@@ -191,8 +201,38 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         lock (_globalLock)
         {
-            _activeBackends[_environmentId] =
-                (_activeBackends.TryGetValue(_environmentId, out int live) ? live : 0) + 1;
+            if (_environmentLifecycles.TryGetValue(_environmentId, out var lifecycle))
+            {
+                if (lifecycle.WorldSize != _worldSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Environment '{_environmentId}' is already configured for world size "
+                        + $"{lifecycle.WorldSize}, not {_worldSize}.");
+                }
+
+                if (lifecycle.ActiveBackends == 0 && lifecycle.ParticipatingRanks.Contains(_rank))
+                {
+                    // The same rank returning to a quiescent environment identifies a new session.
+                    // Force-clear any incomplete collective/message from the abandoned generation so
+                    // it cannot be consumed by this generation's peers.
+                    ClearEnvironmentState(_environmentId, force: true);
+                    lifecycle = new EnvironmentLifecycle(_worldSize);
+                    _environmentLifecycles[_environmentId] = lifecycle;
+                }
+                else if (lifecycle.ActiveBackends > 0 && lifecycle.ParticipatingRanks.Contains(_rank))
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank} is already active in environment '{_environmentId}'.");
+                }
+            }
+            else
+            {
+                lifecycle = new EnvironmentLifecycle(_worldSize);
+                _environmentLifecycles.Add(_environmentId, lifecycle);
+            }
+
+            lifecycle.ParticipatingRanks.Add(_rank);
+            lifecycle.ActiveBackends++;
         }
 
         // Base class handles initialization state
@@ -204,20 +244,23 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         lock (_globalLock)
         {
-            int live = _activeBackends.TryGetValue(_environmentId, out int n) ? n - 1 : 0;
-            if (live > 0)
+            if (!_environmentLifecycles.TryGetValue(_environmentId, out var lifecycle))
             {
-                _activeBackends[_environmentId] = live;
-            }
-            else
-            {
-                _activeBackends.Remove(_environmentId);
+                return;
             }
 
-            // Clear only this environment's shared state. FORCE once the last backend is gone: the
-            // in-flight guards exist to protect a PEER, and with no peer left there is nothing to
-            // protect -- only stale state for whoever reuses this environmentId next.
-            ClearEnvironmentState(_environmentId, force: live <= 0);
+            lifecycle.ActiveBackends = Math.Max(0, lifecycle.ActiveBackends - 1);
+            bool generationComplete = lifecycle.ActiveBackends == 0
+                && lifecycle.ParticipatingRanks.Count >= lifecycle.WorldSize;
+            if (generationComplete)
+            {
+                _environmentLifecycles.Remove(_environmentId);
+            }
+
+            // An incomplete generation keeps in-flight data for ranks that have not joined yet. Once
+            // every rank has participated and all are gone, no valid consumer remains, so abandoned
+            // state can be removed without contaminating a later session using the same environment.
+            ClearEnvironmentState(_environmentId, force: generationComplete);
         }
     }
 
@@ -238,7 +281,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // FORCE: this method's contract is "clears all shared state for an environment", which a
             // preserved in-flight queue would quietly violate -- and its stated purpose is test
             // isolation, where leaked state is exactly what it exists to prevent.
-            _activeBackends.Remove(environmentId);
+            _environmentLifecycles.Remove(environmentId);
             ClearEnvironmentState(environmentId, force: true);
         }
     }

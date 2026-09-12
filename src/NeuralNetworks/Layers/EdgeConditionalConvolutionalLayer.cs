@@ -942,22 +942,22 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Use Engine operations for parameter updates
         var scaledW1Grad = Engine.TensorMultiplyScalar(_edgeNetworkWeights1Gradient, learningRate);
-        _edgeNetworkWeights1 = Engine.TensorSubtract(_edgeNetworkWeights1, scaledW1Grad);
+        Engine.TensorSubtractInPlace(_edgeNetworkWeights1, scaledW1Grad);
 
         var scaledW2Grad = Engine.TensorMultiplyScalar(_edgeNetworkWeights2Gradient!, learningRate);
-        _edgeNetworkWeights2 = Engine.TensorSubtract(_edgeNetworkWeights2, scaledW2Grad);
+        Engine.TensorSubtractInPlace(_edgeNetworkWeights2, scaledW2Grad);
 
         var scaledSelfGrad = Engine.TensorMultiplyScalar(_selfWeightsGradient!, learningRate);
-        _selfWeights = Engine.TensorSubtract(_selfWeights, scaledSelfGrad);
+        Engine.TensorSubtractInPlace(_selfWeights, scaledSelfGrad);
 
         var scaledBias1Grad = Engine.TensorMultiplyScalar(_edgeNetworkBias1Gradient!, learningRate);
-        _edgeNetworkBias1 = Engine.TensorSubtract(_edgeNetworkBias1, scaledBias1Grad);
+        Engine.TensorSubtractInPlace(_edgeNetworkBias1, scaledBias1Grad);
 
         var scaledBias2Grad = Engine.TensorMultiplyScalar(_edgeNetworkBias2Gradient!, learningRate);
-        _edgeNetworkBias2 = Engine.TensorSubtract(_edgeNetworkBias2, scaledBias2Grad);
+        Engine.TensorSubtractInPlace(_edgeNetworkBias2, scaledBias2Grad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_edgeNetworkWeights1);

@@ -167,7 +167,7 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else if (UseNativeMode)
         {

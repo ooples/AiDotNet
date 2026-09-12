@@ -637,11 +637,11 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Update using vectorized Engine operations
-        _selfWeights = Engine.TensorSubtract(_selfWeights,
+        Engine.TensorSubtractInPlace(_selfWeights,
             Engine.TensorMultiplyScalar(_selfWeightsGradient, learningRate));
-        _neighborWeights = Engine.TensorSubtract(_neighborWeights,
+        Engine.TensorSubtractInPlace(_neighborWeights,
             Engine.TensorMultiplyScalar(_neighborWeightsGradient, learningRate));
-        _bias = Engine.TensorSubtract(_bias,
+        Engine.TensorSubtractInPlace(_bias,
             Engine.TensorMultiplyScalar(_biasGradient, learningRate));
     }
 

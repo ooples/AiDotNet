@@ -1,6 +1,7 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $analyzer = Join-Path $PSScriptRoot 'test-regression-analysis.ps1'
+$matrixParser = Join-Path $PSScriptRoot 'get-selected-shard-names.ps1'
 $retrySelector = Join-Path $PSScriptRoot 'find-pr-new-failures.ps1'
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("aidotnet-trx-analysis-" + [Guid]::NewGuid().ToString('N'))
 
@@ -91,6 +92,74 @@ function Invoke-Git {
     $result = & git -C $Repository @Arguments
     if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed in $Repository" }
     return $result
+}
+
+function Invoke-AnalyzerChild {
+    param(
+        [string] $Analyzer,
+        [string] $CurrentResultsPath,
+        [string] $OutputDirectory,
+        [string] $CurrentSha,
+        [string[]] $ExpectedShardNames,
+        [string] $BaselineLedgerPath,
+        [string] $BaselineSha,
+        [string] $RepositoryPath,
+        [switch] $FailOnPolicy
+    )
+
+    # pwsh -File cannot faithfully bind multiple command-line tokens to a string[] script
+    # parameter. Marshal the array as JSON through the child environment, then invoke the analyzer
+    # from inside that isolated process so its intentional `exit 1` cannot end this test runner.
+    $env:AIDOTNET_TEST_ANALYZER = $Analyzer
+    $env:AIDOTNET_TEST_CURRENT_RESULTS = $CurrentResultsPath
+    $env:AIDOTNET_TEST_OUTPUT = $OutputDirectory
+    $env:AIDOTNET_TEST_CURRENT_SHA = $CurrentSha
+    $env:AIDOTNET_TEST_EXPECTED_SHARDS = $ExpectedShardNames | ConvertTo-Json -Compress
+    $env:AIDOTNET_TEST_BASELINE_LEDGER = $BaselineLedgerPath
+    $env:AIDOTNET_TEST_BASELINE_SHA = $BaselineSha
+    $env:AIDOTNET_TEST_REPOSITORY = $RepositoryPath
+    $env:AIDOTNET_TEST_FAIL_ON_POLICY = if ($FailOnPolicy) { '1' } else { '0' }
+
+    try {
+        $childScript = @'
+$arguments = @{
+    CurrentResultsPath = $env:AIDOTNET_TEST_CURRENT_RESULTS
+    OutputDirectory = $env:AIDOTNET_TEST_OUTPUT
+    CurrentSha = $env:AIDOTNET_TEST_CURRENT_SHA
+    ExpectedShardNames = @($env:AIDOTNET_TEST_EXPECTED_SHARDS | ConvertFrom-Json)
+}
+if (-not [string]::IsNullOrWhiteSpace($env:AIDOTNET_TEST_BASELINE_LEDGER)) {
+    $arguments.BaselineLedgerPath = $env:AIDOTNET_TEST_BASELINE_LEDGER
+}
+if (-not [string]::IsNullOrWhiteSpace($env:AIDOTNET_TEST_BASELINE_SHA)) {
+    $arguments.BaselineSha = $env:AIDOTNET_TEST_BASELINE_SHA
+}
+if (-not [string]::IsNullOrWhiteSpace($env:AIDOTNET_TEST_REPOSITORY)) {
+    $arguments.RepositoryPath = $env:AIDOTNET_TEST_REPOSITORY
+}
+if ($env:AIDOTNET_TEST_FAIL_ON_POLICY -eq '1') {
+    $arguments.FailOnPolicy = $true
+}
+& $env:AIDOTNET_TEST_ANALYZER @arguments
+'@
+        $childOutput = & pwsh -NoLogo -NoProfile -Command $childScript 2>&1
+        return [PSCustomObject]@{
+            ExitCode = $LASTEXITCODE
+            Output = @($childOutput)
+        }
+    }
+    finally {
+        'AIDOTNET_TEST_ANALYZER',
+        'AIDOTNET_TEST_CURRENT_RESULTS',
+        'AIDOTNET_TEST_OUTPUT',
+        'AIDOTNET_TEST_CURRENT_SHA',
+        'AIDOTNET_TEST_EXPECTED_SHARDS',
+        'AIDOTNET_TEST_BASELINE_LEDGER',
+        'AIDOTNET_TEST_BASELINE_SHA',
+        'AIDOTNET_TEST_REPOSITORY',
+        'AIDOTNET_TEST_FAIL_ON_POLICY' |
+            ForEach-Object { Remove-Item -LiteralPath "Env:$_" -ErrorAction SilentlyContinue }
+    }
 }
 
 try {
@@ -408,6 +477,137 @@ internal static class TouchedRegressionProbe
     Assert-Matches 'VisibleFailure' $reporterOutput `
         'the failure digest still reports every recorded assertion alongside the lifecycle failure'
 
+    # ---- #2086: a dispatched shard that uploaded nothing must not read as success ----
+    # Before this, inventory mode (no baseline) had no expected set: counts were taken over
+    # whatever artifacts arrived, so a shard whose runner died was simply absent and the run
+    # reported "N shards, N passed, 0 failed, 0 incomplete". Integration D died twice in a row
+    # on master and the gate still published "Regression status: improved".
+    $missingShardRoot = Join-Path $testRoot 'missing-shard'
+    Write-SyntheticShard $missingShardRoot 'ac01' 'Shard Alpha' 'AlphaTest' 'Passed'
+    Write-SyntheticShard $missingShardRoot 'ac01' 'Shard Beta' 'BetaTest' 'Passed'
+
+    # Control arm: with every dispatched shard present, inventory mode still passes and the
+    # ledger is publishable. Without this, the assertions below could pass simply because the
+    # new code failed everything.
+    $completeOutput = Join-Path $testRoot 'missing-shard-complete'
+    & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $completeOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta')
+    $complete = Get-Content -LiteralPath (Join-Path $completeOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal 'inventory' $complete.mode 'no baseline means inventory mode'
+    Assert-Equal $true $complete.policyPassed 'every dispatched shard uploaded an artifact'
+    Assert-Equal $true $complete.baselinePublishable 'a complete ledger is publishable as the baseline'
+    Assert-Equal 0 @($complete.missingExpectedShards).Count 'nothing is missing when all shards reported'
+
+    # The real case: the matrix dispatched three shards and only two uploaded.
+    $incompleteOutput = Join-Path $testRoot 'missing-shard-incomplete'
+    $incompleteRun = Invoke-AnalyzerChild -Analyzer $analyzer `
+        -CurrentResultsPath $missingShardRoot -OutputDirectory $incompleteOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta', 'Shard Gamma')
+    Assert-Equal 1 $incompleteRun.ExitCode 'a missing dispatched shard fails inventory mode'
+    $incomplete = Get-Content -LiteralPath (Join-Path $incompleteOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal $false $incomplete.policyPassed 'a dispatched shard that uploaded nothing fails the policy'
+    Assert-Equal $false $incomplete.baselinePublishable 'an incomplete ledger is not publishable as the baseline'
+    Assert-Equal 1 @($incomplete.missingExpectedShards).Count 'exactly the absent shard is reported'
+    Assert-Equal 'Shard Gamma' @($incomplete.missingExpectedShards)[0] 'the absent shard is named'
+
+    # It must appear in the shard inventory as Missing, not be silently omitted -- that omission
+    # is what let the aggregate report "0 failing shards" while a shard had died.
+    $missingShardRows = @(Import-Csv -LiteralPath (Join-Path $incompleteOutput 'shards.csv') |
+        Where-Object { $_.name -eq 'Shard Gamma' })
+    Assert-Equal 1 $missingShardRows.Count 'the dead shard is present in shards.csv rather than dropped'
+    Assert-Equal 'Missing' $missingShardRows[0].status 'the dead shard is recorded as Missing, never as Passed'
+
+    $missingSummary = Get-Content -LiteralPath (Join-Path $incompleteOutput 'summary.md') -Raw
+    Assert-Matches 'Shard Gamma' $missingSummary 'the summary names the shard that produced no artifact'
+    Assert-Matches 'not.*published as the' $missingSummary 'the summary states the baseline is withheld'
+
+    # Enforcement: this must be a nonzero process exit even though there is no baseline. The
+    # pre-existing -FailOnPolicy gate only fired when a baseline existed, which is precisely why
+    # a baseline-establishing master run could go green with a dead shard.
+    $missingExitOutput = Join-Path $testRoot 'missing-shard-exit'
+    $missingExitRun = Invoke-AnalyzerChild -Analyzer $analyzer `
+        -CurrentResultsPath $missingShardRoot -OutputDirectory $missingExitOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta', 'Shard Gamma') -FailOnPolicy
+    Assert-Equal 1 $missingExitRun.ExitCode `
+        'a missing dispatched shard fails the run even with no baseline present'
+
+    # Comparison mode must enforce the same authoritative matrix. Shard Gamma is not in the
+    # baseline, so a baseline-only missing-key walk cannot discover it; ExpectedShardNames must.
+    $comparisonMissingOutput = Join-Path $testRoot 'missing-shard-comparison'
+    $comparisonMissingRun = Invoke-AnalyzerChild -Analyzer $analyzer `
+        -CurrentResultsPath $missingShardRoot `
+        -BaselineLedgerPath (Join-Path $completeOutput 'ledger.json') `
+        -OutputDirectory $comparisonMissingOutput -CurrentSha $repositoryHeadSha `
+        -BaselineSha $repositoryBaseSha -RepositoryPath $repository `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta', 'Shard Gamma') -FailOnPolicy
+    Assert-Equal 1 $comparisonMissingRun.ExitCode 'a newly dispatched missing shard fails comparison mode'
+    $comparisonMissing = Get-Content -LiteralPath (Join-Path $comparisonMissingOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal $false $comparisonMissing.policyPassed 'comparison policy records the missing expected shard'
+    Assert-Equal $false $comparisonMissing.criteria.allDispatchedShardsReported `
+        'comparison criteria identify the incomplete dispatched matrix'
+    Assert-Equal 1 @($comparisonMissing.currentIncompleteShards).Count `
+        'the new missing shard is included exactly once in comparison incompleteness'
+    Assert-Equal 'Shard Gamma' @($comparisonMissing.currentIncompleteShards)[0].name `
+        'comparison incompleteness names the newly dispatched missing shard'
+
+    # The hole must be recorded in the ledger artifact itself, not only in shards.csv --
+    # find-test-baseline.ps1 picks baselines without filtering on run conclusion, so a failed run's
+    # ledger can still be adopted later. The artifact has to carry its own evidence.
+    $incompleteLedger = Get-Content -LiteralPath (Join-Path $incompleteOutput 'ledger.json') -Raw | ConvertFrom-Json
+    Assert-Equal 1 @($incompleteLedger.missingExpectedShards).Count 'the ledger artifact records its own hole'
+    Assert-Equal 'Shard Gamma' @($incompleteLedger.missingExpectedShards)[0] 'the recorded hole names the absent shard'
+
+    $completeLedger = Get-Content -LiteralPath (Join-Path $completeOutput 'ledger.json') -Raw | ConvertFrom-Json
+    Assert-Equal 0 @($completeLedger.missingExpectedShards).Count 'a complete ledger records no holes'
+
+    # And a baseline carrying a hole must be refused outright: comparing against it would inherit
+    # the blind spot, since the absent shard is in neither side and its failures could never be
+    # classified as new.
+    $holedBaselineOutput = Join-Path $testRoot 'holed-baseline'
+    $holedBaselineError = $null
+    try {
+        & $analyzer -CurrentResultsPath $missingShardRoot `
+            -BaselineLedgerPath (Join-Path $incompleteOutput 'ledger.json') `
+            -OutputDirectory $holedBaselineOutput -CurrentSha 'ac02' -BaselineSha 'ac01'
+    } catch { $holedBaselineError = $_.Exception.Message }
+    Assert-Matches 'incomplete' $holedBaselineError 'a baseline with a missing shard is refused, not silently used'
+
+    # Backward compatibility: callers that pass no expected set keep the old behaviour, so the
+    # change cannot break local or ad-hoc invocations of the analyzer.
+    $legacyOutput = Join-Path $testRoot 'missing-shard-legacy'
+    & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $legacyOutput -CurrentSha 'ac01'
+    $legacy = Get-Content -LiteralPath (Join-Path $legacyOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal $true $legacy.policyPassed 'with no expected set supplied, inventory mode behaves as before'
+
+    # Expected names are artifact keys after normalization. Two distinct display names must not
+    # be allowed to alias one uploaded artifact, and validation must happen before report output.
+    $collidingOutput = Join-Path $testRoot 'colliding-shard-names'
+    $collidingRun = Invoke-AnalyzerChild -Analyzer $analyzer `
+        -CurrentResultsPath $missingShardRoot -OutputDirectory $collidingOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard A-B', 'Shard A B')
+    Assert-Equal 1 $collidingRun.ExitCode 'normalized expected shard keys must be unique'
+    Assert-Matches 'collide after normalization' ($collidingRun.Output -join "`n") `
+        'the collision failure identifies the violated key contract'
+    Assert-Equal $false (Test-Path -LiteralPath (Join-Path $collidingOutput 'ledger.json')) `
+        'an ambiguous expected inventory is rejected before any reusable ledger is written'
+
+    # The workflow output is an array of shard objects, not an object with a `shard` property.
+    # Parse that exact shape and fail closed for every form that cannot prove a nonempty inventory.
+    $validMatrix = '[{"name":"Shard Alpha","framework":"net10.0"},{"name":"Shard Beta","framework":"net10.0"}]'
+    $parsedNames = @(& $matrixParser -MatrixJson $validMatrix)
+    Assert-Equal 2 $parsedNames.Count 'the selected-shard array yields every dispatched name'
+    Assert-Equal 'Shard Alpha' $parsedNames[0] 'the first selected shard is preserved'
+    Assert-Equal 'Shard Beta' $parsedNames[1] 'the second selected shard is preserved'
+
+    foreach ($invalidMatrix in @('', '{not-json', '[]', '{"name":"not-an-array"}', '[{"framework":"net10.0"}]',
+            '[{"name":"Shard A-B"},{"name":"Shard A B"}]')) {
+        $matrixError = $null
+        try { $null = & $matrixParser -MatrixJson $invalidMatrix }
+        catch { $matrixError = $_.Exception.Message }
+        Assert-Equal $false ([string]::IsNullOrWhiteSpace($matrixError)) `
+            "an unverifiable selected matrix fails closed: $invalidMatrix"
+    }
+
     Write-Host 'test-regression-analysis.tests.ps1: all assertions passed.'
 }
 finally {
@@ -418,3 +618,7 @@ finally {
         Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
     }
 }
+
+# Native child processes used for expected-failure cases intentionally leave LASTEXITCODE=1.
+# This file is a standalone test executable; reaching here means every assertion passed.
+exit 0

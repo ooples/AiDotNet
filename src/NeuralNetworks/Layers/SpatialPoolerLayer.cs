@@ -634,7 +634,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
         if (_connectionsGradient != null)
         {
             var delta = Engine.TensorMultiplyScalar(_connectionsGradient, learningRate);
-            Connections = Engine.TensorSubtract(Connections, delta);
+            Engine.TensorSubtractInPlace(Connections, delta);
 
             // Maintain connection constraints
             NormalizeConnections();

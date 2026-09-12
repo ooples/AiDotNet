@@ -1257,10 +1257,10 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         var w2Update = Engine.TensorMultiplyScalar(_weights2Gradient, learningRate);
         var b2Update = Engine.TensorMultiplyScalar(_bias2Gradient, learningRate);
 
-        _weights1 = Engine.TensorSubtract(_weights1, w1Update);
-        _bias1 = Engine.TensorSubtract(_bias1, b1Update);
-        _weights2 = Engine.TensorSubtract(_weights2, w2Update);
-        _bias2 = Engine.TensorSubtract(_bias2, b2Update);
+        Engine.TensorSubtractInPlace(_weights1, w1Update);
+        Engine.TensorSubtractInPlace(_bias1, b1Update);
+        Engine.TensorSubtractInPlace(_weights2, w2Update);
+        Engine.TensorSubtractInPlace(_bias2, b2Update);
     }
 
     /// <summary>

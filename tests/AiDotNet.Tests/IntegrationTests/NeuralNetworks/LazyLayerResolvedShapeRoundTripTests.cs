@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
@@ -134,5 +135,46 @@ public class LazyLayerResolvedShapeRoundTripTests
         var layer = new Conv1DLayer<double>(outputChannels: 4, kernelSize: 3);
         layer.SetTrainingMode(false);
         Assert.Throws<System.ArgumentException>(() => layer.Forward(Ramp([2, 8])));
+    }
+
+    [Fact]
+    public void PublishedShapeReplay_PropagatesFailureAfterShapeResolution()
+    {
+        using var layer = new ResolvesThenThrowsLayer();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => layer.ResolveFromPublishedShape([4]));
+
+        Assert.Equal(ResolvesThenThrowsLayer.FailureMessage, exception.Message);
+        Assert.True(layer.IsShapeResolved);
+        Assert.Equal(1, layer.FirstForwardCalls);
+    }
+
+    [ElementWiseShape]
+    private sealed class ResolvesThenThrowsLayer : LayerBase<double>
+    {
+        internal const string FailureMessage = "Initialization failed after resolving the shape.";
+
+        internal ResolvesThenThrowsLayer() : base([-1], [-1])
+        {
+        }
+
+        internal int FirstForwardCalls { get; private set; }
+
+        protected override void OnFirstForward(Tensor<double> input)
+        {
+            FirstForwardCalls++;
+            int features = input.Shape[input.Rank - 1];
+            ResolveShapes([features], [features]);
+            throw new InvalidOperationException(FailureMessage);
+        }
+
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
     }
 }

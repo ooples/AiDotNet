@@ -914,6 +914,72 @@ public class DistributedTrainingDeepMathIntegrationTests
                 Assert.Equal(rank0Params[i], results[rank][i], ZeroTol);
     }
 
+    /// <summary>
+    /// A collective's pending-consumer count, not the number of currently initialized backends,
+    /// owns its payload. Rank 0 may finish before a joining worker has initialized.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_Broadcast_SurvivesRootShutdownBeforePeerInitializes()
+    {
+        await Task.Yield();
+        string envId = Guid.NewGuid().ToString("N");
+        try
+        {
+            var root = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+            root.Initialize();
+            var expected = new Vector<double>(new[] { 1.25, -2.5, 4.75 });
+            var rootResult = root.Broadcast(expected, root: 0);
+            root.Shutdown();
+
+            var peer = new InMemoryCommunicationBackend<double>(rank: 1, worldSize: 2, environmentId: envId);
+            peer.Initialize();
+            var peerResult = peer.Broadcast(new Vector<double>(expected.Length), root: 0);
+            peer.Shutdown();
+
+            Assert.Equal(expected.ToArray(), rootResult.ToArray());
+            Assert.Equal(expected.ToArray(), peerResult.ToArray());
+        }
+        finally
+        {
+            InMemoryCommunicationBackend<double>.ClearEnvironment(envId);
+        }
+    }
+
+    /// <summary>
+    /// Reusing a quiescent environment from a rank that already participated starts a new session;
+    /// an abandoned payload from the old session must not be delivered to the new session's peer.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_NewSessionWithSameEnvironment_DiscardsAbandonedBroadcast()
+    {
+        await Task.Yield();
+        string envId = Guid.NewGuid().ToString("N");
+        try
+        {
+            var abandonedRoot = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+            abandonedRoot.Initialize();
+            _ = abandonedRoot.Broadcast(new Vector<double>(new[] { -10.0, -20.0 }), root: 0);
+            abandonedRoot.Shutdown();
+
+            var currentRoot = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+            currentRoot.Initialize();
+            var expected = new Vector<double>(new[] { 10.0, 20.0 });
+            _ = currentRoot.Broadcast(expected, root: 0);
+            currentRoot.Shutdown();
+
+            var currentPeer = new InMemoryCommunicationBackend<double>(rank: 1, worldSize: 2, environmentId: envId);
+            currentPeer.Initialize();
+            var peerResult = currentPeer.Broadcast(new Vector<double>(expected.Length), root: 0);
+            currentPeer.Shutdown();
+
+            Assert.Equal(expected.ToArray(), peerResult.ToArray());
+        }
+        finally
+        {
+            InMemoryCommunicationBackend<double>.ClearEnvironment(envId);
+        }
+    }
+
     // ---- Pure data-parallel (single-step gradient path) invariants --------------------------------
     // Every DP optimizer below now performs the paper-faithful per-step gradient hook (backward-only
     // ComputeGradients -> AllReduce(Average) -> single ApplyGradients from the original params), the SAME

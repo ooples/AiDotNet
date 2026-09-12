@@ -335,7 +335,7 @@ public partial class Hippo<T> : ForecastingModelBase<T>
         {
             _useCustomLayerStack = true;
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else if (_useNativeMode)
         {
