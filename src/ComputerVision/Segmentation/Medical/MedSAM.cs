@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.01,
+                Source = "Ma et al. 2024, Sec. 4: the network is optimized by AdamW with beta1 0.9 and "
+                        + "beta2 0.999, an initial learning rate of 1e-4 and a weight decay of 0.01.")]
 public partial class MedSAM<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAMOptions _options;

@@ -65,6 +65,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TOTEM: TOkenized Time Series EMbeddings", "https://arxiv.org/abs/2402.16412")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Schedule = LearningRateSchedulerType.OneCycle,
+                Source = "Talukder et al. 2024, Sec. 4: training uses Adam with a base learning rate of "
+                        + "0.0001 and a one-cycle learning rate scheduler. The 0.001 elsewhere in the "
+                        + "paper trains the VQVAE tokenizer rather than this model.")]
 public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -222,23 +227,24 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateForecastingOptimizer(
         TOTEMOptions<T> options)
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = false,
-                LearningRateScheduler = new OneCycleLRScheduler(
-                    maxLearningRate: options.LearningRate,
-                    totalSteps: options.TotalTrainingSteps),
-                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false,
+                    EnableGradientClipping = false,
+                    LearningRateScheduler = new OneCycleLRScheduler(
+                        maxLearningRate: options.LearningRate,
+                        totalSteps: options.TotalTrainingSteps),
+                    SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                }));
     }
 
 

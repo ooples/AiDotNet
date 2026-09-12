@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -42,6 +43,13 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("ACE-Step: A Step Towards Music Generation Foundation Model", "https://doi.org/10.48550/arXiv.2501.09263", Year = 2024, Authors = "Yushen Chen, Liwei Deng, Ziyang Ma, Kehan Chen, Yongqi Wang, Jianwei Yu, Dong Yu")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.9, WeightDecay = 0.01,
+                WarmupSteps = 4000, Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Constant,
+                Source = "Gong et al. 2025, Sec. 4: AdamW with a weight decay of 1e-2 and betas of "
+                        + "(0.8, 0.9), warming up over the first 4,000 steps. The paper states no decay "
+                        + "after the warm-up and no peak rate, so the rate is not declared and the tail "
+                        + "is left constant.")]
 public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -116,12 +124,13 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         // materialization was reconnected the block's parameter count went 16,704 -> 33,280, the
         // feed-forward weights started receiving updates, and five iterations at 1e-3 left the loss
         // worse than the untrained baseline (6.371 against 4.836). Honour the configured rate.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

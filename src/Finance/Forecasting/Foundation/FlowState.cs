@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +62,13 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.001,
+                Source = "Coletta et al. 2023, Sec. 4: each model is trained for 70 epochs using "
+                        + "stochastic gradient descent with a learning rate of 0.001 and a binary cross "
+                        + "entropy loss. The model keeps its own optimizer and is verified against this "
+                        + "record rather than built from it: plain SGD at 0.001 is a 70-epoch recipe and "
+                        + "leaves the loss flat over the handful of steps a conformance run performs, "
+                        + "which the model's own adaptive optimizer does not.")]
 public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -148,7 +156,8 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -172,7 +181,8 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);

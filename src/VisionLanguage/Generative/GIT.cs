@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,10 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2022,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2.5e-6, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 512,
+                Source = "Wang et al. 2022, Sec. 3: parameters are updated by AdamW with beta1 0.9 and "
+                        + "beta2 0.999, at a batch size of 512 and a learning rate of 2.5e-6.")]
 public partial class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly GITOptions _options;
@@ -102,7 +108,9 @@ public partial class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
     {
         _options = options ?? new GITOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

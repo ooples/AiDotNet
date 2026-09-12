@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +59,13 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2204.04216",
     Year = 2022,
     Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.99, ReferenceBatchSize = 8,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Liu et al. 2022, Sec. 4.1: cosine annealing with Adam at beta1 0.9 and beta2 "
+                        + "0.99, at a batch size of 8. No single learning rate is declared because the "
+                        + "paper sets 1.25e-5 for the motion estimation and 2e-4 for the other parts, "
+                        + "and this model builds one optimizer over both.")]
 public partial class TTVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -95,11 +103,12 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
         // already carried as its default -- but building the optimizer bare ignored it and ran on
         // AdamW's 1e-3, and Train() then dropped the optimizer entirely on the two-argument
         // TrainWithTape overload.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

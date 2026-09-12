@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,12 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Dai et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.05, WarmupSteps = 1000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Dai et al. 2023, Sec. 4: AdamW with beta1 0.9, beta2 0.999 and a weight decay "
+                        + "of 0.05, applying a linear warmup over the initial 1,000 steps from 1e-8 to "
+                        + "1e-5, followed by a cosine decay to a minimum learning rate of 0.")]
 public partial class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly InstructBLIPOptions _options;
@@ -102,7 +110,9 @@ public partial class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVi
         _options = options ?? new InstructBLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

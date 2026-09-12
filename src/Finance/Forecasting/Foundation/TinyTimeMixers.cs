@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -82,6 +83,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series", "https://arxiv.org/abs/2401.03955", Year = 2024, Authors = "Vijay Ekambaram, Arindam Jati, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
+[PaperOptimizer(OptimizerKind.Unspecified, ReferenceBatchSize = 4500,
+                Source = "Ekambaram et al. 2024, Sec. 4: the standard configuration uses a batch size "
+                        + "of 4500 for pre-training; downstream datasets such as Traffic use 8. The "
+                        + "optimizer is left unspecified and no rate declared because the paper states "
+                        + "neither.")]
 public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
@@ -186,7 +192,9 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -221,7 +229,9 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);

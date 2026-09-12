@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -56,6 +58,12 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Sun et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 50,
+                WarmupSteps = 5000,
+                Source = "Sun et al. 2023, visual decoder configuration: a batch size of 50 over 15k "
+                        + "iterations, with the learning rate warmed up to 1e-4 for the first 5k steps "
+                        + "and then decreased to 5e-5 at 10k and 1e-5 at 14k. The two drops are not a "
+                        + "uniform factor, so no step schedule is declared; the peak and warm-up are.")]
 public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly EmuOptions _options;
@@ -103,7 +111,9 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         _options = options ?? new EmuOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

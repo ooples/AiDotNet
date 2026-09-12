@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -52,6 +53,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2111.15483",
     Year = 2022,
     Authors = "Duolikun Danier, Fan Zhang, David Bull")]
+[PaperOptimizer(OptimizerKind.Adamax, LearningRate = 0.001, Beta1 = 0.9, Beta2 = 0.999,
+                DecayRate = 0.5, EarlyStoppingPatience = 5,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Danier et al. 2022, Sec. 4: the AdaMax optimizer with beta1 0.9 and beta2 "
+                        + "0.999, a learning rate of 0.001 reduced by a factor of 0.5 whenever "
+                        + "validation performance stops improving for 5 epochs.")]
 public partial class STMFNet<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -87,7 +94,9 @@ public partial class STMFNet<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new STMFNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = false;
         InitializeLayers();
     }

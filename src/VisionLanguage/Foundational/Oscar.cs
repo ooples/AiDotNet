@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -56,6 +58,14 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2020,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, ReferenceBatchSize = 768,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Li et al. 2020, Sec. 4: the AdamW optimizer is used; Oscar-B is trained for "
+                        + "at least 1.0M steps with a learning rate of 5e-5 and a batch size of 768.")]
+[PaperOptimizer(OptimizerKind.AdamW, ReferenceBatchSize = 256,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Li et al. 2020, Sec. 4: the Oscar-B model is fine-tuned with a batch size of "
+                        + "256 for 40 epochs. No rate is stated for this stage, so none is declared.")]
 public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly OscarOptions _options;
@@ -108,13 +118,14 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
             throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and non-negative.");
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,9 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-5, ReferenceBatchSize = 48,
+                Source = "Li et al. 2019, Sec. 3: models are optimized with Adam, pre-trained on COCO "
+                        + "for 10 epochs at a batch size of 48 and a maximum learning rate of 5e-5.")]
 public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VisualBERTOptions _options;
@@ -108,12 +113,13 @@ public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguage
         // 2019, Appendix A). Honor the public options instead of AdamW's generic
         // 1e-2 default; the previous hard-coded 2e-4 rate overshot after the model
         // had already reached a good minimum.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

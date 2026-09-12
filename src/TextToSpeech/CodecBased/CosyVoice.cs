@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Du et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified,
+                Source = "Du et al. 2024, Sec. 4: the tiny model trains for 50 epochs and the "
+                        + "multilingual model for 800,000 steps. No learning rate is declared because "
+                        + "the paper states 1e-3 and 1e-4 for two different components under one "
+                        + "optimizer, and no optimizer is declared because it names none.")]
 public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoiceOptions _options;
@@ -101,7 +108,9 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new CosyVoiceOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

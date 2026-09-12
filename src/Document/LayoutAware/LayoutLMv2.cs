@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -57,6 +58,12 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [RankRoutedInputDomain(2, 12)]
 [ResearchPaper("LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding", "https://doi.org/10.48550/arXiv.2012.14740", Year = 2021, Authors = "Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.01, ReferenceBatchSize = 64,
+                Source = "Xu et al. 2021, Appendix B: LayoutLMv2 is pre-trained with Adam at a learning "
+                        + "rate of 2e-5, a weight decay of 1e-2 and betas (0.9, 0.999). The BASE model "
+                        + "uses a batch size of 64 over 5 epochs, which is what is declared; LARGE uses "
+                        + "2048 over 20 epochs.")]
 public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv2Options _options;
@@ -256,7 +263,8 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
             UseAMSGrad = false,
             UseAdaptiveLearningRate = false
         };
-        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options));
     }
 
     #region Initialization

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -76,6 +77,13 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimeGPT-1", "https://arxiv.org/abs/2310.03589", Year = 2023, Authors = "Azul Garza, Max Mergenthaler-Canseco")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Garza and Mergenthaler-Canseco 2023, Sec. 3: TimeGPT was trained using Adam "
+                        + "with a learning rate decay strategy that reduced the rate to 12 percent of "
+                        + "its initial value. No schedule is declared: 12 percent is the total reduction "
+                        + "over training, not a per-interval decay factor, and the paper states neither "
+                        + "an initial rate nor a decay interval, so any step schedule built from it "
+                        + "would be invented.")]
 public partial class TimeGPT<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -295,7 +303,9 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -341,7 +351,9 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
 
         _useNativeMode = true;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;

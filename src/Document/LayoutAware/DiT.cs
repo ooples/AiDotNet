@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -54,6 +55,12 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiT: Self-supervised Pre-training for Document Image Transformer", "https://doi.org/10.48550/arXiv.2203.02378", Year = 2022, Authors = "Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.05, ReferenceBatchSize = 2048, WarmupSteps = 10000,
+                Source = "Li et al. 2022, Sec. 4.1: DiT is pre-trained for 500K steps at a batch size "
+                        + "of 2,048, a learning rate of 1e-3, 10K warmup steps and a weight decay of "
+                        + "0.05, with Adam betas 0.9 and 0.999. The 5e-4 elsewhere in the paper trains "
+                        + "the tokenizer rather than the model.")]
 public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DiTOptions _options;
@@ -164,7 +171,9 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _numHeads = numHeads;
         _patchSize = patchSize;
         _modelSize = modelSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 
@@ -211,7 +220,9 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _numHeads = numHeads;
         _patchSize = patchSize;
         _modelSize = modelSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,11 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocGCN: Heterogeneous Graph Convolutional Networks for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2208.10970", Year = 2022, Authors = "Siwen Luo, Josiah Poon, Soyeon Caren Han")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Zhang et al. 2022, Sec. 4: 2-layer GCNs trained for 10 epochs with the Adam "
+                        + "optimizer. No single learning rate is declared because the paper uses 1e-4 "
+                        + "for the semantic and syntactic graphs and 0.001 for the other two, and this "
+                        + "model builds one optimizer over all of them.")]
 public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly DocGCNOptions _options;
@@ -288,14 +294,15 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         // threshold, missing by 9% of the threshold. It was not that gradients were failing to reach
         // the parameters -- a detached graph gives a flat loss, and a last-layer-only gradient would
         // have given roughly a tenth of that movement. The whole model was descending, just slowly.
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-3,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-3,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0
+                }));
     }
 
     #endregion

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,15 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 7.5e-5, WarmupSteps = 20000,
+                MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Chen et al. 2024, Sec. 4: the AdamW optimizer with a peak learning rate of "
+                        + "7.5e-5, linearly warmed up over 20K updates and then linearly decayed. The "
+                        + "paper's text extracts as 7.5e5 with the minus sign lost, which would be "
+                        + "750,000; the value is 7.5e-5. No reference batch size is declared because the "
+                        + "batch is given as 307,200 audio frames, about 0.91 hours, rather than as a "
+                        + "count of examples.")]
 public partial class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly F5TTSOptions _options;
@@ -81,7 +92,9 @@ public partial class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new F5TTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

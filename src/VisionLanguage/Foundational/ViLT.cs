@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,11 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2021,
     Authors = "Kim et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.01,
+                ReferenceBatchSize = 4096,
+                Source = "Kim et al. 2021, Implementation Details: AdamW with a base learning rate of "
+                        + "1e-4 and a weight decay of 1e-2, pre-training ViLT-B/32 for 100K or 200K "
+                        + "steps at a batch size of 4,096.")]
 public partial class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLTOptions _options;
@@ -98,24 +105,25 @@ public partial class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusion
     {
         _options = options ?? new ViLTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // Official ViLT pre-training uses AdamW at 1e-4 with a
-                // 2,500-step warmup over 25,000 steps and 0.01 weight decay.
-                // The old parameterless AdamW silently trained at 1e-3.
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                    baseLearningRate: _options.LearningRate,
-                    warmupSteps: _options.WarmupSteps,
-                    totalSteps: _options.TotalTrainingSteps,
-                    warmupInitLr: _options.WarmupInitialLearningRate,
-                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
-                    endLr: 0.0),
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // Official ViLT pre-training uses AdamW at 1e-4 with a
+                    // 2,500-step warmup over 25,000 steps and 0.01 weight decay.
+                    // The old parameterless AdamW silently trained at 1e-3.
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                    LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                        baseLearningRate: _options.LearningRate,
+                        warmupSteps: _options.WarmupSteps,
+                        totalSteps: _options.TotalTrainingSteps,
+                        warmupInitLr: _options.WarmupInitialLearningRate,
+                        decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
+                        endLr: 0.0),
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

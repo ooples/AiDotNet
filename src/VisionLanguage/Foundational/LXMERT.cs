@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -49,6 +51,13 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Tan and Bansal"
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 256,
+                MinLearningRate = 0, DecayRate = 1.0,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Tan and Bansal 2019, Sec. 3.4: Adam with a linear-decayed learning rate "
+                        + "schedule and a peak learning rate of 1e-4, trained for 20 epochs at a batch "
+                        + "size of 256. The linear decay is declared as a polynomial schedule of power "
+                        + "1, which is the same curve.")]
 public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly LXMERTOptions _options;
@@ -97,7 +106,9 @@ public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         _options = options ?? new LXMERTOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

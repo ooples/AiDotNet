@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -55,6 +56,11 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2406.17256",
     Year = 2024,
     Authors = "Jaihyun Lew, Jooyoung Choi, Chaehun Shin, Dahuin Jung, Sungroh Yoon")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, WeightDecay = 1e-4,
+                ReferenceBatchSize = 32, Schedule = LearningRateSchedulerType.Constant,
+                Source = "Lew et al. 2024, Sec. 4: stage 1 uses AdamW with a weight decay of 1e-4 and a "
+                        + "batch size of 32, training the synthesis model for 200 epochs at a fixed "
+                        + "learning rate of 2e-4.")]
 public partial class MoMo<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -90,7 +96,9 @@ public partial class MoMo<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new MoMoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
