@@ -36,10 +36,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// <para>
 /// Custom layers with opaque/detached parameter storage, retained raw writable spans and mutations
 /// under tensor inference mode must use the agent's explicit update boundary. Do not mutate a policy
-/// concurrently with collection. Manually constructed or copied one-hot actions carry no verifiable
-/// selection provenance; the caller must supply actions sampled from the current actor. Known greedy,
-/// changed or stale actions returned by this agent are rejected. Pending behavior is runtime-only
-/// and is not restored from checkpoints.
+/// concurrently with collection. Public collection accepts each sampled action object exactly once
+/// for the state values used to select it. Caller-created, copied, foreign, greedy, changed and stale
+/// actions are rejected. The explicit supervised <c>Train(state, target)</c> API instead isolates its
+/// labelled transition from pending on-policy data. Pending behavior and selection stamps are
+/// runtime-only and are not restored from checkpoints.
 /// </para>
 /// </remarks>
 /// <example>
@@ -146,14 +147,21 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var logits = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        Guard.NotNull(state);
+        if (state.Length != TradingOptions.StateSize)
+            throw new ArgumentException("State length must match StateSize.", nameof(state));
+        // Move the rollout's state copy to selection so the returned action is tied to the
+        // actual input values. Successful storage takes ownership of this snapshot without
+        // making a second state copy. Evaluation does not allocate a rollout snapshot.
+        var selectedState = training ? state.Clone() : null;
+        var logits = _actor.Predict(Tensor<T>.FromVector(selectedState ?? state)).ToVector();
         SynchronizePolicyStorage();
         var probabilities = SoftmaxProbabilities(logits);
 
         int actionIndex = training ? SampleCategorical(probabilities) : ArgMaxIndex(probabilities);
         var action = new Vector<T>(TradingOptions.ActionSize);
         action[actionIndex] = NumOps.One;
-        _policyRuntime.Selections.Add(action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex));
+        _policyRuntime.Selections.Add(action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState));
         return action;
     }
 
@@ -373,13 +381,46 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Store an exact one-hot sampled action (one 1, all other entries 0).
-    /// The vectors are copied so later environment updates cannot change an earlier transition.
+    /// <b>For Beginners:</b> Store the original exact one-hot action returned by this agent's
+    /// training-mode selection, once, with the matching state values. Copied or caller-created
+    /// actions cannot establish which policy sampled them. The state snapshot made at selection,
+    /// and copies of the remaining vectors, prevent later environment changes to the transition.
     /// <see cref="TradingAgentOptions{T}.ReplayBufferSize"/> bounds this current rollout; at capacity
     /// the oldest pending transition is dropped. It is not an off-policy replay history.
     /// </para>
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        int selected = ValidateTransition(state, action, nextState);
+        if (!_policyRuntime.Selections.TryGetValue(action, out var selection) ||
+            !ReferenceEquals(selection.Epoch, _policyRuntime.Epoch) || !selection.Sampled ||
+            selected != selection.ActionIndex || selection.State is not { } selectedState ||
+            !StateMatches(state, selectedState))
+        {
+            throw new InvalidOperationException("Use an unconsumed action sampled by this agent from the current policy for these state values.");
+        }
+
+        SynchronizePolicyStorage();
+        if (!ReferenceEquals(selection.Epoch, _policyRuntime.Epoch))
+            throw new InvalidOperationException("The actor policy changed after this action was sampled.");
+
+        EnqueueTransition(new Experience<T>(selectedState, action.Clone(), reward, nextState.Clone(), done));
+        // Validation/allocation failure leaves the selection available for a corrected attempt.
+        _policyRuntime.Selections.Remove(action);
+    }
+
+    /// <inheritdoc/>
+    protected override void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        ValidateTransition(state, action, nextState);
+        var experience = new Experience<T>(state.Clone(), action.Clone(), reward, nextState.Clone(), done);
+        // A target-specified action is labelled supervision, not sampled behavior. Keep its
+        // explicit one-shot update separate and invalidate all outstanding behavior tokens.
+        InvalidatePolicy();
+        EnqueueTransition(experience);
+    }
+
+    private int ValidateTransition(Vector<T> state, Vector<T> action, Vector<T> nextState)
     {
         Guard.NotNull(state);
         Guard.NotNull(action);
@@ -388,18 +429,23 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             throw new ArgumentException("State length must match StateSize.", nameof(state));
         if (nextState.Length != TradingOptions.StateSize)
             throw new ArgumentException("Next-state length must match StateSize.", nameof(nextState));
-        int selected = ValidateOneHotAction(action);
-        SynchronizePolicyStorage();
-        if (_policyRuntime.Selections.TryGetValue(action, out var selection) &&
-            (!ReferenceEquals(selection.Epoch, _policyRuntime.Epoch) || !selection.Sampled || selected != selection.ActionIndex))
-        {
-            throw new InvalidOperationException("This action was not sampled from the current unchanged actor policy.");
-        }
+        return ValidateOneHotAction(action);
+    }
 
-        var experience = new Experience<T>(state.Clone(), action.Clone(), reward, nextState.Clone(), done);
-        if (_policyRuntime.Pending.Count == TradingOptions.ReplayBufferSize)
-            _policyRuntime.Pending.Dequeue();
+    private static bool StateMatches(Vector<T> state, Vector<T> selectedState)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (state.Length != selectedState.Length) return false;
+        for (int i = 0; i < state.Length; i++)
+            if (!numOps.Equals(state[i], selectedState[i])) return false;
+        return true;
+    }
+
+    private void EnqueueTransition(Experience<T> experience)
+    {
         _policyRuntime.Pending.Enqueue(experience);
+        if (_policyRuntime.Pending.Count > TradingOptions.ReplayBufferSize)
+            _policyRuntime.Pending.Dequeue();
     }
 
     private int ValidateOneHotAction(Vector<T> action)
@@ -470,11 +516,12 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private sealed class SelectionStamp
     {
-        public SelectionStamp(object epoch, bool sampled, int actionIndex)
-        { Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; }
+        public SelectionStamp(object epoch, bool sampled, int actionIndex, Vector<T>? state)
+        { Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; State = state; }
         public object Epoch { get; }
         public bool Sampled { get; }
         public int ActionIndex { get; }
+        public Vector<T>? State { get; }
     }
 
     #endregion

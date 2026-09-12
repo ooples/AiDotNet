@@ -324,7 +324,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         // collapses the Bellman update to Q(s,a) ← Q(s,a) + α·(r − Q(s,a)) which is
         // exactly the one-shot supervised semantics callers expect. The abstract
         // <see cref="Train()"/> consumes the stored experience and applies one update.
-        StoreExperience(state, actionVec, bestValue, state, done: true);
+        StoreSupervisedExperience(state, actionVec, bestValue, state, done: true);
         // Flag the one-shot supervised update so replay agents bypass warmup and train now.
         SupervisedUpdateRequested = true;
         try
@@ -336,6 +336,21 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             SupervisedUpdateRequested = false;
         }
     }
+
+    /// <summary>
+    /// Stores the labelled transition created by <see cref="Train(Vector{T}, Vector{T})"/>.
+    /// </summary>
+    /// <param name="state">The labelled input state.</param>
+    /// <param name="action">The preferred action decoded from the supervised target.</param>
+    /// <param name="reward">The target value associated with that action.</param>
+    /// <param name="nextState">The terminal successor state.</param>
+    /// <param name="done">Whether this labelled transition is terminal.</param>
+    /// <remarks>
+    /// The default retains the existing public store dispatch. On-policy agents can isolate
+    /// explicitly labelled updates without admitting unverified actions through public collection.
+    /// </remarks>
+    protected virtual void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, done);
 
     /// <summary>
     /// Serializes the agent to bytes.

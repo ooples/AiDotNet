@@ -31,6 +31,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialA2CPolicyOwnershipTests.cs" Link="FinancialA2CPolicyOwnershipTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/ParameterChunkMutationContractTests.cs" Link="ParameterChunkMutationContractTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialA2CLiveStorageTests.cs" Link="FinancialA2CLiveStorageTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialA2CActionProvenanceTests.cs" Link="FinancialA2CActionProvenanceTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

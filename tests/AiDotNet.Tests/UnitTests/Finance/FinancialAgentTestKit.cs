@@ -25,6 +25,18 @@ internal static class FinancialAgentTestKit
     internal const FinancialAgentKind Sac = FinancialAgentKind.Sac;
     internal const FinancialAgentKind MarketMaking = FinancialAgentKind.MarketMaking;
 
+    internal static Vector<double> SampleActionForIndex(FinancialA2CAgent<double> agent, Vector<double> state, int selected)
+    {
+        // These numeric-oracle fixtures need a particular sampled action, not a fabricated
+        // behavior token. Seeded tiny policies give every tested action nonzero probability.
+        for (int draw = 0; draw < 512; draw++)
+        {
+            var action = agent.SelectAction(state, training: true);
+            if (ArgMax(action) == selected) return action;
+        }
+        throw new InvalidOperationException($"The fixture did not sample action {selected} in 512 draws.");
+    }
+
     internal static NeuralNetworkArchitecture<double> Arch(int inputs, int outputs) =>
         new(inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,

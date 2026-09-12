@@ -57,10 +57,11 @@ public sealed class FinancialA2CLiveStorageTests
         var outputBefore = actor.Predict(input).ToArray();
         var oldAction = agent.SelectAction(state, training: true);
         agent.StoreExperience(state, oldAction, 1.0, state, true);
+        var outstandingAction = agent.SelectAction(state, training: true);
         var mean = normalization.GetRunningMean();
         mean.SetFlat(0, mean.GetFlat(0) + 3);
         Assert.False(outputBefore.SequenceEqual(actor.Predict(input).ToArray()));
-        Assert.Throws<InvalidOperationException>(() => agent.StoreExperience(state, oldAction, 2.0, state, true));
+        Assert.Throws<InvalidOperationException>(() => agent.StoreExperience(state, outstandingAction, 2.0, state, true));
         var before = agent.GetParameters().ToArray();
         Assert.Equal(0.0, agent.Train());
         Assert.Equal(before, agent.GetParameters().ToArray());
@@ -118,13 +119,14 @@ public sealed class FinancialA2CLiveStorageTests
         architecture.Layers.Add(composite);
         using var agent = new FinancialA2CAgent<double>(architecture, Arch(4, 1), options);
         var state = State(4, 1);
-        agent.SelectAction(state, training: true); // Materialize before measuring the collection path.
+        var firstAction = agent.SelectAction(state, training: true); // Materialize before measuring the collection path.
         int reads = child.ParameterReads;
-        agent.StoreExperience(state, OneHot(3, 0), 1.0, state, true);
+        agent.StoreExperience(state, firstAction, 1.0, state, true);
         Assert.Equal(reads, child.ParameterReads);
         if (replace) agent.SetParameters(agent.GetParameters());
         reads = child.ParameterReads;
-        agent.StoreExperience(state, OneHot(3, 1), 2.0, state, true);
+        var secondAction = agent.SelectAction(state, training: true);
+        agent.StoreExperience(state, secondAction, 2.0, state, true);
         Assert.Equal(reads, child.ParameterReads);
         var before = agent.GetParameters().ToArray();
         var loss = agent.Train();

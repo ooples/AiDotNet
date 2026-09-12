@@ -31,12 +31,12 @@ public sealed class FinancialA2CPolicyOwnershipTests
     {
         using var agent = FinancialA2CRolloutContractTests.CreateVanillaAgent();
         var state = State(4, 1);
-        agent.StoreExperience(state, OneHot(3, 0), 2.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 0), 2.0, state, true);
         ChangeActor(agent, write);
         var changed = agent.GetParameters().ToArray();
         Assert.Equal(0.0, agent.Train());
         Assert.Equal(changed, agent.GetParameters().ToArray());
-        agent.StoreExperience(state, OneHot(3, 1), 2.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 1), 2.0, state, true);
         agent.Train();
         Assert.False(changed.SequenceEqual(agent.GetParameters().ToArray()));
     }
@@ -105,7 +105,7 @@ public sealed class FinancialA2CPolicyOwnershipTests
         for (int i = 0; i < parameterCount; i++) reader.ReadDouble();
         var truncated = payload.Take(checked((int)payloadStream.Position)).ToArray();
         var state = State(4, 1);
-        agent.StoreExperience(state, OneHot(3, 0), 2.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 0), 2.0, state, true);
         Assert.Throws<EndOfStreamException>(() => agent.Deserialize(truncated));
         var afterFailure = agent.GetParameters().ToArray();
         Assert.Equal(0.0, agent.Train());
@@ -133,9 +133,9 @@ public sealed class FinancialA2CPolicyOwnershipTests
         var secondSnapshot = Assert.Single(actor.GetParameterStateChunks());
         Assert.False(firstSnapshot.IsWritableInPlace);
         Assert.NotSame(firstSnapshot.Tensor, secondSnapshot.Tensor);
-        agent.StoreExperience(state, OneHot(3, 0), 2.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 0), 2.0, state, true);
         if (replace) agent.SetParameters(agent.GetParameters());
-        agent.StoreExperience(state, OneHot(3, 1), 2.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 1), 2.0, state, true);
         var before = agent.GetParameters().ToArray();
         var loss = agent.Train();
         if (replace)

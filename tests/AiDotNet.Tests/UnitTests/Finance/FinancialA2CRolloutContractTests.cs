@@ -54,12 +54,13 @@ public sealed class FinancialA2CRolloutContractTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void Store_accepts_every_exact_one_hot_action_including_signed_zero(int selected)
+    public void Store_accepts_every_sampled_exact_one_hot_action_including_signed_zero(int selected)
     {
         using var fixture = new RolloutFixture(batchSize: 1);
-        var action = new Vector<double>(new[] { -0.0, -0.0, -0.0 });
-        action[selected] = 1.0;
         var state = State(4, 1);
+        var action = SampleActionForIndex(fixture.Agent, state, selected);
+        for (int i = 0; i < action.Length; i++)
+            if (i != selected) action[i] = -0.0;
         fixture.Agent.StoreExperience(state, action, 1.0, state, true);
         fixture.Agent.Train();
         Assert.Single(fixture.Actor.TrainingInputs);
@@ -76,7 +77,7 @@ public sealed class FinancialA2CRolloutContractTests
         Assert.Equal(1.0, (double)almostOne); // Establish the conversion trap.
         var state = new Vector<decimal>(new[] { 0m });
         Assert.Throws<ArgumentException>(() => agent.StoreExperience(state, new Vector<decimal>(new[] { almostOne, 0m }), 1m, state, true));
-        agent.StoreExperience(state, new Vector<decimal>(new[] { 1m, 0m }), 1m, state, true);
+        agent.StoreExperience(state, agent.SelectAction(state, training: true), 1m, state, true);
     }
 
     [Fact]
@@ -135,8 +136,10 @@ public sealed class FinancialA2CRolloutContractTests
         using var actual = new RolloutFixture(batchSize: 1);
         var state = State(4, 1);
         var next = State(4, 2);
-        var action = OneHot(3, 2);
-        expected.Agent.StoreExperience(state.Clone(), action.Clone(), 1.0, next.Clone(), false);
+        var action = SampleActionForIndex(actual.Agent, state, 2);
+        var expectedAction = SampleActionForIndex(expected.Agent, state, 2);
+        Assert.Equal(action.ToArray(), expectedAction.ToArray());
+        expected.Agent.StoreExperience(state.Clone(), expectedAction, 1.0, next.Clone(), false);
         actual.Agent.StoreExperience(state, action, 1.0, next, false);
         state[0] = 500;
         next[0] = -500;
@@ -180,7 +183,7 @@ public sealed class FinancialA2CRolloutContractTests
     {
         using var agent = CreateVanillaAgent();
         var state = State(4, 1);
-        agent.StoreExperience(state, OneHot(3, 0), 1.0, state, true);
+        agent.StoreExperience(state, SampleActionForIndex(agent, state, 0), 1.0, state, true);
         var changed = agent.GetParameters().Clone();
         changed[0] += 0.25;
         switch (replacement)
@@ -277,7 +280,10 @@ public sealed class FinancialA2CRolloutContractTests
         public void Store(int count, int start = 0)
         {
             for (int i = start; i < start + count; i++)
-                Agent.StoreExperience(State(4, i), OneHot(3, i % 3), 1.0 + i, State(4, i + 1), true);
+            {
+                var state = State(4, i);
+                Agent.StoreExperience(state, SampleActionForIndex(Agent, state, i % 3), 1.0 + i, State(4, i + 1), true);
+            }
         }
         public void Dispose() => Agent.Dispose();
     }

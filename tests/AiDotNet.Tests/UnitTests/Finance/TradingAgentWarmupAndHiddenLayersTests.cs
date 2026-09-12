@@ -116,9 +116,12 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
         for (int i = 0; i < count; i++)
         {
             var state = State(StateSize, salt: i);
-            var action = kind is Sac or MarketMaking
-                ? State(ActionSize, salt: 100 + i)
-                : OneHot(ActionSize, i % ActionSize);
+            var action = kind switch
+            {
+                A2C => SampleActionForIndex(Assert.IsType<FinancialA2CAgent<double>>(agent), state, i % ActionSize),
+                Sac or MarketMaking => State(ActionSize, salt: 100 + i),
+                _ => OneHot(ActionSize, i % ActionSize),
+            };
             agent.StoreExperience(state, action, 0.1 * (i + 1), State(StateSize, salt: i + 1), done: false);
         }
     }
