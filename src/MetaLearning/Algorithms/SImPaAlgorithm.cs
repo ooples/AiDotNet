@@ -87,6 +87,37 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     public CompressionLemmaKLEstimator<T> KLEstimator { get; }
 
     /// <summary>
+    /// <c>psi</c>, the hyper-meta-parameter: the mean of <c>q(theta; psi) = N(theta; psi, sigma_0 I)</c>
+    /// (eq. 9). It lives in the GENERATOR's parameter space.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This, and not the base network's weights, is what SImPa meta-learns. Algorithm 1 line 18 starts
+    /// each task's generator at a draw from this distribution (<c>lambda_i &lt;- theta</c>), and the base
+    /// network never owns persistent weights at all, because every <c>w_i</c> is <c>G(z; lambda_i)</c>
+    /// (eq. 10). The paper is explicit that "the meta-parameter of interest is the model initialisation";
+    /// the model being initialised is the generator.
+    /// </para>
+    /// <para>
+    /// Declared as a buffer rather than a trainable parameter because this algorithm moves it itself
+    /// (line 12); no optimizer walks a gradient tape through it.
+    /// </para>
+    /// </remarks>
+    [Buffer]
+    private Vector<T> _psi;
+
+    /// <summary>
+    /// <c>phi_0</c>, the meta-level initialisation of the compression-lemma network (Algorithm 1 line 3).
+    /// </summary>
+    /// <remarks>
+    /// The paper learns a starting point for <c>phi</c> with MAML instead of training a fresh phi-network
+    /// per task, purely to make the KL estimation affordable. Every task resets to this vector (line 19),
+    /// and it is then ascended on the average of the tasks' KL lower bounds (line 13).
+    /// </remarks>
+    [Buffer]
+    private Vector<T> _phiZero;
+
+    /// <summary>
     /// Gets the most recent PAC-Bayes bound value computed by <see cref="MetaTrain"/>, or NaN before the
     /// first call.
     /// </summary>
@@ -124,6 +155,11 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             inputDimension: _paramDim,
             hiddenWidth: options.KLEstimatorHiddenWidth,
             rng: RandomHelper.CreateSeededRandom(_rng.Next()));
+
+        // The two meta-parameters start where their networks were initialised, so an untrained learner and
+        // a freshly constructed generator agree.
+        _psi = Posterior.GetParameters();
+        _phiZero = KLEstimator.GetParameters();
     }
 
     /// <summary>
@@ -159,61 +195,93 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Algorithm 1's TRAIN procedure: one draw of <c>theta</c> (line 5), then the lower level of lines
+    /// 17-24 per task, then the two meta-updates — <c>psi</c> descends the average Theorem 2 bound
+    /// (line 12) and <c>phi_0</c> ascends the average KL lower bound (line 13).
+    /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         Guard.NotNull(taskBatch);
         if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
 
-        var metaParams = ParamModel.GetParameters();
-        var lambda = Posterior.GetParameters();
+        // The base network holds no meta-learned weights. Its parameter vector is scratch for the forward
+        // passes below, overwritten once per posterior sample, and restored before returning.
+        var baseParams = ParamModel.GetParameters();
+
+        // Line 5: theta ~ N(psi, sigma_0 I). With the paper's sigma_0 = 1e-6 this is very nearly psi
+        // itself, which is the point: q(theta; psi) exists so KL[q(theta)||p(theta)] is defined at all
+        // (a Dirac delta would make it infinite), not to inject exploration.
+        var theta = SampleMetaParameter();
 
         var queryLosses = new List<double>();
-        var metaGradients = new List<Vector<T>>();
+        var klLowerBounds = new List<double>();
+        var phiDirections = new List<Vector<T>>();
+        var lambdaDirections = new List<Vector<T>>();
         int validationSampleCount = 0;
 
-        foreach (var task in taskBatch.Tasks)
+        try
         {
-            // Inner loop: adapt the GENERATOR's weights lambda, not a point parameter vector. This is the
-            // structural difference from a MAML-style inner loop — what gets adapted is the whole
-            // distribution over task parameters.
-            var taskLambda = AdaptGeneratorToTask(lambda, task, _algoOptions.AdaptationSteps);
-            Posterior.SetParameters(taskLambda);
-
-            // Query loss under samples from the adapted implicit posterior.
-            var posteriorSamples = Posterior.SampleMany(_algoOptions.TrainingPosteriorSamples, _rng);
-            double taskLoss = 0.0;
-            foreach (var w in posteriorSamples)
+            foreach (var task in taskBatch.Tasks)
             {
-                ParamModel.SetParameters(w);
-                taskLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+                // ---- OPTIMISE LOWER-LEVEL, Algorithm 1 lines 17-24 ----
+
+                // Line 19: phi_i starts at phi_0 for EVERY task. Carrying on from wherever the previous
+                // task left the phi-network is the "train phi from scratch" approach the paper replaces
+                // with a MAML initialisation, and it silently makes the KL estimate depend on task order.
+                KLEstimator.SetParameters(_phiZero);
+
+                // Line 18: lambda_i <- theta.
+                Posterior.SetParameters(theta);
+
+                // Lines 20-21: phi_i maximises the compression-lemma lower bound (11), and that maximum
+                // IS the KL estimate (12). An implicit posterior has no density, so this is the only way
+                // the KL term in either level can be evaluated.
+                int mc = _algoOptions.KLMonteCarloSamples;
+                klLowerBounds.Add(KLEstimator.EstimateKL(
+                    Posterior.SampleMany(mc, _rng),
+                    SamplePrior(mc),
+                    _algoOptions.KLEstimatorSteps,
+                    _algoOptions.KLEstimatorLearningRate,
+                    _rng));
+                phiDirections.Add(Difference(KLEstimator.GetParameters(), _phiZero));
+
+                // Line 22: lambda_i minimises Theorem 1's bound on the support set. The KL term was fixed
+                // at line 21 and does not move with lambda, so within this step the bound and the support
+                // loss share a minimiser — which is why descending the support loss IS line 22 rather
+                // than an approximation of it.
+                var taskLambda = AdaptGeneratorToTask(theta, task, _algoOptions.AdaptationSteps);
+                lambdaDirections.Add(Difference(taskLambda, theta));
+                Posterior.SetParameters(taskLambda);
+
+                // Step 9's empirical term: the QUERY loss under samples from the adapted posterior.
+                var posteriorSamples = Posterior.SampleMany(_algoOptions.TrainingPosteriorSamples, _rng);
+                double taskLoss = 0.0;
+                foreach (var w in posteriorSamples)
+                {
+                    ParamModel.SetParameters(w);
+                    taskLoss += NumOps.ToDouble(
+                        ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+                }
+                queryLosses.Add(taskLoss / posteriorSamples.Count);
+
+                if (validationSampleCount == 0) validationSampleCount = CountSamples(task.QueryOutput);
             }
-            taskLoss /= posteriorSamples.Count;
-            queryLosses.Add(taskLoss);
-
-            if (validationSampleCount == 0) validationSampleCount = CountSamples(task.QueryOutput);
-
-            // Meta-gradient from the last drawn sample's position, which is where the loss was measured.
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
-
-            Posterior.SetParameters(lambda);
+        }
+        finally
+        {
+            // Both components are scratch between tasks; leaving either holding a task's adapted weights
+            // would make the next call depend on the last task of the previous one.
+            Posterior.SetParameters(theta);
+            KLEstimator.SetParameters(_phiZero);
         }
 
-        // Task-level KL, estimated from samples because q has no density. Drawn from the meta-level
-        // generator so the estimate reflects the shared posterior the bound is stated over.
-        Posterior.SetParameters(lambda);
-        int mc = _algoOptions.KLMonteCarloSamples;
-        double taskKL = KLEstimator.EstimateKL(
-            Posterior.SampleMany(mc, _rng),
-            SamplePrior(mc),
-            _algoOptions.KLEstimatorSteps,
-            _algoOptions.KLEstimatorLearningRate,
-            _rng);
-        LastTaskKL = taskKL;
+        LastTaskKL = Mean(klLowerBounds);
 
-        // Meta-level KL for a near-point-mass q(theta; psi) against a sigma_w Gaussian prior: the closed
-        // form IS available here, because q(theta) is an explicit isotropic Gaussian. Only the TASK
-        // posterior is implicit, so using the closed form at this level is correct rather than a relapse.
-        double metaKL = GaussianKLToZeroMeanPrior(metaParams, _algoOptions.MetaPosteriorStdDev, _algoOptions.PriorStdDev);
+        // Meta-level KL for a near-point-mass q(theta; psi) against a sigma Gaussian prior, taken in the
+        // GENERATOR's parameter space because that is where theta lives. The closed form is correct here:
+        // only the TASK posterior is implicit, so using it at this level is not a relapse.
+        double metaKL = GaussianKLToZeroMeanPrior(_psi, _algoOptions.MetaPosteriorStdDev, _algoOptions.PriorStdDev);
 
         double empirical = Mean(queryLosses);
         int taskCount = taskBatch.Tasks.Length;
@@ -221,27 +289,112 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         // The bound needs at least 2 validation samples and 2 tasks. Below that it is undefined rather
         // than large, so the empirical loss is reported and the bound left as NaN — saying "no guarantee"
         // instead of inventing one.
-        if (validationSampleCount > 1 && taskCount > 1)
-        {
-            LastBound = PacBayesMetaBound.MetaLearning(
-                empirical, taskKL, metaKL, validationSampleCount, taskCount, _algoOptions.Epsilon);
-        }
-        else
-        {
-            LastBound = double.NaN;
-        }
+        LastBound = validationSampleCount > 1 && taskCount > 1
+            ? PacBayesMetaBound.MetaLearning(
+                empirical, LastTaskKL, metaKL, validationSampleCount, taskCount, _algoOptions.Epsilon)
+            : double.NaN;
 
-        // Outer loop.
-        ParamModel.SetParameters(metaParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(metaParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyMetaUpdates(lambdaDirections, phiDirections, taskCount, metaKL);
+        ParamModel.SetParameters(baseParams);
 
         // The bound is the training signal when it is defined; the paper minimizes the bound, not the raw
         // empirical loss, and reporting the loss instead would hide the complexity term entirely.
         return NumOps.FromDouble(double.IsNaN(LastBound) ? empirical : LastBound);
+    }
+
+    /// <summary>Draws <c>theta ~ N(psi, sigma_0 I)</c> — eq. 9, Algorithm 1 line 5.</summary>
+    private Vector<T> SampleMetaParameter()
+    {
+        double sigma = _algoOptions.MetaPosteriorStdDev;
+        var theta = new Vector<T>(_psi.Length);
+
+        for (int i = 0; i < _psi.Length; i++)
+        {
+            double u1 = Math.Max(1e-12, _rng.NextDouble());
+            double u2 = _rng.NextDouble();
+            double g = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            theta[i] = NumOps.FromDouble(NumOps.ToDouble(_psi[i]) + (g * sigma));
+        }
+
+        return theta;
+    }
+
+    /// <summary>Elementwise <c>from - baseline</c>.</summary>
+    private Vector<T> Difference(Vector<T> from, Vector<T> baseline)
+    {
+        var difference = new Vector<T>(from.Length);
+        for (int i = 0; i < from.Length; i++) difference[i] = NumOps.Subtract(from[i], baseline[i]);
+        return difference;
+    }
+
+    /// <summary>
+    /// Algorithm 1 lines 12 and 13: <c>psi</c> by descent on the average Theorem 2 bound, <c>phi_0</c> by
+    /// ascent on the average KL lower bound.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both use the FIRST-ORDER MAML direction — the mean of where each task's lower level moved from its
+    /// shared starting point — because neither the generator nor the phi-network is differentiable here:
+    /// both are hand-written forward passes over <c>double</c> with no tape to backpropagate through.
+    /// That is an approximation of the paper's SGD/SGA, and it is the same first-order truncation
+    /// <see cref="SImPaOptions{T, TInput, TOutput}.UseFirstOrder"/> already describes.
+    /// </para>
+    /// <para>
+    /// The one part of the bound whose dependence on <c>psi</c> IS available in closed form — the
+    /// meta-level KL term — is differentiated exactly and subtracted, so <c>psi</c> is pulled back toward
+    /// the prior instead of only toward the tasks. Chain rule through
+    /// <c>metaTerm = sqrt((metaKL + metaLog) / (2 (T - 1)))</c> and
+    /// <c>d(metaKL)/d(psi) = psi / sigma^2</c> gives the coefficient below. Without it the complexity
+    /// half of the bound would be reported but never actually optimised.
+    /// </para>
+    /// </remarks>
+    private void ApplyMetaUpdates(
+        List<Vector<T>> lambdaDirections, List<Vector<T>> phiDirections, int taskCount, double metaKL)
+    {
+        if (lambdaDirections.Count > 0)
+        {
+            var direction = AverageVectors(lambdaDirections);
+
+            double pull = 0.0;
+            if (taskCount > 1)
+            {
+                double metaLog = taskCount * Math.Log(taskCount) / _algoOptions.Epsilon;
+                double metaTerm = Math.Sqrt((metaKL + metaLog) / (2.0 * (taskCount - 1)));
+                if (metaTerm > 0.0)
+                {
+                    double variance = _algoOptions.PriorStdDev * _algoOptions.PriorStdDev;
+                    pull = 1.0 / (variance * 4.0 * (taskCount - 1) * metaTerm);
+                }
+            }
+
+            double rate = _algoOptions.OuterLearningRate;
+            var next = new Vector<T>(_psi.Length);
+            for (int i = 0; i < _psi.Length; i++)
+            {
+                double psi = NumOps.ToDouble(_psi[i]);
+                next[i] = NumOps.FromDouble(psi + (rate * (NumOps.ToDouble(direction[i]) - (pull * psi))));
+            }
+
+            _psi = next;
+            Posterior.SetParameters(_psi);
+        }
+
+        if (phiDirections.Count > 0)
+        {
+            var direction = AverageVectors(phiDirections);
+            double rate = _algoOptions.PhiMetaLearningRate;
+            var next = new Vector<T>(_phiZero.Length);
+
+            for (int i = 0; i < _phiZero.Length; i++)
+            {
+                // ASCENT: line 13 is SGA, because phi_0 initialises a MAXIMISATION.
+                next[i] = NumOps.FromDouble(
+                    NumOps.ToDouble(_phiZero[i]) + (rate * NumOps.ToDouble(direction[i])));
+            }
+
+            _phiZero = next;
+            KLEstimator.SetParameters(_phiZero);
+        }
     }
 
     /// <summary>
@@ -328,9 +481,12 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         Guard.NotNull(task);
 
         var metaParams = ParamModel.GetParameters();
-        var lambda = Posterior.GetParameters();
 
-        var taskLambda = AdaptGeneratorToTask(lambda, task, _algoOptions.AdaptationSteps);
+        // Algorithm 1 lines 5 and 18: a task starts from a draw of theta, not from whatever lambda the
+        // generator happens to be holding after the last call.
+        var theta = SampleMetaParameter();
+
+        var taskLambda = AdaptGeneratorToTask(theta, task, _algoOptions.AdaptationSteps);
         Posterior.SetParameters(taskLambda);
         var samples = Posterior.SampleMany(_algoOptions.AdaptationPosteriorSamples, _rng);
 
@@ -342,7 +498,7 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             mean[d] = NumOps.FromDouble(sum / samples.Count);
         }
 
-        Posterior.SetParameters(lambda);
+        Posterior.SetParameters(_psi);
         ParamModel.SetParameters(metaParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, mean);
     }
@@ -365,7 +521,7 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         Guard.NotNull(task);
 
         int count = sampleCount ?? _algoOptions.AdaptationPosteriorSamples;
-        var lambda = Posterior.GetParameters();
+        var theta = SampleMetaParameter();
 
         // ParamModel IS RESTORED TOO, not just Posterior. AdaptGeneratorToTask reaches
         // SupportLossFor, which calls ParamModel.SetParameters(w) once per posterior sample -- so on
@@ -376,13 +532,13 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var metaParams = ParamModel.GetParameters();
         try
         {
-            var taskLambda = AdaptGeneratorToTask(lambda, task, _algoOptions.AdaptationSteps);
+            var taskLambda = AdaptGeneratorToTask(theta, task, _algoOptions.AdaptationSteps);
             Posterior.SetParameters(taskLambda);
             return Posterior.SampleMany(count, _rng);
         }
         finally
         {
-            Posterior.SetParameters(lambda);
+            Posterior.SetParameters(_psi);
             ParamModel.SetParameters(metaParams);
         }
     }
