@@ -149,7 +149,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <para><b>For Beginners:</b> This checks that the network matches the input and output sizes
     /// for market-making and fills in a sensible default if no layers were provided.</para>
     /// </remarks>
-    private static void EnsureMarketMakingLayers(NeuralNetworkArchitecture<T> architecture, int stateSize, int actionSize)
+    private void EnsureMarketMakingLayers(NeuralNetworkArchitecture<T> architecture, int stateSize, int actionSize)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -160,11 +160,16 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         if (architecture.OutputSize != actionSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {actionSize}.", nameof(architecture));
 
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.AddRange(LayerHelper<T>.CreateDefaultMarketMakingLayers(
+            // ReLU MLP sized by TradingAgentOptions.HiddenLayers (default [64, 64], the same network
+            // LayerHelper.CreateDefaultMarketMakingLayers builds).
+            var hiddenSizes = GetHiddenLayerSizes();
+            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateFeedForwardLayers(
                 architecture,
-                stateSize,
+                hiddenSizes,
                 actionSize));
         }
     }
@@ -182,19 +187,19 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var action = _policyNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
-        
-        if (training)
-        {
-            // Add exploration noise
-            var noise = new Vector<T>(action.Length);
-            for (int i = 0; i < noise.Length; i++)
-                noise[i] = NumOps.FromDouble(RandomHelper.CreateSecureRandom().NextDouble() * 0.05);
-            
-            return action.Add(noise);
-        }
 
-        return action;
+        // Zero-mean Gaussian exploration from the agent's seeded stream. The previous U[0, 0.05) noise was
+        // unseeded and one-sided (mean +0.025), so every exploratory quote was skewed the same way and the
+        // skew compounded into the policy, which is regressed onto the actions it took.
+        return training
+            ? AddGaussianExplorationNoise(action, ExplorationNoiseStandardDeviation)
+            : action;
     }
+
+    /// <summary>
+    /// Standard deviation of the Gaussian exploration noise added to the policy output in training mode.
+    /// </summary>
+    private const double ExplorationNoiseStandardDeviation = 0.05;
 
     #endregion
 
@@ -258,6 +263,9 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
             : TradingOptions.BatchSize;
         if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
+
+        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
         if (batch.Count == 0) return NumOps.Zero;

@@ -119,27 +119,33 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Action Selection
 
+    /// <summary>
+    /// Standard deviation of the Gaussian exploration noise added to the actor's action in training mode.
+    /// </summary>
+    private const double ExplorationNoiseStandardDeviation = 0.1;
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, SelectAction performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
+    /// The actor has a single deterministic head (one output per action dimension, no log-std head), so
+    /// there is no policy Gaussian to reparameterize. Training-mode exploration therefore adds independent
+    /// zero-mean Gaussian noise, <c>a = mu(s) + 0.1 * eps, eps ~ N(0, I)</c>, drawn from the agent's seeded
+    /// random stream. The previous noise was <c>U[0, 0.1)</c> — mean +0.05 and never negative — which biased
+    /// every exploratory position long and, because the actor is regressed onto the actions it took, pushed
+    /// the policy's output upward on every update.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> While training, the agent jitters its chosen position sizes a little in both
+    /// directions so it can discover better ones; at evaluation time it uses the actor's output as-is.
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var action = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
-        
-        if (training)
-        {
-            // Stochastic policy (simplified with noise)
-            var noise = new Vector<T>(action.Length);
-            for (int i = 0; i < noise.Length; i++)
-                noise[i] = NumOps.FromDouble(RandomHelper.CreateSecureRandom().NextDouble() * 0.1);
-            
-            return action.Add(noise);
-        }
 
-        return action;
+        return training
+            ? AddGaussianExplorationNoise(action, ExplorationNoiseStandardDeviation)
+            : action;
     }
 
     #endregion
@@ -161,6 +167,9 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
             : TradingOptions.BatchSize;
         if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
+
+        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;

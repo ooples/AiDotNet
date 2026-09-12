@@ -170,6 +170,14 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         return _innerAgent.Train();
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The inner agent owns both the labelled-transition route and the one-shot supervised
+    /// update flag. Forward the complete operation, rather than creating a target action in
+    /// the wrapper and sending it through the inner agent's public on-policy collection API.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target) => _innerAgent.Train(state, target);
+
     #endregion
 
     #region Base Implementation
