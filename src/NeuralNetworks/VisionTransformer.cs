@@ -185,10 +185,6 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         int channels,
         int patchSize,
         int numClasses,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int mlpDim = 3072,
         ILossFunction<T>? lossFunction = null,
         VisionTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>())
@@ -207,14 +203,17 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
             throw new ArgumentOutOfRangeException(nameof(patchSize), patchSize, "Patch size must be greater than 0.");
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "Number of classes must be greater than 0.");
-        if (hiddenDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(hiddenDim), hiddenDim, "Hidden dimension must be greater than 0.");
-        if (numLayers <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be greater than 0.");
-        if (numHeads <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numHeads), numHeads, "Number of heads must be greater than 0.");
-        if (mlpDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(mlpDim), mlpDim, "MLP dimension must be greater than 0.");
+        // Checked against the options rather than shadowing parameters. Kept as explicit throws
+        // rather than moved onto the options because these raise ArgumentOutOfRangeException and
+        // xUnit's Assert.Throws matches an exception type exactly.
+        if (_options.HiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.HiddenDim), _options.HiddenDim, "Hidden dimension must be greater than 0.");
+        if (_options.NumLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumLayers), _options.NumLayers, "Number of layers must be greater than 0.");
+        if (_options.NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumHeads), _options.NumHeads, "Number of heads must be greater than 0.");
+        if (_options.MlpDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MlpDim), _options.MlpDim, "MLP dimension must be greater than 0.");
 
         // Validate image dimensions are divisible by patch size (prevents silent truncation)
         if (imageHeight % patchSize != 0)
@@ -223,23 +222,23 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
             throw new ArgumentException($"Image width ({imageWidth}) must be divisible by patch size ({patchSize}).", nameof(imageWidth));
 
         // Validate multi-head attention requirement
-        if (hiddenDim % numHeads != 0)
-            throw new ArgumentException($"Hidden dimension ({hiddenDim}) must be divisible by number of heads ({numHeads}) for multi-head attention.", nameof(hiddenDim));
+        if (_options.HiddenDim % _options.NumHeads != 0)
+            throw new ArgumentException($"Hidden dimension ({_options.HiddenDim}) must be divisible by number of heads ({_options.NumHeads}) for multi-head attention.", nameof(_options.HiddenDim));
 
         _imageHeight = imageHeight;
         _imageWidth = imageWidth;
         _channels = channels;
         _patchSize = patchSize;
         _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _mlpDim = mlpDim;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _mlpDim = _options.MlpDim;
 
         _numPatches = (imageHeight / patchSize) * (imageWidth / patchSize);
 
-        _clsToken = new Tensor<T>(new[] { hiddenDim });
-        _positionalEmbeddings = new Tensor<T>(new[] { _numPatches + 1, hiddenDim });
+        _clsToken = new Tensor<T>(new[] { _hiddenDim });
+        _positionalEmbeddings = new Tensor<T>(new[] { _numPatches + 1, _hiddenDim });
 
         InitializeLayers();
     }

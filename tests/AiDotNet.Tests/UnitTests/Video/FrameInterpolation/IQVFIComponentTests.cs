@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Video.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.FrameInterpolation;
 using Xunit;

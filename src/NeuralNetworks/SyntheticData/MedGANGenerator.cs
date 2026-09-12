@@ -203,22 +203,19 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <param name="options">medGAN options; defaults reproduce the paper's hyperparameters.</param>
     /// <param name="optimizer">Gradient-based optimizer for the generator (defaults to Adam at the paper's 1e-3).</param>
     /// <param name="lossFunction">Loss function used by the base class's generic training path.</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <exception cref="ArgumentException">
     /// Thrown when a generator width differs from the embedding dimension. The generator's shortcut
     /// connection is an addition, so mismatched widths cannot be added; rejecting this at
     /// construction is deliberate, since silently dropping the shortcut would remove one of the
     /// paper's three named contributions without saying so.
     /// </exception>
-    public MedGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public MedGANGenerator(NeuralNetworkArchitecture<T> architecture,
         MedGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MedGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new MedGANOptions<T>();
+        _options = options;
 
         Guard.Positive(_options.EmbeddingDimension, nameof(_options.EmbeddingDimension));
         foreach (int width in _options.GeneratorDimensions)
@@ -408,8 +405,9 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// ordering is load-bearing — the generator's whole job is to hit a latent space that already
     /// means something, so starting the GAN against an untrained decoder is training against noise.
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
 
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
@@ -422,7 +420,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         RebuildLayersWithActualDimensions();
 
         double noiseMultiplier = _options.EnablePrivacy
-            ? ComputeNoiseMultiplier(data.Rows, epochs)
+            ? ComputeNoiseMultiplier(data.Rows, epochCount)
             : 0.0;
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -430,8 +428,8 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         // --- Stage 1: pre-train the autoencoder on the real records ---
         int pretrainEpochs = _options.AutoencoderPretrainEpochs
-            ?? Math.Max(1, (int)Math.Round(epochs * _options.AutoencoderPretrainFraction));
-        pretrainEpochs = Math.Min(pretrainEpochs, epochs);
+            ?? Math.Max(1, (int)Math.Round(epochCount * _options.AutoencoderPretrainFraction));
+        pretrainEpochs = Math.Min(pretrainEpochs, epochCount);
 
         for (int epoch = 0; epoch < pretrainEpochs; epoch++)
         {
@@ -442,7 +440,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
 
         // --- Stage 2: the GAN, with the decoder still training as part of theta_(g,dec) ---
-        for (int epoch = pretrainEpochs; epoch < epochs; epoch++)
+        for (int epoch = pretrainEpochs; epoch < epochCount; epoch++)
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
@@ -459,10 +457,11 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => Fit(data, columns, epochs), cancellationToken);
+        int epochCount = epochs ?? _options.Epochs;
+        return Task.Run(() => Fit(data, columns, epochCount), cancellationToken);
     }
 
     /// <inheritdoc />

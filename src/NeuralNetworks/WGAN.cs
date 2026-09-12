@@ -241,16 +241,15 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
         InputType inputType,
+        WGANOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? criticOptimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double weightClipValue = 0.01,
-        int criticIterations = 5,
-        WGANOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(CreateWGANArchitecture(generatorArchitecture, criticArchitecture, inputType),
                lossFunction ?? new WassersteinLoss<T>())
     {
         _options = options ?? new WGANOptions();
+        _options.Validate();
         Options = _options;
 
         if (generatorArchitecture is null)
@@ -281,17 +280,17 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
                 nameof(criticArchitecture));
         }
 
-        if (weightClipValue <= 0)
+        if (_options.WeightClipValue <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(weightClipValue), weightClipValue, "Weight clip value must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.WeightClipValue), _options.WeightClipValue, "Weight clip value must be positive.");
         }
-        if (criticIterations <= 0)
+        if (_options.CriticIterations <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(criticIterations), criticIterations, "Critic iterations must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.CriticIterations), _options.CriticIterations, "Critic iterations must be positive.");
         }
 
-        _weightClipValue = weightClipValue;
-        _criticIterations = criticIterations;
+        _weightClipValue = _options.WeightClipValue;
+        _criticIterations = _options.CriticIterations;
 
         Generator = CreateNetworkForInputType(generatorArchitecture, inputType);
         Critic = CreateNetworkForInputType(criticArchitecture, inputType);

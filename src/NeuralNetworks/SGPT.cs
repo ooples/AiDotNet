@@ -91,36 +91,27 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the SGPT model.
         /// </summary>
-        /// <param name="embeddingDimension">The dimension of the embeddings (default: 768).</param>
         /// <param name="maxSequenceLength">The maximum length of input sequences (default: 1024).</param>
         /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
         /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
         /// <param name="poolingStrategy">The strategy used to aggregate outputs (default: Mean, though research often uses last token).</param>
         /// <param name="lossFunction">Optional loss function.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public SGPT(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 50257,
-            [ModelDimensionRole(ModelDimensionRole.AttentionDimension)] int embeddingDimension = 768,
-            int maxSequenceLength = 1024,
-            int numLayers = 12,
-            [ModelDimensionRole(ModelDimensionRole.AttentionHeadCount)] int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            SGPTOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        SGPTOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
-            _options = options ?? new SGPTOptions();
+        _options = options ?? new SGPTOptions();
+        _options.Validate();
             Options = _options;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
 
             InitializeLayersCore(false);
         }

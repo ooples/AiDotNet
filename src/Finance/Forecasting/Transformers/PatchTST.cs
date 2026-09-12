@@ -210,31 +210,53 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     public PatchTST(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sequenceLength = 96,
-        int predictionHorizon = 24,
-        int numFeatures = 7,
-        int patchSize = 16,
-        int stride = 8,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PatchTSTOptions<T>? options = null)
-        : base(architecture, onnxModelPath, sequenceLength, predictionHorizon, numFeatures)
+        : this(options ?? new PatchTSTOptions<T>(), architecture, onnxModelPath, optimizer, lossFunction)
     {
-        options ??= new PatchTSTOptions<T>();
+    }
+
+    /// <summary>
+    /// Initializes the ONNX-backed model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs SequenceLength, PredictionHorizon and NumFeatures and runs
+    /// before the body, so the options must be resolved first. Options come first in the parameter
+    /// list because a nullable and a non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private PatchTST(
+        PatchTSTOptions<T> options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, onnxModelPath, options.SequenceLength, options.PredictionHorizon, options.NumFeatures)
+    {
         _options = options;
         Options = _options;
 
-        _patchSize = patchSize;
-        _stride = stride;
-        _numLayers = 3;
-        _numHeads = 4;
-        _modelDimension = 128;
-        _feedForwardDimension = 256;
-        _channelIndependent = true;
-        _useInstanceNormalization = true;
-        _dropout = 0.05;
+        // Every field below was previously a LITERAL here while the native constructor read the
+        // same value from a parameter, so the two constructors described different models even
+        // when handed the same options object. Both now read the options.
+        _patchSize = options.PatchSize;
+        _stride = options.Stride;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _channelIndependent = options.ChannelIndependent;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
 
         InitializeLayers();
     }
@@ -287,40 +309,57 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     public PatchTST(
         NeuralNetworkArchitecture<T> architecture,
-        int sequenceLength = 96,
-        int predictionHorizon = 24,
-        int numFeatures = 7,
-        int patchSize = 16,
-        int stride = 8,
-        int numLayers = 3,
-        int numHeads = 4,
-        int modelDimension = 128,
-        int feedForwardDimension = 256,
-        bool channelIndependent = true,
-        bool useInstanceNormalization = true,
-        double dropout = 0.05,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PatchTSTOptions<T>? options = null)
-        : base(architecture, sequenceLength, predictionHorizon, numFeatures, lossFunction)
+        : this(options ?? new PatchTSTOptions<T>(), architecture, optimizer, lossFunction)
     {
-        ValidateParameters(sequenceLength, predictionHorizon, numFeatures, patchSize, stride, numLayers, numHeads, modelDimension);
+    }
 
-        options ??= new PatchTSTOptions<T>();
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs SequenceLength, PredictionHorizon and NumFeatures and runs
+    /// before the body, so the options must be resolved first. Options come first in the
+    /// parameter list because a nullable and a non-nullable reference type are the same type to
+    /// the compiler.
+    /// </para>
+    /// </remarks>
+    private PatchTST(
+        PatchTSTOptions<T> options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, options.SequenceLength, options.PredictionHorizon, options.NumFeatures, lossFunction)
+    {
+        // Same checks as before, reading the options rather than shadowing parameters. Kept as a
+        // call rather than moved onto the options because PatchTSTOptions derives from
+        // ModelOptions, which has no Require helper, and these throw ArgumentOutOfRangeException
+        // for the positivity rules -- a type xUnit's Assert.Throws matches exactly.
+        ValidateParameters(options.SequenceLength, options.PredictionHorizon, options.NumFeatures,
+            options.PatchSize, options.Stride, options.NumLayers, options.NumHeads, options.ModelDimension);
+
         _options = options;
         Options = _options;
 
-        _patchSize = patchSize;
-        _stride = stride;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _modelDimension = modelDimension;
-        _feedForwardDimension = feedForwardDimension;
-        _channelIndependent = channelIndependent;
-        _useInstanceNormalization = useInstanceNormalization;
-        _dropout = dropout;
+        _patchSize = options.PatchSize;
+        _stride = options.Stride;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _channelIndependent = options.ChannelIndependent;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
 
         InitializeLayers();
     }

@@ -317,7 +317,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for Mamba.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -326,10 +325,8 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// Mamba is particularly efficient for long sequences due to its linear complexity.
     /// </para>
     /// </remarks>
-    public Mamba(
-        NeuralNetworkArchitecture<T> architecture,
+    public Mamba(NeuralNetworkArchitecture<T> architecture,
         MambaOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -353,7 +350,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         _dropout = options.DropoutRate;
         _dtRank = options.DtRank < 0 ? (_modelDimension / 16) : options.DtRank;
         _useBidirectional = options.UseBidirectional;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new MambaOptions<T>()).NumFeatures;
 
         InitializeLayers();
     }

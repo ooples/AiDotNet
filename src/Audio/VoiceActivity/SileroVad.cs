@@ -229,15 +229,11 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     public SileroVad(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int frameSize = 512,
-        double threshold = 0.5,
-        int minSpeechDurationMs = 250,
-        int minSilenceDurationMs = 100,
         SileroVadOptions? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new SileroVadOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -246,11 +242,11 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         _modelPath = modelPath;
         _lossFunction = new BinaryCrossEntropyLoss<T>();
 
-        SampleRate = sampleRate;
-        _frameSize = frameSize;
-        _threshold = threshold;
-        _minSpeechDurationMs = minSpeechDurationMs;
-        _minSilenceDurationMs = minSilenceDurationMs;
+        SampleRate = _options.SampleRate;
+        _frameSize = _options.FrameSize;
+        _threshold = _options.Threshold;
+        _minSpeechDurationMs = _options.MinSpeechDurationMs;
+        _minSilenceDurationMs = _options.MinSilenceDurationMs;
 
         // Default architecture parameters (not used in ONNX mode)
         _convFilters = 64;
@@ -277,32 +273,25 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     /// <param name="numLstmLayers">Number of LSTM layers (default: 2).</param>
     public SileroVad(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int frameSize = 512,
-        double threshold = 0.5,
-        int minSpeechDurationMs = 250,
-        int minSilenceDurationMs = 100,
-        int convFilters = 64,
-        int lstmHiddenDim = 64,
-        int numLstmLayers = 2,
         SileroVadOptions? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new SileroVadOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
         _modelPath = null;
         _lossFunction = new BinaryCrossEntropyLoss<T>();
 
-        SampleRate = sampleRate;
-        _frameSize = frameSize;
-        _threshold = threshold;
-        _minSpeechDurationMs = minSpeechDurationMs;
-        _minSilenceDurationMs = minSilenceDurationMs;
+        SampleRate = _options.SampleRate;
+        _frameSize = _options.FrameSize;
+        _threshold = _options.Threshold;
+        _minSpeechDurationMs = _options.MinSpeechDurationMs;
+        _minSilenceDurationMs = _options.MinSilenceDurationMs;
 
-        _convFilters = convFilters;
-        _lstmHiddenDim = lstmHiddenDim;
-        _numLstmLayers = numLstmLayers;
+        _convFilters = _options.ConvFilters;
+        _lstmHiddenDim = _options.LstmHiddenDim;
+        _numLstmLayers = _options.NumLstmLayers;
 
         InitializeLayers();
         ResetVadState();

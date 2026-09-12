@@ -348,13 +348,9 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         string qformerPath,
         string languageModelPath,
         ITokenizer tokenizer,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
-        int embeddingDimension = 256,
-        int maxSequenceLength = 32,
-        int imageSize = 224,
+        Blip2Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        Blip2Options? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
@@ -380,10 +376,14 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _visionEncoderPath = visionEncoderPath;
         _qformerPath = qformerPath;
         _languageModelPath = languageModelPath;
-        _languageModelBackbone = languageModelBackbone;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _languageModelBackbone = _options.LanguageModelBackbone;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
         _qformerHiddenDim = 768;
         _numQformerLayers = 12;
         _numHeads = 12;
@@ -463,62 +463,45 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// </remarks>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 224,
-        int channels = 3,
-        int patchSize = 14,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 32,
-        int embeddingDimension = 256,
-        int qformerHiddenDim = 768,
-        int visionHiddenDim = 1408,
-        int lmHiddenDim = 2560,
-        int numQformerLayers = 12,
-        int numQueryTokens = 32,
-        int numHeads = 12,
-        int numLmDecoderLayers = 6,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
+        Blip2Options? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        Blip2Options? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
     {
-        if (patchSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
-        if (imageSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
-        if (imageSize % patchSize != 0)
-            throw new ArgumentException(
-                $"imageSize ({imageSize}) must be evenly divisible by patchSize ({patchSize}); " +
-                $"got remainder {imageSize % patchSize}.",
-                nameof(imageSize));
-
         _options = options ?? new Blip2Options();
+        _options.Validate();
+        if (_options.ImageSize % _options.PatchSize != 0)
+            throw new ArgumentException(
+                $"_options.ImageSize ({_options.ImageSize}) must be evenly divisible by _options.PatchSize ({_options.PatchSize}); " +
+                $"got remainder {_options.ImageSize % _options.PatchSize}.",
+                nameof(_options.ImageSize));
+
         Options = _options;
 
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _qformerHiddenDim = qformerHiddenDim;
-        _visionHiddenDim = visionHiddenDim;
-        _lmHiddenDim = lmHiddenDim;
-        _numQformerLayers = numQformerLayers;
-        _numHeads = numHeads;
-        _numQueryTokens = numQueryTokens;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
-        _numLmDecoderLayers = numLmDecoderLayers;
-        _languageModelBackbone = languageModelBackbone;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _qformerHiddenDim = _options.QformerHiddenDim;
+        _visionHiddenDim = _options.VisionHiddenDim;
+        _lmHiddenDim = _options.LmHiddenDim;
+        _numQformerLayers = _options.NumQformerLayers;
+        _numHeads = _options.NumHeads;
+        _numQueryTokens = _options.NumQueryTokens;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _numLmDecoderLayers = _options.NumLmDecoderLayers;
+        _languageModelBackbone = _options.LanguageModelBackbone;
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
-        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(_options.LanguageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
-        InitializeNativeLayers(channels);
+        InitializeNativeLayers(_options.Channels);
     }
 
     #endregion

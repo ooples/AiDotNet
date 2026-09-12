@@ -168,13 +168,9 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     public ConvTasNet(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 8000,
-        int encoderDim = 512,
-        int kernelSize = 16,
-        int numSources = 2,
-        OnnxModelOptions? onnxOptions = null,
-        ConvTasNetOptions? options = null)
-        : base(architecture)
+        ConvTasNetOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new ConvTasNetOptions();
         Options = _options;
@@ -190,17 +186,21 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         }
 
-        SampleRate = sampleRate;
-        _encoderDim = encoderDim;
-        _kernelSize = kernelSize;
-        _stride = kernelSize / 2;
-        _numSources = numSources;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        SampleRate = _options.SampleRate;
+        _encoderDim = _options.EncoderDim;
+        _kernelSize = _options.KernelSize;
+        _stride = _options.KernelSize / 2;
+        _numSources = _options.NumSources;
 
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
 
         // Calculate latency (encoder kernel + some TCN lookahead)
-        LatencySamples = kernelSize;
+        LatencySamples = _options.KernelSize;
 
         // Initialize empty arrays (not used in ONNX mode)
         _encoderWeight = new Tensor<T>([0]);
@@ -238,37 +238,29 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <param name="lossFunction">Loss function. If null, SI-SNR loss is used.</param>
     public ConvTasNet(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 8000,
-        int encoderDim = 512,
-        int kernelSize = 16,
-        int bottleneckDim = 128,
-        int hiddenDim = 512,
-        int numBlocks = 8,
-        int numRepeats = 3,
-        int tcnKernelSize = 3,
-        int numSources = 2,
+        ConvTasNetOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ConvTasNetOptions? options = null)
-        : base(architecture, lossFunction)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction: lossFunction)
     {
         _options = options ?? new ConvTasNetOptions();
+        _options.Validate();
         Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
-        SampleRate = sampleRate;
-        _encoderDim = encoderDim;
-        _kernelSize = kernelSize;
-        _stride = kernelSize / 2;
-        _bottleneckDim = bottleneckDim;
-        _hiddenDim = hiddenDim;
-        _numBlocks = numBlocks;
-        _numRepeats = numRepeats;
-        _tcnKernelSize = tcnKernelSize;
-        _numSources = numSources;
+        SampleRate = _options.SampleRate;
+        _encoderDim = _options.EncoderDim;
+        _kernelSize = _options.KernelSize;
+        _stride = _options.KernelSize / 2;
+        _bottleneckDim = _options.BottleneckDim;
+        _hiddenDim = _options.HiddenDim;
+        _numBlocks = _options.NumBlocks;
+        _numRepeats = _options.NumRepeats;
+        _tcnKernelSize = _options.TcnKernelSize;
+        _numSources = _options.NumSources;
 
         // Calculate latency
-        LatencySamples = kernelSize;
+        LatencySamples = _options.KernelSize;
 
         // Initialize encoder weights
         _encoderWeight = InitializeWeights(_encoderDim * _kernelSize);
@@ -280,24 +272,24 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
         // Initialize TCN blocks
         _tcnBlocks = new List<TcnBlock>();
-        for (int r = 0; r < numRepeats; r++)
+        for (int r = 0; r < _options.NumRepeats; r++)
         {
-            for (int b = 0; b < numBlocks; b++)
+            for (int b = 0; b < _options.NumBlocks; b++)
             {
                 int dilation = (int)Math.Pow(2, b);
                 _tcnBlocks.Add(new TcnBlock(
                     _numOps,
-                    bottleneckDim,
-                    hiddenDim,
-                    tcnKernelSize,
+                    _options.BottleneckDim,
+                    _options.HiddenDim,
+                    _options.TcnKernelSize,
                     dilation));
             }
         }
 
         // Initialize mask estimation layer
-        int maskInputDim = bottleneckDim;
-        _maskWeight = InitializeWeights(numSources * encoderDim * maskInputDim);
-        _maskBias = InitializeWeights(numSources * encoderDim, 0.0);
+        int maskInputDim = _options.BottleneckDim;
+        _maskWeight = InitializeWeights(_options.NumSources * _options.EncoderDim * maskInputDim);
+        _maskBias = InitializeWeights(_options.NumSources * _options.EncoderDim, 0.0);
 
         // Initialize decoder weights (transposed convolution)
         _decoderWeight = InitializeWeights(_encoderDim * _kernelSize);

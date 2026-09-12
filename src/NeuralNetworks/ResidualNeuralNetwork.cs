@@ -253,8 +253,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the ResNet.</param>
     /// <param name="learningRate">The learning rate for training. Default is 0.01 converted to type T.</param>
-    /// <param name="epochs">The number of training epochs. Default is 10.</param>
-    /// <param name="batchSize">The batch size for training. Default is 32.</param>
     /// <param name="lossFunction">Optional custom loss function. If null, a default will be chosen based on task type.</param>
     /// <remarks>
     /// <para>
@@ -289,21 +287,19 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     {
     }
 
-    public ResidualNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        int epochs = 10,
-        int batchSize = 32,
+    public ResidualNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResidualNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        options ??= new ResidualNeuralNetworkOptions();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _options = options ?? new ResidualNeuralNetworkOptions();
+        _options = options;
         Options = _options;
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
-        _epochs = epochs;
-        _batchSize = batchSize;
+        _epochs = options.Epochs;
+        _batchSize = options.BatchSize;
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.3);

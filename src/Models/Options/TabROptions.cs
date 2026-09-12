@@ -176,28 +176,7 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// </remarks>
     public bool UseFiLM { get; set; } = false;
 
-    /// <summary>
-    /// Gets or sets the feed-forward dimension multiplier.
-    /// </summary>
-    /// <value>The multiplier, defaulting to 4.</value>
-    public int FeedForwardMultiplier { get; set; } = 4;
 
-    /// <summary>
-    /// Gets the feed-forward network dimension.
-    /// </summary>
-    public int FeedForwardDimension => EmbeddingDimension * FeedForwardMultiplier;
-
-    /// <summary>
-    /// Gets or sets whether to enable gradient clipping.
-    /// </summary>
-    /// <value>True to enable gradient clipping; false otherwise. Defaults to true.</value>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for clipping.
-    /// </summary>
-    /// <value>The maximum gradient norm, defaulting to 1.0.</value>
-    public double MaxGradientNorm { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the weight decay coefficient.
@@ -224,10 +203,8 @@ public class TabROptions<T> : RiskModelOptions<T>
             UseLayerNorm = UseLayerNorm,
             ActivationType = ActivationType,
             UseFiLM = UseFiLM,
-            FeedForwardMultiplier = FeedForwardMultiplier,
-            EnableGradientClipping = EnableGradientClipping,
-            MaxGradientNorm = MaxGradientNorm,
-            WeightDecay = WeightDecay
+            WeightDecay = WeightDecay,
+            MaxGradNorm = MaxGradNorm
         };
     }
 }

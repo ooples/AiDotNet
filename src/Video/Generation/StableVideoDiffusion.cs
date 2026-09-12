@@ -205,31 +205,24 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <param name="textEncoderHeads">Number of text encoder attention heads. Default: 12 (ViT-H).</param>
     public StableVideoDiffusion(
         NeuralNetworkArchitecture<T> architecture,
-        SVDModelVariant variant = SVDModelVariant.SVD,
-        int numFrames = 14,
-        int numInferenceSteps = 25,
-        double guidanceScale = 7.5,
-        int vaeChannels = 128,
-        int textEncoderDim = 768,
-        int textEncoderLayers = 12,
-        int textEncoderHeads = 12,
         StableVideoDiffusionOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new StableVideoDiffusionOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 576;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _variant = variant;
-        _numFrames = variant == SVDModelVariant.SVDXT ? 25 : numFrames;
-        _numInferenceSteps = numInferenceSteps;
-        _guidanceScale = guidanceScale;
-        GuidanceScale = guidanceScale;
+        _variant = _options.Variant;
+        _numFrames = _options.Variant == SVDModelVariant.SVDXT ? 25 : _options.NumFrames;
+        _numInferenceSteps = _options.NumInferenceSteps;
+        _guidanceScale = _options.GuidanceScale;
+        GuidanceScale = _options.GuidanceScale;
 
-        // Set latent dimension based on variant
-        _latentDim = variant switch
+        // Set latent dimension based on _options.Variant
+        _latentDim = _options.Variant switch
         {
             SVDModelVariant.SVD => 4,
             SVDModelVariant.SVDXT => 4,
@@ -237,9 +230,9 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
             _ => 4
         };
 
-        _textEncoderDim = textEncoderDim;
-        _textEncoderLayers = textEncoderLayers;
-        _textEncoderHeads = textEncoderHeads;
+        _textEncoderDim = _options.TextEncoderDim;
+        _textEncoderLayers = _options.TextEncoderLayers;
+        _textEncoderHeads = _options.TextEncoderHeads;
 
         _vaeEncoder = [];
         _vaeDecoder = [];
@@ -254,7 +247,7 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         // Initialize noise schedule (cosine schedule)
         (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
-        InitializeNativeLayers(vaeChannels);
+        InitializeNativeLayers(_options.VaeChannels);
     }
 
     private void InitializeNativeLayers(int vaeChannels)

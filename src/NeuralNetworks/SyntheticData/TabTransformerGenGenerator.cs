@@ -134,7 +134,6 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     /// <param name="options">TabTransformerGen-specific options for transformer configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TabTransformer-Gen network.
@@ -159,17 +158,20 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     {
     }
 
-    public TabTransformerGenGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabTransformerGenGenerator(NeuralNetworkArchitecture<T> architecture,
         TabTransformerGenOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerGenOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabTransformerGenOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -288,8 +290,9 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, columns);
@@ -317,7 +320,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         var rowOrder = new int[data.Rows];
         for (int i = 0; i < data.Rows; i++) rowOrder[i] = i;
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             ShuffleInPlace(rowOrder);
             for (int oi = 0; oi < rowOrder.Length; oi++)
@@ -373,12 +376,13 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         return Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, ct);
     }
 

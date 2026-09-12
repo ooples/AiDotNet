@@ -145,15 +145,10 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     public DocGCN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int nodeDim = 256,
-        int edgeDim = 64,
-        int gcnLayers = 3,
-        int numClasses = 9,
-        int maxNodes = 512,
+        DocGCNOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DocGCNOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocGCNOptions();
         Options = _options;
@@ -164,11 +159,15 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _nodeDim = nodeDim;
-        _edgeDim = edgeDim;
-        _gcnLayers = gcnLayers;
-        _numClasses = numClasses;
-        _maxNodes = maxNodes;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _nodeDim = _options.NodeDim;
+        _edgeDim = _options.EdgeDim;
+        _gcnLayers = _options.GcnLayers;
+        _numClasses = _options.NumClasses;
+        _maxNodes = _options.MaxNodes;
         _optimizer = ResolveOptimizer(optimizer);
 
         _onnxSession = new InferenceSession(onnxModelPath);
@@ -190,25 +189,21 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     /// </remarks>
     public DocGCN(
         NeuralNetworkArchitecture<T> architecture,
-        int nodeDim = 256,
-        int edgeDim = 64,
-        int gcnLayers = 3,
-        int numClasses = 9,
-        int maxNodes = 512,
+        DocGCNOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DocGCNOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocGCNOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _nodeDim = nodeDim;
-        _edgeDim = edgeDim;
-        _gcnLayers = gcnLayers;
-        _numClasses = numClasses;
-        _maxNodes = maxNodes;
+        _nodeDim = _options.NodeDim;
+        _edgeDim = _options.EdgeDim;
+        _gcnLayers = _options.GcnLayers;
+        _numClasses = _options.NumClasses;
+        _maxNodes = _options.MaxNodes;
         _optimizer = ResolveOptimizer(optimizer);
 
         InitializeLayers();

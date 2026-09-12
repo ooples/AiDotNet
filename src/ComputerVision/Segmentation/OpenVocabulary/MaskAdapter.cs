@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new MaskAdapter&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new MaskAdapter&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new MaskAdapter&lt;double&gt;(architecture,
+///     options: new MaskAdapterOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for improved boundary quality
-/// var onnxModel = new MaskAdapter&lt;double&gt;(architecture, "maskadapter.onnx", numClasses: 150);
+/// var onnxModel = new MaskAdapter&lt;double&gt;(architecture, "maskadapter.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -84,8 +87,6 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -94,18 +95,17 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     /// </remarks>
     public MaskAdapter(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 150,
-        double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         MaskAdapterOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // lazily via CreateDefaultOptimizer(), overridden below to keep Mask-Adapter's 1e-4 AdamW.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new MaskAdapterOptions()).NumClasses)
     {
-        _options = options ?? new MaskAdapterOptions(); Options = _options;
+        _options = options; Options = _options;
         // Mask-Adapter defaults to 640x640, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         // Hand the resolved optimizer to the base training loop. Without this call training
         // silently falls back to the base default Adam, whose 1e-3 learning rate diverges on
         // this deep, unnormalized conv encoder/decoder (the loss explodes geometrically).
@@ -121,7 +121,6 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -131,17 +130,17 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public MaskAdapter(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 150,
+    public MaskAdapter(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         MaskAdapterOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new MaskAdapterOptions()).NumClasses)
     {
-        _options = options ?? new MaskAdapterOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _dropRate = 0.1;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 320, 512];
         _depths = [2, 2, 4, 2];
         _decoderDim = 256;

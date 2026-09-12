@@ -164,15 +164,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         string videoEncoderPath,
         string textEncoderPath,
         ITokenizer tokenizer,
-        int numFrames = 8,
-        double frameRate = 1.0,
-        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
-        int embeddingDimension = 512,
-        int maxSequenceLength = 77,
-        int imageSize = 224,
+        VideoCLIPOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        VideoCLIPOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
@@ -190,12 +184,16 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _useNativeMode = false;
         _videoEncoderPath = videoEncoderPath;
         _textEncoderPath = textEncoderPath;
-        _numFrames = numFrames;
-        _frameRate = frameRate;
-        _temporalAggregation = temporalAggregation;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numFrames = _options.NumFrames;
+        _frameRate = _options.FrameRate;
+        _temporalAggregation = _options.TemporalAggregation;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
         _patchSize = 16;
         _visionHiddenDim = 768;
         _textHiddenDim = 512;
@@ -233,51 +231,37 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// </summary>
     public VideoCLIPNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 224,
-        int channels = 3,
-        int patchSize = 16,
-        int vocabularySize = 49408,
-        int maxSequenceLength = 77,
-        int embeddingDimension = 512,
-        int visionHiddenDim = 768,
-        int textHiddenDim = 512,
-        int numFrameEncoderLayers = 12,
-        int numTemporalLayers = 4,
-        int numTextLayers = 12,
-        int numHeads = 12,
-        int numFrames = 8,
-        double frameRate = 1.0,
-        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
+        VideoCLIPOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        VideoCLIPOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _visionHiddenDim = visionHiddenDim;
-        _textHiddenDim = textHiddenDim;
-        _numFrameEncoderLayers = numFrameEncoderLayers;
-        _numTemporalLayers = numTemporalLayers;
-        _numTextLayers = numTextLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
-        _numFrames = numFrames;
-        _frameRate = frameRate;
-        _temporalAggregation = temporalAggregation;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _visionHiddenDim = _options.VisionHiddenDim;
+        _textHiddenDim = _options.TextHiddenDim;
+        _numFrameEncoderLayers = _options.NumFrameEncoderLayers;
+        _numTemporalLayers = _options.NumTemporalLayers;
+        _numTextLayers = _options.NumTextLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _numFrames = _options.NumFrames;
+        _frameRate = _options.FrameRate;
+        _temporalAggregation = _options.TemporalAggregation;
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
-        InitializeNativeLayers(channels);
+        InitializeNativeLayers(_options.Channels);
     }
 
     #endregion

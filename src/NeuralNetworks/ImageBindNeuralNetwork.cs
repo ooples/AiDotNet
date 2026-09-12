@@ -182,13 +182,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         string textEncoderPath,
         string audioEncoderPath,
         ITokenizer tokenizer,
-        int embeddingDimension = 1024,
-        int maxSequenceLength = 77,
-        int imageSize = 224,
-        int audioSampleRate = 16000,
+        ImageBindOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ImageBindOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new ImageBindOptions();
@@ -210,10 +206,14 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
         _audioEncoderPath = audioEncoderPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _audioSampleRate = audioSampleRate;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _audioSampleRate = _options.AudioSampleRate;
         _audioMaxDuration = 10; // 10 seconds max
         _patchSize = 14;
         _hiddenDim = 1280;
@@ -261,40 +261,28 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// </summary>
     public ImageBindNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 224,
-        int channels = 3,
-        int patchSize = 14,
-        int vocabularySize = 49408,
-        int maxSequenceLength = 77,
-        int embeddingDimension = 1024,
-        int hiddenDim = 1280,
-        int numEncoderLayers = 32,
-        int numHeads = 16,
-        int audioSampleRate = 16000,
-        int audioMaxDuration = 10,
-        int imuTimesteps = 2000,
-        int numVideoFrames = 2,
+        ImageBindOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ImageBindOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new ImageBindOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
-        _audioSampleRate = audioSampleRate;
-        _audioMaxDuration = audioMaxDuration;
-        _imuTimesteps = imuTimesteps;
-        _numVideoFrames = numVideoFrames;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _audioSampleRate = _options.AudioSampleRate;
+        _audioMaxDuration = _options.AudioMaxDuration;
+        _imuTimesteps = _options.ImuTimesteps;
+        _numVideoFrames = _options.NumVideoFrames;
 
         _supportedModalities = new List<ModalityType>
         {
@@ -306,7 +294,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-        InitializeNativeLayers(channels);
+        InitializeNativeLayers(_options.Channels);
     }
 
     #endregion

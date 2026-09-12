@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 448, inputWidth: 448, inputDepth: 3, outputSize: 1);
-/// var model = new SegGPT&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new SegGPT&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SegGPT&lt;double&gt;(architecture,
+///     options: new SegGPTOptions { NumClasses = 1, DropRate = 0.1, ModelSize = SegGPTModelSize.ViTLarge });
 ///
 /// // Or load a pre-trained ONNX model for example-guided segmentation
-/// var onnxModel = new SegGPT&lt;double&gt;(architecture, "seggpt.onnx", numClasses: 1);
+/// var onnxModel = new SegGPT&lt;double&gt;(architecture, "seggpt.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -87,9 +90,6 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size variant (default: ViTLarge).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -98,19 +98,18 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
     /// </remarks>
     public SegGPT(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         SegGPTOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
         // hand. `optimizer` is passed straight through INCLUDING null; the base's lazy
         // CreateDefaultOptimizer() produces the same `new AdamWOptimizer<...>(this)` default, which
         // could never be written as a base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SegGPTOptions()).NumClasses)
     {
-        _options = options ?? new SegGPTOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySegGPTInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = dropRate;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
         InitializeLayers();
     }
@@ -137,8 +136,6 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size for metadata (default: ViTLarge).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -148,16 +145,16 @@ public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SegGPT(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1, SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge,
+    public SegGPT(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         SegGPTOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SegGPTOptions()).NumClasses)
     {
-        _options = options ?? new SegGPTOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySegGPTInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = 0.1;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
         InitializeLayers();
     }

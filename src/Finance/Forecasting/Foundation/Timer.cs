@@ -367,7 +367,6 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for Timer.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -380,21 +379,20 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     public Timer(
         NeuralNetworkArchitecture<T> architecture,
         TimerOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        // Validate numFeatures before any assignments to prevent invalid layer shapes
-        if (numFeatures <= 0)
+        // Validate NumFeatures before any assignments to prevent invalid layer shapes.
+        options ??= new TimerOptions<T>();
+        if (options.NumFeatures <= 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(numFeatures),
-                numFeatures,
-                "numFeatures must be greater than 0. Timer requires at least one input feature.");
+                nameof(options),
+                options.NumFeatures,
+                "NumFeatures must be greater than 0. Timer requires at least one input feature.");
         }
 
-        options ??= new TimerOptions<T>();
         _options = options;
         Options = _options;
 
@@ -414,7 +412,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         _maskRatio = options.MaskRatio;
         _useAutoregressiveDecoding = options.UseAutoregressiveDecoding;
         _generationTemperature = options.GenerationTemperature;
-        _numFeatures = numFeatures;
+        _numFeatures = options.NumFeatures;
 
         if (_patchLength < 1)
             throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");

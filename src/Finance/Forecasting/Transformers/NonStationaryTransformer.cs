@@ -373,7 +373,12 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useDeStationaryAttention = opts.UseDeStationaryAttention;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         LastLoss = NumOps.Zero;
     }
@@ -422,7 +427,12 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useDeStationaryAttention = opts.UseDeStationaryAttention;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         LastLoss = NumOps.Zero;
 

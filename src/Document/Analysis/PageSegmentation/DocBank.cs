@@ -62,6 +62,26 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
 {
     private readonly DocBankOptions _options;
 
+    /// <summary>
+    /// Builds the model's own optimizer at the rate its options publish.
+    /// </summary>
+    /// <returns>An Adam optimizer configured from the options.</returns>
+    /// <remarks>
+    /// <para>
+    /// Both constructors previously wrote <c>new AdamOptimizer&lt;...&gt;(this)</c> with no
+    /// options, so the model trained at the optimizer's own default and DocBankOptions could not
+    /// influence it. The default is unchanged -- 1e-3 IS Adam's default -- but it is now a value
+    /// a caller can see and set.
+    /// </para>
+    /// </remarks>
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -151,10 +171,6 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     public DocBank(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 1024,
-        int backboneChannels = 256,
-        int numClasses = 13,
-        bool useTextFeatures = false,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocBankOptions? options = null)
@@ -170,14 +186,16 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _backboneChannels = backboneChannels;
-        _numClasses = numClasses;
-        _hiddenDim = 256;
-        _useTextFeatures = useTextFeatures;
+        _backboneChannels = _options.BackboneChannels;
+        _numClasses = _options.NumClasses;
+        // Previously the literal 256 here while the native constructor took it as a parameter,
+        // so the two constructors agreed only by coincidence.
+        _hiddenDim = _options.HiddenDim;
+        _useTextFeatures = _options.UseTextFeatures;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -206,11 +224,6 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     /// </remarks>
     public DocBank(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 1024,
-        int backboneChannels = 256,
-        int numClasses = 13,
-        int hiddenDim = 256,
-        bool useTextFeatures = false,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocBankOptions? options = null)
@@ -220,14 +233,14 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         Options = _options;
 
         _useNativeMode = true;
-        _backboneChannels = backboneChannels;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _useTextFeatures = useTextFeatures;
+        _backboneChannels = _options.BackboneChannels;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _useTextFeatures = _options.UseTextFeatures;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
     }

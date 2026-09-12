@@ -201,18 +201,13 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     /// Adam's own 1e-3 default because that default, combined with the absence of gradient clipping,
     /// measurably drove the memorization probe's loss UP over 100 steps. Overridable per instance.
     /// </remarks>
-    private const double DefaultLearningRate = 1e-4;
+    /// <summary>
+    /// The resolved configuration this instance was built from.
+    /// </summary>
+    private readonly SpeechEmotionRecognizerOptions _options;
 
-    private static readonly string[] DefaultEmotions =
-    [
-        "neutral",
-        "happy",
-        "sad",
-        "angry",
-        "fearful",
-        "disgusted",
-        "surprised"
-    ];
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Custom emotion labels if provided.
@@ -261,12 +256,7 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     public SpeechEmotionRecognizer(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int numMels = 80,
-        int nFft = 1024,
-        int hopLength = 256,
-        string[]? emotionLabels = null,
-        bool includeArousalValence = true)
+        SpeechEmotionRecognizerOptions? options = null)
         : base(architecture)
     {
         if (architecture is null)
@@ -274,29 +264,35 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or whitespace", nameof(modelPath));
 
+        _options = options ?? new SpeechEmotionRecognizerOptions();
+        _options.Validate();
+
         _isOnnxMode = true;
         _modelPath = modelPath;
 
         // Audio configuration
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _nFft = nFft;
-        _hopLength = hopLength;
-        _inputDurationSeconds = 3.0;
-        _includeArousalValence = includeArousalValence;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _nFft = _options.NFft;
+        _hopLength = _options.HopLength;
+        _inputDurationSeconds = _options.InputDurationSeconds;
+        _includeArousalValence = _options.IncludeArousalValence;
 
         // Emotion labels
-        _emotionLabels = emotionLabels ?? DefaultEmotions;
+        _emotionLabels = _options.GetEffectiveEmotionLabels();
         ClassLabels = _emotionLabels;
 
-        // Initialize native mode fields with defaults (not used in ONNX mode)
-        _numConvBlocks = 4;
-        _baseFilters = 32;
-        _hiddenDim = 256;
-        _dropoutRate = 0.3;
+        // The native-mode fields are unused in ONNX mode, but they are read back by
+        // GetModelMetadata, so they carry the same values the native path would use. This ctor
+        // previously hardcoded 4 convolutional blocks while the native ctor used 3 -- the two
+        // constructors described different models.
+        _numConvBlocks = _options.NumConvBlocks;
+        _baseFilters = _options.BaseFilters;
+        _hiddenDim = _options.HiddenDim;
+        _dropoutRate = _options.DropoutRate;
 
         // Create mel spectrogram extractor
-        _melSpec = CreateMelSpectrogram(sampleRate, numMels, nFft, hopLength);
+        _melSpec = CreateMelSpectrogram(_options.SampleRate, _options.NumMels, _options.NFft, _options.HopLength);
 
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath);
@@ -339,45 +335,36 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     /// </remarks>
     public SpeechEmotionRecognizer(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int numMels = 80,
-        int nFft = 1024,
-        int hopLength = 256,
-        double inputDurationSeconds = 3.0,
-        // Badshah et al. specify THREE convolutional layers; this defaulted to 4.
-        int numConvBlocks = 3,
-        int baseFilters = 32,
-        int hiddenDim = 256,
-        double dropoutRate = 0.3,
-        string[]? emotionLabels = null,
-        bool includeArousalValence = true,
         ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        double learningRate = DefaultLearningRate)
+        SpeechEmotionRecognizerOptions? options = null)
         : base(architecture)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
 
+        _options = options ?? new SpeechEmotionRecognizerOptions();
+        _options.Validate();
+
         _isOnnxMode = false;
         _modelPath = null;
 
         // Audio configuration
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _nFft = nFft;
-        _hopLength = hopLength;
-        _inputDurationSeconds = inputDurationSeconds;
-        _includeArousalValence = includeArousalValence;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _nFft = _options.NFft;
+        _hopLength = _options.HopLength;
+        _inputDurationSeconds = _options.InputDurationSeconds;
+        _includeArousalValence = _options.IncludeArousalValence;
 
         // Architecture configuration
-        _numConvBlocks = numConvBlocks;
-        _baseFilters = baseFilters;
-        _hiddenDim = hiddenDim;
-        _dropoutRate = dropoutRate;
+        _numConvBlocks = _options.NumConvBlocks;
+        _baseFilters = _options.BaseFilters;
+        _hiddenDim = _options.HiddenDim;
+        _dropoutRate = _options.DropoutRate;
 
         // Emotion labels
-        _emotionLabels = emotionLabels ?? DefaultEmotions;
+        _emotionLabels = _options.GetEffectiveEmotionLabels();
         ClassLabels = _emotionLabels;
 
         // Set loss function
@@ -408,13 +395,13 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = learningRate,
+                InitialLearningRate = _options.LearningRate,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                MaxGradientNorm = _options.MaxGradNorm
             }));
 
         // Create mel spectrogram extractor
-        _melSpec = CreateMelSpectrogram(sampleRate, numMels, nFft, hopLength);
+        _melSpec = CreateMelSpectrogram(_options.SampleRate, _options.NumMels, _options.NFft, _options.HopLength);
 
         // Initialize layers
         InitializeLayers();

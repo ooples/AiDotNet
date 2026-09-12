@@ -119,9 +119,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public CLAPModel(
         NeuralNetworkArchitecture<T> architecture,
         string audioEncoderPath,
-        string? textEncoderPath = null,
         CLAPModelOptions? options = null)
-        : base(architecture)
+        : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
@@ -129,16 +128,22 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         if (!File.Exists(audioEncoderPath))
             throw new FileNotFoundException($"Audio encoder ONNX model not found: {audioEncoderPath}", audioEncoderPath);
 
+        // Validated after the audio-encoder path check so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options. It must still
+        // precede the text-encoder check below, which reads _options.TextEncoderPath and so
+        // needs the options to be valid first.
+        _options.Validate();
+
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
         _audioEncoderPath = audioEncoderPath;
-        _textEncoderPath = textEncoderPath;
+        _textEncoderPath = _options.TextEncoderPath;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
         // Fail fast when a text-encoder path is provided but invalid — the
         // earlier "try-and-skip" path silently dropped a mistyped path and
         // only surfaced as a NotSupportedException deep inside EncodeText().
         // Pattern-matches into a non-null local for net471 nullable-flow.
-        if (textEncoderPath is { Length: > 0 } pathLocal
+        if (_options.TextEncoderPath is { Length: > 0 } pathLocal
             && !string.IsNullOrWhiteSpace(pathLocal))
         {
             if (!File.Exists(pathLocal))
@@ -160,9 +165,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public CLAPModel(
         NeuralNetworkArchitecture<T> architecture,
         CLAPModelOptions? options = null)
-        : base(architecture)
+        : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        _options.Validate();
         SampleRate = _options.SampleRate;
         _useNativeMode = true;
 

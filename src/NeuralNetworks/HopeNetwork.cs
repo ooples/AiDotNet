@@ -87,17 +87,13 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public HopeNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public HopeNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int hiddenDim = 256,
-        int numCMSLevels = 4,
-        int numRecurrentLayers = 3,
-        int inContextLearningLevels = 5,
         HopeNetworkOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm: 1.0)
     {
+        options ??= new HopeNetworkOptions();
         // Adam with eps=1e-6 (paper-standard for transformers / recurrent
         // self-modifying nets, e.g. Vaswani et al. 2017 §5.4 explicitly
         // raises eps over the original Kingma & Ba 2014 default of 1e-8
@@ -129,24 +125,24 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
                 Epsilon = DefaultHopeAdamEpsilon,
                 InitialLearningRate = DefaultHopeAdamInitialLearningRate,
             });
-        _options = options ?? new HopeNetworkOptions();
+        _options = options;
         Options = _options;
-        _hiddenDim = hiddenDim;
-        _numCMSLevels = numCMSLevels;
-        _numRecurrentLayers = numRecurrentLayers;
-        _inContextLearningLevels = inContextLearningLevels;
+        _hiddenDim = options.HiddenDim;
+        _numCMSLevels = options.NumCMSLevels;
+        _numRecurrentLayers = options.NumRecurrentLayers;
+        _inContextLearningLevels = options.InContextLearningLevels;
         _adaptationStep = 0;
         _selfModificationRate = _numOps.FromDouble(0.01);
 
         // Initialize arrays to avoid non-nullable warnings
-        _cmsBlocks = new ContinuumMemorySystemLayer<T>[numCMSLevels];
-        _recurrentLayers = new RecurrentLayer<T>[numRecurrentLayers];
+        _cmsBlocks = new ContinuumMemorySystemLayer<T>[options.NumCMSLevels];
+        _recurrentLayers = new RecurrentLayer<T>[options.NumRecurrentLayers];
 
         // Initialize context flow for multi-level optimization
-        _contextFlow = new ContextFlow<T>(hiddenDim, inContextLearningLevels);
+        _contextFlow = new ContextFlow<T>(options.HiddenDim, options.InContextLearningLevels);
 
         // Initialize associative memory (models backprop as associative memory)
-        _associativeMemory = new AssociativeMemory<T>(hiddenDim, capacity: 10000);
+        _associativeMemory = new AssociativeMemory<T>(options.HiddenDim, capacity: 10000);
 
         InitializeLayers();
     }

@@ -129,16 +129,10 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     public TRIE(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 512,
-        int visualDim = 256,
-        int textDim = 256,
-        int graphDim = 256,
-        int numEntityTypes = 10,
-        int maxEntities = 100,
+        TRIEOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        TRIEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new TRIEOptions();
         Options = _options;
@@ -149,14 +143,18 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _visualDim = visualDim;
-        _textDim = textDim;
-        _graphDim = graphDim;
-        _numEntityTypes = numEntityTypes;
-        _maxEntities = maxEntities;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _visualDim = _options.VisualDim;
+        _textDim = _options.TextDim;
+        _graphDim = _options.GraphDim;
+        _numEntityTypes = _options.NumEntityTypes;
+        _maxEntities = _options.MaxEntities;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -177,29 +175,24 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     /// </remarks>
     public TRIE(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 512,
-        int visualDim = 256,
-        int textDim = 256,
-        int graphDim = 256,
-        int numEntityTypes = 10,
-        int maxEntities = 100,
+        TRIEOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        TRIEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new TRIEOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _visualDim = visualDim;
-        _textDim = textDim;
-        _graphDim = graphDim;
-        _numEntityTypes = numEntityTypes;
-        _maxEntities = maxEntities;
+        _visualDim = _options.VisualDim;
+        _textDim = _options.TextDim;
+        _graphDim = _options.GraphDim;
+        _numEntityTypes = _options.NumEntityTypes;
+        _maxEntities = _options.MaxEntities;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
     }

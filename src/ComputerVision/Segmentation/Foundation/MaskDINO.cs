@@ -122,27 +122,34 @@ public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 80,
-        int numQueries = 300,
-        MaskDINOModelSize modelSize = MaskDINOModelSize.R50,
-        double dropRate = 0.1,
         MaskDINOOptions? options = null)
-        // The base resolves numClasses/native-mode/optimizer. `optimizer` is passed straight through,
+        : this(options ?? new MaskDINOOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    private MaskDINO(
+        MaskDINOOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+
+        // The base resolves options.NumClasses/native-mode/optimizer. `optimizer` is passed straight through,
         // INCLUDING null: the base defaults it lazily via CreateDefaultOptimizer(), which is the one
         // thing `optimizer ?? new AdamWOptimizer<...>(this)` could never do in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new MaskDINOOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
         // Mask DINO's own detection-scale defaults, which differ from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1333;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -166,24 +173,31 @@ public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
     public MaskDINO(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 80,
-        int numQueries = 300,
-        MaskDINOModelSize modelSize = MaskDINOModelSize.R50,
         MaskDINOOptions? options = null)
+        : this(options ?? new MaskDINOOptions(), architecture, onnxModelPath)
+    {
+    }
+
+    private MaskDINO(
+        MaskDINOOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new MaskDINOOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1333;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
         _dropRate = 0.0;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }

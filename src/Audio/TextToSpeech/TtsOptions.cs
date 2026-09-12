@@ -1,6 +1,8 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
+using AiDotNet.Audio.TextToSpeech;
+
 namespace AiDotNet.Audio.TextToSpeech;
 
 /// <summary>
@@ -18,10 +20,29 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// and the vocoder makes it actually sound like speech.
 /// </para>
 /// </remarks>
-public class TtsOptions : ModelOptions
+public class TtsOptions : AudioNeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public TtsOptions() { }
+    public TtsOptions()
+    {
+        VocoderModelPath = null;
+        SampleRate = 22050;
+        NumMels = 80;
+        SpeakingRate = 1.0;
+        PitchShift = 0.0;
+        Energy = 1.0;
+        SpeakerId = null;
+        Language = null;
+        UseGriffinLimFallback = true;
+        GriffinLimIterations = 60;
+        FftSize = 1024;
+        HopLength = 256;
+        HiddenDim = 256;
+        NumHeads = 4;
+        NumEncoderLayers = 4;
+        NumDecoderLayers = 4;
+        MaxPhonemeLength = 256;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -46,6 +67,11 @@ public class TtsOptions : ModelOptions
         NumMels = other.NumMels;
         FftSize = other.FftSize;
         HopLength = other.HopLength;
+        HiddenDim = other.HiddenDim;
+        NumHeads = other.NumHeads;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        MaxPhonemeLength = other.MaxPhonemeLength;
     }
 
     /// <summary>
@@ -120,4 +146,40 @@ public class TtsOptions : ModelOptions
     /// Gets or sets the hop length.
     /// </summary>
     public int HopLength { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets the hidden dim.
+    /// </summary>
+    public int HiddenDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num heads.
+    /// </summary>
+    public int NumHeads { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num encoder layers.
+    /// </summary>
+    public int NumEncoderLayers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num decoder layers.
+    /// </summary>
+    public int NumDecoderLayers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the max phoneme length.
+    /// </summary>
+    public int MaxPhonemeLength { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

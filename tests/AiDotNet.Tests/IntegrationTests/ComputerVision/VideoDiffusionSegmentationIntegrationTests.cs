@@ -33,7 +33,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DEVA_Construction_Succeeds()
     {
-        var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
+        var model = new DEVA<double>(Arch(), options: new DEVAOptions { ModelSize = DEVAModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -41,7 +41,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DEVA_Predict_ReturnsOutput()
     {
-        var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
+        var model = new DEVA<double>(Arch(), options: new DEVAOptions { ModelSize = DEVAModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -50,7 +50,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DEVA_Train_DoesNotThrow()
     {
-        var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
+        var model = new DEVA<double>(Arch(), options: new DEVAOptions { ModelSize = DEVAModelSize.Base });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -71,7 +71,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task EfficientTAM_Construction_Succeeds()
     {
-        var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
+        var model = new EfficientTAM<double>(Arch(), options: new EfficientTAMOptions { ModelSize = EfficientTAMModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -79,7 +79,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task EfficientTAM_Predict_ReturnsOutput()
     {
-        var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
+        var model = new EfficientTAM<double>(Arch(), options: new EfficientTAMOptions { ModelSize = EfficientTAMModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -99,7 +99,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task UniVS_Construction_Succeeds()
     {
-        var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
+        var model = new UniVS<double>(Arch(), options: new UniVSOptions { ModelSize = UniVSModelSize.R50 });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -107,7 +107,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task UniVS_Predict_ReturnsOutput()
     {
-        var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
+        var model = new UniVS<double>(Arch(), options: new UniVSOptions { ModelSize = UniVSModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

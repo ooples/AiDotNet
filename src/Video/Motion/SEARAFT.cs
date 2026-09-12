@@ -86,16 +86,15 @@ public partial class SEARAFT<T> : OpticalFlowBase<T>
 
     public SEARAFT(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
         SEARAFTOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new SEARAFTOptions();
+        _options.Validate();
         Options = _options;
 
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
+        _numFeatures = _options.NumFeatures;
+        _numLayers = _options.NumLayers;
         _processingBlocks = [];
 
         InitializeNativeLayers(architecture);

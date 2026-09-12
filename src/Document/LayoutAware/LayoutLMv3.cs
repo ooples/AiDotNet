@@ -164,17 +164,10 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 17,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 50265,
+        LayoutLMv3Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMv3Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMv3Options();
         Options = _options;
@@ -188,17 +181,21 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _patchSize = 16; // Default patch size for LayoutLMv3
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        Guard.Positive(imageSize, nameof(imageSize));
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        Guard.Positive(_options.ImageSize, nameof(_options.ImageSize));
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -233,34 +230,27 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     /// </remarks>
     public LayoutLMv3(
         NeuralNetworkArchitecture<T> architecture,
+        LayoutLMv3Options? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 17,
-        int imageSize = 224,
-        int patchSize = 16,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 50265,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMv3Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMv3Options();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _patchSize = patchSize;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _patchSize = _options.PatchSize;
 
-        Guard.Positive(imageSize, nameof(imageSize));
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        Guard.Positive(_options.ImageSize, nameof(_options.ImageSize));
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.RoBERTa);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

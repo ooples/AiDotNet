@@ -1,6 +1,8 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
+using AiDotNet.Audio.AudioGen;
+
 namespace AiDotNet.Audio.AudioGen;
 
 /// <summary>
@@ -21,10 +23,28 @@ namespace AiDotNet.Audio.AudioGen;
 /// - "Crowd cheering at a sports event"
 /// </para>
 /// </remarks>
-public class AudioGenOptions : ModelOptions
+public class AudioGenOptions : AudioNeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public AudioGenOptions() { }
+    public AudioGenOptions()
+    {
+        ModelSize = AudioGenModelSize.Medium;
+        SampleRate = 32000;
+        DurationSeconds = 5.0;
+        MaxDurationSeconds = 30.0;
+        Temperature = 1.0;
+        TopK = 250;
+        TopP = 0.0;
+        GuidanceScale = 3.0;
+        Channels = 1;
+        TextHiddenDim = 0;
+        LmHiddenDim = 0;
+        NumLmLayers = 0;
+        NumHeads = 0;
+        NumCodebooks = 4;
+        CodebookSize = 1024;
+        MaxTextLength = 256;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -48,6 +68,13 @@ public class AudioGenOptions : ModelOptions
         LanguageModelPath = other.LanguageModelPath;
         AudioCodecPath = other.AudioCodecPath;
         OnnxOptions = other.OnnxOptions;
+        TextHiddenDim = other.TextHiddenDim;
+        LmHiddenDim = other.LmHiddenDim;
+        NumLmLayers = other.NumLmLayers;
+        NumHeads = other.NumHeads;
+        NumCodebooks = other.NumCodebooks;
+        CodebookSize = other.CodebookSize;
+        MaxTextLength = other.MaxTextLength;
     }
 
     /// <summary>
@@ -123,4 +150,50 @@ public class AudioGenOptions : ModelOptions
     /// Gets or sets the ONNX execution options.
     /// </summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the text hidden dim.
+    /// </summary>
+    public int TextHiddenDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the lm hidden dim.
+    /// </summary>
+    public int LmHiddenDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num lm layers.
+    /// </summary>
+    public int NumLmLayers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num heads.
+    /// </summary>
+    public int NumHeads { get; set; }
+
+    /// <summary>
+    /// Gets or sets the num codebooks.
+    /// </summary>
+    public int NumCodebooks { get; set; }
+
+    /// <summary>
+    /// Gets or sets the codebook size.
+    /// </summary>
+    public int CodebookSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets the max text length.
+    /// </summary>
+    public int MaxTextLength { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

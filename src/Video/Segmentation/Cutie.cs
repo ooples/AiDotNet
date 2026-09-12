@@ -213,26 +213,25 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
 
     public Cutie(
         NeuralNetworkArchitecture<T> architecture,
+        CutieOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 256,
-        int memorySize = 50,
-        CutieOptions? options = null)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new CutieOptions();
+        _options.Validate();
         Options = _options;
-        if (numFeatures < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Feature dimension must be at least 1.");
-        if (memorySize < 1)
-            throw new ArgumentOutOfRangeException(nameof(memorySize), memorySize, "Memory size must be at least 1.");
+        if (_options.NumFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFeatures), _options.NumFeatures, "Feature dimension must be at least 1.");
+        if (_options.MemorySize < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.MemorySize), _options.MemorySize, "Memory size must be at least 1.");
 
         _useNativeMode = true;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _memorySize = memorySize;
+        _numFeatures = _options.NumFeatures;
+        _memorySize = _options.MemorySize;
         _memoryBank = [];
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
@@ -264,9 +263,8 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     public Cutie(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int memorySize = 50,
         CutieOptions? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new CutieOptions();
         Options = _options;
@@ -281,7 +279,11 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numFeatures = 256;
-        _memorySize = memorySize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _memorySize = _options.MemorySize;
         _memoryBank = [];
         _lossFunction = new BinaryCrossEntropyLoss<T>();
 

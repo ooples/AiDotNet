@@ -196,28 +196,26 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
 
     public AnimateDiff(
         NeuralNetworkArchitecture<T> architecture,
+        AnimateDiffOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int inputChannels = 320,
-        int numLayers = 8,
-        int numFrames = 16,
-        AnimateDiffOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new AnimateDiffOptions();
+        _options.Validate();
         Options = _options;
 
-        if (inputChannels < 1)
-            throw new ArgumentOutOfRangeException(nameof(inputChannels), inputChannels, "Input channels must be at least 1.");
-        if (numLayers < 1)
-            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be at least 1.");
-        if (numFrames < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFrames), numFrames, "Number of frames must be at least 1.");
+        if (_options.InputChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.InputChannels), _options.InputChannels, "Input channels must be at least 1.");
+        if (_options.NumLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumLayers), _options.NumLayers, "Number of layers must be at least 1.");
+        if (_options.NumFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFrames), _options.NumFrames, "Number of frames must be at least 1.");
 
         _useNativeMode = true;
-        _inputChannels = inputChannels;
-        _numLayers = numLayers;
-        _numFrames = numFrames;
+        _inputChannels = _options.InputChannels;
+        _numLayers = _options.NumLayers;
+        _numFrames = _options.NumFrames;
         _featureHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _featureWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
 
@@ -250,9 +248,8 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
     public AnimateDiff(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numFrames = 16,
         AnimateDiffOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new AnimateDiffOptions();
         Options = _options;
@@ -266,7 +263,11 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _inputChannels = 320;
         _numLayers = 8;
-        _numFrames = numFrames;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numFrames = _options.NumFrames;
         _featureHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _featureWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
         _lossFunction = new MeanSquaredErrorLoss<T>();

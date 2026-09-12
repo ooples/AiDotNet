@@ -110,7 +110,8 @@ public class AdversarialRobustnessIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ImageEvaluator_CustomThreshold_Works()
     {
-        var evaluator = new AdversarialImageEvaluator<double>(threshold: 0.3);
+        var evaluator = new AdversarialImageEvaluator<double>(
+            options: new AdversarialImageEvaluatorOptions { Threshold = 0.3 });
         var data = new double[3 * 16 * 16];
         var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();

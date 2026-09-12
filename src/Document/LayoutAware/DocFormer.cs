@@ -147,18 +147,10 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 16,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int spatialDim = 128,
+        DocFormerOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DocFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocFormerOptions();
         Options = _options;
@@ -171,12 +163,16 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _spatialDim = spatialDim;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _spatialDim = _options.SpatialDim;
         // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
         // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
         // optimizer injectable so callers can fully customize the training recipe.
@@ -190,8 +186,8 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
                 MaxGradientNorm = 1.0
             });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -226,30 +222,23 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// </remarks>
     public DocFormer(
         NeuralNetworkArchitecture<T> architecture,
+        DocFormerOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 16,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int spatialDim = 128,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DocFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocFormerOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _spatialDim = spatialDim;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _spatialDim = _options.SpatialDim;
         // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
         // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
         // optimizer injectable so callers can fully customize the training recipe.
@@ -263,8 +252,8 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
                 MaxGradientNorm = 1.0
             });
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

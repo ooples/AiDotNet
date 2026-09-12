@@ -77,7 +77,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
         var (depth, width) = GetSizeConfig(options.Size);
 
         // Initialize backbone with higher capacity for PGI
-        Backbone = new CSPDarknet<T>(depth: depth * 1.2, widthMultiplier: width);
+        Backbone = new CSPDarknet<T>(options: new CSPDarknetOptions { Depth = depth * 1.2, WidthMultiplier = width });
 
         // Initialize GELAN-enhanced neck
         Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));

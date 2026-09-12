@@ -70,34 +70,28 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// <summary>
     /// Creates a new CSP-Darknet backbone.
     /// </summary>
-    /// <param name="depth">Depth multiplier for number of blocks (default 1.0 = medium).</param>
-    /// <param name="widthMultiplier">Width multiplier for channel counts (default 1.0 = medium).</param>
-    /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     /// <param name="activation">
     /// Activation function applied throughout the network. <c>null</c> resolves to
     /// the YOLOv4 paper default <see cref="SiLUActivation{T}"/>.
     /// </param>
-    public CSPDarknet(
-        double depth = 1.0,
-        double widthMultiplier = 1.0,
-        int inChannels = 3,
-        IActivationFunction<T>? activation = null)
+    public CSPDarknet(IActivationFunction<T>? activation = null,
+        CSPDarknetOptions? options = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: inChannels,
+                channels: (options ??= new CSPDarknetOptions()).InChannels,
                 outputSize: 1),
               new MeanSquaredErrorLoss<T>())
     {
-        _depthOriginal = depth;
-        _depth = Math.Max(1, (int)Math.Round(depth));
-        _widthMultiplier = widthMultiplier;
-        _inChannels = inChannels;
+        _depthOriginal = options.Depth;
+        _depth = Math.Max(1, (int)Math.Round(options.Depth));
+        _widthMultiplier = options.WidthMultiplier;
+        _inChannels = options.InChannels;
         _activation = activation ?? new SiLUActivation<T>();
         _stages = new List<CSPBlock<T>>();
 
         int[] baseChannels = { 64, 128, 256, 512 };
-        _stageChannels = baseChannels.Select(c => (int)(c * widthMultiplier)).ToArray();
+        _stageChannels = baseChannels.Select(c => (int)(c * options.WidthMultiplier)).ToArray();
         OutputChannels = new[] { _stageChannels[1], _stageChannels[2], _stageChannels[3] };
 
         _stem = new ConvolutionalLayer<T>(outputDepth: _stageChannels[0] / 2, kernelSize: 3, stride: 2, padding: 1);

@@ -165,25 +165,43 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
 
     public GraphIsomorphismNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int mlpHiddenDim = 64,
-        int numLayers = 5,
-        bool learnEpsilon = true,
-        double initialEpsilon = 0.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         ILearningRateScheduler? learningRateScheduler = null,
         GraphIsomorphismNetworkOptions? options = null)
+        : this(options ?? new GraphIsomorphismNetworkOptions(), architecture, optimizer, lossFunction, learningRateScheduler)
+    {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must
+    /// be resolved first. Chaining avoids constructing a throwaway options object just to
+    /// read one value off it. Options come first because a nullable and a non-nullable
+    /// reference type are the same type to the compiler, so ordering is what keeps this from
+    /// being a duplicate signature.
+    /// </para>
+    /// </remarks>
+    private GraphIsomorphismNetwork(
+        GraphIsomorphismNetworkOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction,
+        ILearningRateScheduler? learningRateScheduler)
         : base(architecture,
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
-               maxGradNorm)
+               options.MaxGradNorm)
     {
-        _options = options ?? new GraphIsomorphismNetworkOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        LearnEpsilon = learnEpsilon;
-        InitialEpsilon = initialEpsilon;
-        MlpHiddenDim = mlpHiddenDim;
-        NumLayers = numLayers;
+        LearnEpsilon = _options.LearnEpsilon;
+        InitialEpsilon = _options.InitialEpsilon;
+        MlpHiddenDim = _options.MlpHiddenDim;
+        NumLayers = _options.NumLayers;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

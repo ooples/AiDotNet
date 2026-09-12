@@ -39,7 +39,8 @@ public class AdversarialImageEvaluatorTests : NeuralNetworkModelTestBase<float>
     protected override double TrainingErrorMultiplier => 100.0;
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new AdversarialImageEvaluator<float>(threshold: 0.5);
+        => new AdversarialImageEvaluator<float>(
+            options: new AdversarialImageEvaluatorOptions { Threshold = 0.5 });
 
     /// <summary>
     /// Override the base "different uniform inputs → different outputs"

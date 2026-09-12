@@ -153,7 +153,6 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <param name="options">TabDDPM-specific options for diffusion and MLP configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -166,15 +165,13 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
     }
 
-    public TabDDPMGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabDDPMGenerator(NeuralNetworkArchitecture<T> architecture,
         TabDDPMOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabDDPMOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabDDPMOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -308,9 +305,10 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region ISyntheticTabularGenerator<T> Implementation
 
     /// <inheritdoc/>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -339,7 +337,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         SetTrainingMode(true);
         try
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 for (int batch = 0; batch < numBatches; batch++)
                 {
@@ -358,9 +356,10 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc/>
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -387,7 +386,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             SetTrainingMode(true);
             try
             {
-                for (int epoch = 0; epoch < epochs; epoch++)
+                for (int epoch = 0; epoch < epochCount; epoch++)
                 {
                     ct.ThrowIfCancellationRequested();
                     for (int batch = 0; batch < numBatches; batch++)

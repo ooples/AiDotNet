@@ -273,12 +273,9 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     public DeepFilterNet(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 48000,
-        int fftSize = 960,
-        int hopSize = 480,
-        OnnxModelOptions? onnxOptions = null,
-        DeepFilterNetOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        DeepFilterNetOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DeepFilterNetOptions();
         Options = _options;
@@ -287,9 +284,13 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model file not found: {modelPath}");
 
-        SampleRate = sampleRate;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        SampleRate = _options.SampleRate;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
         _numErbBands = 32;
         _hiddenDim = 96;
         _dfOrder = 5;
@@ -346,31 +347,23 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// </remarks>
     public DeepFilterNet(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 48000,
-        int numErbBands = 32,
-        int hiddenDim = 96,
-        int dfOrder = 5,
-        int dfBins = 96,
-        int numGruLayers = 2,
-        int fftSize = 960,
-        int hopSize = 480,
-        int lookahead = 2,
+        DeepFilterNetOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DeepFilterNetOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DeepFilterNetOptions();
+        _options.Validate();
         Options = _options;
-        SampleRate = sampleRate;
-        _numErbBands = numErbBands;
-        _hiddenDim = hiddenDim;
-        _dfOrder = dfOrder;
-        _dfBins = dfBins;
-        _numGruLayers = numGruLayers;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
-        _lookahead = lookahead;
+        SampleRate = _options.SampleRate;
+        _numErbBands = _options.NumErbBands;
+        _hiddenDim = _options.HiddenDim;
+        _dfOrder = _options.DfOrder;
+        _dfBins = _options.DfBins;
+        _numGruLayers = _options.NumGruLayers;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
+        _lookahead = _options.Lookahead;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

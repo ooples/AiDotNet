@@ -8,10 +8,14 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the GroundedSAM2 model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class GroundedSAM2Options : NeuralNetworkOptions
+public class GroundedSAM2Options : SegmentationModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public GroundedSAM2Options() { }
+    public GroundedSAM2Options()
+    {
+        NumClasses = 1;
+        DropRate = 0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -23,6 +27,9 @@ public class GroundedSAM2Options : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        MaxGradNorm = other.MaxGradNorm;
+        NumClasses = other.NumClasses;
+        DropRate = other.DropRate;
         VisionDim = other.VisionDim;
         DecoderDim = other.DecoderDim;
         NumVisionLayers = other.NumVisionLayers;
@@ -83,4 +90,13 @@ public class GroundedSAM2Options : NeuralNetworkOptions
     /// <para>Default 16 follows the SAM / ViT-B patch size used by Grounded SAM 2 (Ravi et al., 2024, "SAM 2"; Dosovitskiy et al., 2021, "ViT").</para>
     /// </remarks>
     public int PatchSize { get; set; } = 16;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
+    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// </exception>
+    public void Validate() => ValidateSegmentationCore();
 }

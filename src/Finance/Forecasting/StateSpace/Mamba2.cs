@@ -155,10 +155,8 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     /// <summary>
     /// Initializes a new instance in native mode for training.
     /// </summary>
-    public Mamba2(
-        NeuralNetworkArchitecture<T> architecture,
+    public Mamba2(NeuralNetworkArchitecture<T> architecture,
         Mamba2Options<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -170,7 +168,7 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new Mamba2Options<T>()).NumFeatures;
         InitializeLayers();
     }
 

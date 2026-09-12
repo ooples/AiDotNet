@@ -259,32 +259,29 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
 
     public CogVideo(
         NeuralNetworkArchitecture<T> architecture,
+        CogVideoOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 1024,
-        int numLayers = 24,
-        int numFrames = 16,
-        int numTimesteps = 1000,
-        CogVideoOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new CogVideoOptions();
+        _options.Validate();
         Options = _options;
 
-        if (embedDim < 1)
-            throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
-        if (numLayers < 1)
-            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be at least 1.");
-        if (numFrames < 1)
-            throw new ArgumentOutOfRangeException(nameof(numFrames), numFrames, "Number of frames must be at least 1.");
-        if (numTimesteps < 1)
-            throw new ArgumentOutOfRangeException(nameof(numTimesteps), numTimesteps, "Number of timesteps must be at least 1.");
+        if (_options.EmbedDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbedDim), _options.EmbedDim, "Embedding dimension must be at least 1.");
+        if (_options.NumLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumLayers), _options.NumLayers, "Number of layers must be at least 1.");
+        if (_options.NumFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFrames), _options.NumFrames, "Number of frames must be at least 1.");
+        if (_options.NumTimesteps < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumTimesteps), _options.NumTimesteps, "Number of timesteps must be at least 1.");
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numLayers = numLayers;
-        _numFrames = numFrames;
-        _numTimesteps = numTimesteps;
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
+        _numFrames = _options.NumFrames;
+        _numTimesteps = _options.NumTimesteps;
         _latentHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 32;
         _latentWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 32;
         _latentChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 4;
@@ -319,10 +316,8 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     public CogVideo(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numFrames = 16,
-        int numTimesteps = 1000,
         CogVideoOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new CogVideoOptions();
         Options = _options;
@@ -336,8 +331,12 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _embedDim = 1024;
         _numLayers = 24;
-        _numFrames = numFrames;
-        _numTimesteps = numTimesteps;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numFrames = _options.NumFrames;
+        _numTimesteps = _options.NumTimesteps;
         _latentHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 32;
         _latentWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 32;
         _latentChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 4;

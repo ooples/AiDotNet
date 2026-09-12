@@ -58,29 +58,25 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     /// <summary>
     /// Creates a new EfficientNet backbone.
     /// </summary>
-    /// <param name="variant">EfficientNet variant (B0-B7).</param>
-    /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     /// <param name="activation">
     /// Activation throughout stem + MBConv + SE blocks. <c>null</c> resolves
     /// to the EfficientNet paper default <see cref="SwishActivation{T}"/>.
     /// </param>
-    public EfficientNet(
-        EfficientNetVariant variant = EfficientNetVariant.B0,
-        int inChannels = 3,
-        IActivationFunction<T>? activation = null)
+    public EfficientNet(IActivationFunction<T>? activation = null,
+        EfficientNetBackboneOptions? options = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: inChannels,
+                channels: (options ??= new EfficientNetBackboneOptions()).InChannels,
                 outputSize: 1),
               new MeanSquaredErrorLoss<T>())
     {
-        _variant = variant;
-        _inChannels = inChannels;
+        _variant = options.Variant;
+        _inChannels = options.InChannels;
         _activation = activation ?? new SwishActivation<T>();
         _blocks = new List<MBConvBlock<T>>();
 
-        var (widthMult, depthMult) = GetScalingFactors(variant);
+        var (widthMult, depthMult) = GetScalingFactors(options.Variant);
 
         var blockConfigs = new[]
         {

@@ -33,18 +33,17 @@ public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    public DistilledT5TextConditioner(
-        ITokenizer tokenizer,
-        DistilledT5Variant variant = DistilledT5Variant.Base,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public DistilledT5TextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DistilledT5TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new DistilledT5TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new DistilledT5TextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -58,7 +57,7 @@ public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new DistilledT5TextConditioner<T>(tokenizer, variant);
+        return new DistilledT5TextConditioner<T>(tokenizer, options: new DistilledT5TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

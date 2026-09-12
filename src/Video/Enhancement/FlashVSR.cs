@@ -110,7 +110,12 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new FlashVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumInputFrames;
         InitializeLayers();

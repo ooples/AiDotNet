@@ -270,7 +270,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">ScoreGrad-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -282,7 +281,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     public ScoreGrad(
         NeuralNetworkArchitecture<T> architecture,
         ScoreGradOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -295,7 +293,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
-        _numFeatures = numFeatures > 0 ? numFeatures : _options.NumFeatures;
+        _numFeatures = _options.NumFeatures;
         _hiddenDimension = _options.HiddenDimension;
         _numLayers = _options.NumLayers;
         _numNoiseScales = _options.NumNoiseScales;

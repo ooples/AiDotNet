@@ -5,6 +5,6 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the FeedForwardNeuralNetwork.
 /// </summary>
-public class FeedForwardNeuralNetworkOptions : NeuralNetworkOptions
+public class FeedForwardNeuralNetworkOptions : ModelHyperparameterOptions
 {
 }

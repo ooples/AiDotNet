@@ -115,8 +115,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         /// <param name="architecture">The neural network architecture for the solution.</param>
         /// <param name="weakFormResidual">The weak form residual: R(x, u, ∇u, v, ∇v).</param>
-        /// <param name="numQuadraturePoints">Number of quadrature points for integration.</param>
-        /// <param name="numTestFunctions">Number of test functions to use.</param>
         /// <remarks>
         /// For Beginners:
         /// The weak form residual should encode the variational formulation of your PDE.
@@ -131,21 +129,19 @@ namespace AiDotNet.PhysicsInformed.PINNs
         ///
         /// The method integrates this over the domain using numerical quadrature.
         /// </remarks>
-        public VariationalPINN(
-            NeuralNetworkArchitecture<T> architecture,
+        public VariationalPINN(NeuralNetworkArchitecture<T> architecture,
             Func<T[], T[], T[,], T[], T[,], T> weakFormResidual,
-            int numQuadraturePoints = 10000,
-            int numTestFunctions = 10,
             VariationalPINNOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new VariationalPINNOptions();
+            options ??= new VariationalPINNOptions();
+            _options = options;
             Options = _options;
 
             Guard.NotNull(weakFormResidual);
             _weakFormResidual = weakFormResidual;
-            _numTestFunctions = numTestFunctions;
-            _numQuadraturePoints = numQuadraturePoints;
+            _numTestFunctions = options.NumTestFunctions;
+            _numQuadraturePoints = options.NumQuadraturePoints;
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = true;
 

@@ -68,14 +68,8 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public ZambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 32000,
-        int modelDimension = 3712,
-        int numLayers = 76,
-        int stateDimension = 16,
-        int attentionInterval = 6,
-        int maxSeqLength = 4096,
-        ILossFunction<T>? lossFunction = null,
-        ZambaOptions? options = null)
+        ZambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Zamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateZambaLayers), so the loss must be cross-entropy-with-logits (fused
@@ -87,13 +81,14 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ZambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _attentionInterval = attentionInterval;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _attentionInterval = _options.AttentionInterval;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

@@ -192,22 +192,12 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         string encoderPath,
         string decoderPath,
         ITokenizer tokenizer,
-        int imageHeight = 1920,
-        int imageWidth = 2560,
-        int maxGenerationLength = 768,
-        int embedDim = 128,
+        DonutOptions? options = null,
         int[]? depths = null,
         int[]? numHeads = null,
-        int windowSize = 10,
-        int patchSize = 4,
-        int decoderHiddenDim = 1024,
-        int numDecoderLayers = 4,
-        int decoderHeads = 16,
-        int vocabSize = 57522,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DonutOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DonutOptions();
         Options = _options;
@@ -230,21 +220,25 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         // Swin-B defaults from Donut paper
         _depths = depths ?? [2, 2, 14, 2];
         _numHeads = numHeads ?? [4, 8, 16, 32];
-        _embedDim = embedDim;
-        _windowSize = windowSize;
-        _patchSize = patchSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _embedDim = _options.EmbedDim;
+        _windowSize = _options.WindowSize;
+        _patchSize = _options.PatchSize;
         _mlpRatio = 4;
-        _decoderHiddenDim = decoderHiddenDim;
-        _numDecoderLayers = numDecoderLayers;
-        _decoderHeads = decoderHeads;
-        _vocabSize = vocabSize;
-        _maxGenerationLength = maxGenerationLength;
+        _decoderHiddenDim = _options.DecoderHiddenDim;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _decoderHeads = _options.DecoderHeads;
+        _vocabSize = _options.VocabSize;
+        _maxGenerationLength = _options.MaxGenerationLength;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = Math.Max(imageHeight, imageWidth);
-        ImageHeight = imageHeight;
-        ImageWidth = imageWidth;
-        MaxSequenceLength = maxGenerationLength;
+        ImageSize = Math.Max(_options.ImageHeight, _options.ImageWidth);
+        ImageHeight = _options.ImageHeight;
+        ImageWidth = _options.ImageWidth;
+        MaxSequenceLength = _options.MaxGenerationLength;
 
         _onnxEncoderSession = new InferenceSession(encoderPath);
         _onnxDecoderSession = new InferenceSession(decoderPath);
@@ -283,26 +277,16 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// </remarks>
     public Donut(
         NeuralNetworkArchitecture<T> architecture,
+        DonutOptions? options = null,
         ITokenizer? tokenizer = null,
-        int imageHeight = 1920,
-        int imageWidth = 2560,
-        int maxGenerationLength = 768,
-        int embedDim = 128,
         int[]? depths = null,
         int[]? numHeads = null,
-        int windowSize = 10,
-        int patchSize = 4,
-        int mlpRatio = 4,
-        int decoderHiddenDim = 1024,
-        int numDecoderLayers = 4,
-        int decoderHeads = 16,
-        int vocabSize = 57522,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DonutOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DonutOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
@@ -312,20 +296,20 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         // Swin-B defaults from Donut paper (ECCV 2022)
         _depths = depths ?? [2, 2, 14, 2];
         _numHeads = numHeads ?? [4, 8, 16, 32];
-        _embedDim = embedDim;
-        _windowSize = windowSize;
-        _patchSize = patchSize;
-        _mlpRatio = mlpRatio;
-        _decoderHiddenDim = decoderHiddenDim;
-        _numDecoderLayers = numDecoderLayers;
-        _decoderHeads = decoderHeads;
-        _vocabSize = vocabSize;
-        _maxGenerationLength = maxGenerationLength;
+        _embedDim = _options.EmbedDim;
+        _windowSize = _options.WindowSize;
+        _patchSize = _options.PatchSize;
+        _mlpRatio = _options.MlpRatio;
+        _decoderHiddenDim = _options.DecoderHiddenDim;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _decoderHeads = _options.DecoderHeads;
+        _vocabSize = _options.VocabSize;
+        _maxGenerationLength = _options.MaxGenerationLength;
 
-        ImageSize = Math.Max(imageHeight, imageWidth);
-        ImageHeight = imageHeight;
-        ImageWidth = imageWidth;
-        MaxSequenceLength = maxGenerationLength;
+        ImageSize = Math.Max(_options.ImageHeight, _options.ImageWidth);
+        ImageHeight = _options.ImageHeight;
+        ImageWidth = _options.ImageWidth;
+        MaxSequenceLength = _options.MaxGenerationLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

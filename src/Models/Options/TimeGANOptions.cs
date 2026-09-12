@@ -42,7 +42,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Time-series Generative Adversarial Networks" (Yoon et al., NeurIPS 2019)
 /// </para>
 /// </remarks>
-public class TimeGANOptions<T> : RiskModelOptions<T>
+public class TimeGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Creates an independent options snapshot whose structural values match a materialized model.

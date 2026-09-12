@@ -169,22 +169,16 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     /// Initializes a new instance of the PointNet class.
     /// </summary>
     /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="useInputTransform">Whether to use input transformation network (T-Net).</param>
-    /// <param name="useFeatureTransform">Whether to use feature transformation network.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a PointNet model for point cloud classification.
     /// </remarks>
     public PointNet(
         int numClasses,
-        bool useInputTransform = true,
-        bool useFeatureTransform = true,
         ILossFunction<T>? lossFunction = null)
         : this(new PointNetOptions
         {
-            NumClasses = numClasses,
-            UseInputTransform = useInputTransform,
-            UseFeatureTransform = useFeatureTransform
+            NumClasses = numClasses
         },
             lossFunction)
     {

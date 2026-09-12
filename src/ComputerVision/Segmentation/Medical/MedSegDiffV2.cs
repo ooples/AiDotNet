@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 1);
-/// var model = new MedSegDiffV2&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new MedSegDiffV2&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new MedSegDiffV2&lt;double&gt;(architecture,
+///     options: new MedSegDiffV2Options { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for iterative denoising segmentation
-/// var onnxModel = new MedSegDiffV2&lt;double&gt;(architecture, "medsegdiffv2.onnx", numClasses: 1);
+/// var onnxModel = new MedSegDiffV2&lt;double&gt;(architecture, "medsegdiffv2.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -90,8 +93,6 @@ public partial class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -100,18 +101,17 @@ public partial class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public MedSegDiffV2(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         MedSegDiffV2Options? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new MedSegDiffV2Options()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new MedSegDiffV2Options(); Options = _options;
+        _options = options; Options = _options;
         // MedSegDiff-V2 defaults to 256x256, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -123,7 +123,6 @@ public partial class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -133,17 +132,17 @@ public partial class MedSegDiffV2<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public MedSegDiffV2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public MedSegDiffV2(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         MedSegDiffV2Options? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, onnxModelPath, (options ??= new MedSegDiffV2Options()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new MedSegDiffV2Options(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;

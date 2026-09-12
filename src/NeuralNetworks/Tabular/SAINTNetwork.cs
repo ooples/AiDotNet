@@ -110,7 +110,6 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// <param name="options">SAINT-specific options for dual attention configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 1.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a SAINT network based on the architecture you provide.
@@ -148,23 +147,26 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public SAINTNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAINTNetwork(NeuralNetworkArchitecture<T> architecture,
         SAINTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new SAINTOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new SAINTOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Validate configuration
-        if (_options.EmbeddingDimension % _options.NumHeads != 0)
+        // Guards HiddenDimension, not EmbeddingDimension. The feature tokenizer embeds each
+        // feature into HiddenDimension and every attention layer is built from it, so that is the
+        // width the head count has to divide. EmbeddingDimension is never passed to layer
+        // construction here, so the old check validated a value this model does not use -- it
+        // would accept a genuinely invalid attention geometry and reject a valid one.
+        if (_options.HiddenDimension % _options.NumHeads != 0)
         {
             throw new ArgumentException(
-                $"EmbeddingDimension ({_options.EmbeddingDimension}) must be divisible by NumHeads ({_options.NumHeads})");
+                $"HiddenDimension ({_options.HiddenDimension}) must be divisible by NumHeads ({_options.NumHeads})");
         }
 
         InitializeLayers();
@@ -206,7 +208,9 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
                 numLayers: _options.NumLayers,
                 sequenceLength: _options.BatchSize,  // Sequence length for inter-sample attention
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

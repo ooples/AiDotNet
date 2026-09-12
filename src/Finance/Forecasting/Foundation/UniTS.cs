@@ -339,7 +339,6 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for UniTS.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -349,10 +348,8 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     /// specific to your domain.
     /// </para>
     /// </remarks>
-    public UniTS(
-        NeuralNetworkArchitecture<T> architecture,
+    public UniTS(NeuralNetworkArchitecture<T> architecture,
         UniTSOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -375,7 +372,7 @@ public partial class UniTS<T> : ForecastingModelBase<T>
         _dropout = options.DropoutRate;
         _taskType = NormalizeTaskType(options.TaskType);
         _numClasses = options.NumClasses;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new UniTSOptions<T>()).NumFeatures;
 
         InitializeLayers();
     }

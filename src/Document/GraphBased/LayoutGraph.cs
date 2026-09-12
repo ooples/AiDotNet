@@ -119,15 +119,10 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     public LayoutGraph(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int nodeDim = 256,
-        int edgeDim = 64,
-        int graphLayers = 4,
-        int numClasses = 9,
-        int maxNodes = 256,
+        LayoutGraphOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutGraphOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutGraphOptions();
         Options = _options;
@@ -138,11 +133,15 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _nodeDim = nodeDim;
-        _edgeDim = edgeDim;
-        _graphLayers = graphLayers;
-        _numClasses = numClasses;
-        _maxNodes = maxNodes;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _nodeDim = _options.NodeDim;
+        _edgeDim = _options.EdgeDim;
+        _graphLayers = _options.GraphLayers;
+        _numClasses = _options.NumClasses;
+        _maxNodes = _options.MaxNodes;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -159,25 +158,21 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// </summary>
     public LayoutGraph(
         NeuralNetworkArchitecture<T> architecture,
-        int nodeDim = 256,
-        int edgeDim = 64,
-        int graphLayers = 4,
-        int numClasses = 9,
-        int maxNodes = 256,
+        LayoutGraphOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutGraphOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutGraphOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _nodeDim = nodeDim;
-        _edgeDim = edgeDim;
-        _graphLayers = graphLayers;
-        _numClasses = numClasses;
-        _maxNodes = maxNodes;
+        _nodeDim = _options.NodeDim;
+        _edgeDim = _options.EdgeDim;
+        _graphLayers = _options.GraphLayers;
+        _numClasses = _options.NumClasses;
+        _maxNodes = _options.MaxNodes;
         // Honor the model's configured LearningRate (the bare AdamOptimizer(this) ignored it and ran at Adam's
         // 0.001) and enable gradient clipping so graph-conv training does not drift upward over more iterations
         // (MoreData saw 200-iter loss 2.40 -> 2.82). Fully user-overridable via the optimizer parameter and

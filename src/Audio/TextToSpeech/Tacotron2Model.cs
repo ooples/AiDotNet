@@ -347,20 +347,12 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
     public Tacotron2Model(
         NeuralNetworkArchitecture<T> architecture,
         string acousticModelPath,
-        string? vocoderPath = null,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        int maxDecoderSteps = 1000,
-        double stopThreshold = 0.5,
-        int fftSize = 1024,
-        int hopLength = 256,
-        int griffinLimIterations = 60,
-        OnnxModelOptions? onnxOptions = null,
-        Tacotron2ModelOptions? options = null)
-        : base(architecture)
+        Tacotron2ModelOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new Tacotron2ModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -369,17 +361,17 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 
         _useNativeMode = false;
         _acousticModelPath = acousticModelPath;
-        _vocoderPath = vocoderPath;
+        _vocoderPath = _options.VocoderPath;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _maxDecoderSteps = maxDecoderSteps;
-        _stopThreshold = stopThreshold;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
-        _griffinLimIterations = griffinLimIterations;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _maxDecoderSteps = _options.MaxDecoderSteps;
+        _stopThreshold = _options.StopThreshold;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
+        _griffinLimIterations = _options.GriffinLimIterations;
 
         // Default architecture parameters (standard Tacotron2)
         _vocabSize = 148; // Standard phoneme vocabulary
@@ -401,17 +393,17 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         var onnxOpts = onnxOptions ?? new OnnxModelOptions();
         _acousticModel = new OnnxModel<T>(acousticModelPath, onnxOpts);
 
-        if (vocoderPath is not null && vocoderPath.Length > 0)
+        if (_options.VocoderPath is not null && _options.VocoderPath.Length > 0)
         {
-            _vocoder = new OnnxModel<T>(vocoderPath, onnxOpts);
+            _vocoder = new OnnxModel<T>(_options.VocoderPath, onnxOpts);
         }
         else
         {
             // Use Griffin-Lim as fallback vocoder
             _griffinLim = new GriffinLim<T>(
-                nFft: fftSize,
-                hopLength: hopLength,
-                iterations: griffinLimIterations);
+                nFft: _options.FftSize,
+                hopLength: _options.HopLength,
+                iterations: _options.GriffinLimIterations);
         }
 
         // Initialize available voices
@@ -471,31 +463,13 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
     /// </remarks>
     public Tacotron2Model(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        int vocabSize = 148,
-        int embeddingDim = 512,
-        int encoderDim = 512,
-        int decoderDim = 1024,
-        int attentionDim = 128,
-        int attentionFilters = 32,
-        int prenetDim = 256,
-        int postnetEmbeddingDim = 512,
-        int numEncoderConvLayers = 3,
-        int numPostnetConvLayers = 5,
-        int numMelsPerFrame = 2,
-        int maxDecoderSteps = 1000,
-        double stopThreshold = 0.5,
-        int fftSize = 1024,
-        int hopLength = 256,
-        int griffinLimIterations = 60,
+        Tacotron2ModelOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        Tacotron2ModelOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new Tacotron2ModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -503,34 +477,34 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         _useNativeMode = true;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _vocabSize = vocabSize;
-        _embeddingDim = embeddingDim;
-        _encoderDim = encoderDim;
-        _decoderDim = decoderDim;
-        _attentionDim = attentionDim;
-        _attentionFilters = attentionFilters;
-        _prenetDim = prenetDim;
-        _postnetEmbeddingDim = postnetEmbeddingDim;
-        _numEncoderConvLayers = numEncoderConvLayers;
-        _numPostnetConvLayers = numPostnetConvLayers;
-        _numMelsPerFrame = numMelsPerFrame;
-        _maxDecoderSteps = maxDecoderSteps;
-        _stopThreshold = stopThreshold;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
-        _griffinLimIterations = griffinLimIterations;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _vocabSize = _options.VocabSize;
+        _embeddingDim = _options.EmbeddingDim;
+        _encoderDim = _options.EncoderDim;
+        _decoderDim = _options.DecoderDim;
+        _attentionDim = _options.AttentionDim;
+        _attentionFilters = _options.AttentionFilters;
+        _prenetDim = _options.PrenetDim;
+        _postnetEmbeddingDim = _options.PostnetEmbeddingDim;
+        _numEncoderConvLayers = _options.NumEncoderConvLayers;
+        _numPostnetConvLayers = _options.NumPostnetConvLayers;
+        _numMelsPerFrame = _options.NumMelsPerFrame;
+        _maxDecoderSteps = _options.MaxDecoderSteps;
+        _stopThreshold = _options.StopThreshold;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
+        _griffinLimIterations = _options.GriffinLimIterations;
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
 
         // Create Griffin-Lim vocoder
         _griffinLim = new GriffinLim<T>(
-            nFft: fftSize,
-            hopLength: hopLength,
-            iterations: griffinLimIterations);
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength,
+            iterations: _options.GriffinLimIterations);
 
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();

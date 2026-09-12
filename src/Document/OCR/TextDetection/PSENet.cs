@@ -131,10 +131,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     public PSENet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 640,
-        int backboneChannels = 256,
-        int featureChannels = 256,
-        int numKernels = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
@@ -156,19 +152,20 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _backboneChannels = backboneChannels;
-        _featureChannels = featureChannels;
-        _numKernels = numKernels;
+        _backboneChannels = _options.BackboneChannels;
+        _featureChannels = _options.FeatureChannels;
+        _numKernels = _options.NumKernels;
+        // The rate the options publish. It defaults to 1e-4 rather than Adam's 1e-3 because the
+        // detector's multi-million-parameter ResNet/FPN stack needs a bounded fine-tuning step --
+        // the generic first step overshoots the BCE-with-logits objective. That reasoning now
+        // lives on PSENetOptions.LearningRate, where a caller can see and change it.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                // The detector's multi-million-parameter ResNet/FPN stack needs the bounded
-                // fine-tuning step used by the established PSENet training path; Adam's generic
-                // 1e-3 first step overshoots the BCE-with-logits objective.
-                InitialLearningRate = 1e-4
+                InitialLearningRate = _options.LearningRate
             });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -189,10 +186,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </remarks>
     public PSENet(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 640,
-        int backboneChannels = 256,
-        int featureChannels = 256,
-        int numKernels = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
@@ -209,16 +202,16 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         Options = _options;
 
         _useNativeMode = true;
-        _backboneChannels = backboneChannels;
-        _featureChannels = featureChannels;
-        _numKernels = numKernels;
+        _backboneChannels = _options.BackboneChannels;
+        _featureChannels = _options.FeatureChannels;
+        _numKernels = _options.NumKernels;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-4
+                InitialLearningRate = _options.LearningRate
             });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
     }

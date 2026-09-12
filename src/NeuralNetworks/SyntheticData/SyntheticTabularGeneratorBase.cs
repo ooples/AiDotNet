@@ -62,30 +62,32 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     }
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? DefaultEpochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         // Clone and index columns, then compute statistics
         _columns = PrepareColumns(data, columns);
 
         // Delegate to subclass implementation
-        FitInternal(data, _columns, epochs);
+        FitInternal(data, _columns, epochCount);
 
         IsFitted = true;
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? DefaultEpochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-            FitInternal(data, _columns, epochs);
+            FitInternal(data, _columns, epochCount);
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
@@ -114,6 +116,17 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <param name="data">The real data matrix.</param>
     /// <param name="columns">Prepared column metadata with computed statistics.</param>
     /// <param name="epochs">Number of training epochs.</param>
+    /// <summary>
+    /// Number of epochs used when a caller does not supply one.
+    /// </summary>
+    /// <remarks>
+    /// The four generators on this base (AIM, BayesianNetworkSynth, CopulaSynth, SMOTENC) are not
+    /// iterative learners -- they fit a distribution or resample in a single pass and ignore the
+    /// epoch count entirely -- so 1 is the honest default rather than an invented training budget.
+    /// A subclass that does train by epochs overrides this with its published value.
+    /// </remarks>
+    protected virtual int DefaultEpochs => 1;
+
     protected abstract void FitInternal(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs);
 
     /// <summary>

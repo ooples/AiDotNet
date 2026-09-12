@@ -99,13 +99,11 @@ public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
     public ProgressiveGAN(
         int latentSize,
         int imageChannels,
-        int maxResolutionLevel = 6,
-        int baseFeatureMaps = 512,
-        ILossFunction<T>? lossFunction = null,
-        ProgressiveGANOptions? options = null)
+        ProgressiveGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(
-            CreateProgressiveGANGeneratorArchitecture(latentSize, imageChannels, 4 * (1 << Math.Max(0, maxResolutionLevel)), baseFeatureMaps),
-            CreateProgressiveGANDiscriminatorArchitecture(imageChannels, 4 * (1 << Math.Max(0, maxResolutionLevel)), baseFeatureMaps),
+            CreateProgressiveGANGeneratorArchitecture(latentSize, imageChannels, 4 * (1 << Math.Max(0, (options?.MaxResolutionLevel ?? 6))), (options?.GeneratorChannels ?? 512)),
+            CreateProgressiveGANDiscriminatorArchitecture(imageChannels, 4 * (1 << Math.Max(0, (options?.MaxResolutionLevel ?? 6))), (options?.GeneratorChannels ?? 512)),
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
@@ -114,24 +112,23 @@ public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
             defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99),
             defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99))
     {
+        _options = options ?? new ProgressiveGANOptions();
+        _options.Validate();
         if (latentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");
         if (imageChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(imageChannels), imageChannels, "Image channels must be positive.");
-        if (maxResolutionLevel < 0)
-            throw new ArgumentOutOfRangeException(nameof(maxResolutionLevel), maxResolutionLevel, "Max resolution level must be non-negative.");
-        if (baseFeatureMaps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(baseFeatureMaps), baseFeatureMaps, "Base feature maps must be positive.");
+        if (_options.MaxResolutionLevel < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxResolutionLevel), _options.MaxResolutionLevel, "Max resolution level must be non-negative.");
 
-        _options = options ?? new ProgressiveGANOptions();
         Options = _options;
         _latentSize = latentSize;
         _imageChannels = imageChannels;
-        _maxResolutionLevel = maxResolutionLevel;
-        _baseFeatureMaps = baseFeatureMaps;
+        _maxResolutionLevel = _options.MaxResolutionLevel;
+        _baseFeatureMaps = _options.GeneratorChannels;
         // The network is built directly at the target resolution, so report the
         // current level as the max (GetCurrentResolution then matches the output).
-        CurrentResolutionLevel = maxResolutionLevel;
+        CurrentResolutionLevel = _options.MaxResolutionLevel;
         Alpha = 1.0;
         UseMinibatchStdDev = true;
         UsePixelNormalization = true;
@@ -158,18 +155,10 @@ public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
     public ProgressiveGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
-        int latentSize = 512,
-        int imageChannels = 3,
-        int maxResolutionLevel = 6,
-        int baseFeatureMaps = 512,
-        InputType inputType = InputType.TwoDimensional,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = DefaultLearningRate,
-        double learningRateDecay = DefaultLearningRateDecay,
-        ProgressiveGANOptions? options = null)
-        : this(latentSize,
-               imageChannels > 0 ? imageChannels : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
-               maxResolutionLevel, baseFeatureMaps, lossFunction, options)
+        ProgressiveGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
+        : this((options?.LatentSize ?? 512),
+               (options?.ImageChannels ?? 3) > 0 ? (options?.ImageChannels ?? 3) : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3), lossFunction: lossFunction, options: options)
     {
     }
 

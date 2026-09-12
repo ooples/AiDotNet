@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -135,39 +136,52 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping. Defaults to 1.0.</param>
     public UNet3D(
         NeuralNetworkArchitecture<T> architecture,
-        int voxelResolution = 32,
-        int numEncoderBlocks = 4,
-        int baseFilters = 32,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         UNet3DOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : this(options ?? new UNet3DOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new UNet3DOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must be
+    /// resolved first. Options come first in the parameter list because a nullable and a
+    /// non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private UNet3D(
+        UNet3DOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), options.MaxGradNorm)
+    {
+        // Every dimension check the constructor used to make now lives on the options, including
+        // the cross-field resolution-vs-blocks rule.
+        options.Validate();
+        _options = options;
         Options = _options;
 
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
-        if (voxelResolution <= 0)
-            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
-        if (numEncoderBlocks <= 0)
-            throw new ArgumentException("Number of encoder blocks must be positive.", nameof(numEncoderBlocks));
-        if (baseFilters <= 0)
-            throw new ArgumentException("Base filters must be positive.", nameof(baseFilters));
 
-        // Minimum resolution depends on numEncoderBlocks
-        int minResolution = 1 << numEncoderBlocks; // 2^numEncoderBlocks
-        if (voxelResolution < minResolution)
-            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
-                $"VoxelResolution must be at least {minResolution} for {numEncoderBlocks} encoder blocks.");
-
-        VoxelResolution = voxelResolution;
-        NumEncoderBlocks = numEncoderBlocks;
-        BaseFilters = baseFilters;
+        VoxelResolution = options.VoxelResolution;
+        NumEncoderBlocks = options.NumEncoderBlocks;
+        BaseFilters = options.BaseFilters;
         NumClasses = architecture.OutputSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own
+        // default and silently ignores anything the caller configured.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate
+            });
 
         InitializeLayers();
     }
@@ -217,17 +231,118 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
-
-        Tensor<T> output = input;
-        foreach (var layer in Layers)
+        // A caller-supplied layer list has no encoder/decoder split to tap, so run it as given.
+        if (Layers.Count != ExpectedGeneratedLayerCount(NumEncoderBlocks))
         {
-            output = layer.Forward(output);
+            Tensor<T> sequential = input;
+            foreach (var layer in Layers)
+            {
+                sequential = layer.Forward(sequential);
+            }
+
+            return sequential;
         }
-        return output;
+
+        // Channels sit on axis 1 when the volume carries a batch dimension and axis 0 otherwise.
+        int channelAxis = input.Rank >= 5 ? 1 : 0;
+
+        var features = input;
+        int li = 0;
+        var taps = new Tensor<T>[NumEncoderBlocks];
+
+        // Encoder: two convolutions per block, tapped before the pool that follows it.
+        for (int block = 0; block < NumEncoderBlocks; block++)
+        {
+            features = Layers[li++].Forward(features);
+            features = Layers[li++].Forward(features);
+            taps[block] = features;
+
+            if (block < NumEncoderBlocks - 1)
+            {
+                features = Layers[li++].Forward(features);
+            }
+        }
+
+        // Bottleneck.
+        features = Layers[li++].Forward(features);
+
+        // Decoder: up-convolve (2x resolution, half the channels), concatenate the encoder tap
+        // now at the matching resolution, then two convolutions.
+        for (int block = NumEncoderBlocks - 2; block >= 0; block--)
+        {
+            features = Layers[li++].Forward(features);
+            features = Engine.TensorConcatenate(new[] { features, taps[block] }, axis: channelAxis);
+            features = Layers[li++].Forward(features);
+            features = Layers[li++].Forward(features);
+        }
+
+        // 1x1x1 output projection.
+        features = Layers[li++].Forward(features);
+
+        return features;
+    }
+
+    /// <summary>
+    /// Training must take the same skip path as inference.
+    /// </summary>
+    /// <param name="input">The input voxel grid tensor.</param>
+    /// <returns>The network output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The decoder convolutions resolve their input channel count lazily, from whatever they are
+    /// first handed. A plain sequential training pass would resolve them against NON-concatenated
+    /// features and then mismatch on the first real forward, so the two paths cannot diverge.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
+    /// The number of layers <see cref="LayerHelper{T}.CreateDefaultUNet3DLayers"/> emits.
+    /// </summary>
+    /// <param name="numEncoderBlocks">The configured encoder block count.</param>
+    /// <returns>The expected layer count.</returns>
+    /// <remarks>
+    /// <para>
+    /// Two convolutions per encoder block, a pool after all but the last, one bottleneck
+    /// convolution, an up-convolution plus two convolutions per decoder block, and the output
+    /// projection. Forward compares against this so a caller-supplied architecture falls back to a
+    /// sequential pass instead of indexing into a layout it does not have.
+    /// </para>
+    /// </remarks>
+    private static int ExpectedGeneratedLayerCount(int numEncoderBlocks)
+        => (2 * numEncoderBlocks) + (numEncoderBlocks - 1) + 1 + (3 * (numEncoderBlocks - 1)) + 1;
+
+    /// <summary>Latches the one-time lazy shape resolution.</summary>
+    private bool _lazyShapesResolved;
+
+    /// <summary>
+    /// Resolves the lazy convolutions through the real skip topology.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Conv3DLayer is built with placeholder shapes and pins its kernel's input channel count to
+    /// whatever first reaches it. The base class resolves that by walking <see cref="Layers"/>
+    /// sequentially, which cannot model the concatenations: it would size the first decoder
+    /// convolution against its non-concatenated predecessor (256) rather than the concatenated
+    /// 256 + 128 = 384, and then fail the first real forward.
+    /// </para>
+    /// <para>
+    /// One inference-mode forward through the actual topology materialises every layer with its
+    /// true channel count, and leaves ParameterCount non-zero before the first user forward, which
+    /// is the contract the base method upholds.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesResolved) return;
+        if (Layers is null || Layers.Count == 0) return;
+
+        using (InferenceMode.Enter())
+        {
+            Forward(new Tensor<T>([1, VoxelResolution, VoxelResolution, VoxelResolution]));
+        }
+
+        _lazyShapesResolved = true;
     }
 
     /// <summary>

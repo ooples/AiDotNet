@@ -47,7 +47,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "TabDDPM: Modelling Tabular Data with Diffusion Models" (Kotelnikov et al., ICML 2023)
 /// </para>
 /// </remarks>
-public class TabDDPMOptions<T> : RiskModelOptions<T>
+public class TabDDPMOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of diffusion timesteps.

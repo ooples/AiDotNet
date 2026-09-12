@@ -101,15 +101,13 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new Mambular network with the specified architecture.
     /// </summary>
-    public MambularNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public MambularNetwork(NeuralNetworkArchitecture<T> architecture,
         MambularOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MambularOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new MambularOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -133,7 +131,8 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
                 stateDimension: _options.StateDimension,
                 numLayers: _options.NumLayers,
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

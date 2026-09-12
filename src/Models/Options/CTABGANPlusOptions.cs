@@ -37,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "CTAB-GAN: Effective Table Data Synthesizing" (Zhao et al., 2021)
 /// </para>
 /// </remarks>
-public class CTABGANPlusOptions<T> : RiskModelOptions<T>
+public class CTABGANPlusOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the dimension of the random noise vector fed to the generator.

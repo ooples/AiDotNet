@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Diffusion Models for Financial Tabular Data" (2024)
 /// </para>
 /// </remarks>
-public class FinDiffOptions<T> : RiskModelOptions<T>
+public class FinDiffOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of diffusion timesteps.

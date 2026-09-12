@@ -102,7 +102,6 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="configuration">The EfficientNet-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
@@ -116,12 +115,10 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     {
     }
 
-    public EfficientNetNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public EfficientNetNetwork(NeuralNetworkArchitecture<T> architecture,
         EfficientNetConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         EfficientNetOptions? options = null)
         // CategoricalCrossEntropyLoss (the MultiClassClassification default) expects softmax
         // PROBABILITIES. The classification head ends in a SoftmaxActivation DenseLayer (per
@@ -130,9 +127,9 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         // IdentityActivation (raw logits) against this probability loss, producing a wrong gradient
         // (differentiated as if the logits were probabilities) that diverged training
         // (Training_ShouldReduceLoss saw 0.33 -> 7094).
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new EfficientNetOptions()).MaxGradNorm)
     {
-        _options = options ?? new EfficientNetOptions();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

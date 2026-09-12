@@ -180,7 +180,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = options.LearningRate,
-                UseAMSGrad = false,
+                UseAMSGrad = false
             }));
 
         _multiScaleRadii = options.MultiScaleRadii;
@@ -225,7 +225,6 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
     /// <param name="samplingRates">Number of points to sample at each hierarchy level.</param>
     /// <param name="searchRadii">Search radius for finding neighbors at each level.</param>
     /// <param name="mlpDimensions">MLP layer dimensions for each set abstraction level.</param>
-    /// <param name="useMultiScaleGrouping">Whether to use multi-scale grouping (MSG).</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a PointNet++ model with hierarchical feature learning.
@@ -256,15 +255,13 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         int[] samplingRates,
         double[] searchRadii,
         int[][] mlpDimensions,
-        bool useMultiScaleGrouping = false,
         ILossFunction<T>? lossFunction = null)
         : this(new PointNetPlusPlusOptions
         {
             NumClasses = numClasses,
             SamplingRates = samplingRates,
             SearchRadii = searchRadii,
-            MlpDimensions = mlpDimensions,
-            UseMultiScaleGrouping = useMultiScaleGrouping
+            MlpDimensions = mlpDimensions
         },
             lossFunction)
     {
@@ -980,7 +977,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
                 AxisRelation.Unknown(
                     $"Centroid count is min({_numPoints}, numPoints) - farthest-point sampling saturates "
                     + "at the point count, and no relation in the vocabulary saturates.")),
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels))
         };
     }
 

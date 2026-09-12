@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new GroundedSAM2&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new GroundedSAM2&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new GroundedSAM2&lt;double&gt;(architecture,
+///     options: new GroundedSAM2Options { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for open-world object tracking
-/// var onnxModel = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx", numClasses: 1);
+/// var onnxModel = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -112,8 +115,6 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -122,18 +123,17 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// </remarks>
     public GroundedSAM2(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         GroundedSAM2Options? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new GroundedSAM2Options()).NumClasses)
     {
-        _options = options ?? new GroundedSAM2Options(); Options = _options;
+        _options = options; Options = _options;
         // Grounded SAM 2 defaults to 1024x1024, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
         _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
         _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;
@@ -148,7 +148,6 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -158,17 +157,17 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public GroundedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public GroundedSAM2(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         GroundedSAM2Options? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new GroundedSAM2Options()).NumClasses)
     {
-        _options = options ?? new GroundedSAM2Options(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
         _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
         _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;

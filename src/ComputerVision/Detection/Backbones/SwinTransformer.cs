@@ -54,23 +54,20 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     /// <summary>
     /// Creates a new Swin Transformer backbone.
     /// </summary>
-    /// <param name="variant">Swin variant (Tiny, Small, Base, Large).</param>
-    /// <param name="windowSize">Window size for attention (default 7).</param>
-    /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
-    public SwinTransformer(SwinVariant variant = SwinVariant.SwinTiny, int windowSize = 7, int inChannels = 3)
+    public SwinTransformer(SwinTransformerOptions? options = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: inChannels,
+                channels: (options ??= new SwinTransformerOptions()).InChannels,
                 outputSize: 1),
               new MeanSquaredErrorLoss<T>())
     {
-        _variant = variant;
-        _windowSize = windowSize;
-        _inChannels = inChannels;
+        _variant = options.Variant;
+        _windowSize = options.WindowSize;
+        _inChannels = options.InChannels;
         _stages = new List<SwinStage<T>>();
 
-        var (embedDim, depths, numHeads) = GetVariantConfig(variant);
+        var (embedDim, depths, numHeads) = GetVariantConfig(options.Variant);
         _embedDim = embedDim;
 
         var outputChannels = new int[4];
@@ -83,7 +80,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
         for (int i = 0; i < 4; i++)
         {
             bool downsample = i > 0;
-            var stage = new SwinStage<T>(currentDim, depths[i], numHeads[i], windowSize, downsample);
+            var stage = new SwinStage<T>(currentDim, depths[i], numHeads[i], options.WindowSize, downsample);
             _stages.Add(stage);
             if (downsample) currentDim *= 2;
         }

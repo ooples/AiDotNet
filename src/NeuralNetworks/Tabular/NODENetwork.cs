@@ -101,7 +101,6 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
     /// <param name="options">NODE-specific options for tree ensemble configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 1.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -114,15 +113,13 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public NODENetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public NODENetwork(NeuralNetworkArchitecture<T> architecture,
         NODEOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new NODEOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new NODEOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

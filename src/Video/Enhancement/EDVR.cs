@@ -114,23 +114,20 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
 
     public EDVR(
         NeuralNetworkArchitecture<T> architecture,
+        EDVROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 64,
-        int numFrames = 5,
-        int numBlocks = 5,
-        int scaleFactor = 4,
-        EDVROptions? options = null)
-        : base(architecture, lossFunction ?? new CharbonnierLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CharbonnierLoss<T>())
     {
         _options = options ?? new EDVROptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numFeatures = numFeatures;
-        _numFrames = numFrames;
-        _numBlocks = numBlocks;
-        _scaleFactor = scaleFactor;
+        _numFeatures = _options.NumFeatures;
+        _numFrames = _options.NumFrames;
+        _numBlocks = _options.NumBlocks;
+        _scaleFactor = _options.ScaleFactor;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
 
         _lossFunction = lossFunction ?? new CharbonnierLoss<T>();
@@ -142,9 +139,8 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
     public EDVR(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4,
         EDVROptions? options = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new EDVROptions();
         Options = _options;
@@ -159,7 +155,11 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         _numFeatures = 64;
         _numFrames = 5;
         _numBlocks = 5;
-        _scaleFactor = scaleFactor;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _scaleFactor = _options.ScaleFactor;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _lossFunction = new CharbonnierLoss<T>();
 

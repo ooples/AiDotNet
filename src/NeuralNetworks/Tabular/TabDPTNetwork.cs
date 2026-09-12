@@ -99,15 +99,13 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public TabDPTNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabDPTNetwork(NeuralNetworkArchitecture<T> architecture,
         TabDPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabDPTOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabDPTOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // Decay the step toward the end of training. Built bare, the rate stayed fixed, so once the
         // model reached its floor the optimizer kept taking full-size steps and oscillated there:
@@ -146,7 +144,9 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
                 numHeads: _options.NumHeads,
                 numLayers: _options.NumLayers,
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

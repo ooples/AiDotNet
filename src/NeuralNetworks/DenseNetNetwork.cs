@@ -109,17 +109,14 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="configuration">The DenseNet-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam with lr=1e-4 and AMSGrad enabled via <c>new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this, new AdamOptimizerOptions&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; { InitialLearningRate = 1e-4, UseAMSGrad = true })</c>).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
-    public DenseNetNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public DenseNetNetwork(NeuralNetworkArchitecture<T> architecture,
         DenseNetConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         DenseNetOptions? options = null)
-        : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), (options ??= new DenseNetOptions()).MaxGradNorm)
     {
-        _options = options ?? new DenseNetOptions();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

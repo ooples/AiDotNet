@@ -268,9 +268,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     public FEDformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sequenceLength = 96,
-        int predictionHorizon = 96,
-        int numFeatures = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FEDformerOptions<T>? options = null)
@@ -289,18 +286,22 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
-        _numEncoderLayers = 2;
-        _numDecoderLayers = 1;
-        _numHeads = 8;
-        _modelDimension = 512;
-        _feedForwardDimension = 2048;
-        _useInstanceNormalization = true;
-        _dropout = 0.05;
-        _numModes = 64;
-        _movingAverageKernel = 25;
+
+        // Every field below was previously a LITERAL here while the native constructor read the
+        // same value from a parameter, so the two constructors described different models even
+        // when handed the same options object. Both now read the options.
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _numEncoderLayers = options.NumEncoderLayers;
+        _numDecoderLayers = options.NumDecoderLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
+        _numModes = options.NumModes;
+        _movingAverageKernel = options.MovingAverageKernel;
 
         InferenceSession? session = null;
         try
@@ -347,18 +348,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// </remarks>
     public FEDformer(
         NeuralNetworkArchitecture<T> architecture,
-        int sequenceLength = 96,
-        int predictionHorizon = 96,
-        int numFeatures = 7,
-        int numEncoderLayers = 2,
-        int numDecoderLayers = 1,
-        int numHeads = 8,
-        int modelDimension = 512,
-        int feedForwardDimension = 2048,
-        int numModes = 64,
-        int movingAverageKernel = 25,
-        bool useInstanceNormalization = true,
-        double dropout = 0.05,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FEDformerOptions<T>? options = null)
@@ -366,25 +355,32 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
                1.0)
     {
-        ValidateParameters(sequenceLength, predictionHorizon, numFeatures, numEncoderLayers, numDecoderLayers, numHeads, modelDimension);
-
         options ??= new FEDformerOptions<T>();
+
+        // Same checks as before, reading the options rather than shadowing parameters. Kept as a
+        // call rather than moved onto the options because FEDformerOptions derives from
+        // ModelOptions, which has no Require helper, and these throw ArgumentOutOfRangeException
+        // for the positivity rules and ArgumentException for modelDimension % numHeads -- types
+        // that xUnit's Assert.Throws matches exactly.
+        ValidateParameters(options.SequenceLength, options.PredictionHorizon, options.NumFeatures,
+            options.NumEncoderLayers, options.NumDecoderLayers, options.NumHeads, options.ModelDimension);
+
         _options = options;
         Options = _options;
 
         _useNativeMode = true;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _modelDimension = modelDimension;
-        _feedForwardDimension = feedForwardDimension;
-        _numModes = numModes;
-        _movingAverageKernel = movingAverageKernel;
-        _useInstanceNormalization = useInstanceNormalization;
-        _dropout = dropout;
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _numEncoderLayers = options.NumEncoderLayers;
+        _numDecoderLayers = options.NumDecoderLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _numModes = options.NumModes;
+        _movingAverageKernel = options.MovingAverageKernel;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
         _optimizer = optimizer ?? CreatePaperOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();

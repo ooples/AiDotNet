@@ -76,9 +76,20 @@ public class AiModelResultFamilyExtensionsTests
         var result = new AiModelResult<float, Tensor<float>, Tensor<float>>
         {
             Model = new AiDotNet.NeuralRadianceFields.Models.NeRF<float>(
-                positionEncodingLevels: 2, directionEncodingLevels: 2, hiddenDim: 8, numLayers: 1,
-                colorHiddenDim: 4, colorNumLayers: 1, useHierarchicalSampling: false,
-                renderSamples: 2, renderNearBound: 1.0, renderFarBound: 3.0, learningRate: 1e-3),
+                options: new AiDotNet.Models.Options.NeRFOptions
+                {
+                    PositionEncodingLevels = 2,
+                    DirectionEncodingLevels = 2,
+                    HiddenDim = 8,
+                    NumLayers = 1,
+                    ColorHiddenDim = 4,
+                    ColorNumLayers = 1,
+                    UseHierarchicalSampling = false,
+                    RenderSamples = 2,
+                    RenderNearBound = 1.0,
+                    RenderFarBound = 3.0,
+                    LearningRate = 1e-3
+                }),
         };
         Assert.Throws<ArgumentOutOfRangeException>(
             () => result.GenerateGreedy(startTokens, maxNewTokens: 0));
@@ -90,9 +101,20 @@ public class AiModelResultFamilyExtensionsTests
         var result = new AiModelResult<float, Tensor<float>, Tensor<float>>
         {
             Model = new AiDotNet.NeuralRadianceFields.Models.NeRF<float>(
-                positionEncodingLevels: 2, directionEncodingLevels: 2, hiddenDim: 8, numLayers: 1,
-                colorHiddenDim: 4, colorNumLayers: 1, useHierarchicalSampling: false,
-                renderSamples: 2, renderNearBound: 1.0, renderFarBound: 3.0, learningRate: 1e-3),
+                options: new AiDotNet.Models.Options.NeRFOptions
+                {
+                    PositionEncodingLevels = 2,
+                    DirectionEncodingLevels = 2,
+                    HiddenDim = 8,
+                    NumLayers = 1,
+                    ColorHiddenDim = 4,
+                    ColorNumLayers = 1,
+                    UseHierarchicalSampling = false,
+                    RenderSamples = 2,
+                    RenderNearBound = 1.0,
+                    RenderFarBound = 3.0,
+                    LearningRate = 1e-3
+                }),
         };
         Assert.Throws<ArgumentNullException>(
             () => result.GenerateSampled(null!, maxNewTokens: 4, temperature: 1.0f));

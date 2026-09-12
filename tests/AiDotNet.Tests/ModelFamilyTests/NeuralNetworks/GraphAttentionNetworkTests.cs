@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -30,7 +31,7 @@ public class GraphAttentionNetworkTests : GraphNNModelTestBase<float>
                 taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
                 inputSize: 128,
                 outputSize: 7),
-            dropoutRate: 0.0);
+            options: new GraphAttentionNetworkOptions { DropoutRate = 0.0 });
         if (_savedParams == null)
             _savedParams = network.GetParameters();
         else

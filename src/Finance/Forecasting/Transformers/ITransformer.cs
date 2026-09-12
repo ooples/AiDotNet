@@ -264,9 +264,6 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     public ITransformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int sequenceLength = 96,
-        int predictionHorizon = 96,
-        int numFeatures = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ITransformerOptions<T>? options = null)
@@ -286,22 +283,31 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
-        _numLayers = 2;
-        _numHeads = 8;
-        _modelDimension = 512;
-        _feedForwardDimension = 512;
-        _useInstanceNormalization = true;
-        _dropout = 0.1;
+
+        // Every field below was previously a LITERAL here while the native constructor read the
+        // same value from a parameter, so the two constructors described different models even
+        // when handed the same options object. Both now read the options.
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
         InferenceSession? session = null;
         try
         {
             session = new InferenceSession(onnxModelPath);
             OnnxSession = session;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            // The rate this model publishes on its own options. Built bare, the optimizer
+            // would use its own default instead and LearningRate would be configuration that
+            // nothing reads — the defect that diverged MusicFlamingo's training.
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { InitialLearningRate = _options.LearningRate });
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             InitializeLayers();
         }
@@ -358,15 +364,6 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     public ITransformer(
         NeuralNetworkArchitecture<T> architecture,
-        int sequenceLength = 96,
-        int predictionHorizon = 96,
-        int numFeatures = 7,
-        int numLayers = 2,
-        int numHeads = 8,
-        int modelDimension = 512,
-        int feedForwardDimension = 512,
-        bool useInstanceNormalization = true,
-        double dropout = 0.1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ITransformerOptions<T>? options = null)
@@ -374,24 +371,33 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
                1.0)
     {
-        ValidateParameters(sequenceLength, predictionHorizon, numFeatures, numLayers, numHeads, modelDimension);
-
         options ??= new ITransformerOptions<T>();
+
+        // Same checks as before, reading the options rather than shadowing parameters. See the
+        // note in FEDformer for why this stays a call instead of moving onto the options.
+        ValidateParameters(options.SequenceLength, options.PredictionHorizon, options.NumFeatures,
+            options.NumLayers, options.NumHeads, options.ModelDimension);
+
         _options = options;
         Options = _options;
 
         _useNativeMode = true;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _modelDimension = modelDimension;
-        _feedForwardDimension = feedForwardDimension;
-        _useInstanceNormalization = useInstanceNormalization;
-        _dropout = dropout;
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+        _dropout = options.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
@@ -788,14 +794,18 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         if (targets is null)
             throw new ArgumentNullException(nameof(targets));
 
-        var predictions = Forecast(inputs);
+        // Forecast can hand back a sliced VIEW, and the caller's targets may be one too; reading
+        // .Data off a non-contiguous view throws. Materialise both once, up front.
+        var forecast = Forecast(inputs);
+        var predictions = forecast.IsContiguous ? forecast : forecast.Contiguous();
+        var expected = targets.IsContiguous ? targets : targets.Contiguous();
         var metrics = new Dictionary<string, T>();
 
         T maeSum = NumOps.Zero;
-        int count = predictions.Length;
+        int count = Math.Min(predictions.Length, expected.Length);
         for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
+            T diff = NumOps.Subtract(predictions.Data.Span[i], expected.Data.Span[i]);
             maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
         }
         metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
@@ -803,7 +813,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         T mseSum = NumOps.Zero;
         for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
+            T diff = NumOps.Subtract(predictions.Data.Span[i], expected.Data.Span[i]);
             mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
         }
         metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
@@ -1055,6 +1065,9 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
+        // Element-wise reads below require contiguous backing memory.
+        input = input.IsContiguous ? input : input.Contiguous();
+
         var result = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
@@ -1101,6 +1114,8 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceMean(Tensor<T> input)
     {
+        input = input.IsContiguous ? input : input.Contiguous();
+
         var mean = new T[_numFeatures];
         int samplesPerFeature = input.Length / _numFeatures;
 
@@ -1131,6 +1146,8 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceStd(Tensor<T> input, Tensor<T> mean)
     {
+        input = input.IsContiguous ? input : input.Contiguous();
+
         var std = new T[_numFeatures];
         int samplesPerFeature = input.Length / _numFeatures;
 
@@ -1167,8 +1184,14 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var newData = new T[input.Length];
         int shiftAmount = stepsToShift * _numFeatures;
 
-        Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
-        Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
+        // Both operands may be SLICED VIEWS, whose backing memory is not contiguous; reading .Data
+        // off one throws "Cannot get contiguous Memory from a non-contiguous tensor view". Same
+        // guard TimeMachine uses in this folder.
+        var sourceInput = input.IsContiguous ? input : input.Contiguous();
+        var sourcePredictions = predictions.IsContiguous ? predictions : predictions.Contiguous();
+
+        Array.Copy(sourceInput.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
+        Array.Copy(sourcePredictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
         return new Tensor<T>(input._shape, new Vector<T>(newData));
     }
@@ -1190,10 +1213,20 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var outputData = new T[totalSteps * _numFeatures];
         int currentIdx = 0;
 
-        foreach (var pred in predictions)
+        foreach (var prediction in predictions)
         {
+            // A prediction produced by slicing the model output is a VIEW, and reading .Data off a
+            // non-contiguous view throws. Materialise first, as TimeMachine does in this folder.
+            var pred = prediction.IsContiguous ? prediction : prediction.Contiguous();
+
             int stepsToCopy = Math.Min(_predictionHorizon, totalSteps - currentIdx / _numFeatures);
             int elementsToCopy = stepsToCopy * _numFeatures;
+
+            // The final chunk can be shorter than the horizon, and a prediction can be shorter
+            // than the horizon when the model is configured with a small PredictionHorizon.
+            elementsToCopy = Math.Min(elementsToCopy, pred.Length);
+            if (elementsToCopy <= 0)
+                break;
 
             Array.Copy(pred.Data.ToArray(), 0, outputData, currentIdx, elementsToCopy);
             currentIdx += elementsToCopy;

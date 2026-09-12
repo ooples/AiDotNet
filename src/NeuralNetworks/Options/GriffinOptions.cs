@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the GriffinLanguageModel.
 /// </summary>
-public class GriffinOptions : NeuralNetworkOptions
+public class GriffinOptions : SequenceModelOptions
 {
     /// <summary>
     /// Gets or sets the RG-LRU width. The default 2560 is the published 1.3B
@@ -38,7 +38,13 @@ public class GriffinOptions : NeuralNetworkOptions
     public double MaxGradientNorm { get; set; } = 1.0;
 
     /// <summary>Initializes an options instance with default values.</summary>
-    public GriffinOptions() { }
+    public GriffinOptions()
+    {
+        VocabSize = 256000;
+        ModelDimension = 2048;
+        NumLayers = 24;
+        MaxSequenceLength = 2048;
+    }
 
     /// <summary>Initializes an options instance by copying inherited configuration.</summary>
     /// <param name="other">The source options.</param>
@@ -46,7 +52,7 @@ public class GriffinOptions : NeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         RecurrenceDimension = other.RecurrenceDimension;
         LearningRate = other.LearningRate;
@@ -56,5 +62,20 @@ public class GriffinOptions : NeuralNetworkOptions
         Epsilon = other.Epsilon;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
+        VocabSize = other.VocabSize;
+        ModelDimension = other.ModelDimension;
+        NumLayers = other.NumLayers;
+        MaxSequenceLength = other.MaxSequenceLength;
+    }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore(requiresHeads: false, requiresState: false);
     }
 }

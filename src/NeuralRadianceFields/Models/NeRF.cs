@@ -353,72 +353,75 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     /// </para>
     /// </remarks>
     public NeRF(
-        int positionEncodingLevels = 10,
-        int directionEncodingLevels = 4,
-        int hiddenDim = 256,
-        int numLayers = 8,
-        int colorHiddenDim = 128,
-        int colorNumLayers = 1,
-        bool useHierarchicalSampling = true,
-        int renderSamples = 64,
-        int hierarchicalSamples = 128,
-        double renderNearBound = 2.0,
-        double renderFarBound = 6.0,
-        double learningRate = 5e-4,
         ILossFunction<T>? lossFunction = null,
         NeRFOptions? options = null)
-        : base(CreateArchitecture(hiddenDim), lossFunction ?? new MeanSquaredErrorLoss<T>())
+        : this(options ?? new NeRFOptions(), lossFunction)
     {
-        _options = options ?? new NeRFOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer builds the architecture from HiddenDim and runs before the body, so
+    /// the options must be resolved first. Options come first in the parameter list because a
+    /// nullable and a non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private NeRF(NeRFOptions options, ILossFunction<T>? lossFunction)
+        : base(CreateArchitecture(options.HiddenDim), lossFunction ?? new MeanSquaredErrorLoss<T>())
+    {
+        _options = options;
         Options = _options;
         // Validate parameters
-        if (positionEncodingLevels <= 0)
+        if (options.PositionEncodingLevels <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(positionEncodingLevels), "Position encoding levels must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.PositionEncodingLevels), "Position encoding levels must be positive.");
         }
-        if (directionEncodingLevels <= 0)
+        if (options.DirectionEncodingLevels <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(directionEncodingLevels), "Direction encoding levels must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.DirectionEncodingLevels), "Direction encoding levels must be positive.");
         }
-        if (hiddenDim <= 0)
+        if (options.HiddenDim <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.HiddenDim), "Hidden dimension must be positive.");
         }
-        if (numLayers <= 0)
+        if (options.NumLayers <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.NumLayers), "Number of layers must be positive.");
         }
-        if (colorHiddenDim <= 0)
+        if (options.ColorHiddenDim <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(colorHiddenDim), "Color hidden dimension must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.ColorHiddenDim), "Color hidden dimension must be positive.");
         }
-        if (colorNumLayers < 0)
+        if (options.ColorNumLayers < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(colorNumLayers), "Color layer count cannot be negative.");
+            throw new ArgumentOutOfRangeException(nameof(options.ColorNumLayers), "Color layer count cannot be negative.");
         }
-        if (renderSamples <= 0)
+        if (options.RenderSamples <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(renderSamples), "Render samples must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(options.RenderSamples), "Render samples must be positive.");
         }
-        if (hierarchicalSamples < 0)
+        if (options.HierarchicalSamples < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(hierarchicalSamples), "Hierarchical samples cannot be negative.");
+            throw new ArgumentOutOfRangeException(nameof(options.HierarchicalSamples), "Hierarchical samples cannot be negative.");
         }
 
         // Store parameters
-        _positionEncodingLevels = positionEncodingLevels;
-        _directionEncodingLevels = directionEncodingLevels;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _colorHiddenDim = colorHiddenDim;
-        _colorNumLayers = colorNumLayers;
-        _useHierarchicalSampling = useHierarchicalSampling;
-        _renderSamples = renderSamples;
-        _hierarchicalSamples = hierarchicalSamples;
-        _renderNearBound = NumOps.FromDouble(renderNearBound);
-        _renderFarBound = NumOps.FromDouble(renderFarBound);
-        _learningRate = NumOps.FromDouble(learningRate);
-        _skipConnectionLayer = numLayers >= 4 ? Math.Min(numLayers / 2, numLayers - 1) : -1;
+        _positionEncodingLevels = options.PositionEncodingLevels;
+        _directionEncodingLevels = options.DirectionEncodingLevels;
+        _hiddenDim = options.HiddenDim;
+        _numLayers = options.NumLayers;
+        _colorHiddenDim = options.ColorHiddenDim;
+        _colorNumLayers = options.ColorNumLayers;
+        _useHierarchicalSampling = options.UseHierarchicalSampling;
+        _renderSamples = options.RenderSamples;
+        _hierarchicalSamples = options.HierarchicalSamples;
+        _renderNearBound = NumOps.FromDouble(options.RenderNearBound);
+        _renderFarBound = NumOps.FromDouble(options.RenderFarBound);
+        _learningRate = NumOps.FromDouble(options.LearningRate);
+        _skipConnectionLayer = options.NumLayers >= 4 ? Math.Min(options.NumLayers / 2, options.NumLayers - 1) : -1;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         // Initialize network layers

@@ -8,10 +8,14 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CATSeg model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class CATSegOptions : NeuralNetworkOptions
+public class CATSegOptions : SegmentationModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public CATSegOptions() { }
+    public CATSegOptions()
+    {
+        NumClasses = 150;
+        DropRate = 0.1;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -23,6 +27,9 @@ public class CATSegOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        MaxGradNorm = other.MaxGradNorm;
+        NumClasses = other.NumClasses;
+        DropRate = other.DropRate;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         MaxGradientNorm = other.MaxGradientNorm;
@@ -45,4 +52,13 @@ public class CATSegOptions : NeuralNetworkOptions
     /// </summary>
     /// <value>Defaults to 0.01, matching CAT-Seg's official full-model gradient clipping.</value>
     public double MaxGradientNorm { get; set; } = 0.01;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
+    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// </exception>
+    public void Validate() => ValidateSegmentationCore();
 }

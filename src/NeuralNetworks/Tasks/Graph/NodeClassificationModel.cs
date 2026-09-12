@@ -99,6 +99,11 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     // Train on a different-sized graph doesn't run against a stale identity.
     private bool _usesFallbackAdjacency;
 
+    private readonly NodeClassificationOptions _options;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of input features per node.
     /// </summary>
@@ -128,12 +133,9 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     /// Initializes a new instance of the <see cref="NodeClassificationModel{T}"/> class.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining input/output sizes and layers.</param>
-    /// <param name="hiddenDim">Hidden dimension for intermediate layers (default: 64).</param>
-    /// <param name="numLayers">Number of graph convolutional layers (default: 2).</param>
-    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
+    /// <param name="options">Model hyperparameters. Defaults to the published values.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creating a node classification model:
     ///
@@ -161,19 +163,39 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
 
     public NodeClassificationModel(
         NeuralNetworkArchitecture<T> architecture,
-        int hiddenDim = 64,
-        int numLayers = 2,
-        double dropoutRate = 0.5,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
+        NodeClassificationOptions? options = null)
+        : this(options ?? new NodeClassificationOptions(), architecture, optimizer, lossFunction)
     {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options have to
+    /// exist before it. Options come first in the parameter list because a nullable and a
+    /// non-nullable reference type are the same type to the compiler — the ordering is what keeps
+    /// this from being a duplicate signature.
+    /// </para>
+    /// </remarks>
+    private NodeClassificationModel(
+        NodeClassificationOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), options.MaxGradNorm)
+    {
+        options.Validate();
+        _options = options;
+        Options = _options;
         InputFeatures = architecture.InputSize;
         NumClasses = architecture.OutputSize;
-        HiddenDim = hiddenDim;
-        NumLayers = numLayers;
-        DropoutRate = dropoutRate;
+        HiddenDim = options.HiddenDim;
+        NumLayers = options.NumLayers;
+        DropoutRate = options.DropoutRate;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

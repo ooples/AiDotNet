@@ -178,14 +178,8 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         string visionEncoderPath,
         string languageModelPath,
         ITokenizer tokenizer,
-        int embeddingDimension = 4096,
-        int visionEmbeddingDim = 1024,
-        int maxSequenceLength = 2048,
-        int contextWindowSize = 128000,
-        int imageSize = 336,
-        int maxImagesPerRequest = 10,
-        ILossFunction<T>? lossFunction = null,
-        Gpt4VisionOptions? options = null)
+        Gpt4VisionOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
@@ -205,16 +199,20 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _languageModelPath = languageModelPath;
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
-        _embeddingDimension = embeddingDimension;
-        _visionEmbeddingDim = visionEmbeddingDim;
-        _maxSequenceLength = maxSequenceLength;
-        _contextWindowSize = contextWindowSize;
-        _imageSize = imageSize;
-        _maxImagesPerRequest = maxImagesPerRequest;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _embeddingDimension = _options.EmbeddingDimension;
+        _visionEmbeddingDim = _options.VisionEmbeddingDim;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _contextWindowSize = _options.ContextWindowSize;
+        _imageSize = _options.ImageSize;
+        _maxImagesPerRequest = _options.MaxImagesPerRequest;
         _maxImageResolution = (2048, 2048);
         _supportedDetailLevels = new List<string> { "low", "high", "auto" };
         _vocabularySize = 128256;
-        _hiddenDim = embeddingDimension;
+        _hiddenDim = _options.EmbeddingDimension;
         _numVisionLayers = 24;
         _numLanguageLayers = 32;
         _numHeads = 32;
@@ -229,39 +227,28 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
     public Gpt4VisionNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         ITokenizer tokenizer,
-        int embeddingDimension = 4096,
-        int visionEmbeddingDim = 1024,
-        int maxSequenceLength = 2048,
-        int contextWindowSize = 128000,
-        int imageSize = 336,
-        int hiddenDim = 4096,
-        int numVisionLayers = 24,
-        int numLanguageLayers = 32,
-        int numHeads = 32,
-        int patchSize = 14,
-        int vocabularySize = 128256,
-        int maxImagesPerRequest = 10,
-        ILossFunction<T>? lossFunction = null,
-        Gpt4VisionOptions? options = null)
+        Gpt4VisionOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
-        _embeddingDimension = embeddingDimension;
-        _visionEmbeddingDim = visionEmbeddingDim;
-        _maxSequenceLength = maxSequenceLength;
-        _contextWindowSize = contextWindowSize;
-        _imageSize = imageSize;
-        _hiddenDim = hiddenDim;
-        _numVisionLayers = numVisionLayers;
-        _numLanguageLayers = numLanguageLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
-        _maxImagesPerRequest = maxImagesPerRequest;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _visionEmbeddingDim = _options.VisionEmbeddingDim;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _contextWindowSize = _options.ContextWindowSize;
+        _imageSize = _options.ImageSize;
+        _hiddenDim = _options.HiddenDim;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLanguageLayers = _options.NumLanguageLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
+        _maxImagesPerRequest = _options.MaxImagesPerRequest;
         _maxImageResolution = (2048, 2048);
         _supportedDetailLevels = new List<string> { "low", "high", "auto" };
 

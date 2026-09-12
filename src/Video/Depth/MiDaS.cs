@@ -124,22 +124,20 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
     /// </summary>
     public MiDaS(
         NeuralNetworkArchitecture<T> architecture,
+        MiDaSOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int embedDim = 768,
-        int numLayers = 12,
-        MiDaSVariant variant = MiDaSVariant.DPTLarge,
-        MiDaSOptions? options = null)
-        : base(architecture, lossFunction ?? new ScaleInvariantDepthLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new ScaleInvariantDepthLoss<T>())
     {
         _options = options ?? new MiDaSOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _embedDim = embedDim;
-        _numLayers = numLayers;
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 384;
-        _variant = variant;
+        _variant = _options.Variant;
 
         _lossFunction = lossFunction ?? new ScaleInvariantDepthLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -153,9 +151,8 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
     public MiDaS(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        MiDaSVariant variant = MiDaSVariant.DPTLarge,
         MiDaSOptions? options = null)
-        : base(architecture, new ScaleInvariantDepthLoss<T>())
+        : base(architecture: architecture, new ScaleInvariantDepthLoss<T>())
     {
         _options = options ?? new MiDaSOptions();
         Options = _options;
@@ -170,7 +167,11 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         _embedDim = 768;
         _numLayers = 12;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 384;
-        _variant = variant;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _variant = _options.Variant;
         _lossFunction = new ScaleInvariantDepthLoss<T>();
 
         try

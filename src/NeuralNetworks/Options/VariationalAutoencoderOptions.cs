@@ -5,6 +5,6 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the VariationalAutoencoder.
 /// </summary>
-public class VariationalAutoencoderOptions : NeuralNetworkOptions
+public class VariationalAutoencoderOptions : ModelHyperparameterOptions
 {
 }

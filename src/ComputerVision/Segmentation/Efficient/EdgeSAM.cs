@@ -43,7 +43,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new EdgeSAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new EdgeSAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new EdgeSAM&lt;double&gt;(architecture,
+///     options: new EdgeSAMOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for mobile deployment
 /// var onnxModel = new EdgeSAM&lt;double&gt;(architecture, "edgesam_model.onnx");
@@ -84,8 +87,6 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -94,14 +95,13 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// </remarks>
     public EdgeSAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         EdgeSAMOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new EdgeSAMOptions()).NumClasses)
     {
-        _options = options ?? new EdgeSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [48, 96, 192, 384];
         _depths = [1, 1, 3, 1];
         _decoderDim = 256;
@@ -113,7 +113,6 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -123,14 +122,14 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public EdgeSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public EdgeSAM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         EdgeSAMOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new EdgeSAMOptions()).NumClasses)
     {
-        _options = options ?? new EdgeSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [48, 96, 192, 384];
         _depths = [1, 1, 3, 1];
         _decoderDim = 256;

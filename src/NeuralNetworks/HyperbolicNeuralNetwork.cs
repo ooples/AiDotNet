@@ -36,8 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HyperbolicNeuralNetworkOptions { InputSize = 64, HiddenSize = 128, Curvature = 1.0 };
-/// var model = new HyperbolicNeuralNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+///     NetworkComplexity.Simple, inputSize: 64, outputSize: 8);
+/// var options = new HyperbolicNeuralNetworkOptions { Curvature = -1.0 };
+/// var model = new HyperbolicNeuralNetwork&lt;float&gt;(architecture, options: options);
 /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
 /// var output = model.Predict(input);
 /// </code>
@@ -71,10 +74,8 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the HyperbolicNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="curvature">The curvature of hyperbolic space (default -1.0, must be negative).</param>
     /// <param name="optimizer">The optimization algorithm to use for training. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, MSE is used.</param>
-    /// <param name="maxGradNorm">The maximum gradient norm for gradient clipping during training.</param>
     /// <remarks>
     /// <para>
     /// The curvature parameter controls how "curved" the hyperbolic space is. More negative values
@@ -94,22 +95,19 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public HyperbolicNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        double curvature = -1.0,
+    public HyperbolicNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
-        HyperbolicNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        HyperbolicNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), (options ??= new HyperbolicNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new HyperbolicNeuralNetworkOptions();
+        _options = options;
         Options = _options;
-        if (curvature >= 0)
+        if (options.Curvature >= 0)
         {
-            throw new ArgumentException("Curvature must be negative for hyperbolic space.", nameof(curvature));
+            throw new ArgumentException("Curvature must be negative for hyperbolic space.", nameof(options.Curvature));
         }
 
-        _curvature = NumOps.FromDouble(curvature);
+        _curvature = NumOps.FromDouble(options.Curvature);
         // Paper-faithful default optimizer: SGD + momentum (lr=1e-4, momentum=0.95)
         // per Ganea et al. 2018 "Hyperbolic Neural Networks" §5.1. Möbius matrix-
         // vector products in the Poincaré ball produce gradients whose magnitude
@@ -120,7 +118,8 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
         // raises lr just where it should be lowered, producing the
         // "200-iter loss > 50-iter loss" divergence the MoreData_ShouldNotDegrade
         // invariant catches. SGD+momentum has a single global lr so geometry-induced
-        // gradient blowup is contained by maxGradNorm=1 alone.
+        // gradient blowup is contained by MaxGradNorm alone, which this model leaves at the
+        // library default of 1.
         _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>

@@ -21,12 +21,14 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Conditioning;
 public class ConditioningModuleTests
 {
     private static CLIPTextConditioner<double> NewClip(CLIPVariant variant = CLIPVariant.ViTL14) =>
-        new CLIPTextConditioner<double>(ClipTokenizerFactory.CreateSimple(), variant);
+        new CLIPTextConditioner<double>(
+            ClipTokenizerFactory.CreateSimple(),
+            options: new CLIPTextConditionerOptions { Variant = variant });
 
     private static T5TextConditioner<double> NewT5(T5Variant variant = T5Variant.Base) =>
         new T5TextConditioner<double>(
             LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5),
-            variant);
+            options: new T5TextConditionerOptions { Variant = variant });
 
     #region CLIP Text Conditioner Tests
 

@@ -289,12 +289,9 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         string textEncoderPath,
         string textDecoderPath,
         ITokenizer tokenizer,
-        int embeddingDimension = 256,
-        int maxSequenceLength = 35,
-        int imageSize = 384,
+        BlipOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        BlipOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
@@ -320,9 +317,13 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         _visionEncoderPath = visionEncoderPath;
         _textEncoderPath = textEncoderPath;
         _textDecoderPath = textDecoderPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
         _hiddenDim = 768;
         _numLayers = 12;
         _numHeads = 12;
@@ -396,39 +397,29 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// </remarks>
     public BlipNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 384,
-        int channels = 3,
-        int patchSize = 16,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 35,
-        int embeddingDimension = 256,
-        int hiddenDim = 768,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 12,
-        int numHeads = 12,
-        int mlpDim = 3072,
+        BlipOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        BlipOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
     {
         _options = options ?? new BlipOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _hiddenDim = hiddenDim;
-        _numLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _mlpDim = mlpDim;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _mlpDim = _options.MlpDim;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
 
         // Create simple tokenizer if not provided
         _tokenizer = tokenizer ?? CreateDefaultTokenizer();

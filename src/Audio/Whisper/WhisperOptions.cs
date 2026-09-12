@@ -22,10 +22,21 @@ namespace AiDotNet.Audio.Whisper;
 /// </list>
 /// </para>
 /// </remarks>
-public class WhisperOptions : ModelOptions
+public class WhisperOptions : AudioNeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public WhisperOptions() { }
+    public WhisperOptions()
+    {
+        ModelSize = WhisperModelSize.Base;
+        Language = null;
+        Translate = false;
+        SampleRate = 16000;
+        NumMels = 80;
+        MaxAudioLengthSeconds = 30;
+        MaxTokens = 448;
+        BeamSize = 5;
+        Temperature = 0.0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -130,4 +141,15 @@ public class WhisperOptions : ModelOptions
     /// Gets or sets whether to include word-level timestamps.
     /// </summary>
     public bool WordTimestamps { get; set; } = false;
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

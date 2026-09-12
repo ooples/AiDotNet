@@ -60,12 +60,15 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
-        _options.Validate();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         SupportedLanguages = new[] { _options.Language };

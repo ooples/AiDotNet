@@ -103,7 +103,16 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
     {
         _options = options ?? new MusicFlamingoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Music Flamingo publishes 1e-4. AdamW's own default is 1e-3, so constructing it
+        // bare trained this ~105M-parameter model at ten times the intended rate and the loss
+        // diverged: MoreData_ShouldNotDegrade measured 2.474 against an UNTRAINED baseline of
+        // 1.126. LearningRate was declared on the options and read by nobody.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

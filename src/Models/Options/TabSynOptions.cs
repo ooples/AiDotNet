@@ -43,7 +43,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "TabSyn: Bridging the Gap" (Zhang et al., NeurIPS 2023)
 /// </para>
 /// </remarks>
-public class TabSynOptions<T> : RiskModelOptions<T>
+public class TabSynOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the hidden layer sizes for the VAE encoder.

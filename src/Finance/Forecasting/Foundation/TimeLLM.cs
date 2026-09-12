@@ -334,7 +334,6 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for Time-LLM.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -343,10 +342,8 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     /// layers. In native mode, the LLM is simulated with transformer layers.
     /// </para>
     /// </remarks>
-    public TimeLLM(
-        NeuralNetworkArchitecture<T> architecture,
+    public TimeLLM(NeuralNetworkArchitecture<T> architecture,
         TimeLLMOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -370,7 +367,7 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
         _numHeads = options.NumHeads;
         _dropout = options.DropoutRate;
         _llmBackbone = options.LLMBackbone;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new TimeLLMOptions<T>()).NumFeatures;
 
         // Validate patch parameters before computing _numPatches
         if (_contextLength < 1)

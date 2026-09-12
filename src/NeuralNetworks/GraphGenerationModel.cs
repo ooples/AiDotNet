@@ -219,33 +219,43 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// </para>
     /// </remarks>
     public GraphGenerationModel(
-        int inputFeatures = 16,
-        int hiddenDim = 32,
-        int latentDim = 16,
-        int numEncoderLayers = 2,
-        int maxNodes = 100,
-        GraphGenerationType generationType = GraphGenerationType.VariationalAutoencoder,
-        double klWeight = 1.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         ILearningRateScheduler? learningRateScheduler = null,
-        GraphGenerationModelOptions? options = null,
-        double learningRate = 0.01,
-        bool useAMSGrad = false)
-        : base(CreateArchitecture(inputFeatures, hiddenDim, latentDim, numEncoderLayers),
-               lossFunction ?? new BinaryCrossEntropyLoss<T>(),
-               maxGradNorm)
+        GraphGenerationModelOptions? options = null)
+        : this(options ?? new GraphGenerationModelOptions(), optimizer, lossFunction, learningRateScheduler)
     {
-        _options = options ?? new GraphGenerationModelOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer builds the architecture from InputFeatures, HiddenDim, LatentDim and
+    /// NumEncoderLayers, so the options must be resolved before it runs. Options come first
+    /// because a nullable and a non-nullable reference type are the same type to the compiler.
+    /// </para>
+    /// </remarks>
+    private GraphGenerationModel(
+        GraphGenerationModelOptions options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction,
+        ILearningRateScheduler? learningRateScheduler)
+        : base(CreateArchitecture(options.InputFeatures, options.HiddenDim, options.LatentDim, options.NumEncoderLayers),
+               lossFunction ?? new BinaryCrossEntropyLoss<T>(),
+               options.MaxGradNorm)
+    {
+        options.Validate();
+        _options = options;
         Options = _options;
-        LatentDim = latentDim;
-        HiddenDim = hiddenDim;
-        NumEncoderLayers = numEncoderLayers;
-        MaxNodes = maxNodes;
-        NumLayers = numEncoderLayers;
-        GenerationType = generationType;
-        KLWeight = klWeight;
+        LatentDim = options.LatentDim;
+        HiddenDim = options.HiddenDim;
+        NumEncoderLayers = options.NumEncoderLayers;
+        MaxNodes = options.MaxNodes;
+        NumLayers = options.NumEncoderLayers;
+        GenerationType = options.GenerationType;
+        KLWeight = options.KlWeight;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
         // Train(input, expectedOutput) needs a tape-capable loss to call
@@ -255,17 +265,17 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         // of the forward pass.
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            InitialLearningRate = learningRate,
-            LearningRateScheduler = learningRateScheduler ?? new ConstantLRScheduler(learningRate),
+            InitialLearningRate = options.LearningRate,
+            LearningRateScheduler = learningRateScheduler ?? new ConstantLRScheduler(options.LearningRate),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            UseAMSGrad = useAMSGrad,
+            UseAMSGrad = options.UseAMSGrad,
         };
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
         _random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize variational layer weights
-        _meanWeights = new Tensor<T>([hiddenDim, latentDim]);
-        _logVarWeights = new Tensor<T>([hiddenDim, latentDim]);
+        _meanWeights = new Tensor<T>([options.HiddenDim, options.LatentDim]);
+        _logVarWeights = new Tensor<T>([options.HiddenDim, options.LatentDim]);
         InitializeVariationalWeights();
 
         InitializeLayers();

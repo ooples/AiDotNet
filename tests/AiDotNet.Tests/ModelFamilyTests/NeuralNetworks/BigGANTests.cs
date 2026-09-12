@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,13 +18,5 @@ public class BigGANTests : GANModelTestBase<float>
     protected override int[] OutputShape => [1, 8, 8];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new BigGAN<float>(
-            latentSize: 16,
-            numClasses: 10,
-            classEmbeddingDim: 8,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8,
-            generatorChannels: 8,
-            discriminatorChannels: 8);
+        => new BigGAN<float>(latentSize: 16, numClasses: 10, classEmbeddingDim: 8, imageChannels: 1, imageHeight: 8, imageWidth: 8, options: new BigGANOptions { GeneratorChannels = 8, DiscriminatorChannels = 8 });
 }

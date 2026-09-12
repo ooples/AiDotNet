@@ -115,18 +115,10 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     public Dessurt(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 1024,
-        int maxSequenceLength = 512,
-        int encoderDim = 1024,
-        int decoderDim = 768,
-        int encoderLayers = 24,
-        int decoderLayers = 12,
-        int numHeads = 16,
-        int vocabSize = 50265,
+        DessurtOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DessurtOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DessurtOptions();
         Options = _options;
@@ -137,16 +129,20 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _encoderDim = encoderDim;
-        _decoderDim = decoderDim;
-        _encoderLayers = encoderLayers;
-        _decoderLayers = decoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _encoderDim = _options.EncoderDim;
+        _decoderDim = _options.DecoderDim;
+        _encoderLayers = _options.EncoderLayers;
+        _decoderLayers = _options.DecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -168,33 +164,26 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// </remarks>
     public Dessurt(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 1024,
-        int maxSequenceLength = 512,
-        int encoderDim = 1024,
-        int decoderDim = 768,
-        int encoderLayers = 24,
-        int decoderLayers = 12,
-        int numHeads = 16,
-        int vocabSize = 50265,
+        DessurtOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DessurtOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DessurtOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _encoderDim = encoderDim;
-        _decoderDim = decoderDim;
-        _encoderLayers = encoderLayers;
-        _decoderLayers = decoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
+        _encoderDim = _options.EncoderDim;
+        _decoderDim = _options.DecoderDim;
+        _encoderLayers = _options.EncoderLayers;
+        _decoderLayers = _options.DecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         // Native layers/embeddings are materialized on first use to avoid
         // constructor-time allocation for metadata and construction probes.

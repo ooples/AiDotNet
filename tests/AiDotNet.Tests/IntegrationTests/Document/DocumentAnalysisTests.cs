@@ -41,7 +41,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<double>(arch, options: new AiDotNet.Document.Options.DocBankOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -49,7 +49,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<double>(arch, options: new AiDotNet.Document.Options.DocBankOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -61,7 +61,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<double>(arch, options: new AiDotNet.Document.Options.DocBankOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("DocBank", meta.Name);
     }
@@ -74,7 +74,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<double>(arch, options: new AiDotNet.Document.Options.TableTransformerOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -82,7 +82,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<double>(arch, options: new AiDotNet.Document.Options.TableTransformerOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -94,7 +94,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<double>(arch, options: new AiDotNet.Document.Options.TableTransformerOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("TableTransformer", meta.Name);
     }

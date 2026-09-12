@@ -88,18 +88,20 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// architecture's input size and the neuron count from its output size (arranged near a golden-ratio
     /// aspect grid).
     /// </summary>
-    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null,
+    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
         SelfOrganizingMapNNOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new SelfOrganizingMapNNOptions();
+        options ??= new SelfOrganizingMapNNOptions();
+        _options = options;
         Options = _options;
 
-        // totalEpochs is a divisor in both the learning-rate decay (currentEpoch / totalEpochs) and the
-        // neighborhood-radius schedule (totalEpochs / log(mapArea)); a non-positive value makes those
+        // options.TotalEpochs is a divisor in both the learning-rate decay (currentEpoch / options.TotalEpochs) and the
+        // neighborhood-radius schedule (options.TotalEpochs / log(mapArea)); a non-positive value makes those
         // schedules divide by zero/negative and emit NaN/Infinity weights on the first update.
-        if (totalEpochs <= 0)
-            throw new ArgumentOutOfRangeException(nameof(totalEpochs),
+        if (options.TotalEpochs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options.TotalEpochs),
                 "Total training epochs must be greater than zero for SOM.");
 
         _inputDimension = architecture.InputSize;
@@ -144,7 +146,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
             ?? unchecked((_mapWidth * 73856093) ^ (_mapHeight * 19349663) ^ (_inputDimension * 83492791));
 
         _weights = new Tensor<T>(new[] { _mapWidth * _mapHeight, _inputDimension });
-        _totalEpochs = totalEpochs;
+        _totalEpochs = options.TotalEpochs;
         _currentEpoch = 0;
 
         InitializeWeights();

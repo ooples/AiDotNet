@@ -46,7 +46,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
 ///
 /// var builder = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
-///     .ConfigureModel(new MedSegDiffV2Segmentation&lt;double&gt;(architecture, numClasses: 1));
+///     .ConfigureModel(new MedSegDiffV2Segmentation&lt;double&gt;(architecture));
 ///
 /// var result = builder.Build(trainingImages, trainingMasks);
 /// var segmentation = result.Predict(medicalImage);
@@ -93,8 +93,6 @@ public partial class MedSegDiffV2Segmentation<T> : Common.MedicalSegmentationBas
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -103,14 +101,13 @@ public partial class MedSegDiffV2Segmentation<T> : Common.MedicalSegmentationBas
     /// </remarks>
     public MedSegDiffV2Segmentation(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         MedSegDiffV2SegmentationOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses, _modalities)
+        : base(architecture, optimizer, lossFunction, (options ??= new MedSegDiffV2SegmentationOptions()).NumClasses, _modalities)
     {
-        _options = options ?? new MedSegDiffV2SegmentationOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyMedSegDiffDefaultGeometry(architecture);
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -122,7 +119,6 @@ public partial class MedSegDiffV2Segmentation<T> : Common.MedicalSegmentationBas
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -132,14 +128,14 @@ public partial class MedSegDiffV2Segmentation<T> : Common.MedicalSegmentationBas
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public MedSegDiffV2Segmentation(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public MedSegDiffV2Segmentation(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         MedSegDiffV2SegmentationOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses, _modalities)
+        : base(architecture, onnxModelPath, (options ??= new MedSegDiffV2SegmentationOptions()).NumClasses, _modalities)
     {
-        _options = options ?? new MedSegDiffV2SegmentationOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyMedSegDiffDefaultGeometry(architecture);
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;

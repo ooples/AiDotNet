@@ -33,18 +33,17 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    public GemmaTextConditioner(
-        ITokenizer tokenizer,
-        GemmaVariant variant = GemmaVariant.TwoB,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public GemmaTextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        GemmaTextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new GemmaTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 8192,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new GemmaTextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -62,7 +61,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
             _ => "google/gemma-2b",
         };
         var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
-        return new GemmaTextConditioner<T>(tokenizer, variant);
+        return new GemmaTextConditioner<T>(tokenizer, options: new GemmaTextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
