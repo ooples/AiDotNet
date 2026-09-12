@@ -614,6 +614,20 @@ foreach ($offset in (0..34 | ForEach-Object { $_ * 5 })) {
         MustCover = '*/VisionLanguage/*'
         Env = @("ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'", "ADNSHAPE_CONF_OFFSET: '$offset'", "ADNSHAPE_CONF_BUDGET: '5'") })
 }
+# The two repaired model-shape sweeps. Both were Category=Sweep tests that no shard filter selected and
+# that could not pass until their models were moved into the ParameterSweepWorker child process. They run
+# their subject in that worker exactly like the count/chunk sweeps and the conformance windows, so losing
+# heavy, mustCover, coverageIncludeDirectory or the env that pins the worker count is the same regression
+# here as it is there, and is guarded identically.
+foreach ($shape in @(
+        @{ Name = 'Sweep - Model shape law'; Filter = 'FullyQualifiedName~ModelFamilyLawTests'
+            MustCover = @('src/Audio/*', 'src/VisionLanguage/*', 'src/TextToSpeech/*', 'src/NeuralNetworks/DeclaredModelLayoutBases.cs') },
+        @{ Name = 'Sweep - Model shape discovery'; Filter = 'FullyQualifiedName~ModelShapeDiscoveryProbeTests'
+            MustCover = @('src/NeuralNetworks/*') })) {
+    [void] $expectedInventoryShards.Add(@{
+        Name = $shape.Name; Filter = $shape.Filter; MustCover = $shape.MustCover
+        Env = @("ADNSHAPE_WORKERS: '2'", "ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'") })
+}
 foreach ($expected in $expectedInventoryShards) {
     $entry = Get-ShardEntry $expected.Name
     Assert-Contract ([bool] $entry) "inventory shard '$($expected.Name)' is missing from test-shards.yml"
@@ -624,7 +638,10 @@ foreach ($expected in $expectedInventoryShards) {
     Assert-Contract ($hangLimit.Success -and [int] $hangLimit.Groups['minutes'].Value -gt 5) `
         "inventory shard '$($expected.Name)' must declare a hang timeout greater than the 5-minute default"
     if ($expected.ContainsKey('MustCover')) {
-        Assert-Contract ($entry.Contains("    mustCover: ['$($expected.MustCover)']")) `
+        # A shard may declare several subject globs (the model-shape law covers four families), so the
+        # expected line is rebuilt from the list. A single pattern renders exactly as it did before.
+        $mustCoverLine = '    mustCover: [' + ((@($expected.MustCover) | ForEach-Object { "'$_'" }) -join ', ') + ']'
+        Assert-Contract ($entry.Contains($mustCoverLine)) `
             "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
         Assert-Contract ($entry.Contains('    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0')) `
             "inventory shard '$($expected.Name)' does not instrument the worker its models run in"

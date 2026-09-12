@@ -147,6 +147,33 @@ $cases += [pscustomobject]@{
     ManifestContent = $manifest.Replace('    hangTimeout: 20min', '    hangTimeout: 5min')
 }
 
+# The two repaired model-shape sweeps run their models in the ParameterSweepWorker child process, so the
+# fields that keep them honest are the same four the other worker-backed sweeps rely on. Strip each one
+# from each shard and the contract must reject it, naming that shard and that field: without these
+# controls a silent edit could stop either shard from ever being selected again.
+foreach ($shape in @('Sweep - Model shape law', 'Sweep - Model shape discovery')) {
+    $shapePattern = '(?ms)^  - name: ' + [regex]::Escape($shape) + '\r?\n.*?(?=^  - name:|\z)'
+    $shapeBlock = [regex]::Match($manifest, $shapePattern).Value
+    if (-not $shapeBlock) { throw "Missing '$shape' shard for negative controls." }
+    foreach ($strip in @(
+            @{ Field = 'heavy'; Pattern = '(?m)^    heavy: true\r?\n'
+                Reason = "inventory shard '$shape' is not on the heavy path" },
+            @{ Field = 'mustCover'; Pattern = '(?m)^    mustCover: \[[^\r\n]*\]\r?\n'
+                Reason = "inventory shard '$shape' can become selectable" },
+            @{ Field = 'coverageIncludeDirectory'; Pattern = '(?m)^    coverageIncludeDirectory: [^\r\n]+\r?\n'
+                Reason = "inventory shard '$shape' does not instrument the worker" },
+            @{ Field = 'env'; Pattern = "(?m)^      ADNSHAPE_WORKERS: '2'\r?\n"
+                Reason = "inventory shard '$shape' lost its env" })) {
+        $strippedBlock = [regex]::Replace($shapeBlock, $strip.Pattern, '')
+        if ($strippedBlock -ceq $shapeBlock) { throw "$shape/$($strip.Field): negative control stripped nothing." }
+        $cases += [pscustomobject]@{
+            Name = ($shape -replace '[^A-Za-z0-9]+', '-') + '-' + $strip.Field + '-removed'
+            Reason = $strip.Reason; Content = $workflow
+            ManifestContent = $manifest.Replace($shapeBlock, $strippedBlock)
+        }
+    }
+}
+
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ('aidotnet-ci-contract-review-' + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
