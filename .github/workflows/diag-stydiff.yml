@@ -6,8 +6,26 @@ name: DIAG StyDiff clone flake
 # sonarcloud.yml matrix). The diag/** prefix triggers no other workflow, and
 # this file exists only on the diag branch, so the cost is one ubuntu runner.
 #
-# Builds ONLY the source generator + src/AiDotNet.csproj + the probe console
-# app, skipping the ~13-minute test-project build entirely.
+# RUN 3: run the REAL xunit test in a loop.
+#
+# Runs 1 and 2 used a standalone probe and both came back null on this exact
+# runner:
+#   run 1 - 50 iterations, clean process, MDOP=4 ....... 0 divergence
+#           also proved Conv2D vs Conv2DInto agree bit-for-bit on Linux at
+#           Tensors 0.130.3, killing the ConvolutionalLayer.cs:1503 theory
+#   run 2 - MDOP {1,2,4,8} x burners {0,4,8}, 120 runs .. 0 divergence
+#           killing the managed-GEMM-partitioning and CPU-contention theory
+#
+# Every null so far shares one weakness: the probe runs StyDiff ALONE in a
+# pristine process, while the three recorded failures came from a real shard
+# (dozens of prior model classes, a populated InferenceWeightCache/WeightRegistry,
+# a grown arena pool, Server GC under a heap cap, the xunit harness). This run
+# removes that weakness by executing the real test.
+#
+#   phase A - loop the whole StyDiffModelTests class: real intra-class ordering
+#             and real in-process pollution, at the real tolerance
+#   phase B - loop Clone_ShouldProduceIdenticalOutput alone: maximum iteration
+#             count on the exact failing assertion
 
 on:
   push:
@@ -15,14 +33,14 @@ on:
       - 'diag/**'
   workflow_dispatch:
     inputs:
-      iterations:
-        description: 'Clone-vs-original iterations PER SWEEP CELL (cells = MDOP x contention)'
+      phase_a_minutes:
+        description: 'Minutes to loop the full StyDiffModelTests class'
         required: false
-        default: '10'
-      procs:
-        description: 'DOTNET_PROCESSOR_COUNT override (empty = runner default)'
+        default: '28'
+      phase_b_minutes:
+        description: 'Minutes to loop Clone_ShouldProduceIdenticalOutput alone'
         required: false
-        default: ''
+        default: '24'
 
 permissions: read-all
 
@@ -34,13 +52,13 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
-  AIDOTNET_DISABLE_GPU: 1
+  DOTNET_gcServer: 1
 
 jobs:
-  probe:
-    name: StyDiff clone probe (ubuntu-latest)
+  repro:
+    name: Loop the real StyDiff clone test (ubuntu-latest)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 95
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -51,6 +69,7 @@ jobs:
           sudo rm -rf /opt/ghc /usr/local/.ghcup || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/share/swift /usr/local/share/boost || true
+          sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
           df -h /
 
       - name: Setup .NET 10.0
@@ -68,30 +87,94 @@ jobs:
 
       - name: Report runner topology
         run: |
-          echo "nproc            : $(nproc)"
-          echo "kernel           : $(uname -a)"
-          echo "libc             : $(ldd --version | head -1)"
-          lscpu | grep -Ei 'model name|^cpu\(s\)|thread|core|flags' | head -8
+          echo "nproc  : $(nproc)"
+          echo "kernel : $(uname -a)"
+          echo "libc   : $(ldd --version | head -1)"
+          lscpu | grep -Ei 'model name|^cpu\(s\)|thread|core' | head -6
+          free -g
+
+      - name: Restore dependencies
+        run: dotnet restore
 
       - name: Build source generator
-        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
-      - name: Build probe (pulls src/AiDotNet.csproj transitively)
-        run: dotnet build tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj -c Release -m:4
+      - name: Build test project (net10.0)
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-restore -f net10.0 -m:4
 
-      - name: Run StyDiff clone probe
+      - name: Phase A — loop the full StyDiffModelTests class
         env:
-          DOTNET_PROCESSOR_COUNT: ${{ github.event.inputs.procs }}
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
-          dotnet run --project tools/StyDiffCloneProbe/StyDiffCloneProbe.csproj \
-            -c Release --no-build \
-            -- --iterations "${{ github.event.inputs.iterations || '10' }}" \
-            2>&1 | tee probe-output.txt
+          set +e
+          mkdir -p diag-out
+          minutes="${{ github.event.inputs.phase_a_minutes || '28' }}"
+          deadline=$(( $(date +%s) + (minutes * 60) ))
+          runs=0; fails=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            runs=$((runs + 1))
+            set -o pipefail
+            dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+              --no-build --no-restore \
+              --filter "(FullyQualifiedName~StyDiffModelTests)&Category!=HeavyTimeout&Category!=ModelPerformanceCensus" \
+              2>&1 | tee current.txt
+            status=${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "$status" -ne 0 ]; then
+              fails=$((fails + 1))
+              echo "::warning::PHASE A FAILURE on loop ${runs}"
+              {
+                echo "########## phase A loop ${runs} (exit ${status}) ##########"
+                grep -aE 'Clone output differs|differs from|Assert\.|\[FAIL\]|Failed |error' current.txt | head -60
+              } >> diag-out/failures.txt
+            fi
+            rm -f current.txt
+          done
+          echo "PHASE A: ${runs} class runs, ${fails} failing runs" | tee -a diag-out/summary.txt
 
-      - name: Upload probe output
+      - name: Phase B — loop Clone_ShouldProduceIdenticalOutput alone
+        if: always()
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        run: |
+          set +e
+          mkdir -p diag-out
+          minutes="${{ github.event.inputs.phase_b_minutes || '24' }}"
+          deadline=$(( $(date +%s) + (minutes * 60) ))
+          runs=0; fails=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            runs=$((runs + 1))
+            set -o pipefail
+            dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+              --no-build --no-restore \
+              --filter "FullyQualifiedName~StyDiffModelTests.Clone_ShouldProduceIdenticalOutput" \
+              2>&1 | tee current.txt
+            status=${PIPESTATUS[0]}
+            set +o pipefail
+            if [ "$status" -ne 0 ]; then
+              fails=$((fails + 1))
+              echo "::warning::PHASE B FAILURE on loop ${runs}"
+              {
+                echo "########## phase B loop ${runs} (exit ${status}) ##########"
+                grep -aE 'Clone output differs|differs from|Assert\.|\[FAIL\]|Failed |error' current.txt | head -60
+              } >> diag-out/failures.txt
+            fi
+            rm -f current.txt
+          done
+          echo "PHASE B: ${runs} clone-test runs, ${fails} failing runs" | tee -a diag-out/summary.txt
+
+      - name: Report
+        if: always()
+        run: |
+          echo "===== SUMMARY ====="
+          cat diag-out/summary.txt 2>/dev/null || echo "(no summary)"
+          echo "===== FAILURES ====="
+          cat diag-out/failures.txt 2>/dev/null || echo "(no failures captured — divergence did NOT reproduce)"
+
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: stydiff-probe-output
-          path: probe-output.txt
+          name: stydiff-repro-output
+          path: diag-out/
           if-no-files-found: warn
