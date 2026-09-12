@@ -242,6 +242,21 @@ public partial class ImplicitPosteriorGenerator<T>
         return Forward(z);
     }
 
+    /// <summary>Creates an independent generator with the same architecture and the same weights.</summary>
+    /// <remarks>
+    /// Present so a meta-learner that holds a generator gets its own when it is deep-copied. The clone
+    /// engine duplicates a field by asking for a parameterless <c>Clone()</c> whose return type fits the
+    /// field; a generator is not a sub-model, not a collection and not an option, so without this method
+    /// it falls through every case the engine tests and the field is left SHARED with the source. Meta-
+    /// training a copy would then retrain the original's posterior too.
+    /// </remarks>
+    public ImplicitPosteriorGenerator<T> Clone()
+    {
+        var copy = new ImplicitPosteriorGenerator<T>(_outputDim, _latent, _hidden1, _hidden2);
+        copy.SetParameters(_lambda);
+        return copy;
+    }
+
     private Vector<T> Forward(double[] z)
     {
         int o = 0;
