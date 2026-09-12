@@ -358,14 +358,35 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(InputLayer<>))
         {
-            // InputLayer(int inputSize)
-            var ctor = type.GetConstructor(new Type[] { typeof(int) });
-            if (ctor is null)
+            // InputLayer declares the network's ENTRY SHAPE, and that shape may be
+            // multi-dimensional -- InputLayer([seqLen, embedDim]), the (int[]) constructor added by
+            // #1325. Rebuilding it through the (int) constructor with inputShape[0] silently DROPPED
+            // every axis after the first: an InputLayer([8, 16]) came back as [8]. The architecture
+            // that accepted 8 x 16 = 128 at construction then rejected its own clone with "The first
+            // layer's input size (8) must match the input size (128)", because the rebuilt entry
+            // layer no longer declared the contract the original did. Rebuild through the (int[])
+            // constructor whenever the recorded shape carries more than one axis, so a clone
+            // declares the same entry contract as the layer it was cloned from.
+            //
+            // Rank 1, and any shape still carrying a lazy/placeholder axis (0 or -1, which the
+            // (int[]) constructor rejects as non-positive), keep the original (int) path.
+            if (inputShape is { Length: > 1 }
+                && Array.TrueForAll(inputShape, d => d > 0)
+                && type.GetConstructor(new Type[] { typeof(int[]) }) is { } shapeCtor)
             {
-                throw new MissingLayerCtorException("Cannot find InputLayer constructor with (int).");
+                instance = shapeCtor.Invoke(new object[] { (int[])inputShape.Clone() });
             }
+            else
+            {
+                // InputLayer(int inputSize)
+                var ctor = type.GetConstructor(new Type[] { typeof(int) });
+                if (ctor is null)
+                {
+                    throw new MissingLayerCtorException("Cannot find InputLayer constructor with (int).");
+                }
 
-            instance = ctor.Invoke(new object[] { inputShape[0] });
+                instance = ctor.Invoke(new object[] { inputShape[0] });
+            }
         }
         else if (genericDef == typeof(ReshapeLayer<>))
         {
