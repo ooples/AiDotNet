@@ -5228,10 +5228,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
     /// </para>
     /// </remarks>
+    // Diagnostic tallies of this instance's own shape propagation, not model state: persisted, they made a copy
+    // serialize differently from its original by however many forward passes each had run.
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedBatched;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedPerSample;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDeclined;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDisagreedBoth;
+    [AiDotNet.Attributes.Scratch]
     private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
