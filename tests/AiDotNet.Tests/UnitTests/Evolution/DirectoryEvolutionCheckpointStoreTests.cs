@@ -240,7 +240,7 @@ public sealed class DirectoryEvolutionCheckpointStoreTests
     };
 
     private static EvolutionEngine<TestGenome> Engine(EvolutionEngineOptions options,
-        AiDotNet.Interfaces.IEvolutionCheckpointStore? checkpointStore) => new(
+        IEvolutionCheckpointStore? checkpointStore) => new(
         new SyntheticEvolutionTask(), new IncrementVariation(),
         _ => new MapElitesArchive<TestGenome>(new[]
         {

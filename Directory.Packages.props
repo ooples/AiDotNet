@@ -4,6 +4,11 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
+    <!-- The quality-diversity evolution engine, which this repository used to carry as ~100 files of its
+         own. It was extracted to AiDotNet.Evolution so AiDotNet.Tensors and other consumers could share it
+         without depending on AiDotNet; keeping a private copy afterwards meant the two drifted, and the
+         extracted one moved ahead by 1,141 lines of code across 41 files while this copy stood still. -->
+    <PackageVersion Include="AiDotNet.Evolution" Version="0.1.0-preview.2" />
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <!-- AiDotNet.Tensors 0.86.1 â€” bumped from 0.84.1 to unblock this PR (#1417).
          The dep that gated this PR's INT8 wiring shipped: Tensors PR #427
