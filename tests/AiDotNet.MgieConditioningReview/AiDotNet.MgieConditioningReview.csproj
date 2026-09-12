@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <_GetChildProjectCopyToOutputDirectoryItems>false</_GetChildProjectCopyToOutputDirectoryItems>
+    <GenerateRuntimeConfigDevFile>true</GenerateRuntimeConfigDevFile>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <ProjectReference Include="../../src/AiDotNet.Generators/AiDotNet.Generators.csproj" OutputItemType="Reference" ReferenceOutputAssembly="true" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <Compile Include="../AiDotNet.Tests/ModuleInitializer.cs" />
+    <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" />
+    <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/MgieConditioningContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/JointVisionLanguageStateTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/JointVisionLanguageEncodingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/MgieSamplingPhysicsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/MgieJointMapperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/MgiePersistenceAndTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/MgieCloneConfigurationReviewTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/VisionLanguage/RectangularAttentionReviewTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Generators/GeneratedMgieFixtureContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Generators/CloneConstructorOwnerBindingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Serialization/CloneDeclaredOwnerRuntimeTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Serialization/ClonePartialGenericOwnerTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Generators/ParameterGeneratorSemanticTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Generators/CloneAutomationAnalyzerTests.cs" />
+    <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CopyMgieLegacyManagedRuntime" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net471'">
+    <Copy SourceFiles="@(RuntimeCopyLocalItems)"
+          DestinationFiles="@(RuntimeCopyLocalItems->'$(TargetDir)%(DestinationSubDirectory)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

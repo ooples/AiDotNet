@@ -29,8 +29,8 @@ public class MGIEOptions : EditingVLMOptions
         MaxGenerationLength = other.MaxGenerationLength;
         DropoutRate = other.DropoutRate;
         ArchitectureType = other.ArchitectureType;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = other.ImageMean is null ? throw new ArgumentException("ImageMean is required.", nameof(other)) : (double[])other.ImageMean.Clone();
+        ImageStd = other.ImageStd is null ? throw new ArgumentException("ImageStd is required.", nameof(other)) : (double[])other.ImageStd.Clone();
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
@@ -39,6 +39,12 @@ public class MGIEOptions : EditingVLMOptions
         NumDiffusionSteps = other.NumDiffusionSteps;
         GuidanceScale = other.GuidanceScale;
         EnableExpressiveInstructions = other.EnableExpressiveInstructions;
+        VisionPatchSize = other.VisionPatchSize;
+        EditHiddenDim = other.EditHiddenDim;
+        EditNumHeads = other.EditNumHeads;
+        EditTokenCount = other.EditTokenCount;
+        EditQueryCount = other.EditQueryCount;
+        ImageGuidanceScale = other.ImageGuidanceScale;
     }
 
     public MGIEOptions()
@@ -51,8 +57,31 @@ public class MGIEOptions : EditingVLMOptions
         NumHeads = 32;
         ImageSize = 512;
         VocabSize = 32000;
+        MaxSequenceLength = 2048;
     }
 
-    /// <summary>Gets or sets whether to use MLLM for expressive instruction understanding.</summary>
+    /// <summary>
+    /// Gets or sets whether string editing requests first generate an expressive continuation
+    /// with the native MLLM. Training/token-ID APIs consume the explicit caller-supplied tokens.
+    /// Generation needs trained weights to produce meaningful language; construction does not load them.
+    /// </summary>
     public bool EnableExpressiveInstructions { get; set; } = true;
+
+    /// <summary>Vision encoder patch size; independent of the diffusion output resolution.</summary>
+    public int VisionPatchSize { get; set; } = 14;
+
+    /// <summary>Hidden width of the edit mapper, 512 in the released MGIE implementation.</summary>
+    public int EditHiddenDim { get; set; } = 512;
+
+    /// <summary>Attention heads in the mapper, independent of the language model's heads.</summary>
+    public int EditNumHeads { get; set; } = 4;
+
+    /// <summary>Learned edit tokens appended to the joint image/instruction stream.</summary>
+    public int EditTokenCount { get; set; } = 8;
+
+    /// <summary>Learned output queries, 77 in the released MGIE implementation.</summary>
+    public int EditQueryCount { get; set; } = 77;
+
+    /// <summary>Image-only classifier-free guidance scale; the text scale is GuidanceScale.</summary>
+    public double ImageGuidanceScale { get; set; } = 1.5;
 }

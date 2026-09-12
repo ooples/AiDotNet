@@ -150,7 +150,8 @@ public static class CloneRegistry
         // total: every model and every layer is generic, so a plan that loses its constructor on
         // closing falls back to demanding a parameterless constructor -- which is precisely the
         // constructor these types do not have.
-        return new ClonePlan(closed, entries, open.ConstructorParameters, open.ConstructorCandidates);
+        return new ClonePlan(closed, entries, open.ConstructorParameters, open.ConstructorCandidates,
+            open.ConstructorBindings);
     }
 
     private static readonly object GeneratedGate = new();

@@ -83,12 +83,8 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     private UNetNoisePredictor<T> _unet;
     private StandardVAE<T> _vae;
 
-    /// <summary>
-    /// The edit head T. Depth comes from <c>EditHeadLayers</c>, whose default is the paper's 4, so
-    /// the paper value is the default without being a constraint. Its width is the U-Net's
-    /// cross-attention width, because producing that context is the whole job of this stage.
-    /// </summary>
-    private readonly List<TransformerEncoderBlock<T>> _editHead = new();
+    private LLaVANeuralNetwork<T> _instructionEncoder;
+    private MultimodalEditMapperLayer<T> _editMapper;
 
     #endregion
 
@@ -109,6 +105,9 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
+
+    /// <inheritdoc />
+    public override double GuidanceScale => _options.GuidanceScale;
 
     /// <summary>Width of the MLLM decoder whose [IMG] tokens the edit head consumes.</summary>
     public int EmbeddingDimension => _options.DecoderDim;
@@ -142,6 +141,27 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
         UNetNoisePredictor<T>? unet = null,
         StandardVAE<T>? vae = null,
         int? seed = null)
+        : this(options, null, architecture, diffusionOptions, scheduler, unet, vae, seed)
+    {
+    }
+
+    /// <summary>
+    /// Creates an MGIE model with a native instruction encoder and its matching tokenizer.
+    /// The encoder becomes an owned, registered component. Arbitrary ONNX providers do not expose
+    /// the joint hidden-state contract required here; their existing LLaVA generation API is unchanged.
+    /// </summary>
+    public MGIE(LLaVANeuralNetwork<T> instructionEncoder,
+        NeuralNetworkArchitecture<T>? architecture = null, MGIEOptions? options = null,
+        DiffusionModelOptions<T>? diffusionOptions = null, INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null, StandardVAE<T>? vae = null, int? seed = null)
+        : this(options, instructionEncoder ?? throw new ArgumentNullException(nameof(instructionEncoder)),
+            architecture, diffusionOptions, scheduler, unet, vae, seed)
+    {
+    }
+
+    private MGIE(MGIEOptions? options, LLaVANeuralNetwork<T>? instructionEncoder,
+        NeuralNetworkArchitecture<T>? architecture, DiffusionModelOptions<T>? diffusionOptions,
+        INoiseScheduler<T>? scheduler, UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
         : base(
             diffusionOptions ?? new DiffusionModelOptions<T>
             {
@@ -153,13 +173,30 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        _options = options ?? new MGIEOptions();
-        InitializeComponents(unet, vae, seed);
+        _options = new MGIEOptions(options ?? new MGIEOptions());
+        ValidateEditingOptions(_options);
+        InitializeComponents(unet, vae, instructionEncoder, seed);
     }
 
-    [MemberNotNull(nameof(_unet), nameof(_vae))]
-    private void InitializeComponents(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_instructionEncoder), nameof(_editMapper))]
+    private void InitializeComponents(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae,
+        LLaVANeuralNetwork<T>? instructionEncoder, int? seed)
     {
+        if (unet is not null && (unet.InputChannels != INPUT_CHANNELS || unet.OutputChannels != LATENT_CHANNELS ||
+            unet.ContextDimension != CROSS_ATTENTION_DIM))
+            throw new ArgumentException("MGIE requires an eight-input/four-output-channel denoiser with 768-wide context.", nameof(unet));
+        if (vae is not null && (vae.InputChannels != 3 || vae.LatentChannels != LATENT_CHANNELS))
+            throw new ArgumentException("MGIE requires an RGB/four-latent-channel VAE.", nameof(vae));
+        int downsample = vae?.DownsampleFactor ?? 8;
+        if (downsample <= 0 || _options.OutputImageSize % downsample != 0)
+            throw new ArgumentOutOfRangeException(nameof(MGIEOptions.OutputImageSize), "Output size must be divisible by the VAE downsampling factor.");
+        if (instructionEncoder is not null &&
+            (instructionEncoder.EmbeddingDimension != _options.DecoderDim ||
+             instructionEncoder.ImageSize != _options.ImageSize ||
+             instructionEncoder.MaxSequenceLength != _options.MaxSequenceLength))
+            throw new ArgumentException("The instruction encoder's width, image size and sequence limit must match MGIE options.",
+                nameof(instructionEncoder));
+
         _unet = unet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: INPUT_CHANNELS,
@@ -180,14 +217,11 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             latentScaleFactor: 0.18215,
             seed: seed);
 
-        for (int i = 0; i < _options.EditHeadLayers; i++)
-        {
-            _editHead.Add(new TransformerEncoderBlock<T>(
-                hiddenSize: CROSS_ATTENTION_DIM,
-                numHeads: _options.NumHeads,
-                ffnDim: CROSS_ATTENTION_DIM * 4,
-                dropoutRate: _options.DropoutRate));
-        }
+        _instructionEncoder = instructionEncoder ?? CreateInstructionEncoder(seed);
+        LayerInitializationSeedScope.ResetForModelConstruction(seed ?? _options.Seed ?? Architecture?.RandomSeed);
+        _editMapper = new MultimodalEditMapperLayer<T>(_options.DecoderDim, _options.EditHiddenDim,
+            CROSS_ATTENTION_DIM, _options.EditTokenCount, _options.EditQueryCount,
+            _options.EditNumHeads, _options.EditHeadLayers, _options.DropoutRate);
     }
 
     /// <inheritdoc />
@@ -195,69 +229,10 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     {
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
-        foreach (var block in _editHead)
-        {
-            RegisterParameterComponent(block);
-        }
+        RegisterParameterComponent(_instructionEncoder);
+        RegisterParameterComponent(_editMapper);
     }
 
-    #endregion
-
-    #region IImageEditingVLM
-
-    /// <summary>
-    /// Runs the edit head over MLLM visual tokens to produce the latent guidance U the denoiser
-    /// cross-attends to. Paper: T "maps the sequential visual tokens from the MLLM to the
-    /// semantically meaningful latent U".
-    /// </summary>
-    private Tensor<T> ApplyEditHead(Tensor<T> visualTokens)
-    {
-        var guidance = visualTokens;
-        foreach (var block in _editHead)
-        {
-            guidance = block.Forward(guidance);
-        }
-
-        return guidance;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> EncodeImage(Tensor<T> image)
-    {
-        if (image is null)
-            throw new ArgumentNullException(nameof(image));
-        return EncodeToLatent(image);
-    }
-
-    /// <summary>Edits <paramref name="image"/> according to <paramref name="instruction"/>.</summary>
-    /// <remarks>
-    /// The source image is encoded to the VAE latent space and carried alongside the noisy latent -
-    /// the 8-channel input MGIE inherits from InstructPix2Pix - while the instruction reaches the
-    /// denoiser as cross-attention context produced by the edit head.
-    /// </remarks>
-    public Tensor<T> EditImage(Tensor<T> image, string instruction)
-    {
-        if (image is null)
-            throw new ArgumentNullException(nameof(image));
-        if (instruction is null)
-            throw new ArgumentNullException(nameof(instruction));
-
-        var sourceLatent = EncodeToLatent(image);
-        var guidance = ApplyEditHead(sourceLatent);
-        var edited = Denoise(sourceLatent, guidance);
-        return DecodeFromLatent(edited);
-    }
-
-    /// <summary>
-    /// Reverse diffusion, delegated to the base. The base owns the scheduler contract - its Step
-    /// takes Vector<T> plus an eta term and varies by scheduler - so re-implementing the loop here
-    /// would duplicate it and drift from it.
-    /// </summary>
-    private Tensor<T> Denoise(Tensor<T> sourceLatent, Tensor<T> guidance)
-    {
-        _ = guidance;
-        return Generate(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps);
-    }
     #endregion
 
     // PredictNoise is deliberately NOT overridden. LatentDiffusionModelBase already implements it
@@ -269,7 +244,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     #region Metadata
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
+    public override ModelOptions GetOptions() => new MGIEOptions(_options);
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -286,6 +261,9 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
         metadata.SetProperty("architecture", "sd15-8ch-input-mllm-guidance");
         metadata.SetProperty("editHeadLayers", _options.EditHeadLayers);
         metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
+        metadata.SetProperty("editMapperHiddenDim", _options.EditHiddenDim);
+        metadata.SetProperty("editMapperQueryCount", _options.EditQueryCount);
+        metadata.SetProperty("weights", "native-trainable; pretrained checkpoint import is not automatic");
         metadata.SetProperty("paper", "arXiv:2309.17102");
         return metadata;
     }
