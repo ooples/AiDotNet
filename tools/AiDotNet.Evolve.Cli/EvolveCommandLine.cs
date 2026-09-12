@@ -328,7 +328,12 @@ internal static class EvolveCommandLine
                         string.Join(", ", known.Select(option => "--" + option)) + ".");
                 }
 
+                if (parsed._values.ContainsKey(name))
+                    throw new ArgumentException($"Option '--{name}' may be specified only once.");
+
                 bool hasValue = index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal);
+                if (hasValue && Flags.Contains(name))
+                    throw new ArgumentException($"Flag option '--{name}' does not accept a value; omit the flag to leave it disabled.");
                 if (!hasValue && !Flags.Contains(name))
                     throw new ArgumentException($"'--{name}' expects a value.");
 
