@@ -117,12 +117,15 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
     {
     }
 
-    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null, RecurrentNeuralNetworkOptions? options = null) :
+    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
+        RecurrentNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new RecurrentNeuralNetworkOptions();
+        options ??= new RecurrentNeuralNetworkOptions();
+        _options = options;
         Options = _options;
-        _learningRate = NumOps.FromDouble(learningRate);
+        _learningRate = NumOps.FromDouble(options.LearningRate);
         InitializeRecurrentLayers();
     }
 

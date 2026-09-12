@@ -116,7 +116,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         DenseNetOptions? options = null)
         : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), (options ??= new DenseNetOptions()).MaxGradNorm)
     {
-        _options = options ?? new DenseNetOptions();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

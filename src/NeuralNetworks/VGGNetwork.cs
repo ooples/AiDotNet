@@ -152,7 +152,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         VGGOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VGGOptions()).MaxGradNorm)
     {
-        _options = options ?? new VGGOptions();
+        _options = options;
         Options = _options;
 
         Guard.NotNull(configuration);

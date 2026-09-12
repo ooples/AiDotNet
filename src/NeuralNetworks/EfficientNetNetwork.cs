@@ -129,7 +129,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         // (Training_ShouldReduceLoss saw 0.33 -> 7094).
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new EfficientNetOptions()).MaxGradNorm)
     {
-        _options = options ?? new EfficientNetOptions();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

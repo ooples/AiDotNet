@@ -225,7 +225,9 @@ public class AdvancedAlgebraNetworkTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new HyperbolicNeuralNetwork<double>(architecture, curvature: 1.0));
+            new HyperbolicNeuralNetwork<double>(
+                architecture,
+                options: new HyperbolicNeuralNetworkOptions { Curvature = 1.0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -273,7 +275,9 @@ public class AdvancedAlgebraNetworkTests
             outputSize: 5,
             layers: layers
         );
-        var network = new HyperbolicNeuralNetwork<double>(architecture, curvature: -1.0);
+        var network = new HyperbolicNeuralNetwork<double>(
+            architecture,
+            options: new HyperbolicNeuralNetworkOptions { Curvature = -1.0 });
 
         var input = new Tensor<double>([10]);
         var target = new Tensor<double>([5]);
@@ -299,7 +303,9 @@ public class AdvancedAlgebraNetworkTests
             outputSize: 5,
             layers: layers
         );
-        var network = new HyperbolicNeuralNetwork<double>(architecture, curvature: -2.0);
+        var network = new HyperbolicNeuralNetwork<double>(
+            architecture,
+            options: new HyperbolicNeuralNetworkOptions { Curvature = -2.0 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -355,7 +361,9 @@ public class AdvancedAlgebraNetworkTests
         );
 
         // Act
-        var network = new SparseNeuralNetwork<double>(architecture, sparsity: 0.9);
+        var network = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.9 });
 
         // Assert
         Assert.NotNull(network);
@@ -381,11 +389,17 @@ public class AdvancedAlgebraNetworkTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new SparseNeuralNetwork<double>(architecture, sparsity: -0.1));
+            new SparseNeuralNetwork<double>(
+                architecture,
+                options: new SparseNeuralNetworkOptions { Sparsity = -0.1 }));
         Assert.Throws<ArgumentException>(() =>
-            new SparseNeuralNetwork<double>(architecture, sparsity: 1.0));
+            new SparseNeuralNetwork<double>(
+                architecture,
+                options: new SparseNeuralNetworkOptions { Sparsity = 1.0 }));
         Assert.Throws<ArgumentException>(() =>
-            new SparseNeuralNetwork<double>(architecture, sparsity: 1.5));
+            new SparseNeuralNetwork<double>(
+                architecture,
+                options: new SparseNeuralNetworkOptions { Sparsity = 1.5 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -403,7 +417,9 @@ public class AdvancedAlgebraNetworkTests
             outputSize: 10,
             layers: layers
         );
-        var network = new SparseNeuralNetwork<double>(architecture, sparsity: 0.8);
+        var network = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.8 });
 
         var input = new Tensor<double>([20]);
         for (int i = 0; i < 20; i++)
@@ -433,7 +449,9 @@ public class AdvancedAlgebraNetworkTests
             layers: layers
         );
         // Dense would have 100*50 + 50 = 5050 parameters
-        var sparseNetwork = new SparseNeuralNetwork<double>(architecture, sparsity: 0.9);
+        var sparseNetwork = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.9 });
 
         // Act
         int paramCount = (int)sparseNetwork.GetParameterCount();
@@ -460,7 +478,9 @@ public class AdvancedAlgebraNetworkTests
             outputSize: 10,
             layers: layers
         );
-        var network = new SparseNeuralNetwork<double>(architecture, sparsity: 0.5);
+        var network = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.5 });
 
         var input = new Tensor<double>([20]);
         var target = new Tensor<double>([10]);
@@ -486,7 +506,9 @@ public class AdvancedAlgebraNetworkTests
             outputSize: 50,
             layers: layers
         );
-        var network = new SparseNeuralNetwork<double>(architecture, sparsity: 0.95);
+        var network = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.95 });
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -515,7 +537,9 @@ public class AdvancedAlgebraNetworkTests
         );
 
         // Act
-        var network = new SparseNeuralNetwork<double>(architecture, sparsity: 0.8);
+        var network = new SparseNeuralNetwork<double>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.8 });
 
         // Assert
         Assert.Equal(3, network.LayerCount);

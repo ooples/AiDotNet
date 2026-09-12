@@ -223,18 +223,6 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
     public int[]? CategoricalCardinalities { get; set; }
 
     /// <summary>
-    /// Gets or sets whether to enable gradient clipping.
-    /// </summary>
-    /// <value>True to enable gradient clipping; false otherwise. Defaults to true.</value>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for clipping.
-    /// </summary>
-    /// <value>The maximum gradient norm, defaulting to 1.0.</value>
-    public double MaxGradientNorm { get; set; } = 1.0;
-
-    /// <summary>
     /// Gets or sets the weight decay (L2 regularization) coefficient.
     /// </summary>
     /// <value>The weight decay, defaulting to 1e-5.</value>
@@ -272,10 +260,9 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
             EmbeddingInitScale = EmbeddingInitScale,
             UseNumericalBias = UseNumericalBias,
             CategoricalCardinalities = CategoricalCardinalities?.ToArray(),
-            EnableGradientClipping = EnableGradientClipping,
-            MaxGradientNorm = MaxGradientNorm,
             WeightDecay = WeightDecay,
-            UseReGLU = UseReGLU
+            UseReGLU = UseReGLU,
+            MaxGradNorm = MaxGradNorm
         };
     }
 }

@@ -32,8 +32,7 @@ public class FinchOptions : SequenceModelOptions
         Beta1 = other.Beta1;
         Beta2 = other.Beta2;
         WeightDecay = other.WeightDecay;
-        EnableGradientClipping = other.EnableGradientClipping;
-        MaxGradientNorm = other.MaxGradientNorm;
+        MaxGradNorm = other.MaxGradNorm;
         VocabSize = other.VocabSize;
         ModelDimension = other.ModelDimension;
         NumLayers = other.NumLayers;
@@ -86,21 +85,6 @@ public class FinchOptions : SequenceModelOptions
     /// rather than of this options object.
     /// </remarks>
     public double WeightDecay { get; set; } = 0.001;
-
-    /// <summary>Gets or sets whether global-norm gradient clipping is enabled.</summary>
-    /// <value>Defaults to <c>true</c>.</value>
-    /// <remarks>
-    /// NOT A PAPER VALUE. arXiv:2404.05892 states no gradient-clipping threshold, so this and
-    /// <see cref="MaxGradientNorm"/> are a library safeguard rather than part of the published
-    /// recipe -- RWKV-6's recurrent products can transiently overflow on an unscaled batch, which
-    /// is what the model's previous hard-coded bound was defending against. They are called out
-    /// separately so nobody later cites the paper for them.
-    /// </remarks>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>Gets or sets the maximum gradient norm. See <see cref="EnableGradientClipping"/>.</summary>
-    /// <value>Defaults to 1.0. NOT a paper value -- see the remark on the property above.</value>
-    public double MaxGradientNorm { get; set; } = 1.0;
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

@@ -111,7 +111,7 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new AutoIntOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new AutoIntOptions<T>();
+        _options = options;
         // Reuse the same resolved instance that was passed to base(...)
         _lossFunction = LossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

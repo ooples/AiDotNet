@@ -103,7 +103,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="energyFunctional">The energy functional to minimize: E(x, u, ∇u).</param>
         /// <param name="boundaryCheck">Function to check if a point is on the boundary.</param>
         /// <param name="boundaryValue">Function returning the boundary value at a point.</param>
-        /// <param name="numQuadraturePoints">Number of quadrature points for numerical integration.</param>
         /// <remarks>
         /// For Beginners:
         /// The energy functional should encode the physics of your problem.
@@ -118,23 +117,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
         ///
         /// The method will integrate this over the domain using quadrature points.
         /// </remarks>
-        public DeepRitzMethod(
-            NeuralNetworkArchitecture<T> architecture,
+        public DeepRitzMethod(NeuralNetworkArchitecture<T> architecture,
             Func<T[], T[], T[,], T> energyFunctional,
             Func<T[], bool>? boundaryCheck = null,
             Func<T[], T[]>? boundaryValue = null,
-            int numQuadraturePoints = 10000,
             DeepRitzMethodOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new DeepRitzMethodOptions();
+            options ??= new DeepRitzMethodOptions();
+            _options = options;
             Options = _options;
 
             Guard.NotNull(energyFunctional);
             _energyFunctional = energyFunctional;
             _boundaryCheck = boundaryCheck;
             _boundaryValue = boundaryValue;
-            _numQuadraturePoints = numQuadraturePoints;
+            _numQuadraturePoints = options.NumQuadraturePoints;
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = true;
 

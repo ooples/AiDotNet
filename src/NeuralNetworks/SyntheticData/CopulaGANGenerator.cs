@@ -202,7 +202,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CopulaGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new CopulaGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

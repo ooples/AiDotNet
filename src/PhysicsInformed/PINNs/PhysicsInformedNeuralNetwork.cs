@@ -122,8 +122,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="pdeSpecification">The PDE that the solution must satisfy.</param>
         /// <param name="boundaryConditions">Boundary conditions for the problem.</param>
         /// <param name="initialCondition">Initial condition for time-dependent problems (optional).</param>
-        /// <param name="numCollocationPoints">Number of points in the domain where to enforce the PDE.</param>
-        /// <param name="optimizer">Optimization algorithm (Adam is recommended for PINNs).</param>
+            /// <param name="optimizer">Optimization algorithm (Adam is recommended for PINNs).</param>
         /// <param name="dataWeight">Weight for data loss component.</param>
         /// <param name="pdeWeight">Weight for PDE residual loss (often needs tuning).</param>
         /// <param name="boundaryWeight">Weight for boundary condition loss.</param>

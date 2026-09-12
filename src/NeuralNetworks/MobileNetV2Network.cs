@@ -117,7 +117,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         MobileNetV2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), (options ??= new MobileNetV2Options()).MaxGradNorm)
     {
-        _options = options ?? new MobileNetV2Options();
+        _options = options;
         Options = _options;
         _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
         Guard.NotNull(configuration);

@@ -158,9 +158,6 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="HTMNetwork{T}"/> class with the specified architecture and parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
-    /// <param name="columnCount">The number of columns in the spatial pooler. Default is 2048.</param>
-    /// <param name="cellsPerColumn">The number of cells per column in the temporal memory. Default is 32.</param>
-    /// <param name="sparsityThreshold">The target sparsity for the spatial pooler output. Default is 0.02 (2%).</param>
     /// <exception cref="InvalidOperationException">Thrown when the input shape is not specified in the architecture.</exception>
     /// <remarks>
     /// <para>
@@ -202,16 +199,13 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public HTMNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        int columnCount = 2048,
-        int cellsPerColumn = 32,
-        double sparsityThreshold = 0.02,
+    public HTMNetwork(NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
         HTMNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new HTMNetworkOptions();
+        options ??= new HTMNetworkOptions();
+        _options = options;
         Options = _options;
         var inputShape = Architecture.GetInputShape();
         if (inputShape == null || inputShape.Length == 0)
@@ -220,9 +214,9 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
         }
 
         _inputSize = inputShape[0];
-        _columnCount = columnCount;
-        _cellsPerColumn = cellsPerColumn;
-        _sparsityThreshold = NumOps.FromDouble(sparsityThreshold);
+        _columnCount = options.ColumnCount;
+        _cellsPerColumn = options.CellsPerColumn;
+        _sparsityThreshold = NumOps.FromDouble(options.SparsityThreshold);
 
         InitializeLayers();
     }

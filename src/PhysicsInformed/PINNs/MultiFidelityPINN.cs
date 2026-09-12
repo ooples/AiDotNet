@@ -114,7 +114,6 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// <param name="boundaryConditions">Boundary conditions.</param>
     /// <param name="initialCondition">Initial condition (optional).</param>
     /// <param name="lowFidelityNetwork">Custom low-fidelity network (null = create default).</param>
-    /// <param name="numCollocationPoints">Number of collocation points for PDE residual.</param>
     /// <param name="optimizer">Optimizer (null = use Adam with default settings).</param>
     /// <param name="lowFidelityWeight">Weight for low-fidelity data loss (default: 1.0).</param>
     /// <param name="highFidelityWeight">Weight for high-fidelity data loss (default: 10.0 - higher because scarcer).</param>

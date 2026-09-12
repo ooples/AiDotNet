@@ -206,7 +206,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CTGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new CTGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // WGAN-GP Adam configuration (Gulrajani et al. 2017 / Xu et al. 2019):

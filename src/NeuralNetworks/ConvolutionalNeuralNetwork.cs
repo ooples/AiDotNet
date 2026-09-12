@@ -108,7 +108,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
         ILossFunction<T>? lossFunction = null,
         ConvolutionalNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ConvolutionalNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new ConvolutionalNeuralNetworkOptions();
+        _options = options;
         Options = _options;
         // Default to AMSGrad to suppress Adam's post-convergence drift on
         // fixed-input regression invariants (MoreData_ShouldNotDegrade).

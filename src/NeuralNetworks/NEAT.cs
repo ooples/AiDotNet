@@ -244,19 +244,21 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture defining input and output sizes.</param>
     /// <param name="populationSize">The number of individual genomes in the population.</param>
-    /// <param name="mutationRate">The probability of mutation occurring during reproduction. Default is 0.1.</param>
-    /// <param name="crossoverRate">The probability of crossover occurring during reproduction. Default is 0.75.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This creates a new NEAT system with your chosen settings.</para>
     /// </remarks>
-    public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75, ILossFunction<T>? lossFunction = null, NEATOptions? options = null)
+    public NEAT(NeuralNetworkArchitecture<T> architecture,
+        int populationSize,
+        ILossFunction<T>? lossFunction = null,
+        NEATOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new NEATOptions();
+        options ??= new NEATOptions();
+        _options = options;
         Options = _options;
         _populationSize = populationSize;
-        _mutationRate = NumOps.FromDouble(mutationRate);
-        _crossoverRate = NumOps.FromDouble(crossoverRate);
+        _mutationRate = NumOps.FromDouble(options.MutationRate);
+        _crossoverRate = NumOps.FromDouble(options.CrossoverRate);
         _innovationNumber = 0;
         // Deterministic, per-instance evolution RNG. NEAT's selection / crossover /
         // mutation all draw from this stream; seeding it from the architecture's

@@ -126,7 +126,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="inverseProblem">The inverse problem specification.</param>
         /// <param name="boundaryConditions">Boundary conditions for the problem.</param>
         /// <param name="initialCondition">Initial condition for time-dependent problems (optional).</param>
-        /// <param name="numCollocationPoints">Number of collocation points for PDE enforcement.</param>
         /// <param name="options">Configuration options for inverse problem training.</param>
         /// <param name="optimizer">Optimization algorithm.</param>
         /// <remarks>
@@ -147,7 +146,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
             IInverseProblem<T> inverseProblem,
             IBoundaryCondition<T>[] boundaryConditions,
             IInitialCondition<T>? initialCondition = null,
-            int numCollocationPoints = 10000,
             InverseProblemOptions<T>? options = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
@@ -157,8 +155,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             Guard.NotNull(boundaryConditions);
             _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
-            _numCollocationPoints = numCollocationPoints;
             _options = options ?? new InverseProblemOptions<T>();
+            _numCollocationPoints = _options.NumCollocationPoints;
             Options = _options;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

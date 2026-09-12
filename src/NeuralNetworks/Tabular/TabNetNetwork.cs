@@ -105,7 +105,7 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabNetOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabNetOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

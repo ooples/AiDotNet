@@ -105,7 +105,7 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabDPTOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabDPTOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // Decay the step toward the end of training. Built bare, the rate stayed fixed, so once the
         // model reached its floor the optimizer kept taking full-size steps and oscillated there:

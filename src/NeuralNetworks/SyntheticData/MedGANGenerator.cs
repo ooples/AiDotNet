@@ -215,7 +215,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MedGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new MedGANOptions<T>();
+        _options = options;
 
         Guard.Positive(_options.EmbeddingDimension, nameof(_options.EmbeddingDimension));
         foreach (int width in _options.GeneratorDimensions)

@@ -146,7 +146,7 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabTransformerOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         if (_options.LearningRate <= 0)

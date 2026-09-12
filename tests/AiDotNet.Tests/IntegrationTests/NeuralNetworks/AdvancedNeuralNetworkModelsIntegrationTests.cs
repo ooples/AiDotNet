@@ -1165,8 +1165,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new DeepBeliefNetwork<float>(
             architecture,
-            epochs: 1,
-            batchSize: 32);
+            options: new DeepBeliefNetworkOptions { Epochs = 1, BatchSize = 32 });
         var input = CreateRandomTensor([64]);
 
         // Act
@@ -1190,8 +1189,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new DeepBeliefNetwork<float>(
             architecture,
-            epochs: 1,
-            batchSize: 32);
+            options: new DeepBeliefNetworkOptions { Epochs = 1, BatchSize = 32 });
 
         // Act
         int parameterCount = (int)network.ParameterCount;
@@ -1220,8 +1218,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             architecture,
             visibleSize: 64,
             hiddenSize: 32,
-            cdSteps: 1,
-            scalarActivation: new SigmoidActivation<float>());
+            scalarActivation: new SigmoidActivation<float>(),
+            options: new RestrictedBoltzmannMachineOptions { CdSteps = 1 });
         var input = CreateRandomTensor([64]);
 
         // Act
@@ -1247,8 +1245,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             architecture,
             visibleSize: 64,
             hiddenSize: 32,
-            cdSteps: 1,
-            scalarActivation: new SigmoidActivation<float>());
+            scalarActivation: new SigmoidActivation<float>(),
+            options: new RestrictedBoltzmannMachineOptions { CdSteps = 1 });
 
         // Act
         int parameterCount = (int)network.ParameterCount;
@@ -1426,9 +1424,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new SpikingNeuralNetwork<float>(
             architecture,
-            timeStep: 0.1,
-            simulationSteps: 100,
-            scalarActivation: new ReLUActivation<float>());
+            scalarActivation: new ReLUActivation<float>(),
+            options: new SpikingNeuralNetworkOptions { TimeStep = 0.1, SimulationSteps = 100 });
         var input = CreateRandomTensor([32]);
 
         // Act
@@ -1452,9 +1449,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new SpikingNeuralNetwork<float>(
             architecture,
-            timeStep: 0.1,
-            simulationSteps: 100,
-            scalarActivation: new ReLUActivation<float>());
+            scalarActivation: new ReLUActivation<float>(),
+            options: new SpikingNeuralNetworkOptions { TimeStep = 0.1, SimulationSteps = 100 });
 
         // Act
         int parameterCount = (int)network.ParameterCount;
@@ -1479,7 +1475,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 10);
 
-        var network = new SparseNeuralNetwork<float>(architecture, sparsity: 0.5);
+        var network = new SparseNeuralNetwork<float>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.5 });
         var input = CreateRandomTensor([64]);
 
         // Act
@@ -1501,7 +1499,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 10);
 
-        var network = new SparseNeuralNetwork<float>(architecture, sparsity: 0.5);
+        var network = new SparseNeuralNetwork<float>(
+            architecture,
+            options: new SparseNeuralNetworkOptions { Sparsity = 0.5 });
 
         // Act
         int parameterCount = (int)network.ParameterCount;
@@ -3577,9 +3577,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var dbm = new DeepBoltzmannMachine<float>(
             architecture,
-            epochs: 10,
             lossFunction: null,
-            activationFunction: (IActivationFunction<float>?)null);
+            activationFunction: (IActivationFunction<float>?)null,
+            options: new DeepBoltzmannMachineOptions { Epochs = 10 });
 
         var input = CreateRandomTensor([16]);
 
@@ -3605,9 +3605,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var dbm = new DeepBoltzmannMachine<float>(
             architecture,
-            epochs: 10,
             lossFunction: null,
-            activationFunction: (IActivationFunction<float>?)null);
+            activationFunction: (IActivationFunction<float>?)null,
+            options: new DeepBoltzmannMachineOptions { Epochs = 10 });
 
         // Act
         int parameterCount = (int)dbm.ParameterCount;
@@ -3630,7 +3630,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var hyperbolicNet = new HyperbolicNeuralNetwork<float>(
             architecture,
-            curvature: -1.0);
+            options: new HyperbolicNeuralNetworkOptions { Curvature = -1.0 });
 
         var input = CreateRandomTensor([16]);
 
@@ -3656,7 +3656,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var hyperbolicNet = new HyperbolicNeuralNetwork<float>(
             architecture,
-            curvature: -1.0);
+            options: new HyperbolicNeuralNetworkOptions { Curvature = -1.0 });
 
         // Act
         int parameterCount = (int)hyperbolicNet.ParameterCount;
@@ -3779,8 +3779,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var htmNet = new HTMNetwork<float>(
             architecture,
-            columnCount: 128,  // Small for testing
-            cellsPerColumn: 8);
+            // Small for testing
+            options: new HTMNetworkOptions { ColumnCount = 128, CellsPerColumn = 8 });
 
         var input = CreateRandomTensor([16]);
 
@@ -3804,7 +3804,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 16,
             outputSize: 4);
 
-        var htmNet = new HTMNetwork<float>(architecture, columnCount: 128, cellsPerColumn: 8);
+        var htmNet = new HTMNetwork<float>(
+            architecture,
+            options: new HTMNetworkOptions { ColumnCount = 128, CellsPerColumn = 8 });
 
         // Act
         int parameterCount = (int)htmNet.ParameterCount;
@@ -3831,10 +3833,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var hopeNet = new HopeNetwork<float>(
             architecture,
-            hiddenDim: 64,
-            numCMSLevels: 2,
-            numRecurrentLayers: 2,
-            inContextLearningLevels: 2);
+            options: new HopeNetworkOptions { HiddenDim = 64, NumCMSLevels = 2, NumRecurrentLayers = 2, InContextLearningLevels = 2 });
 
         var input = CreateRandomTensor([64]);
 
@@ -3858,7 +3857,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 32);
 
-        var hopeNet = new HopeNetwork<float>(architecture, hiddenDim: 64, numCMSLevels: 2);
+        var hopeNet = new HopeNetwork<float>(
+            architecture,
+            options: new HopeNetworkOptions { HiddenDim = 64, NumCMSLevels = 2 });
 
         // Act
         int parameterCount = (int)hopeNet.ParameterCount;
@@ -3886,8 +3887,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var neat = new NEAT<float>(
             architecture,
             populationSize: 10,
-            mutationRate: 0.1,
-            crossoverRate: 0.75);
+            options: new NEATOptions { MutationRate = 0.1, CrossoverRate = 0.75 });
 
         var input = CreateRandomTensor([4]);
 
@@ -3973,7 +3973,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var occNet = new OccupancyNeuralNetwork<float>(
             architecture,
-            includeTemporalData: false);
+            options: new OccupancyNeuralNetworkOptions { IncludeTemporalData = false });
 
         var input = CreateRandomTensor([8]);
 
@@ -3997,7 +3997,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 8,
             outputSize: 1);
 
-        var occNet = new OccupancyNeuralNetwork<float>(architecture, includeTemporalData: false);
+        var occNet = new OccupancyNeuralNetwork<float>(
+            architecture,
+            options: new OccupancyNeuralNetworkOptions { IncludeTemporalData = false });
 
         // Act
         int parameterCount = (int)occNet.ParameterCount;

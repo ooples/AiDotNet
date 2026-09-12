@@ -63,7 +63,6 @@ public class UnreadOptionsRatchetTests
     /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{T}"/>'s own property, which is
     /// the authority on a model's input shape.
     /// </para>
-    /// </remarks>
     /// <para>
     /// Raised 3 -> 35 when the scan stopped counting getter calls made from inside the options
     /// hierarchy itself. That is not a regression: nothing became unread, 32 properties that were
@@ -103,7 +102,26 @@ public class UnreadOptionsRatchetTests
     /// — it bounds magnitude, never correctness. Reading one model and comparing it against the
     /// claim is what exposed it.
     /// </para>
-    private const int UnreadBaseline = 112;
+    /// <para>
+    /// 112 -> 97 with the duplicate-clipping cluster. <c>EnableGradientClipping</c> and
+    /// <c>MaxGradientNorm</c> were deleted from TabROptions, FinchOptions, FTTransformerOptions,
+    /// TabNetOptions and TabMOptions: they duplicated the <c>MaxGradNorm</c> inherited from
+    /// <c>ModelHyperparameterOptions</c>, which already documents zero-or-negative as "off", so
+    /// the separate boolean expressed no state the single double could not. TabNet's published
+    /// bound of 2.0 moved onto <c>MaxGradNorm</c> in a new parameterless constructor rather than
+    /// being dropped. <c>WeightDecay</c> was wired instead of deleted — TabR, TabM and GANDALF
+    /// each built a BARE <c>AdamOptimizer</c>, so it reached nothing; they now build AdamW, whose
+    /// learning-rate default is identical, and Finch built no optimizer at all.
+    /// </para>
+    /// <para>
+    /// Found while doing it, and fixed with it: none of those Clone()/copy constructors carried
+    /// the INHERITED MaxGradNorm, so a clone silently reset it. That was survivable while each
+    /// class had its own duplicate shadowing it, and became a live defect the moment the
+    /// duplicate was removed — the same copy-constructor hazard this file already documents,
+    /// reached from the opposite direction.
+    /// </para>
+    /// </remarks>
+    private const int UnreadBaseline = 97;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

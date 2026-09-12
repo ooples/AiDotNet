@@ -107,7 +107,7 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabPFNOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabPFNOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // TabPFN (Hollmann et al., ICLR 2023) trains its transformer at 1e-4. Built bare, the
         // optimizer ran on framework defaults; the rate now comes from TabPFNOptions.LearningRate,

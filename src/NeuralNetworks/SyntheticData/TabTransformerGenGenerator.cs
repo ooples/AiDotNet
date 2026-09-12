@@ -164,7 +164,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerGenOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabTransformerGenOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

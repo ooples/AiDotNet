@@ -98,7 +98,7 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
                 : new MeanSquaredErrorLoss<T>()),
             (options ??= new OctonionNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new OctonionNeuralNetworkOptions();
+        _options = options;
         ValidateOptions(_options);
         Options = _options;
         _optimizer = optimizer ?? new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(

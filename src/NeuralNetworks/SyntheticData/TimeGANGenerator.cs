@@ -182,7 +182,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TimeGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TimeGANOptions<T>();
+        _options = options;
         ValidateOptions();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>

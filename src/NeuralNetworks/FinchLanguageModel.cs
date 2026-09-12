@@ -51,6 +51,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
     private readonly double _learningRate;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -72,7 +73,8 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     public FinchLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         FinchOptions? options = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -88,6 +90,22 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _numHeads = _options.NumHeads;
         _maxSeqLength = _options.MaxSequenceLength;
         _learningRate = _options.LearningRate;
+
+        // Finch published LearningRate, Beta1, Beta2 and WeightDecay, but the model built no
+        // optimizer at all, so every one of them was inert and training ran at the base Adam
+        // default. Building the optimizer with `this` hands it to the base trainer through
+        // AdoptConfiguredOptimizer, so the declared values actually reach training.
+        // Beta2 = 0.99 (not Adam's 0.999) is the paper's value for RWKV-6-style recurrences.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _learningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                WeightDecay = _options.WeightDecay,
+            });
+        SetBaseTrainOptimizer(_optimizer);
+
         InitializeLayers();
     }
 

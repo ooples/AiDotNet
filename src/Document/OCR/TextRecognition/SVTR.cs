@@ -139,16 +139,15 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <summary>
     /// Creates an SVTR model using a pre-trained ONNX model for inference.
     /// </summary>
-    public SVTR(
-        NeuralNetworkArchitecture<T> architecture,
+    public SVTR(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
-        _options = options is null ? new SVTROptions() : new SVTROptions(options);
+        options ??= new SVTROptions();
+        _options = new SVTROptions(options);
         _options.ValidateReferenceTopology();
         Options = _options;
 
@@ -162,7 +161,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numLayers = _options.StageDepths.Sum();
         _numHeads = _options.StageHeads.Max();
         _imageHeight = _options.InputHeight;
-        _charset = charset ?? GetDefaultCharset();
+        _charset = _options.Charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.InputWidth;
@@ -188,15 +187,14 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// - CTC decoder
     /// </para>
     /// </remarks>
-    public SVTR(
-        NeuralNetworkArchitecture<T> architecture,
-        string? charset = null,
+    public SVTR(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
-        _options = options is null ? new SVTROptions() : new SVTROptions(options);
+        options ??= new SVTROptions();
+        _options = new SVTROptions(options);
         _options.ValidateReferenceTopology();
         Options = _options;
 
@@ -205,7 +203,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numLayers = _options.StageDepths.Sum();
         _numHeads = _options.StageHeads.Max();
         _imageHeight = _options.InputHeight;
-        _charset = charset ?? GetDefaultCharset();
+        _charset = _options.Charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.InputWidth;

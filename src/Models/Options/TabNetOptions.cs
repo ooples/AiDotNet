@@ -39,6 +39,17 @@ namespace AiDotNet.Models.Options;
 public class TabNetOptions<T> : RiskModelOptions<T>
 {
     /// <summary>
+    /// Initializes a new instance with TabNet's published defaults.
+    /// </summary>
+    public TabNetOptions()
+    {
+        // TabNet clips at a global norm of 2.0 rather than the library-wide 1.0. This used to live
+        // on a TabNetOptions-specific MaxGradientNorm that nothing read; it is assigned onto the
+        // inherited MaxGradNorm so the published bound actually reaches the training loop.
+        MaxGradNorm = 2.0;
+    }
+
+    /// <summary>
     /// Gets or sets the number of sequential decision steps.
     /// </summary>
     /// <value>The number of decision steps, defaulting to 5.</value>
@@ -221,18 +232,6 @@ public class TabNetOptions<T> : RiskModelOptions<T>
     public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets whether to clip gradients.
-    /// </summary>
-    /// <value>True to enable gradient clipping; otherwise, false. Defaults to true.</value>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for clipping.
-    /// </summary>
-    /// <value>The maximum gradient norm, defaulting to 2.0.</value>
-    public double MaxGradientNorm { get; set; } = 2.0;
-
-    /// <summary>
     /// Gets or sets the embedding dimension for categorical features.
     /// </summary>
     /// <value>The categorical embedding dimension, defaulting to 1 (simple embedding).</value>
@@ -259,9 +258,8 @@ public class TabNetOptions<T> : RiskModelOptions<T>
             EnablePreTraining = EnablePreTraining,
             PreTrainingMaskingRatio = PreTrainingMaskingRatio,
             DropoutRate = DropoutRate,
-            EnableGradientClipping = EnableGradientClipping,
-            MaxGradientNorm = MaxGradientNorm,
-            CategoricalEmbeddingDimension = CategoricalEmbeddingDimension
+            CategoricalEmbeddingDimension = CategoricalEmbeddingDimension,
+            MaxGradNorm = MaxGradNorm
         };
     }
 }

@@ -150,7 +150,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         ResNetOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
     {
-        _options = options ?? new ResNetOptions();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

@@ -208,7 +208,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         VariationalAutoencoderOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VariationalAutoencoderOptions()).MaxGradNorm)
     {
-        _options = options ?? new VariationalAutoencoderOptions();
+        _options = options;
         Options = _options;
 
         LatentSize = latentSize;

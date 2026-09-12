@@ -191,7 +191,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CTABGANPlusOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new CTABGANPlusOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

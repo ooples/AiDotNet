@@ -97,7 +97,7 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
         MobileNetV3Options? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MobileNetV3Options()).MaxGradNorm)
     {
-        _options = options ?? new MobileNetV3Options();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

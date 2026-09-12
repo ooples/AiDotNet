@@ -788,8 +788,7 @@ public class PhysicsInformedIntegrationTests
         var vpinn = new VariationalPINN<double>(
             architecture,
             weakForm,
-            numQuadraturePoints: 100,
-            numTestFunctions: 5);
+            options: new VariationalPINNOptions { NumQuadraturePoints = 100, NumTestFunctions = 5 });
 
         Assert.NotNull(vpinn);
         Assert.True(vpinn.SupportsTraining);
@@ -814,8 +813,7 @@ public class PhysicsInformedIntegrationTests
         var vpinn = new VariationalPINN<double>(
             architecture,
             weakForm,
-            numQuadraturePoints: 10,
-            numTestFunctions: 2);
+            options: new VariationalPINNOptions { NumQuadraturePoints = 10, NumTestFunctions = 2 });
 
         var point = new double[] { 0.5 };
         var solution = vpinn.GetSolution(point);
@@ -835,8 +833,7 @@ public class PhysicsInformedIntegrationTests
         var vpinn = new VariationalPINN<double>(
             architecture,
             weakForm,
-            numQuadraturePoints: 10,
-            numTestFunctions: 2);
+            options: new VariationalPINNOptions { NumQuadraturePoints = 10, NumTestFunctions = 2 });
 
         var residual = vpinn.ComputeWeakResidual(testFunctionIndex: 0);
 
@@ -858,7 +855,7 @@ public class PhysicsInformedIntegrationTests
         var drm = new DeepRitzMethod<double>(
             architecture,
             energyFunctional,
-            numQuadraturePoints: 100);
+            options: new DeepRitzMethodOptions { NumQuadraturePoints = 100 });
 
         Assert.NotNull(drm);
         Assert.True(drm.SupportsTraining);
@@ -883,7 +880,7 @@ public class PhysicsInformedIntegrationTests
         var drm = new DeepRitzMethod<double>(
             architecture,
             energyFunctional,
-            numQuadraturePoints: 10);
+            options: new DeepRitzMethodOptions { NumQuadraturePoints = 10 });
 
         var point = new double[] { 0.5 };
         var solution = drm.GetSolution(point);
@@ -1026,10 +1023,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 8,
-            width: 16,
             spatialDimensions: new[] { 16 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 8, Width = 16, NumLayers = 2 });
 
         Assert.NotNull(fno);
         Assert.True(fno.SupportsTraining);
@@ -1042,10 +1037,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 4,
-            width: 8,
             spatialDimensions: new[] { 8 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 4, Width = 8, NumLayers = 2 });
 
         // Input: [batch, channels, spatial]
         var input = new Tensor<double>(new[] { 2, 1, 8 });
@@ -1064,10 +1057,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 4,
-            width: 8,
             spatialDimensions: new[] { 8 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 4, Width = 8, NumLayers = 2 });
 
         var input = new Tensor<double>(new[] { 1, 1, 8 });
         var output = fno.Predict(input);
@@ -1083,10 +1074,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 4,
-            width: 8,
             spatialDimensions: new[] { 8 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 4, Width = 8, NumLayers = 2 });
 
         var parameters = fno.GetParameters();
 
@@ -1101,10 +1090,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 4,
-            width: 8,
             spatialDimensions: new[] { 8 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 4, Width = 8, NumLayers = 2 });
 
         // Initialize tensors with actual values to ensure gradients are computed
         var input = new Tensor<double>(new[] { 1, 1, 8 });
@@ -1385,10 +1372,8 @@ public class PhysicsInformedIntegrationTests
 
         var fno = new FourierNeuralOperator<double>(
             architecture,
-            modes: 4,
-            width: 8,
             spatialDimensions: new[] { 16 },
-            numLayers: 2);
+            options: new FourierNeuralOperatorOptions { Modes = 4, Width = 8, NumLayers = 2 });
 
         var metadata = fno.GetModelMetadata();
 

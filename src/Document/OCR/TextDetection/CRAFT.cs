@@ -126,18 +126,17 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// <summary>
     /// Creates a CRAFT model using a pre-trained ONNX model for inference.
     /// </summary>
-    public CRAFT(
-        NeuralNetworkArchitecture<T> architecture,
+    public CRAFT(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int imageSize = 768,
         int backboneChannels = 512,
-        int upscaleChannels = 256,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        _options = options ?? new CRAFTOptions();
+        options ??= new CRAFTOptions();
+        _options = options;
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -147,7 +146,7 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
         _useNativeMode = false;
         _backboneChannels = backboneChannels;
-        _upscaleChannels = upscaleChannels;
+        _upscaleChannels = options.UpscaleChannels;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
@@ -170,22 +169,21 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// - Image size: 768x768
     /// </para>
     /// </remarks>
-    public CRAFT(
-        NeuralNetworkArchitecture<T> architecture,
+    public CRAFT(NeuralNetworkArchitecture<T> architecture,
         int imageSize = 768,
         int backboneChannels = 512,
-        int upscaleChannels = 256,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        _options = options ?? new CRAFTOptions();
+        options ??= new CRAFTOptions();
+        _options = options;
         Options = _options;
 
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
-        _upscaleChannels = upscaleChannels;
+        _upscaleChannels = options.UpscaleChannels;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;

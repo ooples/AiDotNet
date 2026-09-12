@@ -112,7 +112,7 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ??= NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new FTTransformerOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new FTTransformerOptions<T>();
+        _options = options;
         _lossFunction = lossFunction;
         // FT-Transformer (Gorishniy et al., 2021 — arXiv:2106.11959) is trained with
         // AdamW at a LOW learning rate: the paper's default is lr=1e-4 with weight
@@ -122,7 +122,7 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         // converged (MoreData_ShouldNotDegrade: the 200-iteration loss came out higher
         // than the 50-iteration loss). Matching the paper's AdamW@1e-4 (together with
         // the PreNorm transformer blocks that are already the default and the model's
-        // MaxGradientNorm clipping) keeps the loss decreasing monotonically with more
+        // MaxGradNorm clipping) keeps the loss decreasing monotonically with more
         // training. WeightDecay is threaded from the options so callers can still tune it.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

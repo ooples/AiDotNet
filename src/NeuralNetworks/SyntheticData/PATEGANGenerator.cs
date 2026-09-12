@@ -165,7 +165,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new PATEGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new PATEGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

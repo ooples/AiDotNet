@@ -109,7 +109,7 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
         ILossFunction<T>? lossFunction = null,
         FeedForwardNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new FeedForwardNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new FeedForwardNeuralNetworkOptions();
+        _options = options;
         Options = _options;
         // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
         // Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough

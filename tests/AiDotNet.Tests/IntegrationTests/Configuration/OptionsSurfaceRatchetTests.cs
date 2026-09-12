@@ -63,8 +63,16 @@ public class OptionsSurfaceRatchetTests
     /// Options classes declare properties, which is a different question from whether the
     /// models read them.
     /// </para>
+    /// <para>
+    /// 53 to 0 with the final tail cluster. Zero means no model constructor takes a tunable
+    /// parameter whose options class does not already declare an equivalently-named property.
+    /// It does NOT mean #2090 is closed: this ratchet credits a NAME match, so it is satisfied
+    /// by a property existing, and says nothing about whether the constructor reads it. The
+    /// stricter <see cref="ConstructorBaseline"/> still stands at 21, and the unread-property
+    /// and Validate-coverage ratchets measure two further defect forms again.
+    /// </para>
     /// </remarks>
-    private const int Baseline = 53;
+    private const int Baseline = 0;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -106,7 +114,6 @@ public class OptionsSurfaceRatchetTests
     /// re-parent onto ModelHyperparameterOptions, because RegressionOptions also serves the
     /// classical non-neural regressors.
     /// </para>
-    /// </remarks>
     /// <para>
     /// 92 to 74 with the variant/inChannels cluster: 4 detection backbones and 8 diffusion text
     /// conditioners. Unlike the earlier clusters these models had NO options parameter at all, so
@@ -115,7 +122,20 @@ public class OptionsSurfaceRatchetTests
     /// already belong to the separate <c>ResNetNetwork</c> and <c>EfficientNetNetwork</c>
     /// classifiers.
     /// </para>
-    private const int ConstructorBaseline = 74;
+    /// <para>
+    /// 74 to 21 with the final tail: 29 model types across NeuralNetworks, PhysicsInformed,
+    /// Document and UncertaintyQuantification. This cluster is where the two ratchets converged —
+    /// <see cref="Baseline"/> reached 0 in the same run — which confirms the 21-point spread
+    /// between them had been exactly what it was recorded as: constructors still taking a
+    /// parameter whose options property already existed, not a detector disagreement.
+    /// </para>
+    /// <para>
+    /// The 21 that remain are genuine gaps, not a floor: DGCNN (knnK, useDropout, dropoutRate)
+    /// and CRAFT (imageSize, backboneChannels) lead the list, and both already have an options
+    /// class to move the values onto.
+    /// </para>
+    /// </remarks>
+    private const int ConstructorBaseline = 21;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
