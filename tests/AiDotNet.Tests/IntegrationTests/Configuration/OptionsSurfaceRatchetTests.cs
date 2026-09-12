@@ -64,7 +64,7 @@ public class OptionsSurfaceRatchetTests
     /// models read them.
     /// </para>
     /// </remarks>
-    private const int Baseline = 83;
+    private const int Baseline = 71;
 
     /// <summary>
     /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
@@ -82,7 +82,11 @@ public class OptionsSurfaceRatchetTests
     /// This count admits no such credit, so it can only fall when a constructor actually stops
     /// taking the parameter. Where the two disagree, this one is the truth.
     /// </para>
-    /// </remarks>
+    /// <para>
+    /// Movement, newest last. Both counts falling by the SAME amount is itself diagnostic: it
+    /// means none of the migrated options classes declared a property of a matching name, so none
+    /// had been drawing name credit.
+    /// </para>
     /// <para>
     /// 307 to 151 in one step when the segmentation family moved: 62 models x numClasses,
     /// dropRate and (for 32 of them) modelSize. Both counts fell by the same 156, which is itself
@@ -96,7 +100,14 @@ public class OptionsSurfaceRatchetTests
     /// outside the <c>ModelHyperparameterOptions</c> hierarchy entirely and so did not inherit
     /// <c>MaxGradNorm</c> at all.
     /// </para>
-    private const int ConstructorBaseline = 104;
+    /// <para>
+    /// 104 to 92 with the forecaster numFeatures family: 12 models, one parameter each. The
+    /// property went onto TimeSeriesRegressionOptions itself rather than being gained by a
+    /// re-parent onto ModelHyperparameterOptions, because RegressionOptions also serves the
+    /// classical non-neural regressors.
+    /// </para>
+    /// </remarks>
+    private const int ConstructorBaseline = 92;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists

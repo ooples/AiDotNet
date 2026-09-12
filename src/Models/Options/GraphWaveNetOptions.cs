@@ -59,6 +59,7 @@ public class GraphWaveNetOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public GraphWaveNetOptions()
     {
+        NumFeatures = 2;
     }
 
     /// <summary>
@@ -125,16 +126,6 @@ public class GraphWaveNetOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int NumNodes { get; set; } = 207;
 
-    /// <summary>
-    /// Gets or sets the number of input features per node.
-    /// </summary>
-    /// <value>The number of features, defaulting to 2.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many measurements at each node per time step.
-    /// Common features: (speed, time_of_day) or (speed, day_of_week).
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets the number of residual channels.

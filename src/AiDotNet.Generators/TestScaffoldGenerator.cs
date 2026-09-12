@@ -5927,7 +5927,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 32, outputSize: 8), " +
                     "new AiDotNet.Models.Options.Mamba2Options<double> { ContextLength = 32, ForecastHorizon = 8, " +
-                    "ModelDimension = 32, StateDimension = 8, NumHeads = 4, NumLayers = 2 }, numFeatures: 16)";
+                    "ModelDimension = 32, StateDimension = 8, NumHeads = 4, NumLayers = 2, NumFeatures = 16 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
@@ -6451,7 +6451,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLayers = 1, DropoutRate = 0.0, HippoMethod = \"legs\", " +
                     "DiscretizationMethod = \"bilinear\", InitialTime = 0, TimeStep = 0.0, " +
                     "TimescaleMin = 0.0, TimescaleMax = double.PositiveInfinity, UseGate = true, " +
-                    "UseNormalization = false }, numFeatures: 1)";
+                    "UseNormalization = false })";
             }
             else if (model.ClassName == "SigLIP2" && model.TypeParameterCount == 1)
             {
@@ -7095,7 +7095,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Models.Options.TimeGPTOptions<double> { ContextLength = 64, " +
                     "ForecastHorizon = 8, HiddenDimension = 64, NumLayers = 2, NumHeads = 4, " +
                     "DropoutRate = 0.0, UseConformalPrediction = true, ConfidenceLevel = 0.90, " +
-                    "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 }, numFeatures: 1)";
+                    "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 })";
             }
             else if (model.ClassName == "Autoformer" && model.TypeParameterCount == 1)
             {
@@ -7127,7 +7127,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 32, outputSize: 8), " +
                     "new AiDotNet.Models.Options.RWKVForecastingOptions<double> { ContextLength = 32, " +
                     "ForecastHorizon = 8, ModelDimension = 32, NumHeads = 4, NumLayers = 1, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-4 }, numFeatures: 1)";
+                    "DropoutRate = 0.0, LearningRate = 1e-4 })";
             }
             else if (model.ClassName == "GraniteSpeech" && model.TypeParameterCount == 1)
             {
