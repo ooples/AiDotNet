@@ -1323,15 +1323,87 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     }
 
     /// <summary>
+    /// Counts the independent clones taken from this architecture, so each one splits to a different seed.
+    /// </summary>
+    /// <remarks>
+    /// Without this, every clone of one source would split to the SAME derived seed and be identical to its
+    /// siblings — the original defect moved one level down rather than fixed. SAC takes three clones of one
+    /// critic architecture, so this is the common case, not a corner.
+    /// </remarks>
+    private int _cloneOrdinal;
+
+    /// <summary>
+    /// Derives a clone's initialization seed from its source's, deterministically.
+    /// </summary>
+    /// <remarks>
+    /// Splitting rather than reusing is what makes the clone independent AND reproducible: the same source
+    /// seed and clone ordinal always yield the same derived seed, so a run repeats exactly, while different
+    /// ordinals never collide in practice. Two odd multipliers keep the low bits moving for small seeds and
+    /// small ordinals, which is the range real callers actually use.
+    /// </remarks>
+    private static int DeriveSplitSeed(int sourceSeed, int cloneOrdinal) =>
+        unchecked((int)(((uint)sourceSeed * 2654435761u) ^ ((uint)cloneOrdinal * 2246822519u)));
+
+    /// <summary>
     /// Creates an independent architecture for another model that must not share this instance's
     /// mutable layer objects.
     /// </summary>
-    internal NeuralNetworkArchitecture<T> CloneForModelConstruction()
+    /// <param name="initialization">
+    /// Whether the clone draws its own weights (the default) or reproduces the source's — see
+    /// <see cref="CloneInitialization"/>.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The clone rebuilds every layer through its constructor: <c>LayerBase.GetMetadata</c> carries
+    /// construction settings, never weight tensors. The new model is therefore INITIALIZED, not copied into,
+    /// which makes "the same weights or its own?" a real question that only the caller can answer.
+    /// </para>
+    /// <para>
+    /// <b>Why the default is <see cref="CloneInitialization.Independent"/>.</b> This method used to copy the
+    /// source's seed unconditionally, so a SEEDED clone came out bit-identical to its source while an
+    /// unseeded one stayed independent. The semantics flipped on a setting that has nothing to do with
+    /// cloning — and flipped toward duplication precisely when a run was made reproducible. That is how a
+    /// twin critic's <c>min(Q1, Q2)</c> silently became <c>Q1</c>. By contrast, seeding PyTorch and
+    /// constructing two modules yields DIFFERENT weights because its generator advances; this rewound.
+    /// </para>
+    /// <para>
+    /// Independence here is deterministic: the clone's seed is split from the source's, and the source's
+    /// split counter advances, so clones differ from the source and from each other, reproducibly, and
+    /// regardless of the order they were created in.
+    /// </para>
+    /// </remarks>
+    internal NeuralNetworkArchitecture<T> CloneForModelConstruction(
+        CloneInitialization initialization = CloneInitialization.Independent)
     {
+        // Read the EFFECTIVE seed, not the field. RandomSeed folds in the process-wide
+        // DefaultRandomSeedOverride, and a clone is just as duplicated when determinism arrives from that
+        // global fallback as when it comes from this instance — testing _randomSeed alone would leave the
+        // defect intact in exactly the configuration a deterministic test harness creates.
+        int? effectiveSeed = RandomSeed;
+
+        int? cloneSeed = _randomSeed;
+        if (initialization == CloneInitialization.Independent && effectiveSeed is int sourceSeed)
+        {
+            // Assigned explicitly rather than left null, so the split also overrides the global fallback;
+            // inheriting it again would put every clone back on the source's seed.
+            cloneSeed = DeriveSplitSeed(sourceSeed, ++_cloneOrdinal);
+        }
+
+        // The decision has to be IN FORCE before the rebuild below, not merely recorded on the copy
+        // afterwards: layer constructors draw from the ambient initialization-seed scope, so by the time the
+        // copy's own seed field is assigned its weights have already been chosen. Identical reproduces the
+        // source's own seed; Independent installs the split. With no seed at all there is nothing to pin and
+        // every rebuild already draws independently, so today's behaviour stands untouched.
+        int? scopeSeed = initialization == CloneInitialization.Independent ? cloneSeed : effectiveSeed;
+        if (scopeSeed is int seedForScope)
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(seedForScope);
+        }
+
         if (IsLayerOnly)
         {
             var layerOnly = CreateLayerOnly();
-            layerOnly._randomSeed = _randomSeed;
+            layerOnly._randomSeed = cloneSeed;
             layerOnly.UseAutodiff = UseAutodiff;
             layerOnly.IsInitialized = IsInitialized;
             return layerOnly;
@@ -1394,7 +1466,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
             copy.Layers.AddRange(layerCopies);
         }
 
-        copy._randomSeed = _randomSeed;
+        copy._randomSeed = cloneSeed;
         copy.UseAutodiff = UseAutodiff;
         copy.IsInitialized = IsInitialized;
         copy.IsValidatedCloneSnapshot = true;
