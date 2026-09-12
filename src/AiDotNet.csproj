@@ -88,7 +88,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Azure.Search.Documents" />
+	  <PackageReference Include="AiDotNet.Evolution" />
+  <PackageReference Include="Azure.Search.Documents" />
 	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
 	       src/AiDotNet.Storage.Elasticsearch (consumers add a project /
 	       package reference to AiDotNet.Storage.Elasticsearch to opt in).
