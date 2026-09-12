@@ -241,6 +241,8 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenLayerCount), "Hidden-layer count cannot be negative.");
 
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
@@ -254,7 +256,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         {
             // An explicit (legacy) uniform count/size from a derived agent wins; otherwise the option applies.
             var hiddenSizes = hiddenLayerCount.HasValue || hiddenLayerSize.HasValue
-                ? Enumerable.Repeat(hiddenLayerSize ?? 64, Math.Max(0, hiddenLayerCount ?? 2)).ToArray()
+                ? Enumerable.Repeat(hiddenLayerSize ?? 64, hiddenLayerCount ?? 2).ToArray()
                 : GetHiddenLayerSizes();
             AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateFeedForwardLayers(
                 architecture,
@@ -353,6 +355,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     private static ReinforcementLearningOptions<T> CreateBaseOptions(TradingAgentOptions<T> options)
     {
         if (options == null) throw new ArgumentNullException(nameof(options));
+        options.Validate();
 
         return new ReinforcementLearningOptions<T>
         {

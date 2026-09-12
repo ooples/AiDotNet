@@ -83,11 +83,24 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <summary>
     /// Batch size for training updates.
     /// </summary>
+    /// <value>64 transitions by default; must be positive.</value>
+    /// <remarks><para>For A2C this is the minimum current-rollout size, not a random replay sample count.
+    /// An eligible update consumes the complete bounded rollout in one actor/critic step.
+    /// Configure this no larger than <see cref="ReplayBufferSize"/> for autonomous replay/rollout
+    /// training; a larger minimum can never be reached by the bounded buffer. Explicit one-shot
+    /// supervised updates bypass this readiness requirement.</para>
+    /// <para><b>For Beginners:</b> This is how many observations the agent waits to collect for a normal
+    /// update. A2C then learns once from all observations in its current rollout.</para></remarks>
     public int BatchSize { get; set; } = 64;
 
     /// <summary>
     /// Size of the experience replay buffer.
     /// </summary>
+    /// <value>100000 transitions by default; must be positive.</value>
+    /// <remarks><para>For on-policy A2C this bounds pending current-policy transitions only; consumed
+    /// transitions are discarded, and the oldest pending transition is dropped at capacity.</para>
+    /// <para><b>For Beginners:</b> This limits how many observations an agent retains, so memory use
+    /// remains bounded. A2C does not reuse observations after changing its policy.</para></remarks>
     public int ReplayBufferSize { get; set; } = 100000;
 
     /// <summary>
@@ -98,15 +111,23 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <summary>
     /// Number of environment steps (stored transitions) before training begins.
     /// </summary>
+    /// <value>1000 transitions by default; must be non-negative.</value>
     /// <remarks>
     /// <para>
-    /// Replay-based agents (DQN, A2C, SAC, market-making) apply no gradient update until their replay buffer
+    /// Replay-based agents (DQN, SAC, market-making) apply no gradient update until their replay buffer
     /// holds at least this many transitions (capped at <see cref="ReplayBufferSize"/>), in addition to
     /// needing one full <see cref="BatchSize"/>. During warmup they still act with their initial exploration
     /// (for DQN, epsilon stays at <see cref="EpsilonStart"/> because it only decays per update), so the
     /// first updates sample from a diverse buffer. A one-shot supervised <c>Train(state, target)</c> call is
     /// not gated. Set 0 to start updating as soon as a minibatch is available.
     /// </para>
+    /// <para>
+    /// A2C applies this threshold only to its initial current-policy rollout, capped at
+    /// <see cref="ReplayBufferSize"/>. Later updates require a fresh <see cref="BatchSize"/> without
+    /// repeating initial warmup. Each update consumes that rollout once, even if the update fails.
+    /// </para>
+    /// <para><b>For Beginners:</b> Warmup lets an agent collect observations before its first lesson.
+    /// Zero removes this initial wait, but does not remove the normal batch-size requirement.</para>
     /// <para>
     /// The on-policy PPO agent learns only from the rollout it just collected and has no replay buffer to
     /// warm up, so it does not use this option.
@@ -117,28 +138,38 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <summary>
     /// Initial exploration rate for epsilon-greedy agents (the financial DQN agent).
     /// </summary>
+    /// <value>1.0 by default; a finite probability in [0, 1], at least <see cref="EpsilonEnd"/>.</value>
     /// <remarks>
     /// <para>
     /// The probability of taking a uniformly random action before any gradient update has been applied.
     /// Epsilon then follows <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>.
     /// </para>
+    /// <para><b>For Beginners:</b> At 1.0 every exploratory decision is random initially;
+    /// at 0.0 the agent always chooses its currently preferred action.</para>
     /// </remarks>
     public double EpsilonStart { get; set; } = 1.0;
 
     /// <summary>
     /// Final (floor) exploration rate for epsilon-greedy agents; epsilon never decays below this value.
     /// </summary>
+    /// <value>0.01 by default; a finite probability in [0, 1], no greater than <see cref="EpsilonStart"/>.</value>
+    /// <remarks><para><b>For Beginners:</b> The default keeps a 1% chance of exploring even after
+    /// training has reduced the initial randomness. It is not a percentage-valued setting: use
+    /// 0.01, not 1, to request one percent.</para></remarks>
     public double EpsilonEnd { get; set; } = 0.01;
 
     /// <summary>
     /// Multiplicative exploration decay applied once per gradient update, in (0, 1].
     /// </summary>
+    /// <value>0.995 by default; a finite factor in (0, 1].</value>
     /// <remarks>
     /// <para>
     /// After <c>k</c> gradient updates epsilon is <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^k)</c> — the
     /// same per-update schedule the library's <c>DQNAgent</c> uses. With the defaults (1.0, 0.01, 0.995)
     /// epsilon reaches its floor after about 920 updates. 1.0 disables decay.
     /// </para>
+    /// <para><b>For Beginners:</b> Each successful update multiplies the random-action probability by
+    /// this factor. Values closer to 1 reduce exploration more slowly; 1 leaves it unchanged.</para>
     /// </remarks>
     public double EpsilonDecay { get; set; } = 0.995;
 
@@ -177,6 +208,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <summary>
     /// Hidden layer sizes for the networks an agent builds itself.
     /// </summary>
+    /// <value>Two layers of 64 neurons: <c>[64, 64]</c>. Empty is valid; every supplied width must be positive.</value>
     /// <remarks>
     /// <para>
     /// When an actor / critic / Q-network architecture is passed with no layers, the agent builds a
@@ -187,8 +219,17 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <para>
     /// The default <c>[64, 64]</c> is the network the agents have always built by default; before this option
     /// was honoured its documented default of <c>[256, 128, 64]</c> was never applied.
+    /// This is an AiDotNet compatibility default, not a universal architecture prescribed by the
+    /// DQN, asynchronous actor-critic, SAC or market-making papers. PPO's reported MuJoCo MLP used
+    /// 64-by-64 Tanh layers, whereas SAC's original experiments used 256-by-256 ReLU layers.
+    /// Select task-appropriate widths explicitly when reproducing a particular experiment.
     /// </para>
+    /// <para><b>For Beginners:</b> Each number is one hidden layer's neuron count. For example,
+    /// <c>[128, 64]</c> builds a wider first layer and a smaller second layer; it does not modify
+    /// layers that you supplied yourself.</para>
     /// </remarks>
+    /// <seealso href="https://arxiv.org/pdf/1707.06347">PPO, section 6.1 (MuJoCo policy architecture).</seealso>
+    /// <seealso href="https://proceedings.mlr.press/v80/haarnoja18b/haarnoja18b-supp.pdf">SAC, appendix D, table 1.</seealso>
     public int[] HiddenLayers { get; set; } = new[] { 64, 64 };
 
     #endregion
@@ -351,6 +392,10 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("BatchSize must be positive.", nameof(BatchSize));
         if (ReplayBufferSize <= 0)
             throw new ArgumentException("ReplayBufferSize must be positive.", nameof(ReplayBufferSize));
+        if (!(EpsilonStart >= 0.0 && EpsilonStart <= 1.0))
+            throw new ArgumentException("EpsilonStart must be a finite probability in [0, 1].", nameof(EpsilonStart));
+        if (!(EpsilonEnd >= 0.0 && EpsilonEnd <= 1.0))
+            throw new ArgumentException("EpsilonEnd must be a finite probability in [0, 1].", nameof(EpsilonEnd));
         if (EpsilonStart < EpsilonEnd)
             throw new ArgumentException("EpsilonStart must be >= EpsilonEnd.", nameof(EpsilonStart));
         if (!(EpsilonDecay > 0.0 && EpsilonDecay <= 1.0))

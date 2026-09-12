@@ -18,7 +18,7 @@ public sealed class FinancialContinuousExplorationNoiseTests
     [InlineData(Sac)]
     [InlineData(MarketMaking)]
     [Trait("category", "unit")]
-    public void Training_noise_is_zero_mean_and_symmetric(string kind)
+    public void Training_noise_is_zero_mean_and_symmetric(FinancialAgentKind kind)
     {
         const int stateSize = 4;
         const int actionSize = 3;
