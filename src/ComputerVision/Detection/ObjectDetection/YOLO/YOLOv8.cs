@@ -38,7 +38,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://github.com/ultralytics/ultralytics",
     Year = 2023,
     Authors = "Glenn Jocher, Ayush Chaurasia, Jing Qiu")]
-public class YOLOv8<T> : ObjectDetectorBase<T>
+public partial class YOLOv8<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
@@ -39,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1712.00726",
     Year = 2018,
     Authors = "Zhaowei Cai, Nuno Vasconcelos")]
-public class CascadeRCNN<T> : ObjectDetectorBase<T>
+public partial class CascadeRCNN<T> : ObjectDetectorBase<T>
 {
     private readonly RPN<T> _rpn;
     private readonly RoIAlign<T> _roiAlign;
@@ -126,22 +127,26 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         // Extract backbone features
         var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
-        // Apply FPN neck
+        // Apply FPN neck to get multi-scale features
         var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
-        // Use P4 level for RPN
-        var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
+        // Cascade R-CNN (Cai & Vasconcelos 2018) on an FPN (Lin et al. 2017; detectron2, torchvision): the shared RPN head runs on
+        // every level P2-P5 plus P6 (P5 subsampled by 2), each with its own anchor size, and each RoI
+        // is pooled from the level matching its size. This used to read one level, fpnFeatures[1] -
+        // P3, stride 8 - while laying anchors out at stride 16 and pooling with a 1/16 scale, so every
+        // anchor and every RoI sample landed at twice its true position, and the other levels' neck
+        // convs never received a gradient.
+        var rpnLevels = new List<Tensor<T>>(fpnFeatures) { CvTensorOps<T>.MaxPoolPadded(fpnFeatures[^1], 1, 2, 0) };
+        var (objectness, bboxDeltas, anchors, levelAnchorCounts) = _rpn.ForwardLevels(rpnLevels);
 
-        // Stage 1: Region Proposal Network
-        var (objectness, bboxDeltas, anchors) = _rpn.Forward(rpnFeatures);
-
-        // Generate initial proposals
+        // Generate initial proposals: top 1000 per level, NMS within each level, best 1000 overall.
         var initialProposals = _rpn.GenerateProposals(
             objectness, bboxDeltas, anchors,
             imageHeight, imageWidth,
-            preNmsTopK: 2000,
+            preNmsTopK: 1000,
             postNmsTopK: 1000,
-            nmsThreshold: 0.7);
+            nmsThreshold: 0.7,
+            levelAnchorCounts: levelAnchorCounts);
 
         if (initialProposals.Count == 0 || initialProposals[0].boxes.Shape[0] == 0)
         {
@@ -149,24 +154,24 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             {
                 new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
                 new Tensor<T>(new[] { 0, (Options.NumClasses + 1) * 4 }),
-                new Tensor<T>(new[] { 0, 4 })
+                new Tensor<T>(new[] { 0, 4 }),
+                objectness,
+                bboxDeltas
             };
         }
-
-        // Get P4 features for RoI Align
-        var p4Features = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
-        double spatialScale = 1.0 / 16.0;
 
         // Current boxes to refine
         var currentBoxes = initialProposals[0].boxes;
         Tensor<T>? classLogits = null;
         Tensor<T>? boxDeltas = null;
+        var intermediate = new List<Tensor<T>>();
 
         // Cascade through stages
         for (int stageIdx = 0; stageIdx < _numStages; stageIdx++)
         {
-            // Extract RoI features for current boxes
-            var roiFeatures = _roiAlign.Forward(p4Features, currentBoxes, spatialScale);
+            // Extract RoI features for current boxes, each from its size-matched pyramid level (the
+            // level can change between stages as refinement resizes the boxes)
+            var roiFeatures = FpnRoIPooler<T>.Pool(_roiAlign, fpnFeatures, EnsureBackbone.Strides, currentBoxes);
 
             // Flatten RoI features
             var flattenedFeatures = FlattenRoIFeatures(roiFeatures);
@@ -183,6 +188,11 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             // Refine boxes for next stage (except for last stage)
             if (stageIdx < _numStages - 1)
             {
+                // Refinement is box-coordinate arithmetic (the boxes are constants to RoIAlign), so it
+                // carries no gradient. That is why every stage's raw outputs are returned below:
+                // without them, only the LAST stage could ever train.
+                intermediate.Add(classLogits);
+                intermediate.Add(boxDeltas);
                 currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight);
             }
         }
@@ -192,7 +202,13 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             throw new InvalidOperationException("Cascade RCNN requires at least one stage to produce outputs.");
         }
 
-        return new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
+        // PostProcess reads the first three entries; the earlier stages' outputs and the RPN's follow
+        // so each of them feeds the training objective.
+        var outputs = new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
+        outputs.AddRange(intermediate);
+        outputs.Add(objectness);
+        outputs.Add(bboxDeltas);
+        return outputs;
     }
 
     /// <inheritdoc/>
@@ -276,10 +292,13 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             double predW = pw * Math.Exp(Math.Min(dw, 4.0));
             double predH = ph * Math.Exp(Math.Min(dh, 4.0));
 
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
+            // Decoded in network-input coordinates; map to the source image before clipping.
+            // (RefineBoxes does NOT do this: it works on proposals in the input frame on purpose.)
+            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
+            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
+            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
+            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
 
             if (x2 <= x1 || y2 <= y1) continue;
 
@@ -402,84 +421,65 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)
+        => AiDotNetEngine.Current.Reshape(
+            roiFeatures, new[] { roiFeatures.Shape[0], roiFeatures.Shape[1] * roiFeatures.Shape[2] * roiFeatures.Shape[3] });
+
+    /// <summary>
+    /// Applies one stage's box deltas to its input boxes, giving the next stage's boxes.
+    /// </summary>
+    /// <param name="boxes">Input boxes <c>[N, 4]</c> as (x1, y1, x2, y2) in network-input coordinates.</param>
+    /// <param name="deltas">The stage's regression output <c>[N, 4 * numClasses]</c>; the first
+    /// foreground class's (dx, dy, dw, dh) are applied.</param>
+    /// <param name="imageWidth">Right clip bound.</param>
+    /// <param name="imageHeight">Bottom clip bound.</param>
+    /// <returns>The refined boxes <c>[N, 4]</c>, still in network-input coordinates.</returns>
+    /// <remarks>
+    /// Engine ops over whole columns rather than a per-box scalar loop. The refined boxes only tell
+    /// the next stage's RoIAlign WHERE to sample, and RoIAlign treats box coordinates as data, so no
+    /// gradient flows back through them - the same "detached proposals" rule as Cai and Vasconcelos
+    /// (2018) and detectron2's cascade head. The deltas themselves still reach the loss through the
+    /// stage outputs <see cref="Forward"/> returns.
+    /// </remarks>
+    internal static Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
     {
-        int numRois = roiFeatures.Shape[0];
-        int channels = roiFeatures.Shape[1];
-        int h = roiFeatures.Shape[2];
-        int w = roiFeatures.Shape[3];
-        int flattenedSize = channels * h * w;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        Tensor<T> Column(Tensor<T> source, int index) => engine.TensorNarrow(source, 1, index, 1);
+        var half = ops.FromDouble(0.5);
+        var unbounded = ops.FromDouble(double.MinValue);
 
-        var result = new Tensor<T>(new[] { numRois, flattenedSize });
+        var px1 = Column(boxes, 0);
+        var py1 = Column(boxes, 1);
+        var pw = engine.TensorSubtract(Column(boxes, 2), px1);
+        var ph = engine.TensorSubtract(Column(boxes, 3), py1);
+        var pcx = engine.TensorAdd(px1, engine.TensorMultiplyScalar(pw, half));
+        var pcy = engine.TensorAdd(py1, engine.TensorMultiplyScalar(ph, half));
 
-        for (int roi = 0; roi < numRois; roi++)
-        {
-            int idx = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        result[roi, idx++] = roiFeatures[roi, c, y, x];
-                    }
-                }
-            }
-        }
+        // Deltas of the first foreground class (columns 4..7; class 0 is background). The scale
+        // deltas are capped at 4 before exponentiating, as in the per-box version this replaces.
+        const int deltaOffset = 4;
+        var predCx = engine.TensorAdd(pcx, engine.TensorMultiply(Column(deltas, deltaOffset), pw));
+        var predCy = engine.TensorAdd(pcy, engine.TensorMultiply(Column(deltas, deltaOffset + 1), ph));
+        var cap = ops.FromDouble(4.0);
+        var predW = engine.TensorMultiply(pw, engine.TensorExp(engine.TensorClamp(Column(deltas, deltaOffset + 2), unbounded, cap)));
+        var predH = engine.TensorMultiply(ph, engine.TensorExp(engine.TensorClamp(Column(deltas, deltaOffset + 3), unbounded, cap)));
+        var halfW = engine.TensorMultiplyScalar(predW, half);
+        var halfH = engine.TensorMultiplyScalar(predH, half);
 
-        return result;
-    }
+        // Clip each edge on its own side only: x1/y1 at zero, x2/y2 at the image extent.
+        var x1 = engine.TensorClampMin(engine.TensorSubtract(predCx, halfW), ops.Zero);
+        var y1 = engine.TensorClampMin(engine.TensorSubtract(predCy, halfH), ops.Zero);
+        var x2 = engine.TensorClamp(engine.TensorAdd(predCx, halfW), unbounded, ops.FromDouble(imageWidth));
+        var y2 = engine.TensorClamp(engine.TensorAdd(predCy, halfH), unbounded, ops.FromDouble(imageHeight));
 
-    private Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
-    {
-        int numBoxes = boxes.Shape[0];
-        int numClasses = deltas.Shape[1] / 4;
-
-        var refinedBoxes = new Tensor<T>(new[] { numBoxes, 4 });
-
-        for (int i = 0; i < numBoxes; i++)
-        {
-            double px1 = NumOps.ToDouble(boxes[i, 0]);
-            double py1 = NumOps.ToDouble(boxes[i, 1]);
-            double px2 = NumOps.ToDouble(boxes[i, 2]);
-            double py2 = NumOps.ToDouble(boxes[i, 3]);
-
-            double pw = px2 - px1;
-            double ph = py2 - py1;
-            double pcx = px1 + pw / 2;
-            double pcy = py1 + ph / 2;
-
-            // Use class-agnostic refinement (average across all classes)
-            // or use the most likely class - here we use first non-background class
-            int deltaOffset = 4; // Skip background class
-            double dx = NumOps.ToDouble(deltas[i, deltaOffset]);
-            double dy = NumOps.ToDouble(deltas[i, deltaOffset + 1]);
-            double dw = NumOps.ToDouble(deltas[i, deltaOffset + 2]);
-            double dh = NumOps.ToDouble(deltas[i, deltaOffset + 3]);
-
-            double predCx = pcx + dx * pw;
-            double predCy = pcy + dy * ph;
-            double predW = pw * Math.Exp(Math.Min(dw, 4.0));
-            double predH = ph * Math.Exp(Math.Min(dh, 4.0));
-
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
-
-            refinedBoxes[i, 0] = NumOps.FromDouble(x1);
-            refinedBoxes[i, 1] = NumOps.FromDouble(y1);
-            refinedBoxes[i, 2] = NumOps.FromDouble(x2);
-            refinedBoxes[i, 3] = NumOps.FromDouble(y2);
-        }
-
-        return refinedBoxes;
+        return engine.TensorConcatenate(new[] { x1, y1, x2, y2 }, 1);
     }
 }
 
 /// <summary>
 /// A single stage in the Cascade R-CNN pipeline.
 /// </summary>
-internal class CascadeStage<T>
+internal class CascadeStage<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Dense<T> _fc1;
@@ -559,14 +559,23 @@ internal class CascadeStage<T>
         _regHead.ReadParameters(reader);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> x)
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> x) => AiDotNetEngine.Current.ReLU(x);
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            result[i] = _numOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
+        yield return _fc1;
+        yield return _fc2;
+        yield return _clsHead;
+        yield return _regHead;
     }
 }

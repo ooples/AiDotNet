@@ -21,7 +21,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 /// - FFN (feed-forward network) for each query
 /// </para>
 /// </remarks>
-internal partial class DETRDecoder<T>
+internal partial class DETRDecoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numLayers;
@@ -282,102 +282,40 @@ internal partial class DETRDecoder<T>
 
     private Tensor<T> ExpandQueriesForBatch(Tensor<T> queries, int batch)
     {
+        // Broadcast rather than copy: the learnable query embeddings must stay on the tape.
         int numQueries = queries.Shape[0];
         int hiddenDim = queries.Shape[1];
-
-        var expanded = new Tensor<T>(new[] { batch, numQueries, hiddenDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    expanded[b, q, d] = queries[q, d];
-                }
-            }
-        }
-
-        return expanded;
+        return AiDotNetEngine.Current.TensorBroadcastTo(AiDotNetEngine.Current.Reshape(queries, new[] { 1, numQueries, hiddenDim }), new[] { batch, numQueries, hiddenDim });
     }
 
-    private Tensor<T> ApplyClassHead(Tensor<T> output)
-    {
-        int batch = output.Shape[0];
-        int numQueries = output.Shape[1];
-        int hiddenDim = output.Shape[2];
-        int numClasses = _classHead.OutputSize;
+    private Tensor<T> ApplyClassHead(Tensor<T> output) => _classHead.ForwardTokens(output);
 
-        var result = new Tensor<T>(new[] { batch, numQueries, numClasses });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                // Extract query features
-                var queryFeat = new Tensor<T>(new[] { 1, hiddenDim });
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    queryFeat[0, d] = output[b, q, d];
-                }
-
-                // Apply class head
-                var classOut = _classHead.Forward(queryFeat);
-
-                // Copy to result
-                for (int c = 0; c < numClasses; c++)
-                {
-                    result[b, q, c] = classOut[0, c];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ApplyBoxHead(Tensor<T> output)
-    {
-        int batch = output.Shape[0];
-        int numQueries = output.Shape[1];
-        int hiddenDim = output.Shape[2];
-
-        var result = new Tensor<T>(new[] { batch, numQueries, 4 });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                // Extract query features
-                var queryFeat = new Tensor<T>(new[] { 1, hiddenDim });
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    queryFeat[0, d] = output[b, q, d];
-                }
-
-                // Apply box head
-                var boxOut = _boxHead.Forward(queryFeat);
-
-                // Copy to result
-                for (int i = 0; i < 4; i++)
-                {
-                    result[b, q, i] = boxOut[0, i];
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> ApplyBoxHead(Tensor<T> output) => _boxHead.ForwardTokens(output);
 
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+        yield return _classHead;
+        yield return _boxHead;
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _queryEmbed;
     }
 }
 
 /// <summary>
 /// Single decoder layer in DETR.
 /// </summary>
-internal class DecoderLayer<T>
+internal class DecoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -479,63 +417,30 @@ internal class DecoderLayer<T>
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-        int ffnDim = _ffn1.OutputSize;
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Extract features
-                var feat = new Tensor<T>(new[] { 1, hiddenDim });
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                // FFN1 with GELU
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                // FFN2
-                var output = _ffn2.Forward(h);
-
-                // Copy to result
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
-    private static double GELU(double x)
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        // Approximate GELU: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+        yield return _selfAttn;
+        yield return _crossAttn;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
+        yield return _norm3;
     }
 }
 
 /// <summary>
 /// Multi-head cross-attention for DETR decoder.
 /// </summary>
-internal class MultiHeadCrossAttention<T>
+internal class MultiHeadCrossAttention<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -563,33 +468,15 @@ internal class MultiHeadCrossAttention<T>
 
     public Tensor<T> Forward(Tensor<T> queries, Tensor<T> memory, Tensor<T>? posEncoding)
     {
-        int batch = queries.Shape[0];
-        int queryLen = queries.Shape[1];
-        int memoryLen = memory.Shape[1];
+        // Keys see the positional encoding; values do not (DETR convention).
+        var memoryWithPos = posEncoding is not null ? AiDotNetEngine.Current.TensorAdd(memory, posEncoding) : memory;
 
-        // Add positional encoding to memory if provided
-        var memoryWithPos = memory;
-        if (posEncoding is not null)
-        {
-            memoryWithPos = new Tensor<T>(memory._shape);
-            for (int i = 0; i < memory.Length; i++)
-            {
-                memoryWithPos[i] = _numOps.Add(memory[i], posEncoding[i]);
-            }
-        }
+        var q = _queryProj.ForwardTokens(queries);
+        var k = _keyProj.ForwardTokens(memoryWithPos);
+        var v = _valueProj.ForwardTokens(memory);
 
-        // Project queries, keys, values
-        var q = ProjectSequence(queries, _queryProj);
-        var k = ProjectSequence(memoryWithPos, _keyProj);
-        var v = ProjectSequence(memory, _valueProj);
-
-        // Compute attention
-        var attnOutput = ComputeAttention(q, k, v, batch, queryLen, memoryLen);
-
-        // Project output
-        var output = ProjectSequence(attnOutput, _outputProj);
-
-        return output;
+        var attended = CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale);
+        return _outputProj.ForwardTokens(attended);
     }
 
     public long GetParameterCount()
@@ -634,102 +521,12 @@ internal class MultiHeadCrossAttention<T>
         _outputProj.ReadParameters(reader);
     }
 
-    private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj)
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int dim = x.Shape[2];
-        int outDim = proj.OutputSize;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, outDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, dim });
-                for (int d = 0; d < dim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                var projected = proj.Forward(feat);
-
-                for (int d = 0; d < outDim; d++)
-                {
-                    result[b, s, d] = projected[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ComputeAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, int batch, int queryLen, int keyLen)
-    {
-        // Simplified attention computation for each head
-        var output = new Tensor<T>(new[] { batch, queryLen, _hiddenDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int headOffset = h * _headDim;
-
-                // Compute attention scores for this head
-                var scores = new double[queryLen, keyLen];
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            score += _numOps.ToDouble(q[b, i, headOffset + d]) *
-                                     _numOps.ToDouble(k[b, j, headOffset + d]);
-                        }
-                        scores[i, j] = score * _scale;
-                    }
-                }
-
-                // Softmax over keys
-                for (int i = 0; i < queryLen; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        maxScore = Math.Max(maxScore, scores[i, j]);
-                    }
-
-                    double sumExp = 0;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] = Math.Exp(scores[i, j] - maxScore);
-                        sumExp += scores[i, j];
-                    }
-
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] /= sumExp;
-                    }
-                }
-
-                // Apply attention to values
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double value = 0;
-                        for (int j = 0; j < keyLen; j++)
-                        {
-                            value += scores[i, j] * _numOps.ToDouble(v[b, j, headOffset + d]);
-                        }
-                        output[b, i, headOffset + d] = _numOps.FromDouble(value);
-                    }
-                }
-            }
-        }
-
-        return output;
+        yield return _queryProj;
+        yield return _keyProj;
+        yield return _valueProj;
+        yield return _outputProj;
     }
 }

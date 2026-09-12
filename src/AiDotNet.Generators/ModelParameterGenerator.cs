@@ -375,8 +375,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     var kind = ComponentKindFor(memberType, elem, isDeclaredSlot: member.IsAbstract);
                     if (kind == "one")
                     {
+                        // A nullable-annotated component may legitimately be absent (a detector
+                        // without a neck). A non-optional accessor reports a null component as
+                        // ShapeDeferred with no count, which makes the WHOLE model's layout
+                        // unresolved and every parameter read throw -- the same regression the
+                        // "adapt" branch below documents for absent conditioners. Mark it optional
+                        // so absence is the resolved, parameter-free fact it is; a present
+                        // component is unaffected.
+                        bool absentIsResolved = memberType.NullableAnnotation == NullableAnnotation.Annotated;
                         components.Add((member.Name,
-                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
+                            absentIsResolved
+                                ? $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name}, optional: true)"
+                                : $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
                             RoleExpression(classification.Kind),
                             AvailabilityExpression(member, classification.Kind)));
                         continue;

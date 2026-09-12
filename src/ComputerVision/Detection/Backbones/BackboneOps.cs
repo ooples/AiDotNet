@@ -4,47 +4,12 @@ using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
-/// Shared CPU-side tensor primitives reused by every detection backbone
-/// (ResNet stem ReLU + MaxPool, EfficientNet swish, etc.). Replaces the
-/// duplicated nested loops that lived in each backbone before
-/// <c>BackboneBase</c> was deleted.
+/// Shared tensor primitives reused by the detection backbones. Every op here must go through the
+/// engine so the gradient tape records it; the ResNet stem's max pool, which used to live here as
+/// an element loop, is now <see cref="AiDotNet.ComputerVision.CvTensorOps{T}.MaxPoolPadded"/>.
 /// </summary>
 internal static class BackboneOps<T>
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-
-    public static Tensor<T> MaxPool2D(Tensor<T> x, int kernelSize, int stride, int padding)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-        int outH = (height + 2 * padding - kernelSize) / stride + 1;
-        int outW = (width + 2 * padding - kernelSize) / stride + 1;
-        var output = new Tensor<T>(new[] { batch, channels, outH, outW });
-
-        for (int n = 0; n < batch; n++)
-        for (int c = 0; c < channels; c++)
-        for (int oh = 0; oh < outH; oh++)
-        for (int ow = 0; ow < outW; ow++)
-        {
-            double maxVal = double.NegativeInfinity;
-            for (int kh = 0; kh < kernelSize; kh++)
-            for (int kw = 0; kw < kernelSize; kw++)
-            {
-                int ih = oh * stride - padding + kh;
-                int iw = ow * stride - padding + kw;
-                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                {
-                    double v = Ops.ToDouble(x[n, c, ih, iw]);
-                    if (v > maxVal) maxVal = v;
-                }
-            }
-            output[n, c, oh, ow] = Ops.FromDouble(maxVal == double.NegativeInfinity ? 0 : maxVal);
-        }
-        return output;
-    }
-
     /// <summary>
     /// Element-wise residual addition (a + b in-place into a fresh tensor of a's shape).
     /// Validates BOTH length and rank-by-rank shape so a same-element-count but
@@ -63,10 +28,9 @@ internal static class BackboneOps<T>
                     $"BackboneOps.AddResidual shape mismatch at axis {axis}: " +
                     $"[{string.Join(",", a._shape)}] vs [{string.Join(",", b._shape)}].");
         }
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < a.Length; i++)
-            result[i] = Ops.Add(a[i], b[i]);
-        return result;
+        // Engine add, not an element loop: a residual skip that drops to scalars severs the gradient
+        // for every layer before it, which in a deep backbone is nearly all of them.
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     // ApplyReLU / ApplySiLU / ApplySwish removed — backbones (ResNet, CSPDarknet,

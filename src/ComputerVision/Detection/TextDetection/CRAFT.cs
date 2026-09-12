@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
     "https://arxiv.org/abs/1904.01941",
     Year = 2019,
     Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
-public class CRAFT<T> : TextDetectorBase<T>
+public partial class CRAFT<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _upConv1;
     private readonly Conv2D<T> _upConv2;
@@ -60,11 +60,16 @@ public class CRAFT<T> : TextDetectorBase<T>
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
 
         // Upsampling convolutions for feature fusion
-        int backboneChannels = Backbone.OutputChannels[^1];
-        _upConv1 = new Conv2D<T>(backboneChannels, _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv2 = new Conv2D<T>(_hiddenDim * 2, _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv3 = new Conv2D<T>(_hiddenDim * 2, _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv4 = new Conv2D<T>(_hiddenDim * 2, _hiddenDim, kernelSize: 3, padding: 1);
+        var stageChannels = Backbone.OutputChannels;
+        _upConv1 = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 3, padding: 1);
+        // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
+        // stage, so its input width is the decoder width plus that stage's channel count. These were
+        // declared as twice the decoder width, which matches no backbone stage, so the first merge
+        // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
+        // built for 512) and the model could not run a forward pass at all.
+        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv4 = new Conv2D<T>(_hiddenDim + stageChannels[^4], _hiddenDim, kernelSize: 3, padding: 1);
 
         // Prediction heads: region score and affinity score
         _regionHead = new Conv2D<T>(_hiddenDim, 1, kernelSize: 1);
@@ -318,116 +323,36 @@ public class CRAFT<T> : TextDetectorBase<T>
         _affinityHead.WriteParameters(writer);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
-    private Tensor<T> ApplySigmoid(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Sigmoid, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
 
     private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
-    {
-        int batch = x.Shape[0];
-        int xChannels = x.Shape[1];
-        int skipChannels = skip.Shape[1];
-        int targetH = skip.Shape[2];
-        int targetW = skip.Shape[3];
-
-        // Upsample x to match skip spatial dimensions
-        var upsampled = BilinearUpsample(x, targetH, targetW);
-
-        // Concatenate along channel dimension
-        var result = new Tensor<T>(new[] { batch, xChannels + skipChannels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            // Copy upsampled
-            for (int c = 0; c < xChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, c, h, w] = upsampled[b, c, h, w];
-                    }
-                }
-            }
-
-            // Copy skip
-            for (int c = 0; c < skipChannels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        result[b, xChannels + c, h, w] = skip[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Upsample to the skip connection's resolution, then stack along channels. Tape-visible, so
+        // the decoder's gradient reaches the backbone through every skip.
+        => CvTensorOps<T>.ConcatChannels(BilinearUpsample(x, skip.Shape[2], skip.Shape[3]), skip);
 
     private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int srcH = x.Shape[2];
-        int srcW = x.Shape[3];
-
-        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * srcH;
-                        double srcX = (double)w / targetW * srcW;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = NumOps.ToDouble(x[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(x[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(x[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(x[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        result[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
+        => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
 
     private List<List<(int H, int W)>> FindConnectedComponents(bool[,] mask, int height, int width)
     {

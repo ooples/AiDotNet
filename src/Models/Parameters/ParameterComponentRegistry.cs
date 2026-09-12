@@ -351,10 +351,11 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             int expected = checked((int)item.ParameterCount!.Value);
             if (expected == 0) continue;
 
-            if (source is IParameterChunkSource<T> chunkSource)
+            var liveChunks = LiveChunksOf(source);
+            if (liveChunks is not null)
             {
                 int actual = 0;
-                foreach (var chunk in chunkSource.GetParameterStateChunks())
+                foreach (var chunk in liveChunks)
                 {
                     if (chunk is null || chunk.Tensor.Length == 0) continue;
                     actual = checked(actual + chunk.Tensor.Length);
@@ -364,7 +365,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     string localId = chunk.StableId == "$"
                         ? entry.StableId
                         : entry.StableId + "/" + chunk.StableId;
-                    yield return new ParameterChunk<T>(localId, role, chunk.Tensor, chunk.SourceTensor);
+                    yield return new ParameterChunk<T>(localId, role, chunk.Tensor, chunk.SourceTensor, chunk.IsWritableInPlace);
                 }
                 if (actual != expected)
                     throw new ParameterContractViolationException(
@@ -401,7 +402,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                         : entry.StableId + "/" + slot.StableId;
                     var role = entry.Role == ParameterSlotRole.Trainable ? slot.Role : entry.Role;
                     yield return new ParameterChunk<T>(
-                        localId, role, new Tensor<T>(new[] { count }, values));
+                        localId, role, new Tensor<T>(new[] { count }, values),
+                        sourceTensor: null, writableInPlace: false);
                     offset += count;
                 }
                 if (offset != flat.Length)
@@ -415,7 +417,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             // above supplies the model's real backing tensor; this fallback is the explicit,
             // immutable-payload style used by scalar/tree/classical sources.
             yield return new ParameterChunk<T>(entry.StableId, entry.Role,
-                new Tensor<T>(new[] { flat.Length }, flat));
+                new Tensor<T>(new[] { flat.Length }, flat),
+                sourceTensor: null, writableInPlace: false);
         }
     }
 
@@ -1061,5 +1064,71 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         int i = start;
         while (i < end - 1 && value[i] == '0') i++;
         return i;
+    }
+
+    /// <summary>
+    /// The live chunks of a registered source, seeing through the generated component adapters; or
+    /// null when the source can only be read as a flat copy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The parameter generator registers a component member through
+    /// <see cref="ComponentAccessorParameterSource{T}"/> (one component) or
+    /// <see cref="ComponentCollectionParameterSource{T}"/> (a collection). Neither adapter is a chunk
+    /// source, so every component registered that way used to be enumerated as a detached COPY,
+    /// even when the component itself exposed live, zero-copy chunks - a layer, a network, a
+    /// computer-vision building block. A tape-based training step keys gradients by tensor
+    /// reference and can only update live tensors, so everything behind those adapters was
+    /// silently untrainable through the registry.
+    /// </para>
+    /// <para>
+    /// The adapters are only seen through when the component (or every collection member) is itself
+    /// a chunk source; anything else keeps the per-slot copy path unchanged. Stable ids follow the
+    /// adapters' own layout scheme - an accessor passes its component's ids through, a collection
+    /// prefixes each member's with <c>index=NNNNNNNN</c> - so the chunk ids match the layout either way.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<ParameterChunk<T>>? LiveChunksOf(IParameterSource<T> source)
+    {
+        switch (source)
+        {
+            case IParameterChunkSource<T> chunked:
+                return chunked.GetParameterStateChunks();
+
+            case ComponentAccessorParameterSource<T> accessor:
+                return accessor.Current is IParameterChunkSource<T> component
+                    && component is IParameterLayoutSource or IParameterManifestProvider
+                    ? component.GetParameterStateChunks()
+                    : null;
+
+            case ComponentCollectionParameterSource<T> collection:
+                var members = collection.Current.ToList();
+                foreach (var member in members)
+                {
+                    if (member is not IParameterChunkSource<T>
+                        || member is not (IParameterLayoutSource or IParameterManifestProvider))
+                    {
+                        return null;
+                    }
+                }
+
+                return CollectionChunks(members);
+
+            default:
+                return null;
+        }
+    }
+
+    private static IEnumerable<ParameterChunk<T>> CollectionChunks(List<IParameterSource<T>> members)
+    {
+        for (int index = 0; index < members.Count; index++)
+        {
+            string prefix = $"index={index:D8}";
+            foreach (var chunk in ((IParameterChunkSource<T>)members[index]).GetParameterStateChunks())
+            {
+                string id = chunk.StableId == "$" ? prefix : prefix + "/" + chunk.StableId;
+                yield return new ParameterChunk<T>(id, chunk.Role, chunk.Tensor, chunk.SourceTensor, chunk.IsWritableInPlace);
+            }
+        }
     }
 }

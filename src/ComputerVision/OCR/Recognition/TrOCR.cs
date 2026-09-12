@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines.Autodiff;
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Attributes;
@@ -38,7 +39,7 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
     "https://arxiv.org/abs/2109.10282",
     Year = 2023,
     Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
-public class TrOCR<T> : OCRBase<T>
+public partial class TrOCR<T> : OCRBase<T>
 {
     private readonly Conv2D<T> _patchEmbed;
     private readonly TrOCREncoderLayer<T>[] _encoderLayers;
@@ -133,44 +134,39 @@ public class TrOCR<T> : OCRBase<T>
 
         // Decode text autoregressively
         var (text, confidence) = DecodeText(encoderOutput);
-
         return (text, confidence);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The encoder output concatenated with the logits of the first decoding step (the decoder run
+    /// on the start token, cross-attending to the encoder). Autoregressive decoding has no single
+    /// fixed-shape output, and the first step is deterministic and reaches every decoder weight - the
+    /// token embedding, both attentions, the FFN, the norms and the output projection - where the
+    /// encoder output alone (the convention of the Document/OCR TrOCR) would leave the whole decoder
+    /// untrained.
+    /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Greedy autoregressive generation - the standard TrOCR inference (Li et al. 2021; Hugging Face
+    /// <c>generate</c>): encode the image, then decode one token at a time from the start token,
+    /// feeding each step's most likely token back in, until every sequence has produced the end token
+    /// or <see cref="OCROptions{T}.MaxSequenceLength"/> is reached. Returns the logits of every step,
+    /// <c>[batch, steps, vocabulary]</c>; a sequence that finished early keeps receiving the end token.
+    /// </para>
+    /// <para>
+    /// Generation is not differentiated (it is <c>no_grad</c> in every reference implementation):
+    /// <see cref="Train"/> uses teacher forcing instead.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ForwardLogits(Tensor<T> image)
+        => Generate(EncodeImage(PreprocessCrop(image))).Logits;
+
     private Tensor<T> EncodeImage(Tensor<T> image)
     {
-        // Patch embedding
-        var patches = _patchEmbed.Forward(image);
-
-        // Flatten patches: [batch, channels, h, w] -> [batch, seq_len, hidden_dim]
-        int batch = patches.Shape[0];
-        int channels = patches.Shape[1];
-        int h = patches.Shape[2];
-        int w = patches.Shape[3];
-        int seqLen = h * w;
-
-        var x = new Tensor<T>(new[] { batch, seqLen, channels });
-
-        for (int b = 0; b < batch; b++)
-        {
-            int idx = 0;
-            for (int ph = 0; ph < h; ph++)
-            {
-                for (int pw = 0; pw < w; pw++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        x[b, idx, c] = patches[b, c, ph, pw];
-                    }
-                    idx++;
-                }
-            }
-        }
-
-        // Add positional encoding
-        x = AddPositionalEncoding(x);
-
-        // Apply encoder layers
+        // Patch embedding, flattened to a token sequence, plus positional encoding.
+        var x = AddPositionalEncoding(CvTensorOps<T>.FlattenSpatial(_patchEmbed.Forward(image)));
         for (int l = 0; l < _numLayers; l++)
         {
             x = ApplyEncoderLayer(x, l);
@@ -181,64 +177,12 @@ public class TrOCR<T> : OCRBase<T>
 
     private (string text, T confidence) DecodeText(Tensor<T> encoderOutput)
     {
-        int batch = encoderOutput.Shape[0];
-        int maxLen = Options.MaxSequenceLength;
+        var (_, tokens, confidences) = Generate(encoderOutput);
 
-        var tokens = new List<int> { _startTokenId };
-        var confidences = new List<double>();
-
-        // Autoregressive decoding
-        for (int step = 0; step < maxLen - 1; step++)
-        {
-            // Create decoder input from current tokens
-            var decoderInput = CreateDecoderInput(tokens);
-
-            // Apply decoder
-            var decoderOutput = ApplyDecoder(decoderInput, encoderOutput);
-
-            // Get output for last position
-            int lastPos = tokens.Count - 1;
-            var logits = new double[VocabularySize + 2];
-
-            for (int v = 0; v < VocabularySize + 2; v++)
-            {
-                logits[v] = NumOps.ToDouble(decoderOutput[0, lastPos, v]);
-            }
-
-            // Apply softmax and get best token
-            double maxLogit = logits.Max();
-            double sumExp = 0;
-            for (int v = 0; v < logits.Length; v++)
-            {
-                logits[v] = Math.Exp(logits[v] - maxLogit);
-                sumExp += logits[v];
-            }
-
-            int bestToken = 0;
-            double bestProb = 0;
-            for (int v = 0; v < logits.Length; v++)
-            {
-                double prob = logits[v] / sumExp;
-                if (prob > bestProb)
-                {
-                    bestProb = prob;
-                    bestToken = v;
-                }
-            }
-
-            // Stop if end token
-            if (bestToken == _endTokenId)
-                break;
-
-            tokens.Add(bestToken);
-            confidences.Add(bestProb);
-        }
-
-        // Convert tokens to text
+        // Convert tokens to text (the generated tokens exclude the start and end tokens)
         var textChars = new List<char>();
-        for (int i = 1; i < tokens.Count; i++) // Skip start token
+        foreach (int tokenId in tokens[0])
         {
-            int tokenId = tokens[i];
             if (tokenId > 0 && tokenId < VocabularySize && IndexToChar.TryGetValue(tokenId, out char ch))
             {
                 textChars.Add(ch);
@@ -246,80 +190,152 @@ public class TrOCR<T> : OCRBase<T>
         }
 
         string text = new string(textChars.ToArray());
-        double avgConf = confidences.Count > 0 ? confidences.Average() : 0;
+        double avgConf = confidences[0].Count > 0 ? confidences[0].Average() : 0;
 
         return (text, NumOps.FromDouble(avgConf));
     }
 
-    private Tensor<T> CreateDecoderInput(List<int> tokens)
+    /// <summary>
+    /// Greedy generation with a key/value cache.
+    /// </summary>
+    /// <param name="encoderOutput">The encoder output <c>[batch, patches, hidden]</c>.</param>
+    /// <returns>
+    /// The logits of every step <c>[batch, steps, vocabulary]</c>, and per sequence the generated
+    /// tokens (without the start and end tokens) and the probability of each.
+    /// </returns>
+    private (Tensor<T> Logits, List<int>[] Tokens, List<double>[] Confidences) Generate(Tensor<T> encoderOutput)
     {
-        int seqLen = tokens.Count;
-        int vocabSize = VocabularySize + 2; // +2 for start/end tokens
+        using var noGrad = new NoGradScope<T>();
+        int batch = encoderOutput.Shape[0];
+        int vocab = VocabularySize + 2;
+        int maxSteps = Math.Max(1, Options.MaxSequenceLength - 1);
 
-        // Create one-hot representation for embedding lookup
-        var oneHot = new Tensor<T>(new[] { 1, seqLen, vocabSize });
-        for (int t = 0; t < seqLen; t++)
+        var caches = new TrOCRLayerCache<T>[_numLayers];
+        for (int l = 0; l < _numLayers; l++)
         {
-            int tokenId = MathHelper.Clamp(tokens[t], 0, vocabSize - 1);
-            oneHot[0, t, tokenId] = NumOps.FromDouble(1.0);
+            caches[l] = new TrOCRLayerCache<T>();
         }
 
-        // Apply learned token embedding projection
-        var embedded = new Tensor<T>(new[] { 1, seqLen, _hiddenDim });
-        for (int t = 0; t < seqLen; t++)
+        var tokens = new List<int>[batch];
+        var confidences = new List<double>[batch];
+        var finished = new bool[batch];
+        var current = new int[batch];
+        for (int b = 0; b < batch; b++)
         {
-            // Extract single token one-hot vector
-            var tokenOneHot = new Tensor<T>(new[] { 1, vocabSize });
-            for (int v = 0; v < vocabSize; v++)
+            tokens[b] = new List<int>();
+            confidences[b] = new List<double>();
+            current[b] = _startTokenId;
+        }
+
+        var steps = new List<Tensor<T>>();
+        for (int step = 0; step < maxSteps; step++)
+        {
+            var x = EmbedTokens(current.Select(t => new[] { t }).ToArray(), step);
+            for (int l = 0; l < _numLayers; l++)
             {
-                tokenOneHot[0, v] = oneHot[0, t, v];
+                x = _decoderLayers[l].ForwardStep(x, encoderOutput, caches[l]);
             }
 
-            // Apply embedding projection
-            var tokenEmb = _tokenEmbedding.Forward(tokenOneHot);
+            var logits = _outputProjection.ForwardTokens(x);                      // [batch, 1, vocab]
+            steps.Add(logits);
 
-            // Copy to output
-            for (int h = 0; h < _hiddenDim; h++)
+            bool allFinished = true;
+            for (int b = 0; b < batch; b++)
             {
-                embedded[0, t, h] = tokenEmb[0, h];
+                if (finished[b])
+                {
+                    current[b] = _endTokenId;
+                    continue;
+                }
+
+                // Softmax over this step's logits; the first most likely token wins ties.
+                double max = double.NegativeInfinity;
+                for (int v = 0; v < vocab; v++)
+                {
+                    max = Math.Max(max, NumOps.ToDouble(logits[(b * vocab) + v]));
+                }
+
+                double sum = 0;
+                int best = 0;
+                double bestValue = double.NegativeInfinity;
+                for (int v = 0; v < vocab; v++)
+                {
+                    double value = NumOps.ToDouble(logits[(b * vocab) + v]);
+                    sum += Math.Exp(value - max);
+                    if (value > bestValue)
+                    {
+                        bestValue = value;
+                        best = v;
+                    }
+                }
+
+                if (best == _endTokenId)
+                {
+                    finished[b] = true;
+                    current[b] = _endTokenId;
+                    continue;
+                }
+
+                tokens[b].Add(best);
+                confidences[b].Add(Math.Exp(bestValue - max) / sum);
+                current[b] = best;
+                allFinished = false;
+            }
+
+            if (allFinished)
+            {
+                break;
             }
         }
 
-        // Add positional encoding - critical for transformer to understand token positions
-        // Uses sinusoidal positional encoding matching the encoder's positional encoding
-        var embeddedWithPos = AddPositionalEncoding(embedded);
-
-        return embeddedWithPos;
+        var all = steps.Count == 1 ? steps[0] : Engine.TensorConcatenate(steps.ToArray(), 1);
+        return (all, tokens, confidences);
     }
 
-    private Tensor<T> AddPositionalEncoding(Tensor<T> x)
+    /// <summary>
+    /// Embeds token ids <c>[batch][length]</c> as <c>[batch, length, hidden]</c>: the learned token
+    /// embedding plus the sinusoidal position encoding, positions starting at <paramref name="startPosition"/>.
+    /// </summary>
+    private Tensor<T> EmbedTokens(int[][] tokens, int startPosition)
+    {
+        int batch = tokens.Length;
+        int seqLen = tokens[0].Length;
+        int vocabSize = VocabularySize + 2; // +2 for start/end tokens
+
+        // One-hot token ids through the learned embedding projection, then positional encoding.
+        var oneHot = new Tensor<T>(new[] { batch, seqLen, vocabSize });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                int tokenId = MathHelper.Clamp(tokens[b][t], 0, vocabSize - 1);
+                oneHot[(((b * seqLen) + t) * vocabSize) + tokenId] = NumOps.FromDouble(1.0);
+            }
+        }
+
+        return AddPositionalEncoding(_tokenEmbedding.ForwardTokens(oneHot), startPosition);
+    }
+
+    private Tensor<T> AddPositionalEncoding(Tensor<T> x, int startPosition = 0)
     {
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
+        // The sinusoidal table is a constant; only the ADD must stay on the tape.
+        var table = new Tensor<T>(new[] { 1, seqLen, hiddenDim });
+        for (int pos = 0; pos < seqLen; pos++)
         {
-            for (int pos = 0; pos < seqLen; pos++)
+            for (int i = 0; i < hiddenDim; i++)
             {
-                for (int i = 0; i < hiddenDim; i++)
-                {
-                    // Use explicit floor division to get the pair index (0,1->0, 2,3->1, etc.)
-                    int pairIndex = i / 2;
-                    double exponent = (2.0 * pairIndex) / hiddenDim;
-                    double angle = pos / Math.Pow(10000.0, exponent);
-                    double pe = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
-
-                    result[b, pos, i] = NumOps.FromDouble(
-                        NumOps.ToDouble(x[b, pos, i]) + pe
-                    );
-                }
+                int pairIndex = i / 2;
+                double exponent = (2.0 * pairIndex) / hiddenDim;
+                double angle = (pos + startPosition) / Math.Pow(10000.0, exponent);
+                table[(pos * hiddenDim) + i] = NumOps.FromDouble((i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle));
             }
         }
 
-        return result;
+        return Engine.TensorAdd(x, Engine.TensorBroadcastTo(table, new[] { batch, seqLen, hiddenDim }));
     }
 
     private Tensor<T> ApplyEncoderLayer(Tensor<T> x, int layerIdx)
@@ -330,45 +346,13 @@ public class TrOCR<T> : OCRBase<T>
 
     private Tensor<T> ApplyDecoder(Tensor<T> decoderInput, Tensor<T> encoderOutput)
     {
-        int batch = decoderInput.Shape[0];
-        int seqLen = decoderInput.Shape[1];
-
         var x = decoderInput;
-
-        // Apply proper transformer decoder layers with self-attention and cross-attention
         for (int l = 0; l < _numLayers; l++)
         {
             x = _decoderLayers[l].Forward(x, encoderOutput);
         }
 
-        // Output projection
-        var logits = new Tensor<T>(new[] { batch, seqLen, VocabularySize + 2 });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int h = 0; h < _hiddenDim; h++)
-                {
-                    feat[0, h] = x[b, t, h];
-                }
-
-                var output = _outputProjection.Forward(feat);
-                for (int v = 0; v < VocabularySize + 2; v++)
-                {
-                    logits[b, t, v] = output[0, v];
-                }
-            }
-        }
-
-        return logits;
-    }
-
-    private static double GELU(double x)
-    {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+        return _outputProjection.ForwardTokens(x);
     }
 
     /// <inheritdoc/>
@@ -619,13 +603,171 @@ public class TrOCR<T> : OCRBase<T>
 
         _outputProjection.ReadParameters(reader);
     }
+
+    /// <summary>
+    /// Runs one teacher-forced training step with cross-entropy.
+    /// </summary>
+    /// <param name="input">The text-line image.</param>
+    /// <param name="expectedOutput">
+    /// The target text as token ids <c>[batch, length]</c>, or as scores <c>[batch, length, vocabulary]</c>
+    /// (such as <see cref="Predict"/>'s output shape), whose most likely token at each position is the
+    /// label. Positions after the first end token are padding and are ignored.
+    /// </param>
+    /// <remarks>
+    /// The standard TrOCR recipe (Li et al. 2021; Hugging Face <c>VisionEncoderDecoderModel</c>): the
+    /// decoder reads the labels shifted right behind the start token in ONE parallel causal pass, and
+    /// the loss is the cross-entropy of each position's prediction of the next label. Every decoder
+    /// weight is on the gradient path - including the self-attention query and key projections, which
+    /// a single-step decode could never train (one key makes the attention weight exactly 1).
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        var labels = LabelsFrom(expectedOutput);
+        var targets = LabelTargets(labels);
+        RecordTrainingLoss(TensorModelTrainer<T>.Step(
+            this, input, targets, NumOps.FromDouble(TrainingLearningRate),
+            image => TeacherForcedLogits(image, labels),
+            CrossEntropy));
+    }
+
+    /// <summary>
+    /// Decoder logits <c>[batch, length, vocabulary]</c> under teacher forcing: position t reads the
+    /// start token followed by labels 0..t-1.
+    /// </summary>
+    private Tensor<T> TeacherForcedLogits(Tensor<T> image, int[][] labels)
+    {
+        var encoderOutput = EncodeImage(PreprocessCrop(image));
+        if (labels.Length != encoderOutput.Shape[0])
+        {
+            throw new ArgumentException(
+                $"The target has {labels.Length} sequences but the input has {encoderOutput.Shape[0]} images.");
+        }
+
+        var shifted = labels.Select(row => new[] { _startTokenId }.Concat(row.Take(row.Length - 1)).ToArray()).ToArray();
+        return ApplyDecoder(EmbedTokens(shifted, 0), encoderOutput);
+    }
+
+    /// <summary>
+    /// Reads label ids from token ids <c>[batch, length]</c> or scores <c>[batch, length, vocabulary]</c>.
+    /// </summary>
+    private int[][] LabelsFrom(Tensor<T> target)
+    {
+        int vocab = VocabularySize + 2;
+        if (target.Rank == 3 && target.Shape[2] == vocab)
+        {
+            int batch = target.Shape[0], length = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                labels[b] = new int[length];
+                for (int t = 0; t < length; t++)
+                {
+                    int best = 0;
+                    double bestValue = double.NegativeInfinity;
+                    for (int v = 0; v < vocab; v++)
+                    {
+                        double value = NumOps.ToDouble(target[(((b * length) + t) * vocab) + v]);
+                        if (value > bestValue)
+                        {
+                            bestValue = value;
+                            best = v;
+                        }
+                    }
+
+                    labels[b][t] = best;
+                }
+            }
+
+            return labels;
+        }
+
+        if (target.Rank == 2)
+        {
+            int batch = target.Shape[0], length = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                labels[b] = new int[length];
+                for (int t = 0; t < length; t++)
+                {
+                    double id = Math.Round(NumOps.ToDouble(target[(b * length) + t]));
+                    if (id < 0 || id >= vocab)
+                    {
+                        throw new ArgumentException(
+                            $"Label {id} at [{b}, {t}] is outside the vocabulary [0, {vocab}).", nameof(target));
+                    }
+
+                    labels[b][t] = (int)id;
+                }
+            }
+
+            return labels;
+        }
+
+        throw new ArgumentException(
+            $"TrOCR training targets are token ids [batch, length] or scores [batch, length, {vocab}]; " +
+            $"got [{string.Join(", ", target.Shape.ToArray())}].", nameof(target));
+    }
+
+    /// <summary>
+    /// One-hot targets <c>[batch, length, vocabulary]</c>; positions after the first end token are
+    /// all zero, so they drop out of the loss.
+    /// </summary>
+    private Tensor<T> LabelTargets(int[][] labels)
+    {
+        int vocab = VocabularySize + 2;
+        int batch = labels.Length, length = labels[0].Length;
+        var targets = new Tensor<T>(new[] { batch, length, vocab });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int t = 0; t < length; t++)
+            {
+                targets[(((b * length) + t) * vocab) + labels[b][t]] = NumOps.One;
+                if (labels[b][t] == _endTokenId)
+                {
+                    break;
+                }
+            }
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// Mean cross-entropy over the labelled positions: <c>-sum(target * log_softmax(logits)) / count</c>.
+    /// </summary>
+    private static Tensor<T> CrossEntropy(Tensor<T> logits, Tensor<T> oneHotTargets)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+
+        double labelled = 0;
+        for (int i = 0; i < oneHotTargets.Length; i++)
+        {
+            labelled += ops.ToDouble(oneHotTargets[i]);
+        }
+
+        var logProbabilities = engine.TensorLogSoftmax(logits, axis: -1);
+        var picked = engine.ReduceSum(engine.TensorMultiply(logProbabilities, oneHotTargets), null);
+        return engine.TensorMultiplyScalar(picked, ops.FromDouble(-1.0 / Math.Max(1.0, labelled)));
+    }
 }
 
 /// <summary>
 /// Transformer encoder layer with proper multi-head self-attention for TrOCR.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class TrOCREncoderLayer<T>
+internal class TrOCREncoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -680,32 +822,29 @@ internal class TrOCREncoderLayer<T>
 
     public Tensor<T> Forward(Tensor<T> x)
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-
         // Self-attention with proper scaled dot-product attention
-        var attnOut = ApplySelfAttention(x, batch, seqLen);
+        var attnOut = ApplySelfAttention(x);
 
         // Add residual & LayerNorm with learnable parameters
-        var residual1 = AddTensors(x, attnOut, batch, seqLen);
+        var residual1 = AddTensors(x, attnOut);
         var x1 = _norm1.Forward(residual1);
 
         // FFN
-        var ffnOut = ApplyFFN(x1, batch, seqLen);
+        var ffnOut = ApplyFFN(x1);
 
         // Add residual & LayerNorm with learnable parameters
-        var residual2 = AddTensors(x1, ffnOut, batch, seqLen);
+        var residual2 = AddTensors(x1, ffnOut);
         var output = _norm2.Forward(residual2);
 
         return output;
     }
 
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private Tensor<T> ApplySelfAttention(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplySelfAttention(Tensor<T> x)
     {
         // Project Q, K, V
         var q = ProjectSequence(x, _queryProj);
@@ -713,150 +852,21 @@ internal class TrOCREncoderLayer<T>
         var v = ProjectSequence(x, _valueProj);
 
         // Compute multi-head attention
-        var attnOutput = ComputeMultiHeadAttention(q, k, v, batch, seqLen, seqLen);
+        var attnOutput = ComputeMultiHeadAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _outputProj);
     }
 
-    private Tensor<T> ComputeMultiHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batch, int queryLen, int keyLen)
-    {
-        var output = new Tensor<T>(new[] { batch, queryLen, _hiddenDim });
+    private Tensor<T> ComputeMultiHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+        => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale);
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int headOffset = h * _headDim;
+    private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj) => proj.ForwardTokens(x);
 
-                // Compute attention scores: Q * K^T / sqrt(d_k)
-                var scores = new double[queryLen, keyLen];
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            score += _numOps.ToDouble(q[b, i, headOffset + d]) *
-                                     _numOps.ToDouble(k[b, j, headOffset + d]);
-                        }
-                        scores[i, j] = score * _scale;
-                    }
-                }
+    private Tensor<T> ApplyFFN(Tensor<T> x)
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
-                // Softmax over key dimension
-                for (int i = 0; i < queryLen; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        maxScore = Math.Max(maxScore, scores[i, j]);
-                    }
 
-                    double sumExp = 0;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] = Math.Exp(scores[i, j] - maxScore);
-                        sumExp += scores[i, j];
-                    }
-
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] /= sumExp;
-                    }
-                }
-
-                // Apply attention weights to values
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double value = 0;
-                        for (int j = 0; j < keyLen; j++)
-                        {
-                            value += scores[i, j] * _numOps.ToDouble(v[b, j, headOffset + d]);
-                        }
-                        output[b, i, headOffset + d] = _numOps.FromDouble(value);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int dim = x.Shape[2];
-        int outDim = proj.OutputSize;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, outDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, dim });
-                for (int d = 0; d < dim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                var projected = proj.Forward(feat);
-                for (int d = 0; d < outDim; d++)
-                {
-                    result[b, s, d] = projected[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
-    {
-        int ffnDim = _ffn1.OutputSize;
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                // FFN1 with GELU
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                // FFN2
-                var output = _ffn2.Forward(h);
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static double GELU(double x)
-    {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-    }
 
     public long GetParameterCount()
     {
@@ -903,13 +913,41 @@ internal class TrOCREncoderLayer<T>
         _norm1.ReadParameters(reader);
         _norm2.ReadParameters(reader);
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _queryProj;
+        yield return _keyProj;
+        yield return _valueProj;
+        yield return _outputProj;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
+    }
+}
+
+/// <summary>
+/// Incremental-decoding state of one <see cref="TrOCRDecoderLayer{T}"/>: the self-attention keys and
+/// values of every token decoded so far, and the cross-attention keys and values of the encoder output.
+/// </summary>
+internal sealed class TrOCRLayerCache<T>
+{
+    public Tensor<T>? SelfKeys { get; set; }
+
+    public Tensor<T>? SelfValues { get; set; }
+
+    public Tensor<T>? CrossKeys { get; set; }
+
+    public Tensor<T>? CrossValues { get; set; }
 }
 
 /// <summary>
 /// Transformer decoder layer with proper multi-head self-attention and cross-attention for TrOCR.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class TrOCRDecoderLayer<T>
+internal class TrOCRDecoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -991,34 +1029,30 @@ internal class TrOCRDecoderLayer<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> encoderOutput)
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int encoderLen = encoderOutput.Shape[1];
-
         // Masked self-attention (causal mask for autoregressive decoding)
-        var selfAttnOut = ApplyCausalSelfAttention(x, batch, seqLen);
-        var residual1 = AddTensors(x, selfAttnOut, batch, seqLen);
+        var selfAttnOut = ApplyCausalSelfAttention(x);
+        var residual1 = AddTensors(x, selfAttnOut);
         var x1 = _norm1.Forward(residual1);
 
         // Cross-attention to encoder output
-        var crossAttnOut = ApplyCrossAttention(x1, encoderOutput, batch, seqLen, encoderLen);
-        var residual2 = AddTensors(x1, crossAttnOut, batch, seqLen);
+        var crossAttnOut = ApplyCrossAttention(x1, encoderOutput);
+        var residual2 = AddTensors(x1, crossAttnOut);
         var x2 = _norm2.Forward(residual2);
 
         // FFN
-        var ffnOut = ApplyFFN(x2, batch, seqLen);
-        var residual3 = AddTensors(x2, ffnOut, batch, seqLen);
+        var ffnOut = ApplyFFN(x2);
+        var residual3 = AddTensors(x2, ffnOut);
         var output = _norm3.Forward(residual3);
 
         return output;
     }
 
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x, int batch, int seqLen)
+    private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x)
     {
         // Project Q, K, V
         var q = ProjectSequence(x, _selfQueryProj);
@@ -1026,95 +1060,16 @@ internal class TrOCRDecoderLayer<T>
         var v = ProjectSequence(x, _selfValueProj);
 
         // Compute masked attention (causal mask)
-        var attnOutput = ComputeCausalAttention(q, k, v, batch, seqLen);
+        var attnOutput = ComputeCausalAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _selfOutputProj);
     }
 
-    private Tensor<T> ComputeCausalAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, int batch, int seqLen)
-    {
-        var output = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
+    private Tensor<T> ComputeCausalAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+        => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale, causal: true);
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int headOffset = h * _headDim;
-
-                // Compute attention scores with causal mask
-                var scores = new double[seqLen, seqLen];
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        if (j > i)
-                        {
-                            // Future tokens are masked (set to -inf before softmax)
-                            scores[i, j] = double.NegativeInfinity;
-                        }
-                        else
-                        {
-                            double score = 0;
-                            for (int d = 0; d < _headDim; d++)
-                            {
-                                score += _numOps.ToDouble(q[b, i, headOffset + d]) *
-                                         _numOps.ToDouble(k[b, j, headOffset + d]);
-                            }
-                            scores[i, j] = score * _scale;
-                        }
-                    }
-                }
-
-                // Softmax
-                for (int i = 0; i < seqLen; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j <= i; j++) // Only look at non-masked positions
-                    {
-                        maxScore = Math.Max(maxScore, scores[i, j]);
-                    }
-
-                    double sumExp = 0;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        if (j <= i)
-                        {
-                            scores[i, j] = Math.Exp(scores[i, j] - maxScore);
-                            sumExp += scores[i, j];
-                        }
-                        else
-                        {
-                            scores[i, j] = 0; // Masked out
-                        }
-                    }
-
-                    for (int j = 0; j <= i; j++)
-                    {
-                        scores[i, j] /= sumExp;
-                    }
-                }
-
-                // Apply attention to values
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double value = 0;
-                        for (int j = 0; j <= i; j++)
-                        {
-                            value += scores[i, j] * _numOps.ToDouble(v[b, j, headOffset + d]);
-                        }
-                        output[b, i, headOffset + d] = _numOps.FromDouble(value);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ApplyCrossAttention(Tensor<T> x, Tensor<T> encoderOutput, int batch, int seqLen, int encoderLen)
+    private Tensor<T> ApplyCrossAttention(Tensor<T> x, Tensor<T> encoderOutput)
     {
         // Query from decoder, Key/Value from encoder
         var q = ProjectSequence(x, _crossQueryProj);
@@ -1122,150 +1077,21 @@ internal class TrOCRDecoderLayer<T>
         var v = ProjectSequence(encoderOutput, _crossValueProj);
 
         // Compute cross-attention (no mask needed)
-        var attnOutput = ComputeCrossAttention(q, k, v, batch, seqLen, encoderLen);
+        var attnOutput = ComputeCrossAttention(q, k, v);
 
         // Output projection
         return ProjectSequence(attnOutput, _crossOutputProj);
     }
 
-    private Tensor<T> ComputeCrossAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batch, int queryLen, int keyLen)
-    {
-        var output = new Tensor<T>(new[] { batch, queryLen, _hiddenDim });
+    private Tensor<T> ComputeCrossAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+        => CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale);
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int headOffset = h * _headDim;
+    private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj) => proj.ForwardTokens(x);
 
-                // Compute attention scores
-                var scores = new double[queryLen, keyLen];
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            score += _numOps.ToDouble(q[b, i, headOffset + d]) *
-                                     _numOps.ToDouble(k[b, j, headOffset + d]);
-                        }
-                        scores[i, j] = score * _scale;
-                    }
-                }
+    private Tensor<T> ApplyFFN(Tensor<T> x)
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
-                // Softmax
-                for (int i = 0; i < queryLen; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        maxScore = Math.Max(maxScore, scores[i, j]);
-                    }
 
-                    double sumExp = 0;
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] = Math.Exp(scores[i, j] - maxScore);
-                        sumExp += scores[i, j];
-                    }
-
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        scores[i, j] /= sumExp;
-                    }
-                }
-
-                // Apply attention to values
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double value = 0;
-                        for (int j = 0; j < keyLen; j++)
-                        {
-                            value += scores[i, j] * _numOps.ToDouble(v[b, j, headOffset + d]);
-                        }
-                        output[b, i, headOffset + d] = _numOps.FromDouble(value);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int dim = x.Shape[2];
-        int outDim = proj.OutputSize;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, outDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, dim });
-                for (int d = 0; d < dim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                var projected = proj.Forward(feat);
-                for (int d = 0; d < outDim; d++)
-                {
-                    result[b, s, d] = projected[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
-    {
-        int ffnDim = _ffn1.OutputSize;
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                // FFN1 with GELU
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                // FFN2
-                var output = _ffn2.Forward(h);
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static double GELU(double x)
-    {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-    }
 
     public long GetParameterCount()
     {
@@ -1327,13 +1153,70 @@ internal class TrOCRDecoderLayer<T>
         _norm2.ReadParameters(reader);
         _norm3.ReadParameters(reader);
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _selfQueryProj;
+        yield return _selfKeyProj;
+        yield return _selfValueProj;
+        yield return _selfOutputProj;
+        yield return _crossQueryProj;
+        yield return _crossKeyProj;
+        yield return _crossValueProj;
+        yield return _crossOutputProj;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
+        yield return _norm3;
+    }
+
+    /// <summary>
+    /// Runs this layer for ONE new decoder token, reusing the keys and values of every earlier token.
+    /// </summary>
+    /// <param name="x">The new token's hidden state <c>[batch, 1, hidden]</c>.</param>
+    /// <param name="encoderOutput">The encoder output <c>[batch, patches, hidden]</c>.</param>
+    /// <param name="cache">This layer's cache; the new token's keys and values are appended to it.</param>
+    /// <returns>The new token's output <c>[batch, 1, hidden]</c>.</returns>
+    /// <remarks>
+    /// Incremental decoding with a key/value cache - the standard generate path (Hugging Face
+    /// <c>use_cache</c>). Because self-attention is causal, the output for the newest token equals
+    /// the last position of <see cref="Forward"/> over the whole prefix; the cache just avoids
+    /// recomputing the earlier positions, making each step O(prefix) instead of O(prefix squared).
+    /// The encoder's cross-attention keys and values are computed once, on the first step.
+    /// </remarks>
+    public Tensor<T> ForwardStep(Tensor<T> x, Tensor<T> encoderOutput, TrOCRLayerCache<T> cache)
+    {
+        var engine = AiDotNetEngine.Current;
+
+        var q = ProjectSequence(x, _selfQueryProj);
+        var k = ProjectSequence(x, _selfKeyProj);
+        var v = ProjectSequence(x, _selfValueProj);
+        cache.SelfKeys = cache.SelfKeys is null ? k : engine.TensorConcatenate(new[] { cache.SelfKeys, k }, 1);
+        cache.SelfValues = cache.SelfValues is null ? v : engine.TensorConcatenate(new[] { cache.SelfValues, v }, 1);
+
+        // The newest token may attend to every cached token, so no mask is needed.
+        var selfAttn = ProjectSequence(
+            CvTensorOps<T>.MultiHeadAttention(q, cache.SelfKeys, cache.SelfValues, _numHeads, _scale), _selfOutputProj);
+        var x1 = _norm1.Forward(engine.TensorAdd(x, selfAttn));
+
+        cache.CrossKeys ??= ProjectSequence(encoderOutput, _crossKeyProj);
+        cache.CrossValues ??= ProjectSequence(encoderOutput, _crossValueProj);
+        var crossAttn = ProjectSequence(
+            CvTensorOps<T>.MultiHeadAttention(ProjectSequence(x1, _crossQueryProj), cache.CrossKeys, cache.CrossValues, _numHeads, _scale),
+            _crossOutputProj);
+        var x2 = _norm2.Forward(engine.TensorAdd(x1, crossAttn));
+
+        return _norm3.Forward(engine.TensorAdd(x2, ApplyFFN(x2)));
+    }
 }
 
 /// <summary>
 /// Layer normalization with learnable affine parameters for TrOCR.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class TrOCRLayerNorm<T>
+internal class TrOCRLayerNorm<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -1368,49 +1251,7 @@ internal class TrOCRLayerNorm<T>
         }
     }
 
-    public Tensor<T> Forward(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Compute mean
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                // Normalize and apply affine transformation
-                double std = Math.Sqrt(variance + _eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    double gamma = _numOps.ToDouble(_gamma[d]);
-                    double beta = _numOps.ToDouble(_beta[d]);
-                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
-                }
-            }
-        }
-
-        return result;
-    }
+    public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);
 
     public long GetParameterCount()
     {
@@ -1445,5 +1286,15 @@ internal class TrOCRLayerNorm<T>
         {
             _beta[i] = _numOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _gamma;
+        yield return _beta;
     }
 }

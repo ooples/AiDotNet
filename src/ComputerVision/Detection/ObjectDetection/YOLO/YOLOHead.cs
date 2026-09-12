@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
@@ -17,7 +18,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 /// <para>Each output tensor has shape [batch, num_anchors * (5 + num_classes), height, width]
 /// where 5 = (x, y, w, h, objectness).</para>
 /// </remarks>
-internal class YOLOHead<T>
+internal class YOLOHead<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numClasses;
@@ -153,6 +154,8 @@ internal class YOLOHead<T>
             int batch = output.Shape[0];
             int featH = output.Shape[2];
             int featW = output.Shape[3];
+            double scaleX = imageWidth / (double)(featW * stride);
+            double scaleY = imageHeight / (double)(featH * stride);
 
             for (int b = 0; b < batch; b++)
             {
@@ -195,10 +198,15 @@ internal class YOLOHead<T>
                             double bh = Math.Exp(MathHelper.Clamp(th, -88.0, 88.0)) * stride;
 
                             // Convert to xyxy format
-                            float x1 = (float)Math.Max(0, cx - bw / 2);
-                            float y1 = (float)Math.Max(0, cy - bh / 2);
-                            float x2 = (float)Math.Min(imageWidth, cx + bw / 2);
-                            float y2 = (float)Math.Min(imageHeight, cy + bh / 2);
+                            // Map from the network-input frame to the source image before clipping.
+                            float x1 = (float)Math.Max(0, (cx - bw / 2) * scaleX);
+                            float y1 = (float)Math.Max(0, (cy - bh / 2) * scaleY);
+                            float x2 = (float)Math.Min(imageWidth, (cx + bw / 2) * scaleX);
+                            float y2 = (float)Math.Min(imageHeight, (cy + bh / 2) * scaleY);
+                            if (x2 <= x1 || y2 <= y1)
+                            {
+                                continue;
+                            }
 
                             // Add to this batch's collections
                             batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
@@ -306,6 +314,12 @@ internal class YOLOHead<T>
     {
         return 1.0 / (1.0 + Math.Exp(-x));
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _convLayers) yield return child;
+    }
 }
 
 /// <summary>
@@ -317,7 +331,7 @@ internal class YOLOHead<T>
 /// YOLOv8+ uses an anchor-free approach where the network directly predicts box sizes
 /// relative to each grid cell. This simplifies the architecture and often improves accuracy.</para>
 /// </remarks>
-internal class YOLOv8Head<T>
+internal class YOLOv8Head<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numClasses;
@@ -478,6 +492,8 @@ internal class YOLOv8Head<T>
             int batch = clsOutput.Shape[0];
             int featH = clsOutput.Shape[2];
             int featW = clsOutput.Shape[3];
+            double scaleX = imageWidth / (double)(featW * stride);
+            double scaleY = imageHeight / (double)(featH * stride);
 
             for (int b = 0; b < batch; b++)
             {
@@ -509,10 +525,17 @@ internal class YOLOv8Head<T>
                         double cx = (w + 0.5) * stride;
                         double cy = (h + 0.5) * stride;
 
-                        float x1 = (float)Math.Max(0, cx - left * stride);
-                        float y1 = (float)Math.Max(0, cy - top * stride);
-                        float x2 = (float)Math.Min(imageWidth, cx + right * stride);
-                        float y2 = (float)Math.Min(imageHeight, cy + bottom * stride);
+                        // Decoded in network-input coordinates (the feature grid times its stride);
+                        // map to the source image before clipping, or a source image smaller than the
+                        // input size yields inverted boxes.
+                        float x1 = (float)Math.Max(0, (cx - left * stride) * scaleX);
+                        float y1 = (float)Math.Max(0, (cy - top * stride) * scaleY);
+                        float x2 = (float)Math.Min(imageWidth, (cx + right * stride) * scaleX);
+                        float y2 = (float)Math.Min(imageHeight, (cy + bottom * stride) * scaleY);
+                        if (x2 <= x1 || y2 <= y1)
+                        {
+                            continue; // Entirely outside the image once mapped.
+                        }
 
                         // Add to this batch's collections
                         batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
@@ -677,26 +700,28 @@ internal class YOLOv8Head<T>
         }
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            // Numerically stable SiLU: x * sigmoid(x)
-            // For large positive x: sigmoid(x) ≈ 1, so SiLU ≈ x
-            // For large negative x: sigmoid(x) ≈ 0, so SiLU ≈ 0
-            // Clamp to prevent overflow in exp(-val) when val is very negative
-            double clampedVal = MathHelper.Clamp(val, -88.0, 88.0);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-clampedVal));
-            double silu = val * sigmoid;
-            result[i] = _numOps.FromDouble(silu);
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise Swish, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySiLU(Tensor<T> x) => AiDotNetEngine.Current.Swish(x);
 
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _clsConvs) yield return child;
+        foreach (var child in _regConvs) yield return child;
+        foreach (var child in _clsHeads) yield return child;
+        foreach (var child in _regHeads) yield return child;
     }
 }

@@ -148,7 +148,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         var features = new List<Tensor<T>>();
         var x = _conv1.Forward(input);
         x = _activation.Activate(x);
-        x = BackboneOps<T>.MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
+        x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
         for (int i = 0; i < _stages.Count; i++)
         {
             x = _stages[i].Forward(x);
@@ -183,7 +183,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         var activations = new Dictionary<string, Tensor<T>>();
         var x = _conv1.Forward(input);
         x = _activation.Activate(x);
-        x = BackboneOps<T>.MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
+        x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
         activations["Stem"] = x.Clone();
         for (int i = 0; i < _stages.Count; i++)
         {

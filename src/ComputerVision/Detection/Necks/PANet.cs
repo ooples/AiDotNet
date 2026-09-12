@@ -182,19 +182,28 @@ public class PANet<T> : NeckBase<T>
         }
 
         // Top-down fusion
+        Tensor<T>? deeperMerged = null;
         for (int i = _numLevels - 1; i >= 0; i--)
         {
             Tensor<T> current = lateralFeatures[i];
 
-            if (i < _numLevels - 1)
+            // Top-down input is the MERGED map of the next deeper level (M_{i+1} in Lin et al. 2017),
+            // before its smoothing conv. This used to read topDownFeatures[^1] - but the list is built with
+            // Insert(0, ...), so [^1] is the DEEPEST level, not the next one: every level took its
+            // top-down signal from the coarsest map, the second-deepest level fed nothing, and a
+            // detector reading one pyramid level (Faster/Cascade R-CNN use P3) left the other levels'
+            // convs without any gradient.
+            if (deeperMerged is not null)
             {
-                var upsampled = Upsample2x(topDownFeatures[^1]);
+                var upsampled = Upsample2x(deeperMerged);
                 if (upsampled.Shape[2] != current.Shape[2] || upsampled.Shape[3] != current.Shape[3])
                 {
                     upsampled = ResizeToMatch(upsampled, current);
                 }
                 current = Add(current, upsampled);
             }
+
+            deeperMerged = current;
 
             var output = Conv1x1(current, _topDownWeights[i], _topDownBiases[i]);
             output = ApplyReLU(output);
@@ -373,45 +382,19 @@ public class PANet<T> : NeckBase<T>
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
-    {
-        int batch = source.Shape[0];
-        int channels = source.Shape[1];
-        int targetH = target.Shape[2];
-        int targetW = target.Shape[3];
-        int sourceH = source.Shape[2];
-        int sourceW = source.Shape[3];
+        // Nearest neighbour, src = min(dst * in / out, in - 1), through tape-visible index gathers.
+        => CvTensorOps<T>.ResizeNearest(source, target.Shape[2], target.Shape[3]);
 
-        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        int srcH = Math.Min(h * sourceH / targetH, sourceH - 1);
-                        int srcW = Math.Min(w * sourceW / targetW, sourceW - 1);
-                        result[n, c, h, w] = source[n, c, srcH, srcW];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
     /// <summary>
     /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
