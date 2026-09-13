@@ -35,19 +35,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a stepwise regression with automatic feature selection
 /// var options = new StepwiseRegressionOptions&lt;double&gt;();
-/// var model = new StepwiseRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 3 features (some may be irrelevant)
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
-///     1, 0, 2,  3, 0, 4,  5, 0, 6,  7, 0, 8,  9, 0, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 0, 2 }, { 3, 0, 4 }, { 5, 0, 6 }, { 7, 0, 8 }, { 9, 0, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0 });
 ///
 /// // Train with forward selection or backward elimination
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new StepwiseRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict using only the selected features
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 11, 0, 12 });
-/// var prediction = model.Predict(newSample);
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 11, 0, 12 } });
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -45,13 +45,13 @@ public static class DataLoaderExtensions
     /// var batches = dataLoader.CreateBatches(batchSize: 32);
     ///
     /// // With configuration
-    /// var batches = dataLoader.CreateBatches(batchSize: 32)
+    /// var batches2 = dataLoader.CreateBatches(batchSize: 32)
     ///     .Shuffled()
     ///     .DropLast()
     ///     .WithSeed(42);
     ///
     /// // Iterate
-    /// foreach (var batch in batches)
+    /// foreach (var batch in batches2)
     /// {
     ///     // Process batch
     /// }

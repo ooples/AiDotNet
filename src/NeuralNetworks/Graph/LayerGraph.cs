@@ -394,10 +394,10 @@ public sealed class LayerGraph<T>
 /// <example>
 /// <code>
 /// var g = new LayerGraphBuilder&lt;double&gt;();
-/// int stem = g.Add(conv1);                       // consumes the model input
-/// int trunk = g.Add(conv2, stem);
-/// int headA = g.Add(scoreHead, trunk);           // both heads read the trunk:
-/// int headB = g.Add(coordHead, trunk);           // this is the fan-out
+/// int stem = g.Add(new DenseLayer&lt;double&gt;(32));            // consumes the model input
+/// int trunk = g.Add(new DenseLayer&lt;double&gt;(32), stem);
+/// int headA = g.Add(new DenseLayer&lt;double&gt;(4), trunk);      // both heads read the trunk:
+/// int headB = g.Add(new DenseLayer&lt;double&gt;(2), trunk);      // this is the fan-out
 /// g.Output(headA);
 /// </code>
 /// </example>

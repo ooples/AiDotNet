@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for instruction-tuned financial multi-task model (2048 tokens)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 ///
 /// // Training mode: multi-task financial LLM for sentiment, NER, and QA

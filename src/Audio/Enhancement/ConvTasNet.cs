@@ -62,6 +62,10 @@ namespace AiDotNet.Audio.Enhancement;
 /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new ConvTasNet&lt;float&gt;(architecture, "conv_tasnet.onnx", 8000, 2));
 ///
+/// var trainingData = Tensor&lt;float&gt;.CreateRandom(4, 16000);
+/// var trainingLabels = Tensor&lt;float&gt;.CreateRandom(4, 16000);
+/// var mixedAudioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// 
 /// // Build and use the model through the facade
 /// var result = builder.Build(trainingData, trainingLabels);
 /// var prediction = result.Predict(mixedAudioTensor);

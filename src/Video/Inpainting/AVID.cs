@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Inpainting;
 /// // Create an AVID model for diffusion-based video inpainting
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new AVIDOptions();
 /// var avid = new AVID&lt;double&gt;(architecture, options);

@@ -80,18 +80,20 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create iMAML with minimal configuration (uses all defaults)
-    /// var options = new iMAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new iMAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create iMAML with custom configuration for more adaptation steps
-    /// var options = new iMAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options2 = new iMAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 20,  // iMAML can handle many steps!
     ///     LambdaRegularization = 2.0,
     ///     ConjugateGradientIterations = 15
     /// };
-    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var imaml2 = new iMAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public iMAMLAlgorithm(iMAMLOptions<T, TInput, TOutput> options)

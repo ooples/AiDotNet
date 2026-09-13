@@ -37,7 +37,6 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <code>
 /// // Create ML-kNN for multi-label classification with Bayesian inference
 /// var options = new MLkNNOptions&lt;double&gt;();
-/// var classifier = new MLkNNClassifier&lt;double&gt;(options);
 ///
 /// // Prepare features and multi-label targets
 /// var features = new Matrix&lt;double&gt;(4, 2);
@@ -52,12 +51,14 @@ namespace AiDotNet.Classification.MultiLabel;
 /// labels[3, 0] = 0; labels[3, 1] = 0; labels[3, 2] = 1;
 ///
 /// // Train by storing instances and computing Bayesian priors
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+///     .ConfigureModel(new MLkNNClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict labels using k-NN neighbor counts and Bayesian inference
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 2.0; newSample[0, 1] = 3.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>

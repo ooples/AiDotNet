@@ -42,7 +42,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 /// <example>
 /// <code>
 /// // Create a TRPO agent with monotonic improvement guarantees
-/// var options = new TRPOOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, MaxKLDivergence = 0.01 };
+/// var options = new TRPOOptions&lt;double&gt; { StateSize = 4, ActionSize = 2};
 /// var agent = new TRPOAgent&lt;double&gt;(options);
 ///
 /// // Select an action within the trust region

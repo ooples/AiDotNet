@@ -37,6 +37,7 @@ namespace AiDotNet.Video.Denoising;
 /// // Create a UDVD model for blind self-supervised video denoising
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new UDVDOptions();
 /// var udvd = new UDVD&lt;double&gt;(architecture, options);

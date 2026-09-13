@@ -51,20 +51,19 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <example>
 /// <code>
 /// // Create Classifier Chain that captures label dependencies
-/// var classifier = new ClassifierChainClassifier&lt;double&gt;();
 ///
 /// // Prepare features and multi-label targets
-/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
-///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
-/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
-///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var labels = new Matrix&lt;double&gt;(new double[,] { { 1, 0, 1 }, { 1, 1, 0 }, { 0, 1, 1 }, { 0, 0, 1 } });
 ///
 /// // Train chained classifiers where each uses previous predictions as features
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+///     .ConfigureModel(new ClassifierChainClassifier&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict label set with label correlation awareness
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
-/// var prediction = classifier.Predict(newSample);
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 2.0, 3.0 } });
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -168,12 +167,12 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// var cc = new ClassifierChainClassifier&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Specific order
-    /// var cc = new ClassifierChainClassifier&lt;double&gt;(
+    /// var cc2 = new ClassifierChainClassifier&lt;double&gt;(
     ///     () => new LogisticRegression&lt;double&gt;(),
     ///     chainOrder: new int[] { 2, 0, 1 });  // Predict label 2 first, then 0, then 1
     ///
     /// // Random order
-    /// var cc = new ClassifierChainClassifier&lt;double&gt;(
+    /// var cc3 = new ClassifierChainClassifier&lt;double&gt;(
     ///     () => new LogisticRegression&lt;double&gt;(),
     ///     useRandomOrder: true);
     /// </code>

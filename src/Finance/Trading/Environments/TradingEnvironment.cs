@@ -29,6 +29,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </remarks>
 /// <example>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// // TradingEnvironment is abstract; use StockTradingEnvironment or MarketMakingEnvironment
 /// // Example with StockTradingEnvironment for single-asset discrete trading:
 /// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 });

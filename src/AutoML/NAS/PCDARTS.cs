@@ -28,8 +28,12 @@ namespace AiDotNet.AutoML.NAS
     /// <example>
     /// <code>
     /// // Use AiModelBuilder facade with PC-DARTS for neural architecture search
+    /// var trainingData = Tensor&lt;float&gt;.CreateRandom(4, 3, 32, 32);
+    /// var trainingLabels = Tensor&lt;float&gt;.CreateRandom(4, 10);
+    /// var inputTensor = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+    /// 
     /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-    ///     .ConfigureModel(new PCDARTS&lt;float&gt;(new SearchSpaceBase&lt;float&gt;(), numNodes: 4));
+    ///     .ConfigureModel(new PCDARTS&lt;float&gt;(new MobileNetSearchSpace&lt;float&gt;(), numNodes: 4));
     ///
     /// var result = builder.Build(trainingData, trainingLabels);
     /// var prediction = result.Predict(inputTensor);

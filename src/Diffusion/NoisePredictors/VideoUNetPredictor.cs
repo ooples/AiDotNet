@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// <example>
 /// <code>
 /// var predictor = new VideoUNetPredictor&lt;float&gt;(inputChannels: 4, baseChannels: 320, numFrames: 14);
-/// var noisyVideo = Tensor&lt;float&gt;.Random(new[] { 1, 4, 14, 64, 64 });
+/// var noisyVideo = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 14, 64, 64 });
 /// var predicted = predictor.PredictNoise(noisyVideo, timestep: 500);
 /// </code>
 /// </example>

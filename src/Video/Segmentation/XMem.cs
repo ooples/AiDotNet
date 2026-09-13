@@ -34,6 +34,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new XMem&lt;double&gt;(arch);
 /// var masks = model.TrackObjectLongTerm(videoFrames, initialMask);
@@ -43,6 +44,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new XMem&lt;double&gt;(arch, "xmem.onnx");
 /// var masks = model.TrackObjectLongTerm(videoFrames, initialMask);

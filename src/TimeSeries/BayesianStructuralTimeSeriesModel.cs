@@ -43,11 +43,17 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+///
 /// // Create a BSTS model for causal impact analysis with structural components
-/// var options = new BayesianStructuralTimeSeriesOptions&lt;double&gt;();
-/// var bsts = new BayesianStructuralTimeSeriesModel&lt;double&gt;(options);
-/// bsts.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = bsts.Forecast(history, horizon: 30);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new BayesianStructuralTimeSeriesModel&lt;double&gt;(
+///         new BayesianStructuralTimeSeriesOptions&lt;double&gt;()))
+///     .Build(trainingMatrix, trainingLabels);
+///
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+/// Vector&lt;double&gt; forecast = result.Forecast(history, horizon: 30);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

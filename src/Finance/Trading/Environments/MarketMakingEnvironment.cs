@@ -23,6 +23,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </remarks>
 /// <example>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// // Create a market making environment for bid/ask spread optimization
 /// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 }); // 1000 timesteps, 1 asset
 /// var env = new MarketMakingEnvironment&lt;double&gt;(

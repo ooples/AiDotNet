@@ -36,7 +36,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// // with ViT-22B encoder + 32B UL2 decoder and component-wise fine-tuning
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model

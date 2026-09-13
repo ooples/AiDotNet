@@ -29,7 +29,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// // Create a Conformer-CTC model for CTC-only non-autoregressive ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new ConformerCTC&lt;double&gt;(architecture);
 ///

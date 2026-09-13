@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.Video;
 ///     numInferenceSteps: 50);
 ///
 /// // Image-to-video with text guidance
-/// var inputImage = LoadImage("sunset.jpg");
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("sunset.jpg");
 /// var animatedVideo = videoCrafter.GenerateFromImageAndText(
 ///     image: inputImage,
 ///     prompt: "waves gently rolling, seagulls flying",

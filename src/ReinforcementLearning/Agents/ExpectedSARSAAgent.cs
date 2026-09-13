@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 /// <example>
 /// <code>
 /// // Create an Expected SARSA agent that averages over next actions
-/// var options = new ExpectedSARSAOptions&lt;double&gt; { LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var options = new ExpectedSARSAOptions&lt;double&gt;(stateSize: 4, actionSize: 2) { LearningRate = 0.1 };
 /// var agent = new ExpectedSARSAAgent&lt;double&gt;(options);
 ///
 /// // Select an action for the current state

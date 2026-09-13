@@ -1084,7 +1084,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// var loaded = builder.LoadModel("model.bin");  // Decompressed automatically
     ///
     /// // Or customize compression settings
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureCompression(new CompressionConfig
     ///     {
     ///         Mode = ModelCompressionMode.Full,
@@ -1375,7 +1375,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -1388,7 +1388,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
     /// </code>
@@ -1784,7 +1784,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     .Build(features, labels);
     ///
     /// // Self-paced learning where model determines its own pace
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
     ///     {
@@ -1795,7 +1795,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     .Build(features, labels);
     ///
     /// // Competence-based learning that advances when mastery is achieved
-    /// var result = await builder
+    /// var result3 = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
     ///     {
@@ -1906,6 +1906,94 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <see cref="BuildAsync(TInput, TOutput, CancellationToken)"/> in a UI or classic ASP.NET context.
     /// </remarks>
     AiModelResult<T, TInput, TOutput> Build(TInput features, TOutput labels);
+
+    /// <summary>
+    /// Builds a survival model from covariates, observed times, and who was censored.
+    /// </summary>
+    /// <param name="features">The covariates, one row per subject. No indicator column.</param>
+    /// <param name="times">
+    /// The observed time for each subject: time to the event, or time to censoring for those who did not
+    /// have it.
+    /// </param>
+    /// <param name="events">1 where the event was observed, 0 where the subject was censored.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Survival data is three things and <see cref="Build(TInput, TOutput)"/> takes two. Rather than
+    /// leave the caller packing the event indicator into the covariate matrix — where a covariate left
+    /// in column 0 is read as censoring and silently changes the answer — this overload keeps the three
+    /// signals as three named arguments and does the packing itself.
+    /// </para>
+    /// <para>
+    /// Only meaningful on a builder over <c>Matrix&lt;T&gt;</c> and <c>Vector&lt;T&gt;</c> configured
+    /// with a survival model; anything else throws rather than training on a quietly wrong matrix.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> features,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> times,
+        AiDotNet.Tensors.LinearAlgebra.Vector<int> events);
+
+    /// <summary>
+    /// Builds a causal model from covariates, who was treated, and what happened to them.
+    /// </summary>
+    /// <param name="covariates">The covariates, one row per subject. No treatment column.</param>
+    /// <param name="treatment">1 for the subjects who were treated, 0 for the controls.</param>
+    /// <param name="outcome">The outcome observed for each subject.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Causal data is three things and <see cref="Build(TInput, TOutput)"/> takes two. Rather than leave
+    /// the caller packing the treatment indicator into the covariate matrix — where a covariate left in
+    /// column 0 is read as treatment and silently changes the answer — this overload keeps the three
+    /// signals as three named arguments.
+    /// </para>
+    /// <para>
+    /// It sits beside the survival overload above, which takes its arguments in the other order. The two
+    /// are told apart by which one is the <c>Vector&lt;int&gt;</c> indicator, so passing them the wrong
+    /// way round is a compile error rather than a silently different call.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> covariates,
+        AiDotNet.Tensors.LinearAlgebra.Vector<int> treatment,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> outcome);
+
+    /// <summary>
+    /// Builds an unsupervised model from data alone.
+    /// </summary>
+    /// <param name="features">The data to fit, one row per sample.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Clustering has no labels to learn from, so <see cref="Build(TInput, TOutput)"/> forced every
+    /// caller to construct an argument the model ignores and then explain it. This overload constructs
+    /// it instead. Assignments come off the result through <c>GetClusterLabels</c>.
+    /// </para>
+    /// <para>
+    /// Only meaningful on a builder configured with an unsupervised model; anything else throws rather
+    /// than quietly discarding labels the model would have used.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(TInput features);
+
+    /// <summary>
+    /// Wraps an already-trained model in a result, without training it.
+    /// </summary>
+    /// <returns>A result over the configured model, with the same prediction surface a built one has.</returns>
+    /// <remarks>
+    /// <para>
+    /// The terminal for a model that arrives ready to use — weights loaded from disk, a model another
+    /// algorithm returned, one built from parameters you already have. <see cref="Build(TInput, TOutput)"/>
+    /// trains, which for an adapted or loaded model destroys the thing that made it worth having, and
+    /// <c>AiModelResult</c>'s constructors are internal, so before this there was no way in at all.
+    /// </para>
+    /// <para>
+    /// Inference-time configuration still applies; training-time configuration does not, because there
+    /// is no training.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> BuildForInference();
 
     // ============================================================================
     // Training Infrastructure Configuration Methods

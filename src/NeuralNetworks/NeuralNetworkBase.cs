@@ -7559,7 +7559,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// var network = new MyNetwork(...);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
+/// var network = new NeuralNetwork&lt;float&gt;(architecture);
     /// var warmupInput = new Tensor&lt;float&gt;(new[] { 1, 3, 224, 224 }); // batch=1, RGB 224x224
     /// if (network.CompileForward(warmupInput))
     /// {

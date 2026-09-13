@@ -28,7 +28,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// // Create a Kyutai Moshi model for full-duplex spoken dialogue
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new KyutaiMoshi&lt;double&gt;(architecture);
 ///

@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// // Create an Emformer-RNNT model for low-latency streaming ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new EmformerRNNT&lt;double&gt;(architecture);
 ///

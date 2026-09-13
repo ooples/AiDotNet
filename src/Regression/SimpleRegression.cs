@@ -33,18 +33,19 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create simple linear regression (y = mx + b)
-/// var model = new SimpleRegression&lt;double&gt;();
 ///
 /// // Prepare single-feature data
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
 ///
 /// // Train to find best-fit line
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SimpleRegression&lt;double&gt;())
+///     .Build(features, targets);
 ///
 /// // Predict for new input
-/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 });
-/// var prediction = model.Predict(newFeatures);
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 6 } });
+/// var prediction = result.Predict(newFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

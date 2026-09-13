@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// // Create a Rev AI model for human-quality transcription
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new RevAI&lt;double&gt;(architecture);
 ///

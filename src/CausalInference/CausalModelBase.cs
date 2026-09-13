@@ -205,15 +205,49 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <remarks>
+    /// Asks the registry rather than counting parameters, because the count is not an answer to this
+    /// question and throws when it cannot be one: a causal model whose coefficient shape is only known
+    /// after fitting has a FitDeferred layout, and reading <see cref="ParameterCount"/> on it raises
+    /// <c>ParameterLayoutNotReadyException</c>. That made SLearner, XLearner,
+    /// InverseProbabilityWeighting and DoublyRobustEstimator impossible to build through the facade at
+    /// all — the builder probes this property to choose a training path, so the throw escaped before
+    /// training began. <c>CanInitializeOptimizerParameters</c> folds in lifecycle readiness, which is
+    /// what the question actually means, and is what ModelBase, ClassifierBase and SurvivalModelBase
+    /// already use.
+    /// </remarks>
+    public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
+
+    /// <summary>
+    /// The seed the bootstrap resampler draws from, or <c>null</c> to draw unseeded.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Standard errors come from resampling, so without a seed the same fitted model returns a different
+    /// standard error on every call — which means a published confidence interval cannot be reproduced,
+    /// and a regression test cannot assert one. Setting this makes the interval a function of the data
+    /// and the seed alone.
+    /// </para>
+    /// </remarks>
+    protected int? RandomSeed { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the CausalModelBase class.
     /// </summary>
-    protected CausalModelBase()
+    /// <param name="randomSeed">
+    /// Seed for the bootstrap resampling behind every standard error. Leave null for unseeded draws.
+    /// </param>
+    protected CausalModelBase(int? randomSeed = null)
     {
         _defaultLossFunction = new MeanSquaredErrorLoss<T>();
+        RandomSeed = randomSeed;
     }
+
+    /// <summary>
+    /// Restores the bootstrap seed after deserialization, so a round-tripped model still reproduces its
+    /// standard errors.
+    /// </summary>
+    protected void RestoreRandomSeed(int? randomSeed) => RandomSeed = randomSeed;
 
     /// <summary>
     /// Ensures the model has been fitted before making predictions.
@@ -555,9 +589,47 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     /// <summary>
     /// Standard model training - fits the causal model.
     /// </summary>
+    /// <summary>
+    /// Treatment assignment handed over by the builder's three-argument Build, consumed by the next
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> and cleared, so a reused model cannot pick up a stale set.
+    /// </summary>
+    private Vector<int>? _suppliedTreatment;
+
+    /// <summary>
+    /// Hands the next <see cref="Train(Matrix{T}, Vector{T})"/> its treatment assignment, so X can stay
+    /// the covariate matrix. Internal because it is the builder's way of passing a third input through a
+    /// two-argument contract, not a step a caller should have to know about.
+    /// </summary>
+    /// <param name="treatment">1 for the subjects who were treated, 0 for the controls.</param>
+    internal void SupplyTreatment(Vector<int>? treatment) => _suppliedTreatment = treatment;
+
+    /// <summary>
+    /// Whether an assignment is waiting to be consumed, which the build pipeline reads to decide that
+    /// this model must see every row in the order it was given.
+    /// </summary>
+    internal bool HasSuppliedTreatment => _suppliedTreatment is not null;
+
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
         ThrowIfDisposed();
+
+        // Supplied by AiModelBuilder.Build(covariates, treatment, outcome), which has the three signals
+        // as three arguments and no reason to fold one into the other two. Taking that path keeps X the
+        // covariate matrix, which matters after training as much as during it: the effect estimators
+        // take covariates, and so does prediction.
+        var supplied = System.Threading.Interlocked.Exchange(ref _suppliedTreatment, null);
+        if (supplied is not null && supplied.Length == y.Length && x.Rows == y.Length)
+        {
+            var treatmentAsT = new Vector<T>(supplied.Length);
+            for (int i = 0; i < supplied.Length; i++)
+            {
+                treatmentAsT[i] = NumOps.FromDouble(supplied[i]);
+            }
+
+            Fit(x, treatmentAsT, y);
+            return;
+        }
+
         // Causal-inference models from the meta-learner family
         // (Künzel et al. 2019 "Metalearners for estimating heterogeneous
         // treatment effects") are usually trained from three signals
@@ -877,7 +949,12 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
             throw new ArgumentOutOfRangeException(nameof(numBootstraps),
                 "numBootstraps must be at least 2 to compute variance.");
 
-        var random = Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        // A fresh generator per call, not one shared across calls: the point of a seed here is that
+        // asking the same fitted model for the same standard error twice gives the same number, and a
+        // generator carried between calls would advance its sequence and quietly break that.
+        var random = RandomSeed.HasValue
+            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         var estimates = new List<double>();
         int n = x.Rows;
 

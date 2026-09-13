@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// // Create a Streaming Conformer for chunk-based real-time ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new StreamingConformer&lt;double&gt;(architecture);
 ///

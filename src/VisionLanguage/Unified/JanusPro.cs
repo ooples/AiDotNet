@@ -54,9 +54,10 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 384, inputWidth: 384, inputDepth: 3, outputSize: 4096);
 /// var model = new JanusPro&lt;double&gt;(arch, new JanusProOptions());
 ///

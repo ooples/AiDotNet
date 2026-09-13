@@ -71,17 +71,19 @@ public class SMOTEENN<T> : IResamplingStrategy<T>
     /// <b>For Beginners:</b> Example usage:
     ///
     /// <code>
+    /// var trainX = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var trainY = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// // Default settings
     /// var smoteenn = new SMOTEENN&lt;double&gt;();
     ///
     /// // Custom settings
-    /// var smoteenn = new SMOTEENN&lt;double&gt;(
+    /// var smoteenn2 = new SMOTEENN&lt;double&gt;(
     ///     kNeighborsSMOTE: 7,  // More neighbors for synthesis
     ///     kNeighborsENN: 5     // More neighbors for cleaning
     /// );
     ///
     /// // Apply to data
-    /// var (newX, newY) = smoteenn.Resample(trainX, trainY);
+    /// var (newX, newY) = smoteenn2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

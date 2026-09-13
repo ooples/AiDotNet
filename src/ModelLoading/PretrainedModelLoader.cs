@@ -22,9 +22,9 @@ namespace AiDotNet.ModelLoading;
 /// ```csharp
 /// var loader = new PretrainedModelLoader&lt;float&gt;();
 ///
-/// // Load a pretrained VAE
-/// var vae = new StandardVAE&lt;float&gt;();
-/// await loader.LoadVAEWeights(vae, "sd-vae-ft-mse/diffusion_pytorch_model.safetensors");
+/// // Load a pretrained VAE encoder
+/// var encoder = new VAEEncoder&lt;float&gt;(inputChannels: 3, latentChannels: 4);
+/// var loadResult = loader.LoadWeights(encoder, "sd-vae-ft-mse/diffusion_pytorch_model.safetensors");
 ///
 /// // Now your VAE is ready for image encoding/decoding!
 /// ```

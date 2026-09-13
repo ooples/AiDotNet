@@ -34,18 +34,19 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create an isotonic regression with monotonically non-decreasing constraint
-/// var model = new IsotonicRegression&lt;double&gt;();
 ///
 /// // Prepare training data: 5 samples with 1 feature (single sorted predictor)
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 1.2, 2.8, 2.5, 4.1, 5.3 });
 ///
 /// // Train with pool adjacent violators algorithm
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new IsotonicRegression&lt;double&gt;())
+///     .Build(features, targets);
 ///
 /// // Predict for a new sample (output is monotonically non-decreasing)
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 3.5 });
-/// var prediction = model.Predict(newSample);
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 3.5 } });
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

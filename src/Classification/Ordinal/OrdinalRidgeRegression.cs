@@ -56,8 +56,6 @@ namespace AiDotNet.Classification.Ordinal;
 /// <example>
 /// <code>
 /// // Create ordinal ridge regression with L2 regularization
-/// var options = new OrdinalRidgeRegressionOptions&lt;double&gt;();
-/// var classifier = new OrdinalRidgeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features, ordinal labels
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -70,12 +68,14 @@ namespace AiDotNet.Classification.Ordinal;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
 ///
 /// // Train with closed-form ridge solution and immediate-threshold method
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OrdinalRidgeRegression&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict ordinal class using learned thresholds
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

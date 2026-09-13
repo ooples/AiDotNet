@@ -196,11 +196,15 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
     /// <example>
     /// <code>
-    /// var automl = new DiffusionAutoML&lt;float&gt;(imageSize: 256, channels: 3);
+    /// var trainImages = new Tensor&lt;float&gt;([16, 3, 32, 32]);
+    /// var trainLabels = new Tensor&lt;float&gt;([16, 10]);
+    /// var valImages = new Tensor&lt;float&gt;([4, 3, 32, 32]);
+    /// var valLabels = new Tensor&lt;float&gt;([4, 10]);
+    ///
+    /// var automl = new DiffusionAutoML&lt;float&gt;();
     /// var bestModel = await automl.SearchAsync(
     ///     trainImages, trainLabels,
     ///     valImages, valLabels,
-    ///     maxTrials: 10,
     ///     timeLimit: TimeSpan.FromHours(1));
     /// </code>
     /// </example>
@@ -759,8 +763,14 @@ namespace AiDotNet.AutoML
     /// </remarks>
     /// <example>
     /// <code>
-    /// // DiffusionAutoMLModel is typically created by DiffusionAutoML.SearchAsync()
-    /// // Use the model for generation after search:
+    /// // DiffusionAutoMLModel is what DiffusionAutoML.SearchAsync() hands back.
+    /// var automl = new DiffusionAutoML&lt;float&gt;();
+    /// var model = await automl.SearchAsync(
+    ///     new Tensor&lt;float&gt;([16, 3, 32, 32]), new Tensor&lt;float&gt;([16, 10]),
+    ///     new Tensor&lt;float&gt;([4, 3, 32, 32]), new Tensor&lt;float&gt;([4, 10]),
+    ///     timeLimit: TimeSpan.FromMinutes(10));
+    ///
+    /// var noiseTensor = new Tensor&lt;float&gt;([1, 3, 32, 32]);
     /// Tensor&lt;float&gt; generated = model.Predict(noiseTensor);
     /// </code>
     /// </example>

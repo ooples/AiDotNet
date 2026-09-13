@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// // Create a Canary-Qwen model with Qwen-2.5 LLM decoder for multilingual ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new CanaryQwen&lt;double&gt;(architecture);
 ///

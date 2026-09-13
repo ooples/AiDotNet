@@ -49,6 +49,7 @@ public class PoolingOptions
     /// </value>
     /// <example>
     /// <code>
+    /// var options = new PoolingOptions();
     /// // Set pool size to 512 MB
     /// options.MaxPoolSizeMB = 512;
     /// </code>

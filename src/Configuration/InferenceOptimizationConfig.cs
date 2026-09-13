@@ -24,7 +24,7 @@ namespace AiDotNet.Configuration;
 /// <code>
 /// var config = InferenceOptimizationConfig.Default;
 ///
-/// var result = await new AiModelBuilder&lt;double, ...&gt;()
+/// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(myModel)
 ///     .ConfigureInferenceOptimizations(config)
 ///     .BuildAsync();

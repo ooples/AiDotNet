@@ -22,7 +22,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 256, outputSize: 24000);
 ///
 /// var model = new WellSaidLabs&lt;float&gt;(architecture, "wellsaid.onnx");

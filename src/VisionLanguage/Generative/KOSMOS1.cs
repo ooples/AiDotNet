@@ -40,7 +40,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new KOSMOS1&lt;double&gt;(architecture, new KOSMOS1Options());
 /// </code>

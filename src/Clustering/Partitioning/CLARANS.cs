@@ -45,10 +45,13 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new CLARANSOptions&lt;double&gt;();
-/// var cLARANS = new CLARANS&lt;double&gt;(options);
-/// cLARANS.Fit(dataMatrix);
-/// int[] labels = cLARANS.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 }, { 1.0, 0.6 }, { 9.0, 11.0 } });
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new CLARANS&lt;double&gt;(new CLARANSOptions&lt;double&gt;()))
+///     .Build(dataMatrix);
+///
+/// // one cluster index per row
+/// var assignments = result.Predict(dataMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

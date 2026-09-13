@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Stabilization;
 /// // Create a 3DMF model for depth-aware 3D video stabilization
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new ThreeDMFOptions();
 /// var threeDMF = new ThreeDMF&lt;double&gt;(architecture, options);

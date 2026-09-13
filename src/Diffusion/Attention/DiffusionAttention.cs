@@ -36,6 +36,7 @@ namespace AiDotNet.Diffusion.Attention;
 ///     numHeads: 8,
 ///     spatialSize: 64);
 ///
+/// var input = Tensor&lt;float&gt;.CreateRandom(1, 320, 64, 64);   // [batch, channels, h, w]
 /// var output = attention.Forward(input);
 /// ```
 /// </para>

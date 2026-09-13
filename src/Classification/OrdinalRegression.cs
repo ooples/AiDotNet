@@ -49,7 +49,6 @@ namespace AiDotNet.Classification;
 /// <code>
 /// // Create ordinal regression for ordered categorical prediction (e.g., star ratings 1-5)
 /// var options = new OrdinalRegressionOptions&lt;double&gt;();
-/// var classifier = new OrdinalRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data with features and ordinal labels (0, 1, 2 for Low, Medium, High)
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -62,12 +61,14 @@ namespace AiDotNet.Classification;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
 ///
 /// // Train with proportional odds model
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OrdinalRegression&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict ordinal class for new data
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

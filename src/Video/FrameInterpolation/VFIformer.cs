@@ -47,6 +47,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create a VFIformer model for transformer-based frame interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new VFIformerOptions();
 /// var vfiFormer = new VFIformer&lt;double&gt;(architecture, options);

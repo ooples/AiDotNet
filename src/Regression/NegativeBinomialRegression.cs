@@ -28,19 +28,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a negative binomial regression for overdispersed count data
 /// var options = new NegativeBinomialRegressionOptions&lt;double&gt;();
-/// var model = new NegativeBinomialRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features, count targets
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2, 5, 12, 28, 45 });
 ///
 /// // Train with log link and dispersion parameter estimation
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NegativeBinomialRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict count for a new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
-/// var prediction = model.Predict(newSample);
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

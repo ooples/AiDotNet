@@ -32,13 +32,19 @@ namespace AiDotNet.Data.Loaders;
 /// **Common Patterns:**
 /// ```csharp
 /// // From arrays (simplest for small datasets)
-/// var loader = DataLoaders.FromArrays(features, labels);
+/// var features = new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
+/// var labels = new double[] { 0.0, 1.0 };
+/// var arrayLoader = DataLoaders.FromArrays(features, labels);
 ///
 /// // From Matrix and Vector (most common for ML)
-/// var loader = DataLoaders.FromMatrixVector(featureMatrix, labelVector);
+/// var featureMatrix = new Matrix&lt;double&gt;(features);
+/// var labelVector = new Vector&lt;double&gt;(labels);
+/// var matrixLoader = DataLoaders.FromMatrixVector(featureMatrix, labelVector);
 ///
 /// // From Tensors (for deep learning)
-/// var loader = DataLoaders.FromTensors(inputTensor, outputTensor);
+/// var inputTensor = Tensor&lt;double&gt;.CreateRandom(2, 2);
+/// var outputTensor = Tensor&lt;double&gt;.CreateRandom(2, 1);
+/// var tensorLoader = DataLoaders.FromTensors(inputTensor, outputTensor);
 /// ```
 ///
 /// All loaders support:

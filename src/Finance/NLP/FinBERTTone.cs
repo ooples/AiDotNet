@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for financial tone classification (512 tokens, 3 sentiment classes)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 3);
 ///
 /// // Training mode: fine-tune BERT for financial tone detection in earnings calls

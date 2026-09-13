@@ -28,7 +28,7 @@ namespace AiDotNet.Configuration;
 /// var recipe = YamlConfigLoader.LoadFromFile&lt;TrainingRecipeConfig&gt;("training-recipe.yaml");
 ///
 /// // Load from string
-/// var config = YamlConfigLoader.LoadFromString&lt;TrainingRecipeConfig&gt;(yamlContent);
+/// var config2 = YamlConfigLoader.LoadFromString&lt;TrainingRecipeConfig&gt;(yamlContent);
 /// </code>
 /// </remarks>
 public static class YamlConfigLoader

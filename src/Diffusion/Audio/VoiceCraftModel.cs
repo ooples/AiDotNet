@@ -83,6 +83,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceEmbedding = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// var voiceCraft = new VoiceCraftModel&lt;float&gt;();
 /// var speech = voiceCraft.TextToSpeech(
 ///     text: "Hello, this is a test of VoiceCraft speech synthesis.",

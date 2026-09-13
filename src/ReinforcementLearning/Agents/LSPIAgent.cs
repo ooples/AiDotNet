@@ -26,7 +26,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// <example>
 /// <code>
 /// // Create an LSPI agent for batch policy iteration
-/// var options = new LSPIOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var options = new LSPIOptions&lt;double&gt; { FeatureSize = 4, ActionSize = 2 };
 /// var agent = new LSPIAgent&lt;double&gt;(options);
 ///
 /// // Select an action using the current policy weights

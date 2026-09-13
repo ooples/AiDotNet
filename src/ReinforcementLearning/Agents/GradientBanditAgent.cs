@@ -26,7 +26,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// <example>
 /// <code>
 /// // Create a gradient bandit agent using softmax action selection
-/// var options = new GradientBanditOptions&lt;double&gt; { NumArms = 10, StepSize = 0.1 };
+/// var options = new GradientBanditOptions&lt;double&gt; { NumArms = 10};
 /// var agent = new GradientBanditAgent&lt;double&gt;(options);
 ///
 /// // Select an arm based on learned preferences

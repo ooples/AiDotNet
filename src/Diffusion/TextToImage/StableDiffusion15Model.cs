@@ -67,14 +67,17 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
+/// var maskTensor = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// var existingImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var sd15 = new StableDiffusion15Model&lt;float&gt;();
 ///
-/// // Create with custom components for full customization
+/// // Swap in your own components. Every parameter is optional, so supply only what you are replacing;
+/// // a conditioner is omitted here because CLIPTextConditioner needs a tokenizer, which needs a
+/// // vocabulary — worth its own example rather than three lines of setup in this one.
 /// var customSd15 = new StableDiffusion15Model&lt;float&gt;(
-///     unet: myCustomUNet,
-///     vae: myCustomVAE,
-///     conditioner: myClipEncoder);
+///     unet: new UNetNoisePredictor&lt;float&gt;(),
+///     vae: new StandardVAE&lt;float&gt;());
 ///
 /// // Generate a 512x512 image from text
 /// var image = sd15.GenerateFromText(
@@ -274,10 +277,10 @@ public partial class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// var model = new StableDiffusion15Model&lt;float&gt;();
     ///
     /// // With text conditioning for text-to-image
-    /// var model = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
+    /// var model2 = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
     ///
     /// // Full customization
-    /// var model = new StableDiffusion15Model&lt;float&gt;(
+    /// var model3 = new StableDiffusion15Model&lt;float&gt;(
     ///     unet: myCustomUNet,
     ///     vae: myCustomVAE,
     ///     conditioner: myClipEncoder,

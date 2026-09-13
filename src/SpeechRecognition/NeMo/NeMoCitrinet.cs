@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// // Create a Citrinet model with 1D separable convolutions for CTC ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
 /// var model = new NeMoCitrinet&lt;double&gt;(architecture);
 ///

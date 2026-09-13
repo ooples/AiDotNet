@@ -41,8 +41,6 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// <example>
 /// <code>
 /// // Create label spreading with symmetric normalization
-/// var options = new LabelSpreadingOptions&lt;double&gt;();
-/// var classifier = new LabelSpreading&lt;double&gt;(options);
 ///
 /// // Prepare data: -1 indicates unlabeled samples
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -55,10 +53,12 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
 ///
 /// // Spread labels with alpha clamping to preserve original labels
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LabelSpreading&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict labels for all samples
-/// var prediction = classifier.Predict(features);
+/// var prediction = result.Predict(features);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

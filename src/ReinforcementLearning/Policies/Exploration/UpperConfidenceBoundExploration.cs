@@ -14,6 +14,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var random = new Random(42);
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.1, -0.4, 0.7, 0.2 });
     /// // Create UCB exploration that favors under-explored actions
     /// var exploration = new UpperConfidenceBoundExploration&lt;double&gt;(explorationConstant: 2.0);
     ///

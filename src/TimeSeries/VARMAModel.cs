@@ -36,11 +36,15 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var multivariateMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targetVector = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a VARMA model for multivariate time series (e.g., GDP + unemployment)
-/// var options = new VARMAModelOptions&lt;double&gt; { AROrder = 1, MAOrder = 1 };
-/// var varma = new VARMAModel&lt;double&gt;(options);
-/// varma.Train(multivariateMatrix, targetVector);
-/// Vector&lt;double&gt; forecast = varma.Predict(inputMatrix);
+/// var options = new VARMAModelOptions&lt;double&gt; { LagOrder = 1};
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new VARMAModel&lt;double&gt;(options))
+///     .Build(multivariateMatrix, targetVector);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

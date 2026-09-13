@@ -39,7 +39,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// // using CLIP-ViT with Phi-3 backbone at only 4.2B parameters
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model

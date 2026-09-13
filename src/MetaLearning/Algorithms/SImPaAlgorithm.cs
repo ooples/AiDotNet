@@ -53,8 +53,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 /// <example>
 /// <code>
+/// var model = new SimpleRegression&lt;double&gt;();
 /// var options = new SImPaOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(model);
 /// var simpa = new SImPaAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// var taskBatch = new TaskBatch&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     new IMetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;[]
+///     {
+///         new MetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     });
 /// double bound = Convert.ToDouble(simpa.MetaTrain(taskBatch));
 /// </code>
 /// </example>

@@ -31,7 +31,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// // Create a ConvTransformer model (convolution-augmented Transformer for ASR)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new ConvTransformer&lt;double&gt;(architecture);
 ///

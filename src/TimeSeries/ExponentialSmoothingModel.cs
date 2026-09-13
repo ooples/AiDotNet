@@ -30,14 +30,18 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a Holt-Winters exponential smoothing model for seasonal data
 /// var options = new ExponentialSmoothingOptions&lt;double&gt;
 /// {
-///     Alpha = 0.3, Beta = 0.1, Gamma = 0.1, SeasonalPeriod = 12
+///     SeasonalPeriod = 12
 /// };
-/// var ets = new ExponentialSmoothingModel&lt;double&gt;(options);
-/// ets.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = ets.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ExponentialSmoothingModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

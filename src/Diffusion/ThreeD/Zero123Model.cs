@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// var zero123 = new Zero123Model&lt;float&gt;();
 ///
 /// // Generate novel view
-/// var inputImage = LoadImage("object.png");
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("object.png");
 /// var novelView = zero123.GenerateNovelView(
 ///     inputImage: inputImage,
 ///     polarAngle: 30.0,    // Rotate up 30 degrees

@@ -38,7 +38,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new MiniGPTv2&lt;double&gt;(architecture, new MiniGPTv2Options());
 /// </code>

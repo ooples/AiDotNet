@@ -44,11 +44,16 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a dynamic regression with ARIMA errors for exogenous-variable forecasting
 /// var options = new DynamicRegressionWithARIMAErrorsOptions&lt;double&gt;();
-/// var drModel = new DynamicRegressionWithARIMAErrors&lt;double&gt;(options);
-/// drModel.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = drModel.Forecast(history, horizon: 12, futureExogenous);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DynamicRegressionWithARIMAErrors&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// // future values of the exogenous drivers, one row per period ahead
+/// var futureExogenous = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 }, { 11.0, 12.0 } });
+/// Vector&lt;double&gt; forecast = result.Predict(futureExogenous);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

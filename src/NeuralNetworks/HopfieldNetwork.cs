@@ -38,10 +38,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HopfieldNetworkOptions { PatternSize = 100, MaxPatterns = 10 };
-/// var model = new HopfieldNetwork&lt;float&gt;(options);
-/// var pattern = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
-/// var recalled = model.Predict(pattern);
+/// var pattern = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new HopfieldNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var recalled = result.Predict(pattern);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

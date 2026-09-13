@@ -44,10 +44,13 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new BIRCHOptions&lt;double&gt;();
-/// var bIRCH = new BIRCH&lt;double&gt;(options);
-/// bIRCH.Fit(dataMatrix);
-/// int[] labels = bIRCH.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 }, { 1.0, 0.6 }, { 9.0, 11.0 } });
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new BIRCH&lt;double&gt;(new BIRCHOptions&lt;double&gt;()))
+///     .Build(dataMatrix);
+///
+/// // one cluster index per row
+/// var assignments = result.Predict(dataMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

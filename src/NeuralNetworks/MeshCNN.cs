@@ -40,10 +40,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MeshCNNOptions { InputEdgeFeatures = 5, HiddenSize = 64, NumLayers = 4 };
-/// var model = new MeshCNN&lt;float&gt;(options);
-/// var edgeFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 5 });
-/// var output = model.Predict(edgeFeatures);
+/// var options = new MeshCNNOptions { InputFeatures = 5};
+/// var edgeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 500, 5 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MeshCNN&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(edgeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.ThreeD)]

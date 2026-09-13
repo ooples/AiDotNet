@@ -69,7 +69,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 ///     contextDim: 4096);       // T5-XXL
 ///
 /// // Create MMDiT for FLUX
-/// var mmdit = new MMDiTNoisePredictor&lt;float&gt;(
+/// var mmdit2 = new MMDiTNoisePredictor&lt;float&gt;(
 ///     inputChannels: 16,
 ///     hiddenSize: 3072,        // FLUX.1
 ///     numJointLayers: 19,

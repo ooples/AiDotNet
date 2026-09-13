@@ -243,9 +243,15 @@ foreach (var grp in grouped)
         }
         else if (illustrative)
         {
+            // Fenced as csharp like any other example, so the compile gate sees it.
+            //
+            // This block used to emit ```cs specifically because the gate keys on ```csharp — an example
+            // that failed to compile was relabelled and published anyway, which is how ~900 uncompilable
+            // examples accumulated without a single red build. Downgrading the fence hid the failure from
+            // the gate but not from the reader, who still got broken code with a note admitting it was
+            // unverified. Now a broken example is a build failure, which is the only way it gets fixed.
             sb.AppendLine("## Example").AppendLine();
-            sb.AppendLine("_From the type's documentation (illustrative — not compile-verified):_").AppendLine();
-            sb.AppendLine("```cs").AppendLine(example).AppendLine("```").AppendLine();
+            sb.AppendLine("```csharp").AppendLine(example).AppendLine("```").AppendLine();
             illustrativeCount++;
         }
         sb.Append(RenderMembers(t, xmlName, memberSummary));
@@ -633,9 +639,11 @@ static string NormalizeBlock(string s)
 {
     s = Regex.Replace(s, @"[ \t]+", " ");
     s = Regex.Replace(s, @"\n[ \t]+", "\n");
-    // Code fences embedded in doc-comment prose are illustrative, not our verified example —
-    // downgrade to ```cs so the compile gate (keyed on ```csharp) skips them.
-    s = Regex.Replace(s, @"```\s*(csharp|c#)", "```cs", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+    // Code fences in doc-comment prose keep their csharp label, so the compile gate checks them like any
+    // other example. They were previously rewritten to ```cs for the stated purpose of making the gate
+    // skip them — a gate that launders its own failures reports nothing, and prose snippets are code a
+    // reader will copy just as readily as one under an <example> tag.
+    s = Regex.Replace(s, @"```\s*(csharp|c#)", "```csharp", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     s = TidyLists(s);
     s = Regex.Replace(s, @"\n{3,}", "\n\n");
     return s.Trim();

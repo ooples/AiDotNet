@@ -37,6 +37,7 @@ namespace AiDotNet.LoRA.Adapters;
 ///     gatLayer, rank: 8, alpha: 16);
 ///
 /// // Now train only the LoRA parameters
+/// var learningRate = 0.001;
 /// loraGat.UpdateParameters(learningRate);
 ///
 /// // After training, merge LoRA into original layer

@@ -23,11 +23,15 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var dateFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var futureDateFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var values = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// // Create a Prophet-style model for time series with trend and seasonality
 /// var options = new ProphetOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-/// var prophet = new ProphetModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
-/// prophet.Train(dateFeatures, values);
-/// Vector&lt;double&gt; forecast = prophet.Predict(futureDateFeatures);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ProphetModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options))
+///     .Build(dateFeatures, values);
+/// Vector&lt;double&gt; forecast = result.Predict(futureDateFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

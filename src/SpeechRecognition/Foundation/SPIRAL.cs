@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// // Create a SPIRAL model for perturbation-invariant speech pre-training
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new SPIRAL&lt;double&gt;(architecture);
 ///

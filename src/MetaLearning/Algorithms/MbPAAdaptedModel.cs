@@ -37,7 +37,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <code>
 /// // Produced by MbPAAlgorithm.Adapt rather than constructed directly: the returned model
 /// // carries the episodic memory and the locally adapted output head for one task.
+/// var metaModel = new NeuralNetwork&lt;double&gt;(
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
+/// var options = new MbPAOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(metaModel);
 /// var mbpa = new MbPAAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+///
+/// var task = new MetaLearningTask&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;();
+/// var taskBatch = new TaskBatch&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
+///     new IMetaLearningTask&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;[] { task });
+///
 /// mbpa.MetaTrain(taskBatch);
 /// var adapted = mbpa.Adapt(task);          // an MbPAAdaptedModel
 /// var prediction = adapted.Predict(task.QueryInput);

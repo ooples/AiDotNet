@@ -447,6 +447,64 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     public abstract Vector<T> GetBaselineSurvival(Vector<T> times);
 
     /// <summary>
+    /// Reconciles a predict-time feature matrix with the <c>[event | covariates]</c> layout that
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> consumes.
+    /// </summary>
+    /// <param name="input">Either the covariates alone, or the same design matrix that was trained on.</param>
+    /// <returns>The covariate columns, with the event indicator dropped if it was present.</returns>
+    /// <remarks>
+    /// <para>
+    /// A model fit through <c>Train</c> drops column 0 (the event indicator) before learning, so it
+    /// holds <see cref="NumFeatures"/> coefficients rather than <c>input.Columns</c> of them. Handing
+    /// the same matrix straight back to <c>Predict</c> would then run the coefficient loop one column
+    /// past its end — an <see cref="ArgumentOutOfRangeException"/> from inside the numeric code, which
+    /// says nothing about the actual mistake. This mirrors
+    /// <c>CausalModelBase.ExtractCovariates</c>, which reconciles the identical
+    /// <c>[treatment | covariates]</c> layout.
+    /// </para>
+    /// <para>
+    /// A matrix that already has <see cref="NumFeatures"/> columns is returned unchanged, so the
+    /// covariate-only path — <c>FitSurvival(x, times, events)</c>, or
+    /// <c>AiModelBuilder.Build(features, times, events)</c>, where the event indicator was never folded
+    /// into X — keeps working. The two widths differ by exactly one, so which one was passed is never
+    /// ambiguous.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="input"/> has neither <see cref="NumFeatures"/> nor <c>NumFeatures + 1</c> columns.
+    /// </exception>
+    protected Matrix<T> ExtractCovariates(Matrix<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        if (input.Columns == NumFeatures)
+        {
+            return input;
+        }
+
+        if (input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var covariates = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    covariates[i, j] = input[i, j + 1];
+                }
+            }
+
+            return covariates;
+        }
+
+        throw new ArgumentException(
+            $"Predict input has {input.Columns} columns but the model was fit with {NumFeatures} " +
+            $"covariates; expected {NumFeatures} (covariates only) or {NumFeatures + 1} " +
+            "([event | covariates], matching Train).",
+            nameof(input));
+    }
+
+    /// <summary>
     /// Standard prediction - returns hazard ratios or survival at median time.
     /// </summary>
     public abstract Vector<T> Predict(Matrix<T> input);
@@ -502,17 +560,119 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
     /// <summary>
-    /// Standard model training - redirects to survival-specific training.
+    /// Event indicators handed over by the builder's three-argument Build, consumed by the next
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> and cleared, so a reused model cannot pick up a stale set.
     /// </summary>
+    private Vector<int>? _suppliedEvents;
+
+    /// <summary>
+    /// Hands the next <see cref="Train(Matrix{T}, Vector{T})"/> its event indicators, so X can stay the
+    /// covariate matrix. Internal because it is the builder's way of passing a third input through a
+    /// two-argument contract, not a step a caller should have to know about.
+    /// </summary>
+    /// <param name="events">1 where the event was observed, 0 where the subject was censored.</param>
+    internal void SupplyEvents(Vector<int>? events) => _suppliedEvents = events;
+
+    /// <summary>
+    /// Whether indicators are waiting to be consumed, which the build pipeline reads to decide that this
+    /// model must see every row in the order it was given.
+    /// </summary>
+    internal bool HasSuppliedEvents => _suppliedEvents is not null;
+
+    /// <summary>
+    /// Standard model training — splits the design matrix and redirects to survival-specific training.
+    /// </summary>
+    /// <param name="x">
+    /// The design matrix. Column 0 is the event indicator — 1 if the event was observed, 0 if the
+    /// subject was censored — and columns 1.. are the covariates.
+    /// </param>
+    /// <param name="y">The observed time for each subject: time to event, or time to censoring.</param>
+    /// <remarks>
+    /// <para>
+    /// Survival data is three things — a time, whether the event actually happened, and the covariates —
+    /// but the <c>IFullModel</c> contract this base inherits exposes a single <c>Train(X, Y)</c>. The
+    /// convention here matches the one <see cref="AiDotNet.CausalInference.CausalModelBase{T}"/> already
+    /// uses for its treatment indicator: the extra per-subject signal is column 0 of X.
+    /// </para>
+    /// <para>
+    /// This method used to set every event indicator to 1, which silently asserted that nobody was
+    /// censored. Censoring is the entire reason survival analysis exists as a separate field: a subject
+    /// still alive when the study ended has not had the event, and counting them as though they had
+    /// biases every survival estimate downward. A model that quietly does that is worse than one that
+    /// refuses the data, because the answer looks reasonable.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Say you follow 100 patients for a year. Some have the event you are
+    /// measuring; others are still fine when the year ends, or move away and stop being followed. You do
+    /// not know when — or whether — the event will happen for that second group; you only know it had not
+    /// happened yet. That is "censored", and column 0 is where you say which is which.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// X has fewer than two columns, its row count does not match <paramref name="y"/>, or column 0
+    /// holds something other than 0 and 1.
+    /// </exception>
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
-        var events = new Vector<int>(y.Length);
-        for (int i = 0; i < y.Length; i++)
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (y is null) throw new ArgumentNullException(nameof(y));
+
+        // Supplied by AiModelBuilder.Build(features, times, events), which has the three signals as
+        // three arguments and no reason to fold one into the other two. Taking that path keeps X the
+        // covariate matrix, which matters after training as much as during it: prediction takes
+        // covariates, and whether the event occurred is the thing being predicted, so a design matrix
+        // is not something a caller can produce at predict time.
+        var supplied = System.Threading.Interlocked.Exchange(ref _suppliedEvents, null);
+        if (supplied is not null && supplied.Length == y.Length && x.Rows == y.Length)
         {
-            events[i] = 1;
+            FitSurvival(x, y, supplied);
+            return;
         }
 
-        FitSurvival(x, y, events);
+        if (x.Columns < 2)
+        {
+            throw new ArgumentException(
+                "Survival models require at least 2 columns in X: column 0 is the event indicator " +
+                "(1 = the event was observed, 0 = the subject was censored) and columns 1.. are the " +
+                "covariates. Y is the observed time for each subject.",
+                nameof(x));
+        }
+
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Sample count mismatch: X has {x.Rows} rows but Y has {y.Length} times.",
+                nameof(y));
+        }
+
+        int n = x.Rows;
+        int p = x.Columns - 1;
+        var features = new Matrix<T>(n, p);
+        var events = new Vector<int>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            // Reading the indicator strictly rather than rounding: a covariate left in column 0 by
+            // mistake is the one failure this cannot recover from, and it would otherwise be read as
+            // censoring and silently change the answer.
+            double indicator = NumOps.ToDouble(x[i, 0]);
+            if (indicator != 0.0 && indicator != 1.0)
+            {
+                throw new ArgumentException(
+                    $"Column 0 of X is the event indicator and must be 0 or 1; found {indicator} at row " +
+                    $"{i}. If that column is a covariate, move it: survival training needs to know which " +
+                    "subjects were censored, and cannot infer it.",
+                    nameof(x));
+            }
+
+            events[i] = (int)indicator;
+            for (int j = 0; j < p; j++)
+            {
+                features[i, j] = x[i, j + 1];
+            }
+        }
+
+        FitSurvival(features, y, events);
     }
 
     #endregion

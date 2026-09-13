@@ -1190,21 +1190,31 @@ compatibility but without a substantial implementation.
 | Classical ML (regression, classification, clustering, time series) | stable | Long-standing surface, extensive tests. |
 | Neural networks core (training, inference, autodiff tape) | stable | Active hardening; recent fixes for #1380 / #1382 mode-collapse + facade gradient bridge. |
 | Optimizers (Adam, AdamW, SGD, etc.) | stable | Per-tensor + flat-vector paths; gradient clipping and mixed precision supported. |
-| Layers + activations + losses | stable | Bottom-up invariant tests at 94% pass rate. |
+| Layers + activations + losses | beta | Eleven bottom-up invariants (finite output, deterministic replay, shape agreement, parameter roundtrip, serialization, taped-vs-numerical gradient) run green over the core layers — 88 assertions in `ModelFamilyTests/Layers`. That is a small fraction of the ~225 layer types; the harness accepts a new layer in about four lines, and widening it is ongoing. |
 | Diffusion / image generation | beta | Implementation present; sample-quality benchmarks pending. |
 | Reinforcement learning agents | beta | API stable; broader benchmark suite in progress. |
 | Federated learning (DP-SGD, secure aggregation) | beta | Privacy primitives present; production deployments should validate threat model. |
 | RAG / retrieval | beta | Retriever + generator + chunking are functional; LangChain-style orchestration is lighter. |
 | LoRA fine-tuning | beta | Adapter wiring works; quantized LoRA path is newer. |
-| AiDotNet.Serving (REST API for inference) | beta | Default-allow-list auth and CORS hardened in this PR; observability + audit logging still developing. |
+| AiDotNet.Serving (REST API for inference) | beta | Default-allow-list auth and CORS; observability + audit logging still developing. |
 | Program synthesis (sandboxed code generation) | experimental | High-risk surface — disable unless explicitly required and isolated. |
 | ONNX / external-model interop | beta | Import covered; export coverage is partial. |
 | Native acceleration (OpenBLAS, BLAS, fused kernels) | beta | CPU SIMD paths shipped; GPU determinism is being pinned (see GpuTransformerDeterminismTests). |
 | Telemetry (opt-in via `AIDOTNET_TELEMETRY=true`) | stable | No PII or model data collected; collects usage metrics only. |
 | Licensing (BSL 1.1 + commercial tiers) | stable | API-key hashing (PBKDF2-SHA256), AES-GCM-encrypted model artifacts on supported frameworks. |
-| OpenTelemetry integration (serving) | preview | Opt-in scaffold added in this audit-hardening PR; full meters/traces in progress. |
-| Speculative decoding REST endpoint | stub | Endpoint returns 501; implementation deferred. |
-| LoRA fine-tuning REST endpoint | stub | Endpoint returns 501; use the in-process API directly. |
+| OpenTelemetry integration (serving) | preview | Opt-in scaffold; full meters/traces in progress. |
+| Vision-language models | preview | Large surface (~360 source files) against ~22 test files that reference it. |
+| Text-to-speech | preview | ~245 source files against ~8 test files that reference it. |
+| Speech recognition | preview | ~192 source files against ~11 test files that reference it. |
+| Video models (generation, restoration, interpolation) | preview | ~221 source files against ~16 test files that reference it. |
+| Audio models (generation, codecs, music) | preview | ~251 source files against ~21 test files that reference it. |
+| Document understanding | preview | ~69 source files against ~10 test files that reference it. |
+| LoRA fine-tuning REST endpoint | stub | Returns 501 by design — `IServableModel` covers prediction, not training; use the in-process API. Contract asserted by `FineTuneWithLoRA_WhenModelExists_Returns501`. |
+
+> **Duplicate type names.** Thirty-three public type names are declared in two namespaces each — for
+> example `Donut`, `LayoutLMv3`, `StableVideoDiffusion`, `BarkModel`, `WaveNet`. In all but two cases the
+> two declarations are independent implementations rather than copies, and they often differ several-fold
+> in size. Code that imports both namespaces cannot use the bare name until one side is qualified.
 
 > The labels reflect a static review of the public repository. They are
 > informational only — production adopters should validate against

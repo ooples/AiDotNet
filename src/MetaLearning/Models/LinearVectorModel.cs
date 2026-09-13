@@ -25,11 +25,12 @@ namespace AiDotNet.MetaLearning.Models;
 /// <example>
 /// <code>
 /// // Create a simple linear model for meta-learning testing
-/// var model = new LinearVectorModel(inputDim: 5, learningRate: 0.01);
 /// var input = new Matrix&lt;double&gt;(10, 5);  // 10 samples, 5 features
 /// var labels = new Vector&lt;double&gt;(10);
-/// model.Train(input, labels);
-/// Vector&lt;double&gt; predictions = model.Predict(input);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LinearVectorModel(inputDim: 5, learningRate: 0.01))
+///     .Build(input, labels);
+/// Vector&lt;double&gt; predictions = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

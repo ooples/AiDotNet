@@ -33,7 +33,7 @@ namespace AiDotNet.Audio.Localization;
 /// var localizer = new SoundLocalizer&lt;float&gt;(micPositions);
 ///
 /// // Audio from each microphone
-/// var audioChannels = new[] { LoadAudio("mic1.wav"), LoadAudio("mic2.wav") };
+/// var audioChannels = new[] { ImageHelper&lt;float&gt;.LoadAudio("mic1.wav"), ImageHelper&lt;float&gt;.LoadAudio("mic2.wav") };
 /// var result = localizer.Localize(audioChannels);
 ///
 /// // Result is available in the returned value

@@ -57,18 +57,20 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create InstantID for zero-shot identity-preserving generation
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 1024,
-///     Width = 1024,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new InstantIDModel&lt;float&gt;(options);
 ///
 /// // Generate images of a specific person from one reference photo
-/// var faceInput = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
-/// var personalized = model.Predict(faceInput);
+/// var faceInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new InstantIDModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var personalized = result.Predict(faceInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

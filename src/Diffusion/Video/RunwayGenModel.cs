@@ -80,6 +80,7 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceFrame = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create Gen-2 with defaults
 /// var runwayGen2 = new RunwayGenModel&lt;float&gt;();
 ///

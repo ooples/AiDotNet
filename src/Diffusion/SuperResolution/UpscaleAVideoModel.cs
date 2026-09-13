@@ -83,6 +83,8 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var lowResVideo = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// var referenceFrame = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var upscaler = new UpscaleAVideoModel&lt;float&gt;();
 ///

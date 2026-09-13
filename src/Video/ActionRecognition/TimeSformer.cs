@@ -36,6 +36,7 @@ namespace AiDotNet.Video.ActionRecognition;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
 /// var model = new TimeSformer&lt;double&gt;(arch, numClasses: 400);
 /// model.Train(videoFrames, expectedLabels);
@@ -46,6 +47,7 @@ namespace AiDotNet.Video.ActionRecognition;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
 /// var model = new TimeSformer&lt;double&gt;(arch, "timesformer.onnx");
 /// var predictions = model.Classify(videoFrames);

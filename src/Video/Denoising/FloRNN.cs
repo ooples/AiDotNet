@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Denoising;
 /// // Create a FloRNN model for optical-flow-guided video denoising
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new FloRNNOptions();
 /// var flornn = new FloRNN&lt;double&gt;(architecture, options);

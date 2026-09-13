@@ -60,15 +60,15 @@ namespace AiDotNet.Diffusion.Control;
 /// var ipAdapter = new IPAdapterModel&lt;float&gt;();
 ///
 /// // Generate with image reference
-/// var referenceImage = LoadImage("style_reference.png");
+/// var referenceImage = ImageHelper&lt;float&gt;.LoadImage("style_reference.png");
 /// var image = ipAdapter.GenerateWithImagePrompt(
 ///     textPrompt: "A beautiful landscape",
 ///     imagePrompt: referenceImage,
 ///     imagePromptWeight: 0.7);
 ///
 /// // Multi-image reference
-/// var faceImage = LoadImage("face.png");
-/// var styleImage = LoadImage("art_style.png");
+/// var faceImage = ImageHelper&lt;float&gt;.LoadImage("face.png");
+/// var styleImage = ImageHelper&lt;float&gt;.LoadImage("art_style.png");
 /// var composed = ipAdapter.GenerateWithMultiImagePrompt(
 ///     textPrompt: "Portrait painting",
 ///     imagePrompts: new[] { faceImage, styleImage },

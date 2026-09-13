@@ -48,12 +48,20 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
-/// // states: one column per snapshot; inputs: the command applied at each of those snapshots.
+/// // states: one column per snapshot; nextStates: the same system one step later;
+/// // inputs: the command applied at each of those snapshots.
+/// var states = new Matrix&lt;double&gt;(new double[,] { { 1.0, 0.9, 0.8 }, { 0.0, 0.1, 0.2 } });
+/// var nextStates = new Matrix&lt;double&gt;(new double[,] { { 0.9, 0.8, 0.7 }, { 0.1, 0.2, 0.3 } });
+/// var inputs = new Matrix&lt;double&gt;(new double[,] { { 0.1, 0.1, 0.1 } });
+///
 /// var result = new DynamicModeDecompositionWithControl&lt;double&gt;()
 ///     .Identify(states, nextStates, inputs);
 ///
+/// // LQR weights the state and input costs as matrices
+/// var stateCost = Matrix&lt;double&gt;.CreateIdentity(2);
+/// var inputCost = Matrix&lt;double&gt;.CreateIdentity(1);
 /// var controller = new LinearQuadraticRegulator&lt;double&gt;(
-///     result.StateMatrix, result.InputMatrix, q, r);
+///     result.StateMatrix, result.InputMatrix, stateCost, inputCost);
 /// </code>
 /// </example>
 public sealed class DynamicModeDecompositionWithControl<T>

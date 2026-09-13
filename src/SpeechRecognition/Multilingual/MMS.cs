@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// // Create an MMS model for massively multilingual ASR (1100+ languages)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new MMS&lt;double&gt;(architecture);
 ///

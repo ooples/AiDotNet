@@ -37,6 +37,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new Cutie&lt;double&gt;(arch);
 /// var masks = model.TrackObject(videoFrames, initialMask);
@@ -46,6 +47,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new Cutie&lt;double&gt;(arch, "cutie.onnx");
 /// var masks = model.TrackObject(videoFrames, initialMask);
@@ -194,6 +196,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
     /// var model = new Cutie&lt;double&gt;(arch);
     /// </code>
@@ -254,6 +257,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
     /// var model = new Cutie&lt;double&gt;(arch, "cutie.onnx");
     /// var masks = model.TrackObject(frames, initialMask);

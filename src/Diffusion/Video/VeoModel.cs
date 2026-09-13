@@ -82,6 +82,7 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceFrame = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create Veo with defaults
 /// var veo = new VeoModel&lt;float&gt;();
 ///

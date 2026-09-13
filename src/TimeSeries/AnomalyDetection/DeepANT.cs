@@ -33,11 +33,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// </remarks>
 /// <example>
 /// <code>
+/// var timeSeriesLabels = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0, 4.0 });
+/// var testMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var timeSeriesMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a DeepANT model for unsupervised time series anomaly detection
 /// var options = new DeepANTOptions&lt;double&gt;();
-/// var deepant = new DeepANT&lt;double&gt;(options);
-/// deepant.Train(timeSeriesMatrix, timeSeriesLabels);
-/// Vector&lt;double&gt; anomalyScores = deepant.Predict(testMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DeepANT&lt;double&gt;(options))
+///     .Build(timeSeriesMatrix, timeSeriesLabels);
+/// Vector&lt;double&gt; anomalyScores = result.Predict(testMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

@@ -85,19 +85,11 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     // Core Model Properties
     // ============================================================================
 
-    /// <summary>
-    /// Gets or sets the trained model used for making predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the actual model that will perform predictions. If not set explicitly,
-    /// it will be derived from OptimizationResult.BestSolution during construction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the "brain" of your prediction system.
-    /// Usually you don't need to set this directly - it comes from the optimization result.
-    /// </para>
-    /// </remarks>
-    public IFullModel<T, TInput, TOutput>? Model { get; set; }
+    // The trained model is NOT a property here. AiModelResult takes it from
+    // OptimizationResult.BestSolution, and exposes it only as an internal member, because the facade
+    // is the supported surface and the model behind it is not part of it. A public `Model` setter
+    // used to sit here documented as taking precedence over OptimizationResult; nothing ever read it,
+    // so setting it silently did nothing and left the result with no model at all.
 
     /// <summary>
     /// Gets or sets the fitted text vectorizer used to turn raw text into model features.

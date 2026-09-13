@@ -32,18 +32,20 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNet for Stable Diffusion 3
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 16,
-///     Height = 1024,
-///     Width = 1024,
-///     NumInferenceSteps = 28
+///     DefaultInferenceSteps = 28
 /// };
-/// var model = new ControlNetSD3Model&lt;float&gt;(options, ControlType.Canny);
 ///
 /// // Generate with control on SD3's MMDiT architecture
-/// var controlImage = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
-/// var result = model.Predict(controlImage);
+/// var controlImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 1024, 1024 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetSD3Model&lt;float&gt;(options: options, controlType: ControlType.Canny))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(controlImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

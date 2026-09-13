@@ -45,7 +45,6 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <code>
 /// // Create ROCKET classifier with short kernel lengths matching the data
 /// var options = new RocketOptions&lt;double&gt; { KernelLengths = new[] { 3, 5 } };
-/// var classifier = new RocketClassifier&lt;double&gt;(options);
 ///
 /// // Prepare time series data: rows are samples, columns are time steps
 /// // Series length must be >= max kernel length
@@ -63,13 +62,15 @@ namespace AiDotNet.Classification.TimeSeries;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train: extract max and PPV features from random kernels and fit classifier
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new RocketClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict class for new time series
 /// var newSample = new Matrix&lt;double&gt;(1, 8);
 /// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2;
 /// newSample[0, 4] = 1.0; newSample[0, 5] = 1.2; newSample[0, 6] = 1.1; newSample[0, 7] = 1.0;
-/// var predictions = classifier.Predict(newSample);
+/// var predictions = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

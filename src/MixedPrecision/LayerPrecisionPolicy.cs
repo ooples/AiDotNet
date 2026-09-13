@@ -148,6 +148,48 @@ public class LayerPrecisionPolicy
     #region Factory Methods
 
     /// <summary>
+    /// Creates the default policy for a precision type — the one you want when the config names a
+    /// precision and you have no reason to override which layers stay in FP32.
+    /// </summary>
+    /// <param name="precisionType">The precision the model will train in.</param>
+    /// <returns>The matching per-layer policy.</returns>
+    /// <remarks>
+    /// <para>
+    /// The per-precision factories below say what each policy is; this says which one goes with which
+    /// precision, so a caller holding a <see cref="MixedPrecisionConfig.PrecisionType"/> does not have to
+    /// re-derive that mapping. It previously lived as a private helper inside
+    /// <c>MixedPrecisionTrainingLoop</c>, a type nothing constructed and which was removed — the mapping
+    /// was the only part of it worth keeping (#2099).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Lower precision is faster and smaller but coarser, and some layers do not
+    /// tolerate coarseness — normalization layers in particular. Each policy encodes which layers to
+    /// leave alone for a given precision, and this picks the right one.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var config = new MixedPrecisionConfig { PrecisionType = MixedPrecisionType.BF16 };
+    /// var policy = LayerPrecisionPolicy.ForPrecision(config.PrecisionType);
+    /// </code>
+    /// </example>
+    public static LayerPrecisionPolicy ForPrecision(MixedPrecisionType precisionType)
+    {
+        return precisionType switch
+        {
+            MixedPrecisionType.BF16 => ForBF16(),
+
+            // All three FP8 formats share the FP8 policy: what makes them differ is the numeric range
+            // of the format, not which layers can survive being cast to it.
+            MixedPrecisionType.FP8_E4M3 or
+            MixedPrecisionType.FP8_E5M2 or
+            MixedPrecisionType.FP8_Hybrid => ForFP8(),
+
+            _ => ForFP16()
+        };
+    }
+
+    /// <summary>
     /// Creates the default policy for FP16 mixed-precision training.
     /// </summary>
     /// <remarks>

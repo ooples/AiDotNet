@@ -58,11 +58,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
+/// var existingImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var omniGen = new OmniGenModel&lt;float&gt;();
 ///
 /// // Create with custom architecture for pre-trained weight loading
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;();
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.Generative,
+///     inputHeight: 32, inputWidth: 32, inputDepth: 3);
 /// var customOmniGen = new OmniGenModel&lt;float&gt;(architecture: architecture);
 ///
 /// // Generate a 1024x1024 image from text

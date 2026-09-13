@@ -56,7 +56,6 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <example>
 /// <code>
 /// // Create Label Powerset treating each label combination as a class
-/// var classifier = new LabelPowerset&lt;double&gt;();
 ///
 /// // Prepare features and multi-label targets
 /// var features = new Matrix&lt;double&gt;(4, 2);
@@ -71,12 +70,14 @@ namespace AiDotNet.Classification.MultiLabel;
 /// labels[3, 0] = 0; labels[3, 1] = 0; labels[3, 2] = 1;
 ///
 /// // Train single multi-class classifier on label combination classes
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+///     .ConfigureModel(new LabelPowerset&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict complete label combination for new sample
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 2.0; newSample[0, 1] = 3.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -163,7 +164,7 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// var lp = new LabelPowerset&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Using a neural network
-    /// var lp = new LabelPowerset&lt;double&gt;(() => new NeuralNetworkClassifier&lt;double&gt;());
+    /// var lp2 = new LabelPowerset&lt;double&gt;(() => new NeuralNetworkClassifier&lt;double&gt;());
     /// </code>
     /// </para>
     /// </remarks>

@@ -54,6 +54,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 /// <example>
 /// <code>
+/// var originalAudio = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// // Create a Stable Audio model with default settings
 /// var stableAudio = new StableAudioModel&lt;float&gt;();
 ///

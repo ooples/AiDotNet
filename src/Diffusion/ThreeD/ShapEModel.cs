@@ -85,7 +85,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 ///     prompt: "A red sports car",
 ///     resolution: 128);
 ///
-/// ExportToOBJ(mesh, "car.obj");
+/// // mesh is the result tensor — write it out with your own encoder.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

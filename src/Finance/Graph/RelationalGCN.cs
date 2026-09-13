@@ -71,7 +71,7 @@ namespace AiDotNet.Finance.Graph;
 /// // Define architecture for multi-relational knowledge graph node classification (50 entities, 5 classes)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 50, inputWidth: 16, inputDepth: 1, outputSize: 5);
 ///
 /// // Training mode: learns relation-specific transformations with basis decomposition

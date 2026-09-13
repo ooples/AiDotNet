@@ -22,16 +22,27 @@ public abstract class SurvivalModelTestBase<T>
     protected virtual int TrainSamples => 80;
     protected virtual int Features => 3;
 
+    /// <summary>
+    /// Builds a survival design matrix: column 0 is the event indicator — 1 if the event was observed,
+    /// 0 if the subject was censored — and columns 1.. are the covariates. Y is the observed time.
+    /// </summary>
+    /// <remarks>
+    /// Roughly a quarter of the subjects are censored, because a survival fixture where everyone has
+    /// the event exercises none of the handling that makes these models survival models.
+    /// </remarks>
     private (Matrix<T> X, Vector<T> Y) GenerateSurvivalData(Random rng)
     {
-        var x = new Matrix<T>(TrainSamples, Features);
+        var x = new Matrix<T>(TrainSamples, Features + 1);
         var y = new Vector<T>(TrainSamples);
         for (int i = 0; i < TrainSamples; i++)
         {
             for (int j = 0; j < Features; j++)
-                x[i, j] = ToT(rng.NextDouble() * 5.0);
+                x[i, j + 1] = ToT(rng.NextDouble() * 5.0);
+
+            x[i, 0] = ToT(rng.NextDouble() < 0.25 ? 0.0 : 1.0);
+
             // Survival time: higher feature values → shorter survival
-            y[i] = ToT(Math.Max(0.1, 10.0 - ToD(x[i, 0]) + ModelTestHelpers.NextGaussian(rng) * 0.5));
+            y[i] = ToT(Math.Max(0.1, 10.0 - ToD(x[i, 1]) + ModelTestHelpers.NextGaussian(rng) * 0.5));
         }
         return (x, y);
     }

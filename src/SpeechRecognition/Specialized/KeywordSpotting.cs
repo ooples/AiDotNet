@@ -28,7 +28,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// // Create a Keyword Spotting model for wake-word detection
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32);
 /// var model = new KeywordSpotting&lt;double&gt;(architecture);
 ///

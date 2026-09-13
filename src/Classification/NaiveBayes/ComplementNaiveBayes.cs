@@ -41,7 +41,6 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// <code>
 /// // Create Complement NB for imbalanced text classification
 /// var options = new NaiveBayesOptions&lt;double&gt;();
-/// var classifier = new ComplementNaiveBayes&lt;double&gt;(options);
 ///
 /// // Prepare word count features (term-frequency vectors)
 /// var features = new Matrix&lt;double&gt;(4, 3);
@@ -52,12 +51,14 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train using complement class statistics to handle imbalance
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ComplementNaiveBayes&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict class using complement likelihood ratio
 /// var newSample = new Matrix&lt;double&gt;(1, 3);
 /// newSample[0, 0] = 3; newSample[0, 1] = 0; newSample[0, 2] = 1;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

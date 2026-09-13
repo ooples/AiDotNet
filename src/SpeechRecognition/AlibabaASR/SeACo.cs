@@ -29,7 +29,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// // Create a SeACo-Paraformer model for hot-word customizable ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new SeACo&lt;double&gt;(architecture);
 ///

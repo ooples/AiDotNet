@@ -25,7 +25,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// var activations = new IntermediateActivations&lt;double&gt;();
 /// activations.Add("layer1", layer1Output);
 /// activations.Add("layer2", layer2Output);
-/// var result = new DistillationForwardResult&lt;double&gt;(finalOutput, activations);
+/// var result2 = new DistillationForwardResult&lt;double&gt;(finalOutput, activations);
 /// </code>
 /// </para>
 ///

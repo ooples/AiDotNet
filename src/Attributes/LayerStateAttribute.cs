@@ -30,10 +30,15 @@ namespace AiDotNet.Attributes;
 /// </remarks>
 /// <example>
 /// <code>
-/// public PositionalEncodingLayer(
-///     [LayerState] int maxSequenceLength,
-///     [LayerState] int embeddingSize)
-///     : base([-1, embeddingSize], [-1, embeddingSize])
+/// public partial class PositionalEncodingLayer&lt;T&gt; : LayerBase&lt;T&gt;
+/// {
+///     public PositionalEncodingLayer(
+///         [LayerState] int maxSequenceLength,
+///         [LayerState] int embeddingSize)
+///         : base([-1, embeddingSize], [-1, embeddingSize])
+///     {
+///     }
+/// }
 /// </code>
 /// </example>
 [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]

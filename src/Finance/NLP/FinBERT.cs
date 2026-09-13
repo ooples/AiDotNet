@@ -75,7 +75,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for financial sentiment classification (512 tokens, 3 classes: pos/neg/neutral)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 3);
 ///
 /// // Training mode: fine-tune BERT on financial text for sentiment analysis

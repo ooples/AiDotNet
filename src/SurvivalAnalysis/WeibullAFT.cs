@@ -39,9 +39,21 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
-/// var weibull = new WeibullAFT&lt;double&gt;(maxIterations: 100, tolerance: 1e-6);
-/// weibull.Fit(times, events, features);
-/// double medianSurvival = weibull.PredictMedianSurvivalTime(newPatientFeatures);
+/// // age and treatment arm per patient
+/// var features = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// // months each patient was observed
+/// var times = new Vector&lt;double&gt;(new double[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0 });
+/// // 1 = the event happened; 0 = censored, still fine when the study ended or lost to follow-up
+/// var events = new Vector&lt;int&gt;(new int[] { 1, 0, 1, 0, 1, 1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new WeibullAFT&lt;double&gt;(maxIterations: 100, tolerance: 1e-6))
+///     .Build(features, times, events);
+///
+/// var risk = result.Predict(features);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -301,6 +313,9 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
+
         int numSubjects = x.Rows;
         var result = new Matrix<T>(numSubjects, times.Length);
         double shape = 1.0 / NumOps.ToDouble(Scale);
@@ -334,6 +349,9 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
     public override Vector<T> PredictHazardRatio(Matrix<T> x)
     {
         EnsureFitted();
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(x.Rows);
@@ -380,6 +398,9 @@ public partial class WeibullAFT<T> : SurvivalModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         EnsureFitted();
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        input = ExtractCovariates(input);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(input.Rows);

@@ -25,10 +25,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new OccupancyNetworkOptions { InputSize = 3, HiddenSize = 256 };
-/// var model = new OccupancyNeuralNetwork&lt;float&gt;(options);
-/// var points = Tensor&lt;float&gt;.Random(new[] { 1, 1000, 3 });
-/// var occupancy = model.Predict(points);
+/// var points = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1000, 3 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new OccupancyNeuralNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var occupancy = result.Predict(points);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.ThreeD)]

@@ -54,6 +54,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 /// <example>
 /// <code>
+/// var originalMelody = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// // Create a MusicGen model
 /// var musicGen = new MusicGenModel&lt;float&gt;();
 ///

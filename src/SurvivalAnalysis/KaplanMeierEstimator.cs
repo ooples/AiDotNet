@@ -48,9 +48,21 @@ namespace AiDotNet.SurvivalAnalysis;
 /// </remarks>
 /// <example>
 /// <code>
-/// var km = new KaplanMeierEstimator&lt;double&gt;();
-/// km.Fit(times, events);
-/// double survivalProb = km.PredictSurvival(timePoint);
+/// // age and treatment arm per patient
+/// var features = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// // months each patient was observed
+/// var times = new Vector&lt;double&gt;(new double[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0 });
+/// // 1 = the event happened; 0 = censored, still fine when the study ended or lost to follow-up
+/// var events = new Vector&lt;int&gt;(new int[] { 1, 0, 1, 0, 1, 1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new KaplanMeierEstimator&lt;double&gt;())
+///     .Build(features, times, events);
+///
+/// var risk = result.Predict(features);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -106,6 +118,7 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     ///
     /// Usage:
     /// <code>
+    /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// var km = new KaplanMeierEstimator&lt;double&gt;();
     /// km.FitSurvival(features, times, events);
     /// var survivalProbs = km.GetBaselineSurvival(timePoints);

@@ -30,9 +30,9 @@ namespace AiDotNet.LearningRateSchedulers;
 ///
 /// for (int epoch = 0; epoch &lt; 100; epoch++)
 /// {
-///     Train(model, scheduler.CurrentLearningRate);
-///     double valLoss = Validate(model);
-///     scheduler.Step(valLoss);  // Scheduler decides whether to reduce LR
+///     double lr = scheduler.CurrentLearningRate;   // hand this to your optimizer for the epoch
+///     double valLoss = 1.0 / (epoch + 1);          // stand-in for your own validation metric
+///     scheduler.Step(valLoss);                     // scheduler decides whether to reduce LR
 /// }
 /// </code>
 /// </example>

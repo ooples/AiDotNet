@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <example>
 /// <code>
 /// var vae = new StandardVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 512, 512 });
 /// var latent = vae.Encode(image);
 /// var decoded = vae.Decode(latent);
 /// </code>
@@ -280,10 +280,10 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var vae = new StandardVAE&lt;float&gt;(architecture: arch);
+    /// var vae2 = new StandardVAE&lt;float&gt;(architecture: arch);
     ///
     /// // Custom encoder/decoder layers directly
-    /// var vae = new StandardVAE&lt;float&gt;(
+    /// var vae3 = new StandardVAE&lt;float&gt;(
     ///     encoderLayers: myEncoderLayers,
     ///     decoderLayers: myDecoderLayers);
     /// </code>

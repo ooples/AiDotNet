@@ -38,8 +38,6 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// <example>
 /// <code>
 /// // Create label propagation for semi-supervised learning
-/// var options = new LabelPropagationOptions&lt;double&gt;();
-/// var classifier = new LabelPropagation&lt;double&gt;(options);
 ///
 /// // Prepare data: some labeled (-1 means unlabeled), some not
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -52,10 +50,12 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
 ///
 /// // Propagate labels through similarity graph to unlabeled samples
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LabelPropagation&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict labels for all samples including previously unlabeled
-/// var prediction = classifier.Predict(features);
+/// var prediction = result.Predict(features);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
