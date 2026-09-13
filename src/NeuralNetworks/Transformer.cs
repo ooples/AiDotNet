@@ -374,7 +374,7 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else
         {

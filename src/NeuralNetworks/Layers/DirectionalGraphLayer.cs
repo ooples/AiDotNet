@@ -1126,50 +1126,50 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Update weights using Engine operations
         var scaledInGrad = Engine.TensorMultiplyScalar(_incomingWeightsGradient, learningRate);
-        _incomingWeights = Engine.TensorSubtract(_incomingWeights, scaledInGrad);
+        Engine.TensorSubtractInPlace(_incomingWeights, scaledInGrad);
 
         var scaledOutGrad = Engine.TensorMultiplyScalar(_outgoingWeightsGradient, learningRate);
-        _outgoingWeights = Engine.TensorSubtract(_outgoingWeights, scaledOutGrad);
+        Engine.TensorSubtractInPlace(_outgoingWeights, scaledOutGrad);
 
         var scaledSelfGrad = Engine.TensorMultiplyScalar(_selfWeightsGradient, learningRate);
-        _selfWeights = Engine.TensorSubtract(_selfWeights, scaledSelfGrad);
+        Engine.TensorSubtractInPlace(_selfWeights, scaledSelfGrad);
 
         var scaledCombGrad = Engine.TensorMultiplyScalar(_combinationWeightsGradient, learningRate);
-        _combinationWeights = Engine.TensorSubtract(_combinationWeights, scaledCombGrad);
+        Engine.TensorSubtractInPlace(_combinationWeights, scaledCombGrad);
 
         // Update biases
         if (_incomingBiasGradient != null)
         {
             var scaledInBiasGrad = Engine.TensorMultiplyScalar(_incomingBiasGradient, learningRate);
-            _incomingBias = Engine.TensorSubtract(_incomingBias, scaledInBiasGrad);
+            Engine.TensorSubtractInPlace(_incomingBias, scaledInBiasGrad);
         }
 
         if (_outgoingBiasGradient != null)
         {
             var scaledOutBiasGrad = Engine.TensorMultiplyScalar(_outgoingBiasGradient, learningRate);
-            _outgoingBias = Engine.TensorSubtract(_outgoingBias, scaledOutBiasGrad);
+            Engine.TensorSubtractInPlace(_outgoingBias, scaledOutBiasGrad);
         }
 
         if (_selfBiasGradient != null)
         {
             var scaledSelfBiasGrad = Engine.TensorMultiplyScalar(_selfBiasGradient, learningRate);
-            _selfBias = Engine.TensorSubtract(_selfBias, scaledSelfBiasGrad);
+            Engine.TensorSubtractInPlace(_selfBias, scaledSelfBiasGrad);
         }
 
         if (_combinationBiasGradient != null)
         {
             var scaledCombBiasGrad = Engine.TensorMultiplyScalar(_combinationBiasGradient, learningRate);
-            _combinationBias = Engine.TensorSubtract(_combinationBias, scaledCombBiasGrad);
+            Engine.TensorSubtractInPlace(_combinationBias, scaledCombBiasGrad);
         }
 
         // Update gating parameters if enabled
         if (_useGating && _gateWeightsGradient != null && _gateBiasGradient != null && _gateWeights != null && _gateBias != null)
         {
             var scaledGateWeightsGrad = Engine.TensorMultiplyScalar(_gateWeightsGradient, learningRate);
-            _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+            Engine.TensorSubtractInPlace(_gateWeights, scaledGateWeightsGrad);
 
             var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
-            _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+            Engine.TensorSubtractInPlace(_gateBias, scaledGateBiasGrad);
         }
     }
 

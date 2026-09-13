@@ -329,14 +329,14 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     public override void UpdateParameters(T learningRate)
     {
         // w = w - lr * grad  =>  Engine.TensorSubtract(w, Engine.TensorMultiplyScalar(grad, lr))
-        _queryWeights = Engine.TensorSubtract(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGrad, learningRate));
-        _keyWeights = Engine.TensorSubtract(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGrad, learningRate));
-        _valueWeights = Engine.TensorSubtract(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGrad, learningRate));
-        _outputWeights = Engine.TensorSubtract(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGrad, learningRate));
+        Engine.TensorSubtractInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGrad, learningRate));
+        Engine.TensorSubtractInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGrad, learningRate));
+        Engine.TensorSubtractInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGrad, learningRate));
+        Engine.TensorSubtractInPlace(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGrad, learningRate));
 
         if (_residualWeights != null && _residualWeightsGrad != null)
         {
-            _residualWeights = Engine.TensorSubtract(_residualWeights, Engine.TensorMultiplyScalar(_residualWeightsGrad, learningRate));
+            Engine.TensorSubtractInPlace(_residualWeights, Engine.TensorMultiplyScalar(_residualWeightsGrad, learningRate));
         }
 
         // Register trainable parameters for tape-based autodiff

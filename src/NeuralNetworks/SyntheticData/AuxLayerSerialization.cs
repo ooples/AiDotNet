@@ -91,7 +91,7 @@ internal static class AuxLayerSerialization
         var layer = factory(inputShape, outputShape);
         if (inputShape.Length > 0 && inputShape[0] > 0 && layer is LayerBase<T> resolvable)
         {
-            resolvable.ResolveFromShape(inputShape);
+            resolvable.ResolveFromPublishedShape(inputShape);
         }
 
         ReadLayerState(reader, layer);

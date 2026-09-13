@@ -694,8 +694,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        _projectionWeights = Engine.TensorSubtract(_projectionWeights, Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate));
-        _projectionBias = Engine.TensorSubtract(_projectionBias, Engine.TensorMultiplyScalar(_projectionBiasGradient, learningRate));
+        Engine.TensorSubtractInPlace(_projectionWeights, Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_projectionBias, Engine.TensorMultiplyScalar(_projectionBiasGradient, learningRate));
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);

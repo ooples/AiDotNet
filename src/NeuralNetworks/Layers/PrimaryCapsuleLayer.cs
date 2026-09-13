@@ -907,10 +907,10 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
 
         // Use Engine operations for GPU/CPU acceleration
         var scaledWeightGrad = Engine.TensorMultiplyScalar(_convWeightsGradient, learningRate);
-        _convWeights = Engine.TensorSubtract(_convWeights, scaledWeightGrad);
+        Engine.TensorSubtractInPlace(_convWeights, scaledWeightGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_convBiasGradient, learningRate);
-        _convBias = Engine.TensorSubtract(_convBias, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_convBias, scaledBiasGrad);
     }
 
     /// <summary>

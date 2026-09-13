@@ -316,7 +316,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
             ExtractLayerReferences();
         }
         else if (_useNativeMode)

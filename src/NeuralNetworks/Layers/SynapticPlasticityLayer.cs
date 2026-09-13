@@ -235,7 +235,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// were active in the recent past.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Buffer]
     private Tensor<T> _presynapticTraces;
 
     /// <summary>
@@ -257,7 +257,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// input and output activity, which is crucial for spike-timing-dependent plasticity.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Buffer]
     private Tensor<T> _postsynapticTraces;
 
     /// <summary>
@@ -279,7 +279,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// version of how biological neurons generate electrical impulses when sufficiently activated.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Buffer]
     private Tensor<T> _presynapticSpikes;
 
     /// <summary>
@@ -301,7 +301,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// timing-dependent learning rules.
     /// </para>
     /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
+    [Buffer]
     private Tensor<T> _postsynapticSpikes;
 
     /// <summary>
@@ -336,10 +336,13 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastInputGpu;
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
+    [Scratch]
     private Tensor<T>? _presynapticTracesGpu;
+    [Scratch]
     private Tensor<T>? _postsynapticTracesGpu;
+    [Scratch]
     private Tensor<T>? _presynapticSpikesGpu;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T>? _postsynapticSpikesGpu;
 
     /// <inheritdoc/>
@@ -369,7 +372,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 
     public override void UpdateParameters(T learningRate)
     {
-        if (Engine is DirectGpuTensorEngine gpuEngine && _lastInputGpu != null)
+        if (Engine is DirectGpuTensorEngine gpuEngine && _lastInputGpu is { } lastInputGpu)
         {
             int size = GetInputShape()[0];
             float decay = (float)_traceDecay;
@@ -383,17 +386,28 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
                 _postsynapticSpikesGpu = gpuEngine.ZerosGpu<T>([size]);
             }
 
+            var presynapticTracesGpu = _presynapticTracesGpu
+                ?? throw new InvalidOperationException("Presynaptic trace storage was not initialized.");
+            var postsynapticTracesGpu = _postsynapticTracesGpu
+                ?? throw new InvalidOperationException("Postsynaptic trace storage was not initialized.");
+            var presynapticSpikesGpu = _presynapticSpikesGpu
+                ?? throw new InvalidOperationException("Presynaptic spike storage was not initialized.");
+            var postsynapticSpikesGpu = _postsynapticSpikesGpu
+                ?? throw new InvalidOperationException("Postsynaptic spike storage was not initialized.");
+            var lastOutputGpu = _lastOutputGpu
+                ?? throw new InvalidOperationException("GPU forward output is unavailable.");
+
             // Update traces and detect spikes directly on GPU
-            gpuEngine.UpdateTracesGpu(_presynapticTracesGpu!, _presynapticSpikesGpu!, _lastInputGpu, decay, threshold);
-            gpuEngine.UpdateTracesGpu(_postsynapticTracesGpu!, _postsynapticSpikesGpu!, _lastOutputGpu!, decay, threshold);
+            gpuEngine.UpdateTracesGpu(presynapticTracesGpu, presynapticSpikesGpu, lastInputGpu, decay, threshold);
+            gpuEngine.UpdateTracesGpu(postsynapticTracesGpu, postsynapticSpikesGpu, lastOutputGpu, decay, threshold);
 
             // Execute STDP update kernel
             gpuEngine.StdpUpdateGpu(
                 _weights,
-                _presynapticTracesGpu!,
-                _postsynapticTracesGpu!,
-                _presynapticSpikesGpu!,
-                _postsynapticSpikesGpu!,
+                presynapticTracesGpu,
+                postsynapticTracesGpu,
+                presynapticSpikesGpu,
+                postsynapticSpikesGpu,
                 _stdpLtpRate, _stdpLtdRate, _homeostasisRate,
                 _minWeight, _maxWeight);
         }

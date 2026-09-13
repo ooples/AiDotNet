@@ -808,10 +808,10 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         var scaledGateWeightsGrad = Engine.TensorMultiplyScalar(_gateWeightsGradient, learningRate);
         var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
 
-        _transformWeights = Engine.TensorSubtract(_transformWeights, scaledTransformWeightsGrad);
-        _transformBias = Engine.TensorSubtract(_transformBias, scaledTransformBiasGrad);
-        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
-        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        Engine.TensorSubtractInPlace(_transformWeights, scaledTransformWeightsGrad);
+        Engine.TensorSubtractInPlace(_transformBias, scaledTransformBiasGrad);
+        Engine.TensorSubtractInPlace(_gateWeights, scaledGateWeightsGrad);
+        Engine.TensorSubtractInPlace(_gateBias, scaledGateBiasGrad);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_transformWeights);
