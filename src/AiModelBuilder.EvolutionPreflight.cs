@@ -15,7 +15,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>Separate preflight evidence; this work does not consume the search's MaxEvaluationAttempts.</returns>
     /// <remarks>
     /// Executes at most one correctness evaluation and one additional fitness evaluation. Built-in runners retain
-    /// their configured per-dispatch limits; opaque caller-owned providers must enforce their own resource limits.
+    /// their configured per-dispatch limits. EvaluationTimeout requests cancellation of each preflight stage;
+    /// EvaluationGracePeriod bounds the additional wait but cannot terminate an uncooperative caller-owned provider.
     /// No proposal/chat request is made here, but caller-supplied evaluators may themselves use external services.
     /// Correctness requires a maximize-one result with no violations or declared measurement reuse, not merely
     /// Completed. Script/custom fitness requires explicit correctness or public input/output examples.
@@ -63,6 +64,44 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         report.OutputLocationsChecked = true;
         ProcessProgramExecutionEngine? owned = null;
         ProcessProgramExecutionEngine? correctnessOwned = null;
+        Task<EvolutionTaskResult>? inFlight = null;
+        var evaluationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        async Task<EvolutionTaskResult?> EvaluateAsync(ProgramEvolutionTask task,
+            EvolutionCandidate<ProgramGenome> candidate, EvolutionEvaluationContext context, bool isCorrectness)
+        {
+            if (runOptions.EvaluationTimeout is { } timeout) evaluationCancellation.CancelAfter(timeout);
+            // Isolate a provider that blocks before returning its ValueTask as well as an asynchronous one.
+            inFlight = Task.Run(async () => await task.EvaluateAsync(candidate, context, evaluationCancellation.Token).ConfigureAwait(false),
+                evaluationCancellation.Token);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            try
+            {
+                if (runOptions.EvaluationTimeout is { } limit && runOptions.EvaluationGracePeriod is { } grace)
+                {
+                    deadline.CancelAfter(limit + grace);
+                    if (await Task.WhenAny(inFlight, Task.Delay(Timeout.Infinite, deadline.Token)).ConfigureAwait(false) != inFlight)
+                    {
+                        report.EvaluationAbandoned = true;
+                        cancellationToken.ThrowIfCancellationRequested();
+                        report.Code = isCorrectness ? "correctness_timeout" : "fitness_timeout";
+                        return null;
+                    }
+                }
+                var result = await inFlight.ConfigureAwait(false);
+                if (isCorrectness) { report.CorrectnessStatus = result.Status; report.CorrectnessCostUnits = result.CostUnits; }
+                else { report.AdditionalFitnessStatus = result.Status; report.AdditionalFitnessCostUnits = result.CostUnits; }
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!evaluationCancellation.IsCancellationRequested) return result;
+            }
+            catch (OperationCanceledException) when (evaluationCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { }
+            finally
+            {
+                deadline.Cancel();
+                if (inFlight.IsCompleted && !evaluationCancellation.IsCancellationRequested) evaluationCancellation.CancelAfter(Timeout.Infinite);
+            }
+            report.Code = isCorrectness ? "correctness_timeout" : "fitness_timeout";
+            return null;
+        }
         try
         {
             IProgramFitnessEvaluator fitness = CreateProgramEvaluator(programs, out owned);
@@ -89,9 +128,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var canonical = await correctnessTask.CanonicalizeAsync(seed, cancellationToken).ConfigureAwait(false);
             var candidate = new EvolutionCandidate<ProgramGenome>(0, canonical, lineage);
             var context = new EvolutionEvaluationContext(0, runOptions.Seed, 0, 1);
-            EvolutionTaskResult validation = await correctnessTask.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
-            report.CorrectnessStatus = validation.Status;
-            report.CorrectnessCostUnits = validation.CostUnits;
+            EvolutionTaskResult? validation = await EvaluateAsync(correctnessTask, candidate, context, isCorrectness: true).ConfigureAwait(false);
+            if (validation is null) return report;
             if (!CorrectnessGatedProgramFitnessEvaluator.PassesCorrectness(validation))
             { report.Code = "seed_correctness_failed"; return report; }
             cancellationToken.ThrowIfCancellationRequested();
@@ -107,9 +145,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             EvolutionTaskResult measured = validation;
             if (!report.SharedCorrectnessAndFitness)
             {
-                measured = await fitnessTask.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
-                report.AdditionalFitnessStatus = measured.Status;
-                report.AdditionalFitnessCostUnits = measured.CostUnits;
+                var additional = await EvaluateAsync(fitnessTask, candidate, context, isCorrectness: false).ConfigureAwait(false);
+                if (additional is null) return report;
+                measured = additional;
             }
             var evaluation = new EvolutionEvaluation(0, canonical.Id, measured.Status, measured.Quality, measured.Direction,
                 measured.Descriptors, measured.Objectives, measured.ConstraintViolations,
@@ -120,6 +158,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             report.Code = report.IsReady ? "ready" : "seed_fitness_or_archive_rejected";
             return report;
         }
-        finally { correctnessOwned?.Dispose(); owned?.Dispose(); }
+        finally
+        {
+            void Release()
+            {
+                evaluationCancellation.Dispose();
+                correctnessOwned?.Dispose();
+                owned?.Dispose();
+            }
+            if (inFlight is { IsCompleted: false } pending)
+            {
+                // Disposing a runner while ExecuteAsync unwinds races its semaphore release.
+                // Retain owned resources until abandoned work settles, and observe any late fault.
+                _ = pending.ContinueWith(completed => { _ = completed.Exception; Release(); },
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+            else { _ = inFlight?.Exception; Release(); }
+        }
     }
 }

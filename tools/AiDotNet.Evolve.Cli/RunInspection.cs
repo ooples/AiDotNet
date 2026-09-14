@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 namespace AiDotNet.Evolve.Cli;
 
 /// <summary>Copies bounded progress during serialized engine callbacks; IPC never reads a live archive.</summary>
-internal sealed class RunInspection(EvolutionRunControl control, CancellationTokenSource cancellation) : IProgramEvolutionArchiveObserver
+internal sealed class RunInspection(EvolutionRunControl control, CancellationTokenSource cancellation) : IProgramEvolutionArchiveObserver, IProgramEvolutionTelemetryObserver
 {
     private readonly object _gate = new();
     private readonly List<IEvolutionArchiveView<ProgramGenome>> _archives = new();
@@ -24,6 +24,13 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
     private int[] _islandCounts = Array.Empty<int>();
     private BestSnapshot? _best;
     private string? _checkpointHash;
+    private Func<ProgramEvolutionTelemetrySnapshot>? _telemetrySource;
+    private RuntimeSnapshot? _runtime;
+
+    internal sealed record RuntimeSnapshot(DateTimeOffset SampledUtc, string OperatorIdentity, string? ConfiguredModelIdentity,
+        long Proposals, long ChatCalls, long Retries, long AbandonedProposals, long ProviderErrors,
+        long? ReportedInputTokens, long? ReportedOutputTokens, int? QueuedExecutions, int? ActiveExecutions,
+        string Scope);
 
     internal sealed record LineageSnapshot(long EvaluationId, string GenomeId, string OperatorId,
         long Generation, int Island, string[] Parents);
@@ -34,7 +41,51 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
         bool UnknownConsumption, int? ObservedPendingCandidates, int? BackendQueueDepth,
         string QueueScope, int ArchiveCount, int[] IslandOccupancy, BestSnapshot? BestFeasible,
         string ValidityScope, IReadOnlyDictionary<string, long> SegmentStatuses, LineageSnapshot[] RecentLineage,
-        long? CheckpointSequence, string? VerifiedCheckpointSha256, bool Resumable, string ModelUsageScope);
+        long? CheckpointSequence, string? VerifiedCheckpointSha256, bool Resumable, string ModelUsageScope)
+    {
+        public RuntimeSnapshot? Runtime { get; init; }
+    }
+
+    public void SetTelemetrySource(Func<ProgramEvolutionTelemetrySnapshot> source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        lock (_gate)
+        {
+            if (_events != 0 || _telemetrySource is not null)
+                throw new InvalidOperationException("Telemetry must be registered once, before event delivery.");
+            _telemetrySource = source;
+        }
+    }
+
+    private void SampleTelemetry()
+    {
+        Func<ProgramEvolutionTelemetrySnapshot>? source;
+        lock (_gate) { source = _finished ? null : _telemetrySource; }
+        if (source is null) return;
+        // The public source contract requires nonblocking, thread-safe reads. Never invoke it under our lock.
+        // A stopped run keeps its final detached sample; it cannot query a disposed runner later.
+        try
+        {
+            var sample = source();
+            var usage = sample.Usage;
+            var runtime = new RuntimeSnapshot(DateTimeOffset.UtcNow, Identity(sample.OperatorId),
+                sample.ConfiguredModelId is null ? null : Identity(sample.ConfiguredModelId),
+                usage.Proposals, usage.ChatCalls, usage.Retries, usage.AbandonedProposals, usage.ProviderErrors,
+                usage.ChatCalls == 0 || usage.InputTokens > 0 ? usage.InputTokens : null,
+                usage.ChatCalls == 0 || usage.OutputTokens > 0 ? usage.OutputTokens : null,
+                sample.QueuedExecutions, sample.ActiveExecutions,
+                "Current process segment; hashed configured identities, not per-response routing. Tokens are reported subtotals of unknown completeness; no currency inference. Queues cover the configured runner instance, not OS/cluster queues.");
+            lock (_gate) { if (!_finished) _runtime = runtime; }
+        }
+        catch (Exception exception) when (IsTelemetryFailure(exception))
+        {
+            lock (_gate) { if (!_finished) _runtime = null; } // Unavailable is not zero consumption.
+        }
+    }
+
+    private static bool IsTelemetryFailure(Exception exception) =>
+        (exception is ArgumentException or InvalidOperationException or IOException or NotSupportedException) &&
+        (exception.InnerException is null || IsTelemetryFailure(exception.InnerException));
 
     public void AddArchive(IEvolutionArchiveView<ProgramGenome> archive)
     {
@@ -116,16 +167,18 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
 
     internal Snapshot Read()
     {
+        SampleTelemetry();
         lock (_gate)
             return new Snapshot(_state, _finished, control.IsStopRequested, _events, _terminal, _attempts,
-                _unknownCost ? null : _cost, _unknownCost, _pendingTruncated ? null : _pending.Count, null,
-                "Only candidates seen in Proposed but not Evaluated; backend/in-flight queues are not exposed by this adapter.",
+                _unknownCost ? null : _cost, _unknownCost, _pendingTruncated ? null : _pending.Count, _runtime?.QueuedExecutions,
+                _runtime?.QueuedExecutions is null ? "Observed pending candidates only; the configured runner supplies no queue telemetry."
+                    : "Waiting requests on this configured runner instance; observed pending candidates also include proposals and active work.",
                 _archiveCount, (int[])_islandCounts.Clone(), _best,
                 "Archive-accepted feasible score, not an independent held-out correctness certificate.",
                 new Dictionary<string, long>(_statuses, StringComparer.Ordinal),
                 _lineage.Select(item => item with { Parents = (string[])item.Parents.Clone() }).ToArray(),
                 _checkpointSequence, _checkpointHash, _checkpointHash is not null,
-                "Model identity, live token usage and API currency are not exposed by this event contract; cost is current-segment evaluator units only.");
+                _runtime?.Scope ?? "No live telemetry source is available; model/tokens/currency are unknown.") { Runtime = _runtime };
     }
 
     internal string Handle(string command)
@@ -151,6 +204,7 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
 
     internal async Task FinishAsync(EvolutionRunSummary? summary)
     {
+        SampleTelemetry();
         string? checkpointHash = null;
         if (summary?.CheckpointPath is { } path && _checkpointSequence is { } sequence && _checkpointEvent >= _lastEvaluationEvent)
         {
@@ -171,6 +225,7 @@ internal sealed class RunInspection(EvolutionRunControl control, CancellationTok
         lock (_gate)
         {
             _finished = true;
+            _telemetrySource = null;
             _checkpointHash = checkpointHash;
             _unknownCost |= summary is null; // No terminal receipt cannot be interpreted as zero abandoned work.
             _state = summary is null ? "aborted" : control.IsStopRequested &&

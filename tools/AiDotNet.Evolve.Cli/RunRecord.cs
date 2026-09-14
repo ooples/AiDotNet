@@ -9,7 +9,6 @@ using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
 using AiDotNet.Models.Results;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Evolve.Cli;
 
@@ -29,23 +28,12 @@ internal sealed class RunRecord : IDisposable
         if (Directory.Exists(_destination) || File.Exists(_destination))
             throw new IOException("Run record destination must not already exist.");
         _includeSource = includeSource;
-        var engine = config.Evolution ?? throw new ArgumentException("Missing evolution configuration.");
-        var programs = config.ProgramEvolution ?? throw new ArgumentException("Missing program configuration.");
-        // Never export a provider parameter bag. Treat every string in it as sensitive, irrespective of key name.
-        // Only the parsed configuration is examined; no global environment or credential store is enumerated.
-        JToken? provider = config.ChatClient is null ? null : JToken.FromObject(config.ChatClient);
-        _prohibited = provider is null ? Array.Empty<string>() : Strings(provider).Distinct(StringComparer.Ordinal).ToArray();
-        _configuration = Json(new
-        {
-            SchemaVersion = 1,
-            Scope = "allowlisted-effective-search-settings; not a complete replay configuration",
-            RunIdSha256 = Hash(engine.RunId), engine.Seed, engine.MaxEvaluationAttempts, engine.MaxProposals,
-            engine.MaxGenerations, engine.IslandCount, Dispatch = engine.Dispatch.ToString(), engine.Resume,
-            engine.CheckpointInterval, Language = programs.Language.ToString(),
-            PublicTestCount = programs.TestCases.Count, StrictPublicCorrectness = programs.TestCases.Count > 0,
-            ProviderConfigurationExported = false,
-            Omitted = new[] { "provider parameters", "paths", "environment variables", "prompts", "seed text", "public examples", "evaluator script" }
-        });
+        _ = config.Evolution ?? throw new ArgumentException("Missing evolution configuration.");
+        _ = config.ProgramEvolution ?? throw new ArgumentException("Missing program configuration.");
+        var exported = RunConfigurationTemplate.Create(config, includeSource);
+        _prohibited = exported.ProhibitedValues;
+        _configuration = exported.Json;
+        RunEvidenceBundle.ValidateMetadata(_configuration, _prohibited);
         _environment = Json(new
         {
             SchemaVersion = 1, Runtime = RuntimeInformation.FrameworkDescription,
@@ -98,20 +86,11 @@ internal sealed class RunRecord : IDisposable
                 Inspection = inspection,
                 Usage = programs?.LlmUsage,
                 UsageScope = "provider-reported final process-segment counters; zero tokens may mean unreported; no monetary estimate",
-                SourcePolicy = "explicit opt-in; exact bytes; configured provider strings checked; unknown or encoded secrets require human review"
+                SourcePolicy = "explicit opt-in; exact bytes; configured parameter/credential/environment strings checked; unknown or encoded secrets require human review"
             })
         };
         if (_includeSource && source is not null) files["program.txt"] = source;
         RunEvidenceBundle.Create(_destination, files, _prohibited);
-    }
-
-    private static IEnumerable<string> Strings(JToken token)
-    {
-        if (token is JValue { Type: JTokenType.String } value && value.Value<string>() is { Length: > 0 } text)
-            yield return text;
-        if (token is JContainer container)
-            foreach (var child in container.Children())
-                foreach (string item in Strings(child)) yield return item;
     }
 
     private static object Fingerprint(Assembly assembly)

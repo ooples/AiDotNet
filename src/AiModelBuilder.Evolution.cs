@@ -783,6 +783,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     "llm-program-variation", null, provenanceSink, programOptions.Provenance);
             }
 
+            if (_programEvolutionObserver is IProgramEvolutionTelemetryObserver telemetryObserver)
+            {
+                var executionTelemetry = (_programExecutionEngine ?? ownedEngine) as IProgramExecutionTelemetrySource;
+                telemetryObserver.SetTelemetrySource(() => new ProgramEvolutionTelemetrySnapshot(
+                    variation.Id, configuredClient?.ModelId, variation.GetUsage(),
+                    executionTelemetry?.QueuedExecutionCount, executionTelemetry?.ActiveExecutionCount));
+            }
+
             // Best-program files. Without this a finished run leaves nothing on disk to open.
             ProgramRunOutputObserver? outputObserver = null;
             if (programOptions.RunOutput is { } outputOptions && runRoot is not null)
@@ -873,6 +881,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         EvolutionOptions options = (_evolutionOptions
             ?? EvolutionOptions.FromEngineOptions(programOptions.Engine)).SnapshotAndValidate();
+
+        // Engine memoization sits outside the evaluator: a hit would bypass fresh correctness and provider
+        // identity checks entirely. Let canonical deduplication report Duplicate instead of re-awarding a score.
+        // Provider-internal, evidence-validated performance reuse may still run behind a fresh correctness gate.
+        if (_programCorrectnessEvaluator is not null || _requireProgramTestCaseCorrectness)
+            options.EnableEvaluationCache = false;
 
         // Configuring novelty has to reach the engine's archive-side gate, which is the only place a near-duplicate
         // can be refused BEFORE it costs an evaluation. The engine's threshold is off by default, so without this

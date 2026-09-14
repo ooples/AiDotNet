@@ -12,6 +12,12 @@ internal static class RunEvidenceBundle
     private static readonly string[] Required = { "configuration.json", "environment.json", "validation.json", "result.json" };
     private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
 
+    internal static void ValidateMetadata(byte[] data, string[] prohibitedValues)
+    {
+        ValidateNameAndLength("configuration.json", data.Length);
+        ValidateContent("configuration.json", data, prohibitedValues);
+    }
+
     internal static void Create(string destination, IReadOnlyDictionary<string, byte[]> files, IEnumerable<string> prohibitedValues)
     {
         // Freeze before validation and hashing: caller mutation cannot change the bytes subsequently written.

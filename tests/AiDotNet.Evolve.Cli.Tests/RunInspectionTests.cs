@@ -36,6 +36,11 @@ public sealed class RunInspectionTests : IDisposable
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var live = inspection.Read();
+            Assert.NotNull(live.Runtime);
+            Assert.Equal("sha256:" + EvolutionHash.Compute("authored-private-operator"), live.Runtime.OperatorIdentity);
+            Assert.Equal(0, live.Runtime.ChatCalls);
+            Assert.Null(live.Runtime.QueuedExecutions); // This custom evaluator exposes no runner telemetry.
             var response = JObject.Parse(await LocalRunControl.SendAsync(session, "pause"));
             Assert.Equal("stop-requested", (string?)response["State"]);
             Assert.False((bool)response["Resumable"]!);

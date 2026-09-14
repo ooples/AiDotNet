@@ -32,4 +32,7 @@ public sealed class ProgramEvolutionPreflightResult
     public int InputOutputCases { get; internal set; }
     /// <summary>Gets whether configured output parents accepted an exclusive temporary write.</summary>
     public bool OutputLocationsChecked { get; internal set; }
+    /// <summary>Gets whether a dispatched evaluation exceeded its grace period without a receipt.</summary>
+    /// <remarks>Its consumption is unknown and work may still be running; no subsequent fitness/search is dispatched.</remarks>
+    public bool EvaluationAbandoned { get; internal set; }
 }

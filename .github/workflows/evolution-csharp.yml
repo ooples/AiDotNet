@@ -7,6 +7,9 @@ on:
       - 'src/Evolution/Programs/**'
       - 'src/Configuration/ProgramEvolution*.cs'
       - 'src/AiModelBuilder.Evolution.cs'
+      - 'src/AiModelBuilder.EvolutionPreflight.cs'
+      - 'src/ProgramSynthesis/Execution/ProcessProgramExecutionEngine.cs'
+      - 'src/ProgramSynthesis/Interfaces/IProgramExecutionTelemetrySource.cs'
       - 'src/Interfaces/IProgramMeasurementEvidenceStore.cs'
       - 'src/AiDotNet.csproj'
       - 'src/Directory.Build.props'
@@ -57,7 +60,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Evolution
-          ref: 76d8343939f9ec1a58c4994384a249e6ecc93dc0
+          ref: 255feb24369702a32ea9db7a3f8a0b7a847d2762
           # Keep sibling repositories separate: nesting core under the consumer inherits its CPM file.
           path: evolution
           persist-credentials: false

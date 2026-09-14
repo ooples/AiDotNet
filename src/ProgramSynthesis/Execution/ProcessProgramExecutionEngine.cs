@@ -52,7 +52,7 @@ namespace AiDotNet.ProgramSynthesis.Execution;
 /// it started are targeted for termination. If it misbehaves, you get a result object describing what went wrong.
 /// Untrusted code additionally needs filesystem/network isolation configured outside this runner.</para>
 /// </remarks>
-public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDisposable
+public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IProgramExecutionTelemetrySource, IDisposable
 {
     private const int DrainTimeoutMilliseconds = 2000;
     private const int TaskKillTimeoutMilliseconds = 5000;
@@ -63,6 +63,12 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
     private readonly ProgramSandboxOptions _options;
     private readonly ProgramSandboxLimitOptions _limits;
     private readonly SemaphoreSlim _concurrency;
+    private int _queuedExecutions, _activeExecutions;
+
+    /// <inheritdoc/>
+    public int QueuedExecutionCount => Volatile.Read(ref _queuedExecutions);
+    /// <inheritdoc/>
+    public int ActiveExecutionCount => Volatile.Read(ref _activeExecutions);
     private readonly string _pinnedPath;
     private readonly string _workspaceRoot;
     private bool _disposed;
@@ -162,6 +168,7 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
                 "The program was not executed.");
         }
 
+        Interlocked.Increment(ref _queuedExecutions);
         try
         {
             await _concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -170,7 +177,9 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
         {
             return Rejected(language, ProgramExecuteErrorCode.TimeoutOrCanceled, "Execution was canceled while queued.");
         }
+        finally { Interlocked.Decrement(ref _queuedExecutions); }
 
+        Interlocked.Increment(ref _activeExecutions);
         try
         {
             return await RunAsync(
@@ -185,6 +194,7 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
         }
         finally
         {
+            Interlocked.Decrement(ref _activeExecutions);
             _concurrency.Release();
         }
     }

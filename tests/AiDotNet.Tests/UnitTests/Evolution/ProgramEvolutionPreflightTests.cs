@@ -124,6 +124,61 @@ public sealed class ProgramEvolutionPreflightTests : IDisposable
         Assert.Equal(0, calls);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GracePeriodBoundsBlockingProvidersAndRetainsEarlierReceipts(bool blockCorrectness)
+    {
+        using var release = new ManualResetEventSlim();
+        var settled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var variation = new Variation();
+        int fitnessCalls = 0;
+        EvolutionTaskResult Block()
+        {
+            try { release.Wait(TimeSpan.FromSeconds(15)); return Result(1, 11); }
+            finally { settled.TrySetResult(true); }
+        }
+        var builder = Builder(variation, () => { fitnessCalls++; return blockCorrectness ? Result(1, 3) : Block(); });
+        builder.ConfigureProgramCorrectness(new DelegateProgramFitnessEvaluator((_, _, _) =>
+            new ValueTask<EvolutionTaskResult>(blockCorrectness ? Block() : Result(1, 7))));
+        builder.ConfigureEvolution(new EvolutionOptions
+        {
+            OutputDirectory = _root, MaxEvaluationAttempts = 2,
+            EvaluationTimeout = TimeSpan.FromMilliseconds(200), EvaluationGracePeriod = TimeSpan.FromMilliseconds(100)
+        });
+        try
+        {
+            var pending = builder.PreflightProgramEvolutionAsync();
+            Assert.Same(pending, await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5))));
+            var report = await pending;
+            Assert.False(report.IsReady);
+            Assert.True(report.EvaluationAbandoned);
+            Assert.Equal(blockCorrectness ? "correctness_timeout" : "fitness_timeout", report.Code);
+            Assert.Equal(blockCorrectness ? null : 7d, report.CorrectnessCostUnits);
+            Assert.Null(report.AdditionalFitnessCostUnits);
+            Assert.Equal(blockCorrectness ? 0 : 1, fitnessCalls);
+            Assert.Equal(0, variation.Calls);
+        }
+        finally { release.Set(); await settled.Task; }
+    }
+
+    [Fact]
+    public async Task CooperativeTimeoutIsNotAbandonedOrPromoted()
+    {
+        var builder = Builder(new Variation(), () => Result(1, 1));
+        builder.ConfigureProgramCorrectness(new DelegateProgramFitnessEvaluator(async (_, _, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return Result(1, 1);
+        }));
+        builder.ConfigureEvolution(new EvolutionOptions { OutputDirectory = _root, EvaluationTimeout = TimeSpan.FromMilliseconds(100) });
+        var report = await builder.PreflightProgramEvolutionAsync();
+        Assert.False(report.IsReady);
+        Assert.False(report.EvaluationAbandoned);
+        Assert.Equal("correctness_timeout", report.Code);
+        Assert.Null(report.CorrectnessCostUnits);
+    }
+
     private AiModelBuilder<double, Matrix<double>, Vector<double>> Builder(Variation variation, Func<EvolutionTaskResult> evaluate)
     {
         var programs = new ProgramEvolutionOptions

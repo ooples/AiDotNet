@@ -1,9 +1,10 @@
-# Evolution CLI — US24 implementation in progress
+# Evolution CLI — US24
 
-This repository tool is not added to the core NuGet dependency graph. US24 is
-**not complete**: coordinated-provider preflight, complete replay configurations,
-held-out winner validation, provider/model telemetry, backend queues and optional
-dashboard work remain.
+This repository tool stays outside the core NuGet dependency graph. It supports
+configured program adapters, local inspection/control, and immutable invocation
+exports. The optional dashboard is not required to use the CLI. Unsupported
+coordinated-provider preflight is refused explicitly; this is not a cluster UI,
+an independent held-out validation service, or proof of better optimization.
 
 ## Seed preflight and budgets
 
@@ -33,11 +34,24 @@ version-pinned before and after each call. Declared reused correctness never
 passes. The gate identity is now `correctness-gated-program-v4-fresh-pinned`;
 checkpoints created with older gate identities are not compatible.
 
+Fresh-correctness gates also disable the **outer engine evaluation cache**, even
+when requested in engine settings: a cache hit would otherwise bypass the checker
+and its identity guard. Repeated canonical candidates become `Duplicate`, not
+another cached `Completed` result. Ungated runs retain their configured caching.
+Evidence-validated performance reuse inside a provider can still operate behind a
+fresh checker. The changed engine cache policy is checkpoint-incompatible with
+earlier cached gated runs; do not relabel or force-load those checkpoints.
+
 The preflight allowance is **separate from** `MaxEvaluationAttempts`: at most one
 correctness evaluation and one additional fitness evaluation. A built-in evaluator
 may dispatch once per public test, subject to its configured runner limits. Opaque
-custom evaluators must enforce their own resource limits. Preflight is not an API
-spending cap or enforcement of the search engine's evaluation grace-period policy.
+custom evaluators must enforce their own resource limits. `EvaluationTimeout`
+requests cancellation per preflight stage. With `EvaluationGracePeriod`, the tool
+stops waiting after timeout plus grace, including for a synchronously blocking
+provider. Abandoned work may still execute: its consumption is unknown, no further
+stage/search starts, and owned runners are retained until that work settles.
+Without grace, cancellation is cooperative. These controls are not an API spending
+cap. The search's `TimeLimit` does not include the separate preflight allowance.
 The report keeps correctness and additional fitness costs separate; arbitrary
 providers may use different units. Do not add unlike units or interpret them as
 money. An exception without a receipt leaves consumption unknown.
@@ -112,9 +126,16 @@ and same-parent publication keep a partially written bundle from appearing at th
 requested destination. Unix staging uses owner-only permissions; Windows inherits
 the parent ACL. Neither is an authorization system or authenticity signature.
 
-Configuration is an **allowlisted search-settings projection**, not a complete
-replay recipe: it excludes paths, provider parameter bags, prompts, seed text,
-examples and evaluator script. Run IDs are hashed. Environment evidence includes
+Configuration is a **structured replay template** of parsed settings and CLI
+overrides, including evaluator, sandbox, descriptor and search settings. Private
+paths, run IDs, parameter bags, environment and runtime services become explicit
+`RequiresBinding` placeholders; `RequiredBindings` identifies their JSON pointers.
+Without `--include-source`, prompts, seeds, examples and evaluator script also
+become placeholders with content hashes. No credential hashes are published.
+Restore required bindings before replay; never send placeholders to a provider.
+Derived facade defaults remain tied to the recorded facade binary, not separately
+serialized. Metadata bounds and known-secret checks run before expensive search.
+Environment evidence includes
 runtime/platform/architecture and exact CLI/facade/core binary hashes, checking
 loaded module identity against disk first. It does not fingerprint every transitive
 dependency, sandbox, device or external evaluator. `validation.json` retains seed
@@ -124,15 +145,15 @@ provider did not report usage, and no currency total is inferred.
 
 Source is omitted unless `--include-source` is supplied. When included it is taken
 from the in-memory winner, without truncation or rewriting, and must match the
-archive receipt. Every configured chat-provider string is treated conservatively
-as sensitive: finding one in the source or decoded JSON blocks publication. This
+archive receipt. Configured parameter-bag and credential/environment strings are
+treated conservatively as sensitive: finding one in source or decoded JSON blocks publication. This
 can reject benign strings too. It cannot detect arbitrary unknown or encoded
 secrets. **Review source before sharing it**; no credentials are loaded from global
 environment/credential stores for this scan. The export command copies a verified
 bundle, including any source already explicitly captured; it is not a new secret
 scanner. Comparison export retains both independently verifiable bundles and a
 descriptive report with a root manifest. Equal configuration/environment
-projections do not establish equal tasks, fair budgets or statistical significance.
+templates do not establish equal tasks, fair budgets or statistical significance.
 Hashes attest integrity, never scientific validity or competitor superiority.
 
 On `run`, Ctrl+C first requests a graceful stop, a second interrupt cancels and may
@@ -150,7 +171,8 @@ filesystem or network access.
 
 Inspection exists while the command is running. With `--session`, its final
 snapshot is emitted to standard error; `--json` keeps the result summary on standard
-output. Durable historical inspection is not implemented yet.
+output. `inspect-record` provides durable historical inspection when `--record`
+was requested; it cannot reconstruct an unrecorded or abruptly terminated run.
 
 ## What progress means
 
@@ -164,8 +186,17 @@ output. Durable historical inspection is not implemented yet.
   candidates; archive-only cost sums would omit them. An aborted segment marks
   unknown consumption rather than reporting zero abandoned cost.
 - Pending candidates means observed `Proposed` without `Evaluated`, bounded to
-  4,096 identities. This is not the evaluator's backend queue; unavailable backend
-  queue depth, model identity, token usage and API currency are explicitly absent.
+  4,096 identities. This is not the evaluator's backend queue.
+- `Runtime` reports operator/configured-model identities, proposals, chat calls,
+  retries, abandoned proposals, provider errors, and reported token subtotals. Labels
+  are hashed (`sha256:` plus SHA-256 for non-hash labels); correlate them with your
+  private configuration. Configured identity is not per-response routing evidence.
+  Unreported tokens are null after chat calls, never an assertion of free usage.
+- Built-in runners expose waiting and active executions separately, including
+  cancellation while queued. Custom runners can implement
+  `IProgramExecutionTelemetrySource`; otherwise queue values are null. These are
+  per-instance counts, not OS/cluster queues. Custom variation usage getters must
+  be thread-safe and nonblocking. Final inspection freezes a detached sample.
 - A checkpoint's existence alone never establishes resumability. The observer
   requires a checkpoint event after the latest terminal evaluation and verifies its
   saved sequence, compatibility hash and integrity before recording its file hash.
@@ -182,24 +213,26 @@ resolving environment variables a second time.
 Checkpoint-time program output now sees the archive during execution, uses the
 effective output directory, and reports `program_output_incomplete` without private
 filesystem diagnostics. `run --output` also synchronizes the program output root
-before configuration validation. Program output remains opt-in. This does not yet
-provide a credential-reviewed export bundle.
+before configuration validation. Program output remains opt-in; use `--record`
+for integrity-checked, bounded exports rather than mutable convenience outputs.
 
-## Current verification
+## Verification
 
-The full .NET 10 facade integration suite passed **989 tests**, with no skips, using
+The previously committed slice passed **1,009 facade tests on .NET 10 and .NET 8**,
+with default analyzers and no skips, using
 the built AiDotNet assembly and explicit local Evolution US10 source dependency
 `255feb24369702a32ea9db7a3f8a0b7a847d2762`. New tests cover batch drain, 2→4 evaluation
 checkpoint resume, trace delivery despite observer failure, fatal exception
 preservation, parsed configuration snapshots, checkpoint winner files and sanitized
-output failure reporting. The actual CLI/worker project suite passed **71 tests**
+output failure reporting. The actual CLI/worker project suite passed **89 tests**
 with no skips. Tests are maintained in `tests/AiDotNet.Evolve.Cli.Tests`; the lifecycle test sends a real
 local pipe pause during an evaluation and resumes the resulting engine checkpoint.
 
-The original 978-test control slice used a default analyzer-enabled library build.
-The later preflight iteration used `RunAnalyzersDuringBuild=false`; final default-
-analyzer and cross-target validation remain required. Initial compiler failures
-and the earlier incorrect-seed behavior were retained, not discarded.
+The current telemetry/template/timeout/cache-policy batch requires its final gate;
+the preceding counts are not evidence for untested changes. The pinned-source
+`Compiler-guided evolution` workflow also runs the actual CLI/worker and facade
+suites and retains TRX/coverage artifacts. Ordinary package-path builds remain a
+separate dependency/release gate. Initial failures are retained, not discarded.
 
 An actual CLI/Python smoke used `print(6)` against expected `7`. The old CLI exited
 0 and saved that wrong program with quality 0. With preflight it exits 3, reports

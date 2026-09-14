@@ -127,6 +127,7 @@ internal static class EvolveCommandLine
             (options.Resume || options.CheckpointInterval > 0 || options.CheckpointDirectory is not null || options.Trace.Enabled))
             options.OutputDirectory = Path.Combine(Path.GetTempPath(), "aidotnet-evolve", EvolutionOutputLayout.CreateStem(options.RunId));
         if (options.OutputDirectory is not null) config.ProgramEvolution.Engine.OutputDirectory = options.OutputDirectory;
+        if (config.ProgramEvolution.TestCases.Count > 0) options.EnableEvaluationCache = false;
         var builder = AiModelBuilder<double, Matrix<double>, Vector<double>>.FromConfiguration(config);
         if (config.ProgramEvolution.TestCases.Count > 0) builder.WithProgramTestCaseCorrectness();
         return (config, builder);
