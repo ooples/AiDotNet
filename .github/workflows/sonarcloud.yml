@@ -186,7 +186,7 @@ jobs:
           # pull-request selection uses. Any failure here leaves both inputs unset, and reuse stays
           # exact-tree only - the pre-existing, fail-closed behaviour.
           & ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -Repository '${{ github.repository }}' `
-              -OutDirectory delta-map -ResultFile delta-map-resolution.json -MapBranch master
+              -OutDirectory delta-map -ResultFile delta-map-resolution.json -MapBranch fix/ci-map-reuse-20260914
           if ($LASTEXITCODE -ne 0) { throw "certified map resolver exited $LASTEXITCODE" }
           $resolution = Get-Content delta-map-resolution.json -Raw | ConvertFrom-Json
           if (-not $resolution.found) { throw 'no certified map is available' }
@@ -616,7 +616,8 @@ jobs:
           # Maps are only ever built on master. A ci-proof/** branch is master plus the CI change under
           # test, so a canary into it must select with master's map; looking for maps built on the
           # proof branch found none and sent every canary to the full matrix, proving nothing.
-          MAP_BRANCH: ${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}
+          # ISOLATED CANARY ONLY: use the real certified fix-branch audit. Never merge this override into master.
+          MAP_BRANCH: fix/ci-map-reuse-20260914
         run: |
           # Normal PRs may consume only an audited/certified map. The forced full-coverage run is
           # different: it consumes the exact candidate named by its dispatch input so that the next

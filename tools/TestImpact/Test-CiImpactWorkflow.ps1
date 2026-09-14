@@ -423,7 +423,7 @@ Assert-Contract ($validationReuseResolverText.Contains("-DecisionScope Validatio
 Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains('PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}')) `
     'a partial post-merge re-run does not reduce the shard matrix'
 $mapStep = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
-Assert-Contract ($mapStep.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
+Assert-Contract ($mapStep.Contains('MAP_BRANCH: fix/ci-map-reuse-20260914')) `
     'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
