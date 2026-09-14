@@ -290,6 +290,25 @@ public class UnreadOptionsRatchetTests
     /// bounds lives in <c>CalculateSTDPWeightChange</c>, which is never called from anywhere).
     /// </para>
     /// <para>
+    /// <b>StdpWindow was attempted and backed out, and what stopped it is worth recording.</b> A
+    /// <c>PretrainStdp</c> entry point is straightforward to write -- extract the simulation loop
+    /// out of <c>Train</c>, present unlabelled stimuli, pair each layer's spike train with its
+    /// predecessor's and apply the existing rule. What is NOT straightforward is where to write
+    /// the result. The supervised path addresses a layer's weights as
+    /// <c>post * preSize + pre</c> into the flat vector from <c>GetParameters</c>, but a
+    /// <c>SpikingLayer</c> stack of (6,5), (5,5) and a 3-wide readout reports 204 parameters
+    /// where synaptic weights and biases alone account for roughly 80, and running a simulation
+    /// moves that vector by 1.5 with no weight update applied at all. So the vector carries
+    /// neuron-model and membrane state alongside the synapses, and a plain flat index would write
+    /// STDP deltas into the neuron model -- silently, and in a direction nothing would report.
+    /// </para>
+    /// <para>
+    /// The unblock is therefore not the rule but the addressing: <c>SpikingLayer</c> needs to
+    /// expose which span of its parameter vector is synaptic weight (or accept a weight delta
+    /// directly), and the supervised path's own indexing should be checked against that answer at
+    /// the same time, since it makes the identical assumption.
+    /// </para>
+    /// <para>
     /// Wired: <c>AudioVisualEventLocalization.LearningRate</c> and
     /// <c>LiquidStateMachine.ReadoutLearningRate</c> (both optimizers were built BARE);
     /// <c>Finch.MinLearningRate</c> (<c>GradientBasedOptimizerOptions</c> already declares a
