@@ -1,4 +1,6 @@
 using System.Text.Json;
+using JsonSerializer = System.Text.Json.JsonSerializer;
+using JsonException = System.Text.Json.JsonException;
 
 namespace AiDotNet.Evolution.Deployment;
 
