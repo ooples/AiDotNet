@@ -572,6 +572,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static string FindClassifierMetaLearnerSizeInitializer(INamedTypeSymbol modelClass)
     {
         var assignments = new System.Collections.Generic.List<string>();
+
+        // The seed has to be bound on THIS path too. A classifier meta-learner emits
+        // ClassifierOptionsSizes instead of MetaLearnerOptionsSizes, and OptionsIntProperties only
+        // yields System_Int32 members, so the int? RandomSeed never appears in that enumeration.
+        // Binding it only in FindMetaLearnerTaskSizeInitializer is the same trap that made the NTM
+        // capacity scale-down a silent no-op.
+        if (DeclaresMetaLearnerSeed(modelClass))
+        {
+            assignments.Add($"{MetaLearnerSeedProperty} = {MetaLearnerSeedValue}");
+        }
+
         foreach (var name in OptionsIntProperties(modelClass))
         {
             if (System.Array.IndexOf(MetaLearnerClassCountProperties, name) >= 0)
@@ -4182,6 +4193,57 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// LatentDimension is deliberately NOT bound here: LEO declares that name too, and its generated fixture
     /// passes at the current size, so shrinking the widths is enough without perturbing another learner.
     /// </remarks>
+    /// <summary>
+    /// The nullable seed every meta-learner options type exposes, and the value the generated fixture
+    /// pins it to.
+    /// </summary>
+    /// <remarks>
+    /// <c>MetaLearnerBase</c> seeds <c>RandomGenerator</c> from <c>options.RandomSeed</c> only when it has
+    /// a value, and otherwise takes <c>RandomHelper.CreateSecureRandom()</c> - in the constructor and again
+    /// in <c>Reset</c>. Unset, that makes every generated meta-learner test non-reproducible.
+    /// </remarks>
+    private const string MetaLearnerSeedProperty = "RandomSeed";
+
+    private const int MetaLearnerSeedValue = 1337;
+
+    /// <summary>The loss property every meta-learner options type exposes.</summary>
+    private const string MetaLearnerLossProperty = "LossFunction";
+
+    /// <summary>
+    /// The loss the scalar family fixture binds: squared error, matching its one-value-per-row inner model.
+    /// </summary>
+    private const string MetaLearnerScalarLossType = "AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>";
+
+    /// <summary>True when the options type the single-options constructor takes exposes a settable nullable seed.</summary>
+    private static bool DeclaresMetaLearnerSeed(INamedTypeSymbol modelClass)
+    {
+        foreach (var ctor in modelClass.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public || ctor.Parameters.Length != 1)
+                continue;
+            if (ctor.Parameters[0].Type is not INamedTypeSymbol options) continue;
+
+            for (var walk = options; walk is not null; walk = walk.BaseType)
+            {
+                foreach (var property in walk.GetMembers(MetaLearnerSeedProperty).OfType<IPropertySymbol>())
+                {
+                    if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+                    if (property.Type is INamedTypeSymbol
+                        {
+                            OriginalDefinition.SpecialType: SpecialType.System_Nullable_T
+                        })
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
     private static readonly (string Name, int Value)[] MetaLearnerMemoryCapacityProperties =
     {
         ("MemorySize", 8),
@@ -4220,6 +4282,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     if (!seen.Add(property.Name)) continue;
                     if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+
+                    // SEED FIRST, AND BEFORE THE Int32 FILTER. RandomSeed is int? on all 102 meta-learner
+                    // options types, so SpecialType is Nullable_T rather than System_Int32 and the filter
+                    // below skips it. MetaLearnerBase falls back to RandomHelper.CreateSecureRandom() when
+                    // options.RandomSeed is null, so every generated meta-learner fixture has been running
+                    // on a NON-REPRODUCIBLE generator: MetaTrain_MovesTheMetaModel failed roughly one run
+                    // in three with "left every meta-model parameter where it was", and the victim moved
+                    // between MetaDiff and ICMFusion from run to run. That survived disabling xUnit
+                    // parallelism entirely, which is what ruled out contention and ordering.
+                    //
+                    // This makes the fixture reproducible. It does NOT make the algorithms robust: the
+                    // assertion only asks that parameters moved at all, so a zero meta-delta on some draws
+                    // is a real fragility in those outer updates that a fixed seed now hides rather than
+                    // fixes.
+                    if (string.Equals(property.Name, MetaLearnerSeedProperty, System.StringComparison.Ordinal)
+                        && property.Type is INamedTypeSymbol
+                        {
+                            OriginalDefinition.SpecialType: SpecialType.System_Nullable_T
+                        })
+                    {
+                        assignments.Add($"{property.Name} = {MetaLearnerSeedValue}");
+                        continue;
+                    }
+
+                    // THE LOSS MUST MATCH THE INNER MODEL. The scalar family base hands every learner a
+                    // LinearVectorModel that emits one unbounded value per row, against class-index targets.
+                    // Most learners default to CategoricalCrossEntropy, which reads its input as a
+                    // probability distribution and clamps it to [1e-7, 1] before the log. Once a meta-step
+                    // carries a prediction out of that band the clamp's gradient is exactly zero, and
+                    // ICMFusion's outer update was a no-op on every draw that did so: the query gradient
+                    // came back [0,0,0,0] for both tasks. The meta-learning integration tests run these
+                    // same learners under a squared-error inner model, so MSE is the contract, not a
+                    // relaxation.
+                    if (string.Equals(property.Name, MetaLearnerLossProperty, System.StringComparison.Ordinal)
+                        && property.Type is INamedTypeSymbol { Name: "ILossFunction" })
+                    {
+                        assignments.Add($"{property.Name} = new {MetaLearnerScalarLossType}()");
+                        continue;
+                    }
+
                     if (property.Type.SpecialType != SpecialType.System_Int32) continue;
                     if (System.Array.IndexOf(MetaLearnerClassCountProperties, property.Name) >= 0)
                         assignments.Add($"{property.Name} = NumWays");
