@@ -17,5 +17,6 @@
     <ProjectReference Include="../../src/AiDotNet.csproj" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Evolution/ProgramEvolutionPreflightTests.cs" Link="ProgramEvolutionPreflightTests.cs" />
     <Compile Include="../AiDotNet.Evolve.Cli.Tests/CorrectnessCachePolicyTests.cs" Link="CorrectnessCachePolicyTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Evolution/EvolutionDeployment*.cs" Link="Deployment/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
