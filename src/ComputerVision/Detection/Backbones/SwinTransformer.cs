@@ -181,16 +181,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
                 nameof(height));
         }
 
-        var featureMap = new Tensor<T>(new[] { batch, dim, height, width });
-        for (int n = 0; n < batch; n++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    int seqIdx = h * width + w;
-                    for (int c = 0; c < dim; c++)
-                        featureMap[n, c, h, w] = x[n, seqIdx, c];
-                }
-        return featureMap;
+        return CvTensorOps<T>.UnflattenSpatial(x, height, width);
     }
 
     // Most-square factor pair (H >= W) of seqLen, or (0, 0) if seqLen <= 0.
@@ -296,6 +287,22 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
+
+    /// <summary>
+    /// Registers the Swin weights that are not layers: every block's two layer norms and its
+    /// relative-position bias table.
+    /// </summary>
+    /// <remarks>
+    /// The generated registration follows the <c>EnumerateLayers()</c> convention, which yields only
+    /// <c>LayerBase</c> instances, so these tensors were outside the parameter registry - never saved,
+    /// cloned, or trained. They are exposed as live tensors so a tape-based step updates the real ones.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(new AiDotNet.Models.Parameters.TensorListParameterSource<T>(
+            () => _stages.SelectMany(stage => stage.ExtraParameterTensors()).ToList()));
+    }
 }
 
 /// <summary>
@@ -335,26 +342,7 @@ internal class PatchEmbeddingBlock<T>
         _proj = new ConvolutionalLayer<T>(outputDepth: embedDim, kernelSize: patchSize, stride: patchSize, padding: 0);
     }
 
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var x = _proj.Forward(input);
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-        int numPatches = height * width;
-
-        var sequence = new Tensor<T>(new[] { batch, numPatches, channels });
-        for (int n = 0; n < batch; n++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    int seqIdx = h * width + w;
-                    for (int c = 0; c < channels; c++)
-                        sequence[n, seqIdx, c] = x[n, c, h, w];
-                }
-        return sequence;
-    }
+    public Tensor<T> Forward(Tensor<T> input) => CvTensorOps<T>.FlattenSpatial(_proj.Forward(input));
 
     public long GetParameterCount() => _proj.ParameterCount;
 
@@ -469,6 +457,14 @@ internal class SwinStage<T>
             throw new InvalidOperationException("SwinStage patch merge configuration mismatch.");
         foreach (var block in _blocks) block.ReadParameters(reader);
         if (_patchMerge is not null) _patchMerge.ReadParameters(reader);
+    }
+
+    /// <summary>Every block's <see cref="SwinTransformerBlock{T}.ExtraParameterTensors"/>, in order.</summary>
+    internal IEnumerable<Tensor<T>> ExtraParameterTensors()
+    {
+        foreach (var block in _blocks)
+            foreach (var tensor in block.ExtraParameterTensors())
+                yield return tensor;
     }
 }
 
@@ -625,249 +621,40 @@ internal class SwinTransformerBlock<T>
     }
 
     private Tensor<T> ReshapeToSpatial(Tensor<T> x, int batch, int h, int w, int c)
-    {
-        var spatial = new Tensor<T>(new[] { batch, h, w, c });
-        for (int b = 0; b < batch; b++)
-            for (int i = 0; i < h; i++)
-                for (int j = 0; j < w; j++)
-                {
-                    int seqIdx = i * w + j;
-                    for (int d = 0; d < c; d++) spatial[b, i, j, d] = x[b, seqIdx, d];
-                }
-        return spatial;
-    }
+        => AiDotNetEngine.Current.Reshape(x, new[] { batch, h, w, c });
 
     private Tensor<T> ReshapeToSequence(Tensor<T> spatial)
-    {
-        int batch = spatial.Shape[0];
-        int h = spatial.Shape[1];
-        int w = spatial.Shape[2];
-        int c = spatial.Shape[3];
-        var seq = new Tensor<T>(new[] { batch, h * w, c });
-        for (int b = 0; b < batch; b++)
-            for (int i = 0; i < h; i++)
-                for (int j = 0; j < w; j++)
-                {
-                    int seqIdx = i * w + j;
-                    for (int d = 0; d < c; d++) seq[b, seqIdx, d] = spatial[b, i, j, d];
-                }
-        return seq;
-    }
+        => AiDotNetEngine.Current.Reshape(
+            spatial, new[] { spatial.Shape[0], spatial.Shape[1] * spatial.Shape[2], spatial.Shape[3] });
 
-    private Tensor<T> CyclicShift(Tensor<T> x, int shift)
-    {
-        int batch = x.Shape[0];
-        int h = x.Shape[1];
-        int w = x.Shape[2];
-        int c = x.Shape[3];
-        var shifted = new Tensor<T>(x._shape);
-        for (int b = 0; b < batch; b++)
-            for (int i = 0; i < h; i++)
-                for (int j = 0; j < w; j++)
-                {
-                    int srcI = (i - shift % h + h) % h;
-                    int srcJ = (j - shift % w + w) % w;
-                    for (int d = 0; d < c; d++) shifted[b, i, j, d] = x[b, srcI, srcJ, d];
-                }
-        return shifted;
-    }
+    private Tensor<T> CyclicShift(Tensor<T> x, int shift) => CvTensorOps<T>.CyclicShift(x, shift);
 
-    private (Tensor<T> windows, int numWindowsH, int numWindowsW) WindowPartition(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int h = x.Shape[1];
-        int w = x.Shape[2];
-        int c = x.Shape[3];
-
-        int padH = (_windowSize - h % _windowSize) % _windowSize;
-        int padW = (_windowSize - w % _windowSize) % _windowSize;
-        int paddedH = h + padH;
-        int paddedW = w + padW;
-
-        Tensor<T> padded;
-        if (padH > 0 || padW > 0)
-        {
-            padded = new Tensor<T>(new[] { batch, paddedH, paddedW, c });
-            for (int b = 0; b < batch; b++)
-                for (int i = 0; i < paddedH; i++)
-                    for (int j = 0; j < paddedW; j++)
-                        for (int d = 0; d < c; d++)
-                            padded[b, i, j, d] = (i < h && j < w) ? x[b, i, j, d] : _numOps.FromDouble(0.0);
-        }
-        else
-        {
-            padded = x;
-            paddedH = h;
-            paddedW = w;
-        }
-
-        int numWindowsH = paddedH / _windowSize;
-        int numWindowsW = paddedW / _windowSize;
-        int numWindows = numWindowsH * numWindowsW;
-        int windowArea = _windowSize * _windowSize;
-
-        var windows = new Tensor<T>(new[] { batch * numWindows, windowArea, c });
-        for (int b = 0; b < batch; b++)
-            for (int wh = 0; wh < numWindowsH; wh++)
-                for (int ww = 0; ww < numWindowsW; ww++)
-                {
-                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
-                    int startH = wh * _windowSize;
-                    int startW = ww * _windowSize;
-                    for (int i = 0; i < _windowSize; i++)
-                        for (int j = 0; j < _windowSize; j++)
-                        {
-                            int tokenIdx = i * _windowSize + j;
-                            for (int d = 0; d < c; d++)
-                                windows[windowIdx, tokenIdx, d] = padded[b, startH + i, startW + j, d];
-                        }
-                }
-        return (windows, numWindowsH, numWindowsW);
-    }
+    private (Tensor<T> Windows, int NumWindowsH, int NumWindowsW) WindowPartition(Tensor<T> x)
+        => CvTensorOps<T>.WindowPartition(x, _windowSize);
 
     private Tensor<T> WindowReverse(Tensor<T> windows, int numWindowsH, int numWindowsW, int batch, int h, int w)
-    {
-        int numWindows = numWindowsH * numWindowsW;
-        int c = windows.Shape[2];
-
-        var spatial = new Tensor<T>(new[] { batch, h, w, c });
-        for (int b = 0; b < batch; b++)
-            for (int wh = 0; wh < numWindowsH; wh++)
-                for (int ww = 0; ww < numWindowsW; ww++)
-                {
-                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
-                    int startH = wh * _windowSize;
-                    int startW = ww * _windowSize;
-                    for (int i = 0; i < _windowSize; i++)
-                        for (int j = 0; j < _windowSize; j++)
-                        {
-                            int outH = startH + i;
-                            int outW = startW + j;
-                            if (outH < h && outW < w)
-                            {
-                                int tokenIdx = i * _windowSize + j;
-                                for (int d = 0; d < c; d++)
-                                    spatial[b, outH, outW, d] = windows[windowIdx, tokenIdx, d];
-                            }
-                        }
-                }
-        return spatial;
-    }
+        => CvTensorOps<T>.WindowReverse(windows, numWindowsH, numWindowsW, batch, h, w, _windowSize);
 
     private Tensor<T> WindowedSelfAttention(Tensor<T> windows)
     {
-        int numWindows = windows.Shape[0];
-        int windowArea = windows.Shape[1];
+        var engine = AiDotNetEngine.Current;
         int c = windows.Shape[2];
 
-        var qkv = new Tensor<T>(new[] { numWindows, windowArea, 3 * c });
-        for (int wIdx = 0; wIdx < numWindows; wIdx++)
-        {
-            for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>(new[] { 1, c });
-                for (int d = 0; d < c; d++) tokenIn[0, d] = windows[wIdx, t, d];
-                var tokenQkv = _qkvProj.Forward(tokenIn);
-                for (int d = 0; d < 3 * c; d++) qkv[wIdx, t, d] = tokenQkv[0, d];
-            }
-        }
+        // One fused projection, then split into Q, K and V along the feature axis.
+        var qkv = CvTensorOps<T>.Tokenwise(windows, _qkvProj.Forward);
+        var q = engine.TensorNarrow(qkv, 2, 0, c);
+        var k = engine.TensorNarrow(qkv, 2, c, c);
+        var v = engine.TensorNarrow(qkv, 2, 2 * c, c);
 
-        var output = new Tensor<T>(new[] { numWindows, windowArea, c });
-        for (int wIdx = 0; wIdx < numWindows; wIdx++)
-        {
-            var attnScores = new double[_numHeads, windowArea, windowArea];
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headOffset = head * _headDim;
-                for (int i = 0; i < windowArea; i++)
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            double q = _numOps.ToDouble(qkv[wIdx, i, headOffset + d]);
-                            double k = _numOps.ToDouble(qkv[wIdx, j, c + headOffset + d]);
-                            score += q * k;
-                        }
-                        score *= _scale;
-                        int biasIdx = _relativePositionIndex[i, j];
-                        score += _numOps.ToDouble(_relativePositionBiasTable[biasIdx, head]);
-                        attnScores[head, i, j] = score;
-                    }
-            }
-
-            var attnProbs = new double[_numHeads, windowArea, windowArea];
-            for (int head = 0; head < _numHeads; head++)
-            {
-                for (int i = 0; i < windowArea; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < windowArea; j++)
-                        if (attnScores[head, i, j] > maxScore) maxScore = attnScores[head, i, j];
-
-                    double sumExp = 0;
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        attnProbs[head, i, j] = Math.Exp(attnScores[head, i, j] - maxScore);
-                        sumExp += attnProbs[head, i, j];
-                    }
-                    for (int j = 0; j < windowArea; j++) attnProbs[head, i, j] /= sumExp;
-                }
-            }
-
-            var attnOut = new double[windowArea, c];
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headOffset = head * _headDim;
-                int vOffset = 2 * c + headOffset;
-                for (int i = 0; i < windowArea; i++)
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double val = 0;
-                        for (int j = 0; j < windowArea; j++)
-                            val += attnProbs[head, i, j] * _numOps.ToDouble(qkv[wIdx, j, vOffset + d]);
-                        attnOut[i, headOffset + d] = val;
-                    }
-            }
-
-            for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>(new[] { 1, c });
-                for (int d = 0; d < c; d++) tokenIn[0, d] = _numOps.FromDouble(attnOut[t, d]);
-                var tokenOut = _outProj.Forward(tokenIn);
-                for (int d = 0; d < c; d++) output[wIdx, t, d] = tokenOut[0, d];
-            }
-        }
-        return output;
+        // The learnable relative-position bias table is gathered by the fixed index map, so it now
+        // receives a gradient; the scalar loop read it out as doubles and it never trained.
+        var bias = CvTensorOps<T>.RelativePositionBias(_relativePositionBiasTable, _relativePositionIndex);
+        var attended = CvTensorOps<T>.MultiHeadAttention(q, k, v, _numHeads, _scale, scoreBias: bias);
+        return CvTensorOps<T>.Tokenwise(attended, _outProj.Forward);
     }
 
     private Tensor<T> ApplyMLP(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenIn = new Tensor<T>(new[] { 1, _dim });
-                for (int d = 0; d < _dim; d++) tokenIn[0, d] = x[b, s, d];
-
-                var hidden = _mlpFc1.Forward(tokenIn);
-                for (int d = 0; d < hidden.Shape[1]; d++)
-                {
-                    double val = _numOps.ToDouble(hidden[0, d]);
-                    double gelu = 0.5 * val * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (val + 0.044715 * val * val * val)));
-                    hidden[0, d] = _numOps.FromDouble(gelu);
-                }
-
-                var tokenOut = _mlpFc2.Forward(hidden);
-                for (int d = 0; d < _dim; d++) result[b, s, d] = tokenOut[0, d];
-            }
-        }
-        return result;
-    }
+        => CvTensorOps<T>.Tokenwise(x, rows => _mlpFc2.Forward(AiDotNetEngine.Current.GELU(_mlpFc1.Forward(rows))));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
         AiDotNetEngine.Current.TensorAdd(a, b);
@@ -916,6 +703,17 @@ internal class SwinTransformerBlock<T>
         BackboneSerialization.ReadLayerParameters(reader, _mlpFc1);
         BackboneSerialization.ReadLayerParameters(reader, _mlpFc2);
     }
+
+    /// <summary>
+    /// Weights this block owns outside its <see cref="EnumerateLayers"/> layers: both norms' scale
+    /// and shift, and the relative-position bias table. Live tensors, in a fixed order.
+    /// </summary>
+    internal IEnumerable<Tensor<T>> ExtraParameterTensors()
+    {
+        foreach (var tensor in _norm1.ParameterTensors()) yield return tensor;
+        foreach (var tensor in _norm2.ParameterTensors()) yield return tensor;
+        yield return _relativePositionBiasTable;
+    }
 }
 
 /// <summary>
@@ -943,39 +741,7 @@ internal class SwinLayerNorm<T>
         }
     }
 
-    public Tensor<T> Forward(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int dim = x.Shape[2];
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-            for (int s = 0; s < seqLen; s++)
-            {
-                double mean = 0;
-                for (int d = 0; d < dim; d++) mean += _numOps.ToDouble(x[b, s, d]);
-                mean /= dim;
-
-                double variance = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= dim;
-
-                double std = Math.Sqrt(variance + _eps);
-                for (int d = 0; d < dim; d++)
-                {
-                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    double gamma = _numOps.ToDouble(_gamma[d]);
-                    double beta = _numOps.ToDouble(_beta[d]);
-                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
-                }
-            }
-        return result;
-    }
+    public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);
 
     public long GetParameterCount() => 2 * _dim;
 
@@ -993,6 +759,13 @@ internal class SwinLayerNorm<T>
             throw new InvalidOperationException($"SwinLayerNorm dim mismatch: expected {_dim}, got {dim}.");
         for (int i = 0; i < _dim; i++) _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
         for (int i = 0; i < _dim; i++) _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+    }
+
+    /// <summary>The learnable scale and shift, as live tensors.</summary>
+    internal IEnumerable<Tensor<T>> ParameterTensors()
+    {
+        yield return _gamma;
+        yield return _beta;
     }
 }
 
@@ -1049,50 +822,10 @@ internal class PatchMergingBlock<T>
                     $"Cannot infer spatial dimensions from sequence length {seqLen} for patch merging.");
         }
 
-        // Pad odd H/W up to the next even size (zeros), so the 2×2 merge always has full quads.
-        int hPad = h + (h & 1);
-        int wPad = w + (w & 1);
-        Tensor<T> src = input;
-        if (hPad != h || wPad != w)
-        {
-            var padded = new Tensor<T>(new[] { batch, hPad * wPad, dim });
-            for (int n = 0; n < batch; n++)
-                for (int i = 0; i < h; i++)
-                    for (int j = 0; j < w; j++)
-                    {
-                        int srcIdx = i * w + j;
-                        int dstIdx = i * wPad + j;
-                        for (int d = 0; d < dim; d++)
-                            padded[n, dstIdx, d] = input[n, srcIdx, d];
-                    }
-            src = padded;
-        }
-
-        int newH = hPad / 2;
-        int newW = wPad / 2;
-        int newSeqLen = newH * newW;
-        var merged = new Tensor<T>(new[] { batch, newSeqLen, dim * 4 });
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int i = 0; i < newH; i++)
-                for (int j = 0; j < newW; j++)
-                {
-                    int newIdx = i * newW + j;
-                    int idx0 = (2 * i) * wPad + (2 * j);
-                    int idx1 = (2 * i) * wPad + (2 * j + 1);
-                    int idx2 = (2 * i + 1) * wPad + (2 * j);
-                    int idx3 = (2 * i + 1) * wPad + (2 * j + 1);
-                    for (int d = 0; d < dim; d++)
-                    {
-                        merged[n, newIdx, d] = src[n, idx0, d];
-                        merged[n, newIdx, dim + d] = src[n, idx1, d];
-                        merged[n, newIdx, 2 * dim + d] = src[n, idx2, d];
-                        merged[n, newIdx, 3 * dim + d] = src[n, idx3, d];
-                    }
-                }
-        }
-
+        // Zero-pad odd H/W to even and gather each 2x2 quad into one token (engine ops, so the tape
+        // survives the merge and the stages before it keep receiving gradient).
+        var spatial = AiDotNetEngine.Current.Reshape(input, new[] { batch, h, w, dim });
+        var merged = CvTensorOps<T>.PatchMerge2x2(spatial);
         return _reduction.Forward(merged);
     }
 

@@ -38,7 +38,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://arxiv.org/abs/2405.14458",
     Year = 2024,
     Authors = "Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
-public class YOLOv10<T> : ObjectDetectorBase<T>
+public partial class YOLOv10<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;
     private readonly YOLOv8Head<T>? _auxHead; // Auxiliary head for training
@@ -313,4 +313,12 @@ public class YOLOv10<T> : ObjectDetectorBase<T>
             _auxHead.WriteParameters(writer);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// In NMS-free mode (the default) the one-to-one head is trained to emit one box per object and
+    /// detections are selected top-K per class with no suppression at all - an IoU threshold of 1,
+    /// whatever the caller requests. With <c>useNmsFree: false</c> the requested threshold applies.
+    /// </remarks>
+    public override double EffectiveNmsThreshold(double requested) => _useNmsFree ? 1.0 : requested;
 }
