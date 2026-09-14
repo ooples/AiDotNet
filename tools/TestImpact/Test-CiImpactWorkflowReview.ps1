@@ -19,6 +19,16 @@ if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
 }
 $cases = @(
     [pscustomobject]@{
+        Name = 'deferred-validation-green'
+        Reason = 'deferred validation must explicitly fail'
+        Content = $workflow.Replace("if: steps.resolve.outputs.deferred == 'true'", "if: steps.resolve.outputs.deferred == 'false'")
+    },
+    [pscustomobject]@{
+        Name = 'pending-validation-polls'
+        Reason = 'pending PR validation occupies a runner'
+        Content = $workflow.Replace('-WaitMinutes 0', '-WaitMinutes 40')
+    },
+    [pscustomobject]@{
         Name = 'map-head-removed'
         Reason = 'map-backed selector.*pull.request'
         Content = [regex]::Replace($workflow, $mapHeadLine, '')
@@ -87,7 +97,7 @@ $cases += @(
     [pscustomobject]@{
         Name = 'resolver-job-budget-shrunk'
         Reason = 'delta.map.*budget'
-        Content = [regex]::Replace($workflow, '(?ms)(^  validation-source:\r?\n.*?^    timeout-minutes:) [0-9]+', '${1} 45')
+        Content = [regex]::Replace($workflow, '(?ms)(^  validation-source:\r?\n.*?^    timeout-minutes:) [0-9]+', '${1} 5')
     }
 )
 

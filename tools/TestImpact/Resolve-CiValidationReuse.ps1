@@ -15,14 +15,11 @@
     matrix. With a certified map, Δ is selected like any other change:
 
       * Δ needs the full matrix (a CI-control, build or unmappable edit)  -> run everything.
-      * Δ touches no shard the pull request ran                          -> reuse its results.
-      * Δ touches some of the pull request's shards                      -> re-run only those,
+      * Δ has runtime effects                                           -> re-run every affected shard,
         and import the pull request's artifacts for the rest, so the landed commit's ledger,
         analysis and coverage still describe every shard the pull request validated.
 
-    A shard Δ affects but the pull request did not run was validated by the commits that make up Δ,
-    each on its own run, and this pull request's change does not reach it; that is the same premise
-    pull-request selection itself rests on, and the nightly miss audit measures it.
+    Shards affected only by Δ still run: intervening master commits might not have passed.
 
     Delta reuse is at most Validation-scoped: CodeQL and Sonar analysed a different tree, so they
     always run again on the landed one.
@@ -229,14 +226,12 @@ function Get-DeltaReuseDecision {
             Why = 'the selector returned no shards for a runtime change' }
     }
 
-    $rerun = @($pullRequest | Where-Object { $delta.Contains($_) })
+    # We have evidence for the PR, not for every intervening master commit. Rerun ALL
+    # delta-affected shards, including ones the PR never ran; do not assume master passed.
+    $rerun = @($delta | Sort-Object -CaseSensitive)
     $import = @($pullRequest | Where-Object { -not $delta.Contains($_) })
-    if ($rerun.Count -eq 0) {
-        return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::Reuse; Rerun = @(); Import = $import
-            Why = 'the change since the validated tree reaches none of the shards the pull request ran' }
-    }
     return [pscustomobject]@{ Mode = [CiDeltaReuseMode]::Partial; Rerun = $rerun; Import = $import
-        Why = "the change since the validated tree reaches $($rerun.Count) of the $($pullRequest.Count) shard(s) the pull request ran" }
+        Why = "the change since the validated tree requires $($rerun.Count) shard(s); importing $($import.Count) unaffected PR shard(s)" }
 }
 
 function Resolve-ValidatedTree {
@@ -364,7 +359,8 @@ function Write-ReuseDecision {
         [string[]] $PartialShards = @(),
         [long] $ImportRunId = 0,
         [string] $ImportSha = '',
-        [string[]] $ImportShards = @()
+        [string[]] $ImportShards = @(),
+        [switch] $Deferred
     )
 
     # Empty imports must not authorize the workflow's coverage-artifact download. Keep this
@@ -376,6 +372,9 @@ function Write-ReuseDecision {
 
     $reuse = $DecisionScope -ne [CiValidationReuseScope]::None
     $reuseQuality = $DecisionScope -eq [CiValidationReuseScope]::Complete
+    if ($Deferred -and ($reuse -or $ImportRunId -gt 0)) {
+        throw 'Deferred validation cannot reuse or import evidence.'
+    }
     $lines = @(
         "run_id=$(if ($RunId -gt 0) { $RunId } else { '' })",
         "pr_number=$(if ($PrNumber -gt 0) { $PrNumber } else { '' })",
@@ -384,8 +383,9 @@ function Write-ReuseDecision {
         "reuse=$($reuse.ToString().ToLowerInvariant())",
         "reuse_quality=$($reuseQuality.ToString().ToLowerInvariant())",
         "reused_requires_validation=$($RequiresValidation.ToString().ToLowerInvariant())",
-        "execute_validation=$(((-not $reuse)).ToString().ToLowerInvariant())",
-        "execute_quality=$(((-not $reuseQuality)).ToString().ToLowerInvariant())",
+        "deferred=$($Deferred.IsPresent.ToString().ToLowerInvariant())",
+        "execute_validation=$(((-not $reuse -and -not $Deferred)).ToString().ToLowerInvariant())",
+        "execute_quality=$(((-not $reuseQuality -and -not $Deferred)).ToString().ToLowerInvariant())",
         "delta_mode=$DeltaMode",
         "partial_shards=$(ConvertTo-Json -InputObject @($PartialShards) -Compress)",
         "import_run_id=$(if ($ImportRunId -gt 0) { $ImportRunId } else { '' })",
@@ -496,22 +496,22 @@ if ($SelfTest) {
     Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse -and @($d.Rerun).Count -eq 0) 'a non-runtime delta was not reused outright'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('Unit - 02 Data', 'ModelFamily - Audio') -PullRequestShards $pr
-    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse) 'a delta reaching none of the pull request''s shards was not reused'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Partial -and (@($d.Rerun) -join ',') -ceq 'ModelFamily - Audio,Unit - 02 Data') 'delta-only shards were skipped without evidence'
     Assert-True (((@($d.Import) | Sort-Object) -join ',') -eq ((@($pr) | Sort-Object) -join ',')) `
         'a full delta reuse did not account for every pull-request shard'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('Integration D', 'Unit - 02 Data') -PullRequestShards $pr
     Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Partial) 'an overlapping delta did not produce a partial re-run'
-    Assert-True ((@($d.Rerun) -join ',') -ceq 'Integration D') 'a partial re-run included shards outside the overlap'
+    Assert-True ((@($d.Rerun) -join ',') -ceq 'Integration D,Unit - 02 Data') 'a partial re-run omitted a delta-affected shard'
     Assert-True ((@($d.Import) -join ',') -ceq 'Integration E-G,Unit - 10 RL') `
         'a partial re-run did not import exactly the pull request''s other shards'
-    Assert-True (-not (@($d.Rerun) -contains 'Unit - 02 Data')) `
-        'a shard only the base branch''s own commits reach was re-run for this pull request'
+    Assert-True (@($d.Rerun) -contains 'Unit - 02 Data') `
+        'a shard only the base branch reaches was skipped without evidence'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true -DeltaShards @() -PullRequestShards $pr
     Assert-True ($d.Mode -eq [CiDeltaReuseMode]::None) 'an empty selection for a runtime delta was treated as permission to skip'
     $d = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
         -DeltaShards @('integration d') -PullRequestShards $pr
-    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Reuse) 'shard names were matched ignoring case'
+    Assert-True ($d.Mode -eq [CiDeltaReuseMode]::Partial -and $d.Import.Count -eq $pr.Count) 'shard names were matched ignoring case'
 
     Assert-True ((Get-ShardFromJobName 'Tests (net10.0) - Unit - 01 Activation/Attention') -ceq 'Unit - 01 Activation/Attention') `
         'a test job name did not yield its shard'
@@ -536,6 +536,20 @@ if ($SelfTest) {
         'an absent routes property was not read as empty'
     Assert-True ((@(Get-OptionalArray ([pscustomobject]@{ routes = @('a', 'b') }) 'routes') -join ',') -ceq 'a,b') `
         'a present routes property was not read back'
+
+    $GitHubOutput = Join-Path ([IO.Path]::GetTempPath()) "ci-deferred-output-$([guid]::NewGuid().ToString('N')).txt"
+    try {
+        Write-ReuseDecision -DecisionScope None -Deferred
+        $deferredOutput = Get-Content -LiteralPath $GitHubOutput -Raw | ConvertFrom-StringData
+        foreach ($key in 'reuse', 'reuse_quality', 'execute_validation', 'execute_quality') {
+            Assert-True ($deferredOutput[$key] -ceq 'false') "deferred output incorrectly authorizes $key"
+        }
+        Assert-True ($deferredOutput.deferred -ceq 'true' -and $deferredOutput.reuse_scope -ceq 'None') 'deferred output is not explicitly incomplete'
+        Assert-Rejected { Write-ReuseDecision -DecisionScope Complete -Deferred } 'deferral accepted a passing reuse scope'
+    }
+    finally {
+        if (Test-Path -LiteralPath $GitHubOutput) { Remove-Item -LiteralPath $GitHubOutput -Force }
+    }
 
     if ($failures.Count -gt 0) {
         Write-Host 'Resolve-CiValidationReuse self-test FAILED:'
@@ -727,11 +741,22 @@ do {
         exit 0
     }
 
-    $inFlight = @($runs | Where-Object { [string] $_.status -cne 'completed' }).Count -gt 0
+    # Only an exact associated merge can be resumed automatically. Unrelated merge-queue
+    # runs or a direct push merely associated with an older PR must not park this commit.
+    $inFlight = $exactMerge.Count -eq 1 -and @($prRuns.workflow_runs | Where-Object {
+        [string] $_.event -ceq 'pull_request' -and [string] $_.head_sha -ceq $headSha -and
+        [string] $_.status -cne 'completed'
+    }).Count -gt 0
     if (-not $inFlight -or [DateTimeOffset]::UtcNow -ge $deadline) { break }
     Write-Host "PR #$prNumber validation is still in flight; waiting for reusable evidence."
     Start-Sleep -Seconds 60
 } while ($true)
+
+if ($inFlight) {
+    Write-ReuseDecision -DecisionScope None -PrNumber $prNumber -Deferred `
+        -Summary "Validation deferred: PR #$prNumber is still running. No duplicate matrix was scheduled. Resume deferred CI will retry after it completes; this run is NOT passing."
+    exit 0
+}
 
 # ---------------------------------------------------------------- delta reuse
 # No exact-tree evidence. The pull request was validated on a base branch that has since moved on;

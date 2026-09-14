@@ -109,8 +109,7 @@ jobs:
   validation-source:
     name: Resolve certified PR validation
     runs-on: ubuntu-latest
-    # Was 5. This job may now WAIT for a merged PR validation run to finish before
-    # deciding, so the ceiling must exceed REUSE_WAIT_MINUTES with room to spare.
+    # Artifact inspection may take time; pending evidence itself now defers without polling.
     timeout-minutes: 50
     permissions:
       actions: read
@@ -214,7 +213,15 @@ jobs:
             -GitHubOutput $env:GITHUB_OUTPUT `
             -MapFile '${{ steps.delta-map.outputs.map_file }}' `
             -ShardManifestFile '${{ steps.delta-map.outputs.manifest_file }}' `
-            -WaitMinutes 40
+            -WaitMinutes 0
+
+      # A failed, recognizable step keeps the gate red and lets the completion reconciler
+      # rerun this job and its dependents on the ORIGINAL push SHA (not a new dispatch SHA).
+      - name: Defer until PR validation completes
+        if: steps.resolve.outputs.deferred == 'true'
+        run: |
+          echo '::error::Validation deferred, not passed: waiting for the merged PR run. No duplicate matrix was scheduled.'
+          exit 1
 
       - name: Report resolver fallback
         if: steps.resolve.outcome == 'failure'
