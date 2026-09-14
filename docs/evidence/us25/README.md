@@ -10,8 +10,9 @@ Production source: `5d9a5c19e11b4013ccbb61c6ad4b4f67f3aa3b6a`. Final test-only f
 | --- | ---: | ---: | ---: | --- |
 | Windows .NET 10 consumer integration | 1,044 | 0 | 0 | `net10.0-isolated/consumer.trx` |
 | Windows .NET Framework 4.7.1 compatibility | 49 | 0 | 0 | `net471-isolated/consumer.trx` |
+| Linux .NET 10 consumer integration, existing local container | 1,044 | 0 | 0 | `consumer-linux.trx` in `linux-local.zip` |
 
-Both suites include all **32 deployment cases**. The actual consumer library was built with its normal analyzers before these tests. After test-only corrections, `BuildProjectReferences=false` reused the unchanged, already-built production binaries. Earlier complete production gates (`net10.0-final`, `net471-final`) passed 1,043 and 48 tests before adding license-denial coverage and fixture isolation; those receipts are retained too.
+All three suites include all **32 deployment cases**. The actual consumer library was built with its normal analyzers before these tests. After test-only corrections, `BuildProjectReferences=false` reused the unchanged, already-built production binaries. Earlier complete production gates (`net10.0-final`, `net471-final`) passed 1,043 and 48 tests before adding license-denial coverage and fixture isolation; those receipts are retained too.
 
 The trained-model case performs actual CPU `MultipleRegression<double>` training through private AutoML, held-out paired prediction, guarded promotion, registry reload and trained-state deserialization. Its explicit `1e-7` prediction tolerance checks functional integration, not competitor superiority. The synthetic fixture uses the existing async-local internal persistence scope; production adapters retain normal entitlement checks. The separate denial regression checks that model licensing errors propagate.
 
@@ -20,6 +21,10 @@ The trained-model case performs actual CPU `MultipleRegression<double>` training
 [`verification.zip`](verification.zip): **1,086,998 bytes**, SHA-256 `8d591f8013061d3a03da9e19b821ff7142fa91b6aee200c600567076a13cb804`.
 
 Contains local build/test console logs and TRX, including failed and corrected attempts, plus the completed failed Linux job log described below. It is not a claim that every entry passed. Current-head hosted Linux .NET 10/.NET 8 results and scoped coverage are retained separately by the PR's `Compiler-guided evolution` workflow; consult the linked PR's exact-head checks and artifacts. Local Windows results alone do not prove Linux behavior.
+
+[`linux-local.zip`](linux-local.zip): **267,375 bytes**, SHA-256 `9146a76171e7b0ae6040ec1b0468fa2caf69dc2ef055dcead258acf955f408dd`. Contains both the initial targeted Linux pass (32/32) and the full consumer pass (1,044/1,044), with console logs and TRX. These executed the final portable net10 binaries in the already-present Linux SDK container, with networking disabled, read-only source mount, two CPUs, 2 GiB memory and disposable temporary storage. No image download or rebuild was required. Image identity: `sha256:4ea6fe75dd36706bb6d8c3c293d4c4315840f5d76ea28ac97def77e3ec487fa5`.
+
+Executed binary SHA-256: `AiDotNetTests.dll` = `f1e470456922314fc72cc6f61cf13c770774ff8c54c1c37c2fb5a484b296e9f1`; `AiDotNet.dll` = `7065cba7d280c3ed0baa6f780fe4c47f0b63e401ac2a4007c750f2aeb3d06ec4`. This is actual Linux runtime execution, not a Linux source-build or net8-runtime claim. Hosted net8 and the normal repository CI remain merge gates while runners are queued; local cross-platform verification makes the implementation reviewable without treating the queue as a passing check.
 
 ## Failures and corrections retained
 
