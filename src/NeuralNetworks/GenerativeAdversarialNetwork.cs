@@ -481,12 +481,14 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     protected static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateAdamOptimizerOptions(
         double initialLearningRate = DefaultGanAdamLearningRate,
         double beta1 = DefaultGanAdamBeta1,
-        double beta2 = DefaultGanAdamBeta2)
+        double beta2 = DefaultGanAdamBeta2,
+        double learningRateDecay = 0.0)
         => new()
         {
             InitialLearningRate = initialLearningRate,
             Beta1 = beta1,
             Beta2 = beta2,
+            LearningRateDecay = learningRateDecay,
         };
 
     /// <summary>

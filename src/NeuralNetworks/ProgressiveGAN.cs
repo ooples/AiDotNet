@@ -49,6 +49,10 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Progressive Growing of GANs for Improved Quality, Stability, and Variation", "https://arxiv.org/abs/1710.10196", Year = 2018, Authors = "Tero Karras, Timo Aila, Samuli Laine, Jaakko Lehtinen")]
 public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
 {
+    // The paper's values. They live on ProgressiveGANOptions' constructor now -- these
+    // remain only as the named source of those defaults, and are no longer what the
+    // optimizers are built from, which is what made InitialLearningRate and
+    // LearningRateDecay unreadable configuration.
     private const double DefaultLearningRate = 0.001;
     private const double DefaultLearningRateDecay = 0.9999;
 
@@ -109,8 +113,11 @@ public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
             discriminatorOptimizer: null,
             lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
             options: null,
-            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99),
-            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99))
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(
+                (options ??= new ProgressiveGANOptions()).InitialLearningRate,
+                0.0, 0.99, options.LearningRateDecay),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(
+                options.InitialLearningRate, 0.0, 0.99, options.LearningRateDecay))
     {
         _options = options ?? new ProgressiveGANOptions();
         _options.Validate();

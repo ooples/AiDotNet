@@ -252,9 +252,16 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
         ILossFunction<T>? lossFunction = null,
         LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new LiquidStateMachineOptions();
         options ??= _options;
+        // Built with the rate this model publishes. Bare, the optimizer would fall back to
+        // Adam's own default and ReadoutLearningRate would be configuration nothing reads --
+        // and in an LSM the readout is the only trained part, so that rate is the whole of
+        // what training responds to.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.ReadoutLearningRate });
         _options.Validate();
         Options = _options;
         _leakingRate = NumOps.FromDouble(options.LeakingRate);

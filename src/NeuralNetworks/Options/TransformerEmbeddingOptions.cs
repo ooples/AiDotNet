@@ -46,7 +46,13 @@ public class TransformerEmbeddingOptions : EmbeddingModelOptions
     /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative.
     /// </exception>
-    public void Validate()
+    /// <remarks>
+    /// Virtual so a derived options class can add its own checks by overriding and calling
+    /// <c>base.Validate()</c>. Hiding it with <c>new</c> instead would leave callers holding
+    /// the base type running the base checks only -- the same shadowing trap that made
+    /// <c>TimeGANOptions.NumFeatures</c> report two different values for one object.
+    /// </remarks>
+    public virtual void Validate()
     {
         ValidateCore();
     }

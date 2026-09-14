@@ -90,7 +90,6 @@ namespace AiDotNet.NeuralNetworks
         MatryoshkaEmbeddingOptions? options = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        int[]? nestedDimensions = null,
         ILossFunction<T>? lossFunction = null)
             : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
@@ -101,7 +100,7 @@ namespace AiDotNet.NeuralNetworks
             _numLayers = _options.NumLayers;
             _numHeads = _options.NumHeads;
             _feedForwardDim = _options.FeedForwardDim;
-            _nestedDimensions = nestedDimensions ?? new[] { 64, 128, 256, 512, 768, 1024, 1536 };
+            _nestedDimensions = _options.NestedDimensions;
 
             InitializeLayersCore(false);
         }

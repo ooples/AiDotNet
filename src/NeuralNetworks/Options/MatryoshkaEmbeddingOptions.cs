@@ -26,6 +26,7 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
     {
         VocabSize = 30522;
         MaxEmbeddingDimension = 1536;
+        NestedDimensions = [64, 128, 256, 512, 768, 1024, 1536];
         MaxSequenceLength = 512;
         NumLayers = 12;
         NumHeads = 12;
@@ -38,5 +39,62 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
     /// <summary>
     /// Gets or sets the max embedding dimension.
     /// </summary>
+    /// <remarks>
+    /// The ceiling on <see cref="NestedDimensions"/>: a nesting level wider than the full
+    /// embedding cannot be sliced out of it, so <c>Validate</c> rejects one.
+    /// </remarks>
     public int MaxEmbeddingDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the nesting ladder — the prefix widths a single embedding can be
+    /// truncated to (Kusupati et al. 2022).
+    /// </summary>
+    /// <value>Defaults to 64, 128, 256, 512, 768, 1024, 1536.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Matryoshka training makes one embedding usable at several
+    /// sizes: the first 64 numbers are a good 64-dimensional embedding on their own, the
+    /// first 128 a better one, and so on. This lists the sizes that are trained to work.
+    /// </para>
+    /// </remarks>
+    public int[] NestedDimensions { get; set; } = [];
+
+    /// <summary>
+    /// Throws if the nesting ladder cannot be honoured by an embedding of
+    /// <see cref="MaxEmbeddingDimension"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// When the ladder is empty, contains a non-positive width, or names a width wider
+    /// than <see cref="MaxEmbeddingDimension"/>.
+    /// </exception>
+    public override void Validate()
+    {
+        base.Validate();
+
+        if (NestedDimensions is null || NestedDimensions.Length == 0)
+        {
+            throw new ArgumentException(
+                "NestedDimensions must name at least one nesting width.",
+                nameof(NestedDimensions));
+        }
+
+        foreach (int dimension in NestedDimensions)
+        {
+            if (dimension <= 0)
+            {
+                throw new ArgumentException(
+                    $"NestedDimensions must be positive; got {dimension}.",
+                    nameof(NestedDimensions));
+            }
+
+            if (dimension > MaxEmbeddingDimension)
+            {
+                throw new ArgumentException(
+                    $"NestedDimensions contains {dimension}, which exceeds "
+                    + $"MaxEmbeddingDimension {MaxEmbeddingDimension}. A prefix cannot be "
+                    + "wider than the embedding it is taken from.",
+                    nameof(NestedDimensions));
+            }
+        }
+    }
 }
