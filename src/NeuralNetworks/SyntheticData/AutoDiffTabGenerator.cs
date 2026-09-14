@@ -581,12 +581,12 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     #region Configuration Search
 
-    private record struct DiffusionConfig(int Timesteps, string Schedule, int[] MLPDims, double Loss);
+    private record struct DiffusionConfig(int Timesteps, BetaSchedule Schedule, int[] MLPDims, double Loss);
 
     private DiffusionConfig SearchConfigurations(Matrix<T> data)
     {
         var configs = GenerateCandidateConfigs();
-        DiffusionConfig bestConfig = new(500, "linear", _options.MLPDimensions, double.MaxValue);
+        DiffusionConfig bestConfig = new(500, _options.BetaSchedule, _options.MLPDimensions, double.MaxValue);
 
         foreach (var config in configs)
         {
@@ -604,13 +604,19 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     {
         var configs = new List<DiffusionConfig>();
         int[] timestepOptions = [100, 250, 500, 1000];
-        string[] scheduleOptions = ["linear", "cosine"];
+        BetaSchedule[] scheduleOptions =
+            [BetaSchedule.Linear, BetaSchedule.ScaledLinear, BetaSchedule.SquaredCosine];
 
         for (int trial = 0; trial < _options.SearchTrials; trial++)
         {
             int ts = timestepOptions[_random.Next(timestepOptions.Length)];
             ts = Math.Min(ts, _options.MaxTimesteps);
-            string schedule = scheduleOptions[_random.Next(scheduleOptions.Length)];
+            // Trial 0 is the configured schedule, so a caller who sets BetaSchedule is
+            // guaranteed it is evaluated -- the same relationship MLPDimensions already has
+            // with the width search below, and MaxTimesteps with the timestep draw above.
+            BetaSchedule schedule = trial == 0
+                ? _options.BetaSchedule
+                : scheduleOptions[_random.Next(scheduleOptions.Length)];
 
             // Randomly vary MLP dimensions
             int baseWidth = _options.MLPDimensions.Length > 0 ? _options.MLPDimensions[0] : 256;
@@ -664,30 +670,49 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     #region Noise Schedule
 
-    private void ComputeNoiseSchedule(string schedule, int timesteps)
+    private void ComputeNoiseSchedule(BetaSchedule schedule, int timesteps)
     {
         var betasD = new double[timesteps];
         var alphasD = new double[timesteps];
         var alphasCumprodD = new double[timesteps];
 
-        if (schedule == "cosine")
+        switch (schedule)
         {
-            double s = 0.008;
-            for (int t = 0; t < timesteps; t++)
-            {
-                double t1 = (double)t / timesteps;
-                double t2 = (double)(t + 1) / timesteps;
-                double alpha1 = Math.Cos((t1 + s) / (1 + s) * Math.PI / 2);
-                double alpha2 = Math.Cos((t2 + s) / (1 + s) * Math.PI / 2);
-                betasD[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
-            }
-        }
-        else
-        {
-            for (int t = 0; t < timesteps; t++)
-            {
-                betasD[t] = _options.BetaStart + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
-            }
+            case BetaSchedule.SquaredCosine:
+                // Nichol & Dhariwal 2021, Eq. 17.
+                double s = 0.008;
+                for (int t = 0; t < timesteps; t++)
+                {
+                    double t1 = (double)t / timesteps;
+                    double t2 = (double)(t + 1) / timesteps;
+                    double alpha1 = Math.Cos((t1 + s) / (1 + s) * Math.PI / 2);
+                    double alpha2 = Math.Cos((t2 + s) / (1 + s) * Math.PI / 2);
+                    betasD[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
+                }
+
+                break;
+
+            case BetaSchedule.ScaledLinear:
+                // Latent-diffusion's variant: linear in sqrt(beta), so beta is the square.
+                for (int t = 0; t < timesteps; t++)
+                {
+                    double interpolated = Math.Sqrt(_options.BetaStart)
+                        + (Math.Sqrt(_options.BetaEnd) - Math.Sqrt(_options.BetaStart))
+                          * t / Math.Max(timesteps - 1, 1);
+                    betasD[t] = interpolated * interpolated;
+                }
+
+                break;
+
+            case BetaSchedule.Linear:
+            default:
+                for (int t = 0; t < timesteps; t++)
+                {
+                    betasD[t] = _options.BetaStart
+                        + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
+                }
+
+                break;
         }
 
         double cumprod = 1.0;

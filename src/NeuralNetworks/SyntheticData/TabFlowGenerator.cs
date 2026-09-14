@@ -545,13 +545,19 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // Sample noise x0 ~ N(0, 1)
             var x0 = CreateStandardNormalVector(_dataWidth);
 
-            // Compute interpolated point: xt = (1-t)*x0 + t*x1
+            // Compute the point on the conditional probability path:
+            //   xt = (1-t)*x0 + t*x1 + sigma*eps      (Lipman et al. 2023, Eq. 22)
+            // Sigma is the width of that path. At sigma = 0 the path is the bare
+            // straight line and the option is inert, which is what it was before.
+            var pathNoise = CreateStandardNormalVector(_dataWidth);
+            double sigma = _options.Sigma;
             var xt = new Vector<T>(_dataWidth);
             for (int j = 0; j < _dataWidth; j++)
             {
                 double v0 = NumOps.ToDouble(x0[j]);
                 double v1 = NumOps.ToDouble(x1[j]);
-                xt[j] = NumOps.FromDouble((1.0 - t) * v0 + t * v1);
+                xt[j] = NumOps.FromDouble(
+                    (1.0 - t) * v0 + t * v1 + sigma * NumOps.ToDouble(pathNoise[j]));
             }
 
             // Target velocity: v* = x1 - x0 (optimal transport direction)

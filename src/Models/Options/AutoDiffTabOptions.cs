@@ -74,15 +74,21 @@ public class AutoDiffTabOptions<T> : SyntheticDataGeneratorOptions<T>
     /// <summary>
     /// Gets or sets the type of noise schedule.
     /// </summary>
-    /// <value>Schedule type: "linear" or "cosine". Defaults to "linear".</value>
+    /// <value>Defaults to <see cref="Enums.BetaSchedule.Linear"/>.</value>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
-    /// - "linear": Noise increases evenly over time
-    /// - "cosine": Noise increases slowly at first, then faster (often works better)
+    /// - <c>Linear</c>: noise increases evenly over time
+    /// - <c>ScaledLinear</c>: linear in the square root, the latent-diffusion variant
+    /// - <c>SquaredCosine</c>: noise increases slowly at first, then faster (often better)
+    /// </para>
+    /// <para>
+    /// AutoDiffTab <i>searches</i> for a schedule rather than simply obeying one, so this is
+    /// the seed of that search: it is the schedule evaluated first, and the one used when
+    /// <see cref="SearchTrials"/> leaves no room to try alternatives.
     /// </para>
     /// </remarks>
-    public string BetaSchedule { get; set; } = "linear";
+    public BetaSchedule BetaSchedule { get; set; } = BetaSchedule.Linear;
 
     /// <summary>
     /// Gets or sets the hidden layer dimensions for the denoiser MLP.

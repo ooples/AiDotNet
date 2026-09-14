@@ -95,6 +95,10 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     private readonly List<FullyConnectedLayer<T>> _ffnLayer1s = new();
     private readonly List<FullyConnectedLayer<T>> _ffnLayer2s = new();
 
+    // Residual dropout, one per transformer block, driven by REaLTabFormerOptions.DropoutRate.
+    // Parameterless, so it stays out of the Layers list that the FFN pairs are indexed from.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Per-column output heads (auxiliary, depend on data columns)
     private readonly List<FullyConnectedLayer<T>> _outputHeads = new();
     private readonly List<int> _vocabSizes = new();
@@ -200,6 +204,7 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         _attentionOutputLayers.Clear();
         _ffnLayer1s.Clear();
         _ffnLayer2s.Clear();
+        _ffnDropouts.Clear();
 
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
@@ -223,6 +228,8 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
                 _ffnLayer1s.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, relu));
                 _ffnLayer2s.Add(new FullyConnectedLayer<T>(d, identity));
             }
+
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
     }
 
@@ -572,6 +579,11 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
             var posInput = ExtractPosition(input, pos, d);
             var hidden = _ffnLayer1s[layerIdx].Forward(VectorToTensor(posInput));
             var ffnOut = _ffnLayer2s[layerIdx].Forward(hidden);
+            if (layerIdx < _ffnDropouts.Count)
+            {
+                _ffnDropouts[layerIdx].SetTrainingMode(IsTrainingMode);
+                ffnOut = _ffnDropouts[layerIdx].Forward(ffnOut);
+            }
             var ffnVec = TensorToVector(ffnOut, d);
 
             // Residual connection

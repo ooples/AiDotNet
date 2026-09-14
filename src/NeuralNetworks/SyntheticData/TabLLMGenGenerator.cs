@@ -95,6 +95,9 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<FullyConnectedLayer<T>> _valueLayers = new();
     private readonly List<FullyConnectedLayer<T>> _outProjLayers = new();
 
+    // Residual dropout, one per transformer layer, driven by TabLLMGenOptions.DropoutRate.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Token embedding and output head (auxiliary)
     private FullyConnectedLayer<T>? _tokenEmbedding;
     private FullyConnectedLayer<T>? _outputHead;
@@ -190,10 +193,12 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
             var gelu = new GELUActivation<T>() as IActivationFunction<T>;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
+            _ffnDropouts.Clear();
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
                 Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
+                _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
             }
             _usingCustomLayers = false;
         }
@@ -605,6 +610,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 {
                     var h1 = Layers[ffn1Idx].Forward(VectorToTensor(attended[pos]));
                     h2 = Layers[ffn2Idx].Forward(h1);
+                    if (layer < _ffnDropouts.Count)
+                    {
+                        _ffnDropouts[layer].SetTrainingMode(IsTrainingMode);
+                        h2 = _ffnDropouts[layer].Forward(h2);
+                    }
                 }
                 else
                 {

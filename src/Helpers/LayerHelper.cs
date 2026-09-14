@@ -19369,13 +19369,16 @@ public static partial class LayerHelper<T>
     /// <param name="generatorDims">Generator hidden widths, each equal to <paramref name="embeddingDim"/>.</param>
     /// <param name="discriminatorDims">Discriminator hidden widths.</param>
     /// <param name="useMinibatchAveraging">When true the discriminator's input width is doubled.</param>
+    /// <param name="batchNormDecay">EMA decay for the generator BatchNorms' running mean/variance
+    /// (medGAN's paper value is 0.99; <see cref="BatchNormalizationLayer{T}"/> defaults to 0.9).</param>
     public static IEnumerable<ILayer<T>> CreateDefaultMedGANLayers(
         int dataWidth,
         int embeddingDim,
         int[] autoencoderDims,
         int[] generatorDims,
         int[] discriminatorDims,
-        bool useMinibatchAveraging = true)
+        bool useMinibatchAveraging = true,
+        double batchNormDecay = 0.9)
     {
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
@@ -19408,11 +19411,12 @@ public static partial class LayerHelper<T>
         for (int i = 0; i < generatorDims.Length; i++)
         {
             yield return new FullyConnectedLayer<T>(embeddingDim, generatorDims[i], identity);
-            yield return new BatchNormalizationLayer<T>(generatorDims[i]);
+            yield return new BatchNormalizationLayer<T>(
+                generatorDims[i], momentum: batchNormDecay);
         }
         // Final generator projection into the embedding space; also batch-normed, also shortcut.
         yield return new FullyConnectedLayer<T>(embeddingDim, embeddingDim, identity);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>(embeddingDim, momentum: batchNormDecay);
 
         // --- Discriminator: no BatchNorm, no shortcuts (stated by the paper) ---
         // Minibatch averaging concatenates the batch mean onto each sample, doubling the input.

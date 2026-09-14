@@ -113,6 +113,13 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     private readonly List<LayerNormalizationLayer<T>> _attnNorms = new();
     private readonly List<LayerNormalizationLayer<T>> _ffnNorms = new();
 
+    // Residual dropout, one per transformer block, driven by
+    // TabTransformerGenOptions.DropoutRate. Parameterless, so unlike every list above it
+    // is not registered into Layers -- Layers exists to collect trainable parameters --
+    // which is also why the rehydration path has to recreate these rather than cast them
+    // back out of Layers.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Column decoders: one decoder head per column [embDim -> colWidth].
     private readonly List<FullyConnectedLayer<T>> _colDecoders = new();
 
@@ -241,6 +248,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         _ffn2.Clear();
         _attnNorms.Clear();
         _ffnNorms.Clear();
+        _ffnDropouts.Clear();
         _colDecoders.Clear();
         Layers.Clear();
 
@@ -260,6 +268,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             _ffn2.Add(new FullyConnectedLayer<T>(embDim, identity));
             _attnNorms.Add(new LayerNormalizationLayer<T>());
             _ffnNorms.Add(new LayerNormalizationLayer<T>());
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
 
         // Column decoders: [embDim -> colWidth].
@@ -320,18 +329,29 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         var rowOrder = new int[data.Rows];
         for (int i = 0; i < data.Rows; i++) rowOrder[i] = i;
 
+        // BatchSize bounds how many rows one batch covers, as it does in every other
+        // generator in this folder. The order was already reshuffled per epoch, so each
+        // batch is a fresh random sample rather than a fixed slice.
+        int batchSize = Math.Max(1, Math.Min(_options.BatchSize, rowOrder.Length));
+        int numBatches = Math.Max(1, rowOrder.Length / batchSize);
+
         for (int epoch = 0; epoch < epochCount; epoch++)
         {
             ShuffleInPlace(rowOrder);
-            for (int oi = 0; oi < rowOrder.Length; oi++)
+            for (int batch = 0; batch < numBatches; batch++)
             {
-                int r = rowOrder[oi];
-                var fullRow = GetRow(transformedData, r);
-                var maskedRow = ApplyColumnMask(fullRow, maskedCols);
+                int start = batch * batchSize;
+                int end = Math.Min(start + batchSize, rowOrder.Length);
+                for (int oi = start; oi < end; oi++)
+                {
+                    int r = rowOrder[oi];
+                    var fullRow = GetRow(transformedData, r);
+                    var maskedRow = ApplyColumnMask(fullRow, maskedCols);
 
-                var inputTensor = VectorToTensor(maskedRow);
-                var targetTensor = VectorToTensor(fullRow);
-                Train(inputTensor, targetTensor);
+                    var inputTensor = VectorToTensor(maskedRow);
+                    var targetTensor = VectorToTensor(fullRow);
+                    Train(inputTensor, targetTensor);
+                }
             }
         }
 
@@ -494,6 +514,11 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             // Position-wise feed-forward.
             var ff = _ffn1[layer].Forward(seq);                       // [numColumns, ffnDim]
             ff = _ffn2[layer].Forward(ff);                            // [numColumns, embDim]
+            if (layer < _ffnDropouts.Count)
+            {
+                _ffnDropouts[layer].SetTrainingMode(IsTrainingMode);
+                ff = _ffnDropouts[layer].Forward(ff);
+            }
             seq = Engine.TensorAdd(seq, ff);                          // residual
             seq = _ffnNorms[layer].Forward(seq);                      // LayerNorm
         }
@@ -635,6 +660,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         _ffn2.Clear();
         _attnNorms.Clear();
         _ffnNorms.Clear();
+        _ffnDropouts.Clear();
         _colDecoders.Clear();
 
         int idx = 0;
@@ -649,6 +675,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             _ffn2.Add((FullyConnectedLayer<T>)Layers[idx++]);
             _attnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
             _ffnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
         for (int c = 0; c < _numColumns; c++)
             _colDecoders.Add((FullyConnectedLayer<T>)Layers[idx++]);

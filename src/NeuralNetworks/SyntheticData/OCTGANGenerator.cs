@@ -529,8 +529,11 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void TrainDiscriminatorStep(Matrix<T> trainData, int batchStart, int batchEnd, T scaledLr)
     {
         // DeepSVDD critic (Xu et al. 2021 OCT-GAN): pull real embeddings toward the
-        // SVDD center and push generated ones away. Tape-connected; weight clipping
-        // keeps the critic Lipschitz-bounded.
+        // SVDD center and push generated ones away. The Lipschitz constraint the
+        // Wasserstein objective needs comes from the gradient penalty below, not from
+        // weight clipping — Gulrajani et al. 2017 replace clipping with the penalty
+        // rather than combining them, and this class's own summary has always said
+        // "WGAN-GP training".
         for (int i = batchStart; i < batchEnd; i++)
         {
             var realRow = VectorToTensor(GetRow(trainData, i));
@@ -540,9 +543,9 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             var fakeRow = GeneratorForward(noise);
             var fakeEmb = DiscriminatorForward(fakeRow, isTraining: true);
             var loss = Engine.TensorSubtract(SvddDistSq(realEmb), SvddDistSq(fakeEmb));
+            loss = Engine.TensorAdd(loss, GradientPenalty(realRow, fakeRow));
             TapeStepOver(tape, loss, BuildDiscriminatorLayerList(), _discriminatorOptimizer);
         }
-        ClipWeights(BuildDiscriminatorLayerList());
     }
 
     private void TrainGeneratorStep(int batchSize, T scaledLr)
@@ -588,7 +591,52 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
     #region Gradient Penalty
 
+    /// <summary>
+    /// λ·(‖∇_x̃ D(x̃)‖₂ − 1)² at x̃ = ε·real + (1−ε)·fake, ε ~ U(0, 1) (Gulrajani et al. 2017,
+    /// Eq. 3), where D is this critic's SVDD distance and λ is
+    /// <see cref="OCTGANOptions{T}.GradientPenaltyWeight"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The inner tape must build a graph.</b> <c>createGraph: true</c> is what lets the
+    /// OUTER tape differentiate this norm back into the critic's weights; without it the
+    /// penalty is a constant with respect to every parameter and contributes nothing, which
+    /// is indistinguishable at runtime from having no penalty at all. This is the same
+    /// double-backprop the repo already performs in <c>WGANGP.TrainCriticBatchWithGP</c>.
+    /// </para>
+    /// <para>
+    /// OCT-GAN trains one row at a time, so ε is a single scalar per call rather than the
+    /// per-sample vector a batched critic would draw.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> GradientPenalty(Tensor<T> realRow, Tensor<T> fakeRow)
+    {
+        var eps = NumOps.FromDouble(_random.NextDouble());
+        var interpolated = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(realRow, eps),
+            Engine.TensorMultiplyScalar(fakeRow, NumOps.Subtract(NumOps.One, eps)));
 
+        Tensor<T> inputGradients;
+        using (var innerTape = new GradientTape<T>())
+        {
+            var score = SvddDistSq(DiscriminatorForward(interpolated, isTraining: false));
+            var inner = innerTape.ComputeGradients(score, [interpolated], createGraph: true);
+            if (!inner.TryGetValue(interpolated, out var gradient))
+            {
+                // No path from the interpolate to the score: a zero penalty is the honest
+                // value, not a fabricated one.
+                return new Tensor<T>([1]);
+            }
+
+            inputGradients = gradient;
+        }
+
+        var squaredNorm = ReduceToScalar(Engine.TensorSquare(inputGradients));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
+        var deviation = Engine.TensorAddScalar(norm, NumOps.Negate(NumOps.One));
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSquare(deviation), NumOps.FromDouble(_options.GradientPenaltyWeight));
+    }
 
     private Tensor<T> ManualLinearBackward(Tensor<T> outputGrad, Vector<T> layerParams,
         int outputSize, int inputSize)
@@ -824,24 +872,6 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (_svddCenter is null) return ReduceToScalar(Engine.TensorSquare(embedding));
         var emb = embedding.Rank == 1 ? embedding : Engine.Reshape(embedding, new[] { embedding.Length });
         return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(emb, _svddCenter)));
-    }
-
-    private const double GanClip = 0.01;
-    private void ClipWeights(IReadOnlyList<ILayer<T>> layers)
-    {
-        T lo = NumOps.FromDouble(-GanClip), hi = NumOps.FromDouble(GanClip);
-        foreach (var layer in layers)
-        {
-            var ps = layer.GetParameters();
-            if (ps.Length == 0) continue;
-            bool changed = false;
-            for (int i = 0; i < ps.Length; i++)
-            {
-                if (NumOps.GreaterThan(ps[i], hi)) { ps[i] = hi; changed = true; }
-                else if (NumOps.LessThan(ps[i], lo)) { ps[i] = lo; changed = true; }
-            }
-            if (changed) layer.UpdateParameters(ps);
-        }
     }
 
     private IReadOnlyList<ILayer<T>> BuildGeneratorLayerList()

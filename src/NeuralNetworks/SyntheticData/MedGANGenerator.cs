@@ -282,7 +282,8 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultMedGANLayers(
                 _dataWidth, _options.EmbeddingDimension,
                 _options.AutoencoderDimensions, _options.GeneratorDimensions,
-                _options.DiscriminatorDimensions, _options.UseMinibatchAveraging));
+                _options.DiscriminatorDimensions, _options.UseMinibatchAveraging,
+                _options.BatchNormDecay));
             _usingCustomLayers = false;
         }
 
@@ -389,7 +390,8 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         Layers.AddRange(LayerHelper<T>.CreateDefaultMedGANLayers(
             _dataWidth, _options.EmbeddingDimension,
             _options.AutoencoderDimensions, _options.GeneratorDimensions,
-            _options.DiscriminatorDimensions, _options.UseMinibatchAveraging));
+            _options.DiscriminatorDimensions, _options.UseMinibatchAveraging,
+            _options.BatchNormDecay));
 
         ExtractMedGANLayerReferences();
     }

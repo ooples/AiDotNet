@@ -32,7 +32,6 @@ namespace AiDotNet.Models.Options;
 /// {
 ///     SequenceLength = 24,      // Each sample is 24 time steps
 ///     HiddenDimension = 64,     // Size of hidden states
-///     NumFeatures = 5,          // 5 features per time step
 ///     Epochs = 2000
 /// };
 /// var timegan = new TimeGANGenerator&lt;double&gt;(options);
@@ -67,18 +66,12 @@ public class TimeGANOptions<T> : SyntheticDataGeneratorOptions<T>
     /// </remarks>
     public int SequenceLength { get; set; } = 24;
 
-    /// <summary>
-    /// Gets or sets the number of features per time step.
-    /// </summary>
-    /// <value>Number of features, defaulting to 5.</value>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> How many measurements at each time step.
-    /// For stock data this might be 5: open, high, low, close, volume.
-    /// This overrides the inherited NumFeatures with a different default value.
-    /// </para>
-    /// </remarks>
-    public new int NumFeatures { get; set; } = 5;
+    // NumFeatures was declared here as `public new int NumFeatures = 5`, shadowing
+    // RiskModelOptions<T>.NumFeatures (10). It is gone for two reasons. TimeGAN reads its
+    // width off the data it is fitted to (Fit sets _dataWidth = data.Columns), so a
+    // configured feature count had no reader and could only contradict the data; and the
+    // `new` meant options.NumFeatures and ((RiskModelOptions<T>)options).NumFeatures
+    // returned different numbers for one object, so anything holding the base type saw 10.
 
     /// <summary>
     /// Gets or sets the hidden dimension for the RNN components.

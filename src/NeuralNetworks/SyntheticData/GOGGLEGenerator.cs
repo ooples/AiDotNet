@@ -336,17 +336,32 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // Rebuild all auxiliary layers with actual dimensions
         RebuildAuxiliaryLayers();
 
+        // Minibatching, as every other generator in this family does it (TVAE, the
+        // closest analogue, is the reference). BatchSize bounds how many rows one
+        // epoch visits per batch; the order is reshuffled each epoch so a batch is a
+        // random sample of the data rather than a fixed contiguous slice.
+        int batchSize = Math.Max(1, Math.Min(_options.BatchSize, transformedData.Rows));
+        int numBatches = Math.Max(1, transformedData.Rows / batchSize);
+        var rowOrder = new int[transformedData.Rows];
+        for (int i = 0; i < rowOrder.Length; i++) rowOrder[i] = i;
+
         SetTrainingMode(true);
         try
         {
             for (int epoch = 0; epoch < epochCount; epoch++)
             {
-                for (int row = 0; row < transformedData.Rows; row++)
+                ShuffleRowOrder(rowOrder);
+                for (int batch = 0; batch < numBatches; batch++)
                 {
-                    var rowVec = GetRow(transformedData, row);
-                    var inputTensor = VectorToTensor(rowVec);
-                    // For an autoencoder, target == input.
-                    Train(inputTensor, inputTensor);
+                    int start = batch * batchSize;
+                    int end = Math.Min(start + batchSize, rowOrder.Length);
+                    for (int i = start; i < end; i++)
+                    {
+                        var rowVec = GetRow(transformedData, rowOrder[i]);
+                        var inputTensor = VectorToTensor(rowVec);
+                        // For an autoencoder, target == input.
+                        Train(inputTensor, inputTensor);
+                    }
                 }
             }
         }
@@ -398,6 +413,19 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
 
         return _transformer.InverseTransform(result);
+    }
+
+    /// <summary>
+    /// Fisher-Yates over the model's seeded <see cref="Random"/>, so reshuffling each
+    /// epoch leaves <c>GOGGLEOptions.Seed</c> reproducible.
+    /// </summary>
+    private void ShuffleRowOrder(int[] order)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
     }
 
     #endregion
@@ -599,12 +627,15 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         // KL divergence between q(z|x)=N(μ, σ²) and p(z)=N(0, I):
         //   KL = -½ Σ (1 + logσ² - μ² - σ²)
+        // scaled by KLWeight — the β of a β-VAE, and the sibling of SparsityWeight
+        // and StructureWeight below, which weight the other two terms of Eq. 5.
         var meanSq = Engine.TensorSquare(mean);
         var expLogVar = Engine.TensorExp(logVar);
         var klInner = Engine.TensorSubtract(
             Engine.TensorSubtract(Engine.TensorAddScalar(logVar, NumOps.One), meanSq),
             expLogVar);
-        var kl = Engine.TensorMultiplyScalar(ReduceToScalar(klInner), NumOps.FromDouble(-0.5));
+        var kl = Engine.TensorMultiplyScalar(
+            ReduceToScalar(klInner), NumOps.FromDouble(-0.5 * _options.KLWeight));
 
         var loss = Engine.TensorAdd(reconLoss, kl);
 
