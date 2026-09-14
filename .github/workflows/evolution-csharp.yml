@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/AiDotNet.Evolution.CSharp/**'
       - 'src/Evolution/Programs/**'
+      - 'src/Evolution/Deployment/**'
       - 'src/Configuration/ProgramEvolution*.cs'
       - 'src/AiModelBuilder.Evolution.cs'
       - 'src/AiModelBuilder.EvolutionPreflight.cs'
@@ -16,6 +17,7 @@ on:
       - 'AiDotNet.sln'
       - 'tests/AiDotNet.Evolution.CSharp.Tests/**'
       - 'tests/AiDotNet.Evolution.Integration.Tests/**'
+      - 'tests/AiDotNet.Evolution.Compatibility.Tests/**'
       - 'tests/AiDotNet.Tests/UnitTests/Evolution/**'
       - 'tests/AiDotNet.Tests/IntegrationTests/Evolution/**'
       - 'tests/AiDotNet.Tests/IntegrationTests/AutoML/MapElitesAutoMLIntegrationTests.cs'
