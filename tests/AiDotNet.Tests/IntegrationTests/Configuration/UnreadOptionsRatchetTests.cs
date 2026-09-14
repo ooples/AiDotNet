@@ -236,8 +236,53 @@ public class UnreadOptionsRatchetTests
     /// dual-implementation guard catching the exact defect it was built for in a fresh change. The
     /// LayerHelper path was wired too and the count returned to 49.
     /// </para>
+    /// <para>
+    /// 40 -> 20, the largest single drop since the detector was repaired. Nineteen came from the
+    /// synthetic-data generators and a handful of single-property models; one came from repairing
+    /// this scan again.
+    /// </para>
+    /// <para>
+    /// Wired: <c>GOGGLE</c> KLWeight (the ELBO's KL term entered the loss at weight 1.0 while the
+    /// options declared 0.1) and BatchSize; <c>MedGAN</c> BatchNormDecay (the generator's
+    /// BatchNorms took the layer's 0.9 default, not the paper's declared 0.99);
+    /// <c>OCTGAN</c> GradientPenaltyWeight; <c>TabFlow</c> Sigma (the probability path was built
+    /// with sigma implicitly 0); <c>AutoDiffTab</c> BetaSchedule; <c>TabLLMGen</c>,
+    /// <c>REaLTabFormer</c> and <c>TabTransformerGen</c> DropoutRate, plus TabTransformerGen
+    /// BatchSize; <c>ProgressiveGAN</c> InitialLearningRate and LearningRateDecay (both were
+    /// private consts shadowing the options that already declared them); <c>LiquidStateMachine</c>
+    /// ReadoutLearningRate (its Adam was built BARE, and in an LSM the readout is the only trained
+    /// part, so that rate is the whole of what training responds to).
+    /// </para>
+    /// <para>
+    /// <c>OCTGAN</c> is the one that was not a wiring. Its summary has always advertised "WGAN-GP
+    /// training", its <c>#region Gradient Penalty</c> stood empty, and the critic was kept
+    /// Lipschitz by weight clipping against a hardcoded <c>GanClip = 0.01</c>. The penalty is now
+    /// implemented against the repo's existing double-backprop pattern
+    /// (<c>WGANGP.TrainCriticBatchWithGP</c>, inner tape with <c>createGraph: true</c>) and the
+    /// clipping removed, because Gulrajani et al. 2017 replace clipping with the penalty rather
+    /// than combining them.
+    /// </para>
+    /// <para>
+    /// Deleted: <c>TimeGANOptions.NumFeatures</c>, which was <c>public new int</c> shadowing
+    /// <c>RiskModelOptions.NumFeatures</c>. TimeGAN takes its width from the data
+    /// (<c>Fit</c> sets it from <c>data.Columns</c>), so a configured feature count had no reader;
+    /// and the <c>new</c> made <c>options.NumFeatures</c> return 5 while
+    /// <c>((RiskModelOptions&lt;T&gt;)options).NumFeatures</c> returned 10 for the same object.
+    /// </para>
+    /// <para>
+    /// <b>One of the 21 was this scan's own false positive.</b> The pass-through that lets a
+    /// computed property carry consumption to what it derives from was restricted to property
+    /// GETTERS, so a helper METHOD did not carry it: SpeechEmotionRecognizer reads its labels
+    /// through <c>_options.GetEffectiveEmotionLabels()</c> and <c>EmotionLabels</c> was reported
+    /// unread while changing it demonstrably changes the model's <c>ClassLabels</c>. Extending the
+    /// edge to methods needed <see cref="BulkReaders"/> in the same change: <c>ToString</c>,
+    /// <c>Equals</c>, <c>GetHashCode</c>, <c>Clone</c> and <c>Validate</c> read every property
+    /// without consuming any, and one of them being called from outside would otherwise have
+    /// marked an entire class consumed. The count moved 21 -> 20, not 21 -> 3, which is the
+    /// evidence that it did.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 40;
+    private const int UnreadBaseline = 20;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry
@@ -260,6 +305,34 @@ public class UnreadOptionsRatchetTests
         "Seed",
         "RandomSeed",
         "Item",
+    };
+
+    /// <summary>
+    /// Members of an options class that read every property they can reach without any of it
+    /// being consumed, so they must not pass consumption on to what they read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The copy constructor is excluded structurally (constructors never propagate). These are
+    /// the ones that are ordinary methods and would otherwise mark the entire class consumed the
+    /// moment anything outside called one of them: <c>Validate</c> range-checks every property,
+    /// <c>Clone</c>/<c>DeepCopy</c> copy every property, and the three <c>object</c> overrides
+    /// touch every property to build a string, a comparison or a hash.
+    /// </para>
+    /// <para>
+    /// Getting this list wrong deflates the count rather than inflating it, which is the failure
+    /// mode this whole guard exists to prevent -- a scan that says "nothing is unread" because it
+    /// followed one <c>ToString</c> is indistinguishable from a scan that found nothing wrong.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> BulkReaders = new(StringComparer.Ordinal)
+    {
+        "Validate",
+        "Clone",
+        "DeepCopy",
+        "ToString",
+        "Equals",
+        "GetHashCode",
     };
 
     [Fact(Timeout = 600000)]
@@ -507,17 +580,29 @@ public class UnreadOptionsRatchetTests
                     var targetKey = cached.Value;
                     if (isOptions)
                     {
-                        // Only a property getter propagates. A copy constructor or Validate()
-                        // reading the same property proves nothing about whether a MODEL reads it.
-                        if (method.IsSpecialName
-                            && method.Name.StartsWith("get_", StringComparison.Ordinal)
+                        // A member that a MODEL can call propagates what it reads; a member that
+                        // reads everything without consuming anything does not. Constructors (the
+                        // copy constructor assigns every property) and Validate() (it range-checks
+                        // every property) are the second kind, and counting them made the whole
+                        // hierarchy look consumed.
+                        //
+                        // Both computed property getters AND ordinary helper methods are the first
+                        // kind. Restricting this to getters was a blind spot with the same shape as
+                        // the generic-token bug: SpeechEmotionRecognizer reads its labels through
+                        // `_options.GetEffectiveEmotionLabels()`, which applies the documented null
+                        // fallback, and EmotionLabels was reported unread while changing it
+                        // demonstrably changes the model's ClassLabels.
+                        if (method is not ConstructorInfo
+                            && !BulkReaders.Contains(method.Name)
                             && method.DeclaringType != null)
                         {
                             var ownerType = method.DeclaringType.IsGenericType
                                 ? method.DeclaringType.GetGenericTypeDefinition()
                                 : method.DeclaringType;
+                            bool isGetter = method.IsSpecialName
+                                && method.Name.StartsWith("get_", StringComparison.Ordinal);
                             var ownerKey = (ownerType.FullName ?? ownerType.Name,
-                                method.Name.Substring(4));
+                                isGetter ? method.Name.Substring(4) : method.Name);
                             if (!derivedFrom.TryGetValue(ownerKey, out var set))
                             {
                                 set = new HashSet<(string Type, string Name)>();
