@@ -142,7 +142,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     #region ISpeechRecognizer Methods
 
     /// <inheritdoc />
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         language ??= DetectLanguage(audio);
@@ -155,14 +155,14 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             Text = text, Language = language, DurationSeconds = duration,
             Confidence = NumOps.FromDouble(0.95)
         };
-        if (includeTimestamps)
+        if (ResolveReturnTimestamps(includeTimestamps))
             result.Segments = GenerateTimestamps(encoded, text, duration);
         return result;
     }
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null,
-        bool includeTimestamps = false, CancellationToken cancellationToken = default)
+        bool? includeTimestamps = null, CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     /// <inheritdoc />

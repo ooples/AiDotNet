@@ -120,7 +120,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// Per Kyutai (2024): the Mimi codec discretizes speech into multi-resolution tokens,
     /// and the Transformer backbone processes interleaved speech-text token streams.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -146,14 +146,14 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 

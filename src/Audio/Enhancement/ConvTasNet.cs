@@ -213,11 +213,11 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         _tcnBlocks = new List<TcnBlock>();
 
         // These are set for consistency
-        _bottleneckDim = 128;
-        _hiddenDim = 512;
-        _numBlocks = 8;
-        _numRepeats = 3;
-        _tcnKernelSize = 3;
+        _bottleneckDim = _options.BottleneckDim;
+        _hiddenDim = _options.HiddenDim;
+        _numBlocks = _options.NumBlocks;
+        _numRepeats = _options.NumRepeats;
+        _tcnKernelSize = _options.TcnKernelSize;
 
     }
 

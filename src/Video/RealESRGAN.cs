@@ -496,12 +496,12 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         ScaleFactor = _options.ScaleFactor;
 
         // Set defaults for other fields (not used in ONNX mode)
-        _numRRDBBlocks = 23;
-        _numFeatures = 64;
-        _residualScale = 0.2;
-        _l1Lambda = 1.0;
-        _perceptualLambda = 1.0;
-        _ganLambda = 0.1;
+        _numRRDBBlocks = _options.NumRRDBBlocks;
+        _numFeatures = _options.NumFeatures;
+        _residualScale = _options.ResidualScale;
+        _l1Lambda = _options.L1Lambda;
+        _perceptualLambda = _options.PerceptualLambda;
+        _ganLambda = _options.GanLambda;
         _lastDiscriminatorLoss = NumOps.Zero;
         _lastGeneratorLoss = NumOps.Zero;
 

@@ -193,14 +193,14 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _patchSize = 14;
+        _patchSize = _options.PatchSize;
         _numVisualTokens = (_options.ImageSize / _patchSize) * (_options.ImageSize / _patchSize);
-        _visionHiddenDim = 1024;
+        _visionHiddenDim = _options.VisionHiddenDim;
         _lmHiddenDim = _options.EmbeddingDimension;
-        _numVisionLayers = 24;
-        _numLmLayers = 32;
-        _numHeads = 16;
-        _vocabularySize = 32000;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
+        _vocabularySize = _options.VocabSize;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? languageModel = null;

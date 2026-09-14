@@ -846,9 +846,6 @@ public class AudioIntegrationTests
         Assert.Equal(3.0, options.GuidanceScale, Tolerance);
         Assert.Null(options.Seed);
         Assert.Equal(1, options.Channels);
-        Assert.Null(options.TextEncoderPath);
-        Assert.Null(options.LanguageModelPath);
-        Assert.Null(options.AudioCodecPath);
         Assert.NotNull(options.OnnxOptions);
     }
 

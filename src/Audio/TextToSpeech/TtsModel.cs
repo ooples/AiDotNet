@@ -301,11 +301,15 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _griffinLimIterations = _options.GriffinLimIterations;
         _fftSize = _options.FftSize;
         _hopLength = _options.HopLength;
-        _hiddenDim = 256;
-        _numHeads = 4;
-        _numEncoderLayers = 4;
-        _numDecoderLayers = 4;
-        _maxPhonemeLength = 256;
+        // These were hardcoded here while the NATIVE constructor read all five from options,
+        // so one model described itself two different ways and a caller configuring the ONNX
+        // path had their settings silently discarded. No ratchet sees this: the native path
+        // reads them, so the properties never counted as unread.
+        _hiddenDim = _options.HiddenDim;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _maxPhonemeLength = _options.MaxPhonemeLength;
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
@@ -317,12 +321,12 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         try
         {
             // Load acoustic model first
-            acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? new OnnxModelOptions());
+            acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? _options.OnnxOptions);
 
             // Load vocoder if path provided
             if (_options.VocoderModelPath is not null && _options.VocoderModelPath.Length > 0)
             {
-                vocoder = new OnnxModel<T>(_options.VocoderModelPath, onnxOptions ?? new OnnxModelOptions());
+                vocoder = new OnnxModel<T>(_options.VocoderModelPath, onnxOptions ?? _options.OnnxOptions);
             }
 
             // Assign to fields only after both succeed
@@ -420,7 +424,7 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _energy = _options.Energy;
         _speakerId = _options.SpeakerId;
         _language = _options.Language;
-        _useGriffinLimFallback = true;
+        _useGriffinLimFallback = _options.UseGriffinLimFallback;
         _griffinLimIterations = _options.GriffinLimIterations;
         _fftSize = _options.FftSize;
         _hopLength = _options.HopLength;

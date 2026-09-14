@@ -227,7 +227,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         _embedDim = _options.EmbedDim;
         _windowSize = _options.WindowSize;
         _patchSize = _options.PatchSize;
-        _mlpRatio = 4;
+        _mlpRatio = _options.MlpRatio;
         _decoderHiddenDim = _options.DecoderHiddenDim;
         _numDecoderLayers = _options.NumDecoderLayers;
         _decoderHeads = _options.DecoderHeads;

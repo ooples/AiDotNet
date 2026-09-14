@@ -343,7 +343,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         _maskRatio = options.MaskRatio;
         _useAutoregressiveDecoding = options.UseAutoregressiveDecoding;
         _generationTemperature = options.GenerationTemperature;
-        _numFeatures = 1;
+        _numFeatures = _options.NumFeatures;
 
         if (_patchLength < 1)
             throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");

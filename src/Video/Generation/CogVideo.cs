@@ -329,8 +329,8 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = 1024;
-        _numLayers = 24;
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();

@@ -291,12 +291,12 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         SampleRate = _options.SampleRate;
         _fftSize = _options.FftSize;
         _hopSize = _options.HopSize;
-        _numErbBands = 32;
-        _hiddenDim = 96;
-        _dfOrder = 5;
-        _dfBins = 96;
-        _numGruLayers = 2;
-        _lookahead = 2;
+        _numErbBands = _options.NumErbBands;
+        _hiddenDim = _options.HiddenDim;
+        _dfOrder = _options.DfOrder;
+        _dfBins = _options.DfBins;
+        _numGruLayers = _options.NumGruLayers;
+        _lookahead = _options.Lookahead;
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
 

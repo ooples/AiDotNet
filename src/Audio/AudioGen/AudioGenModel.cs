@@ -407,7 +407,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
         _numCodebooks = 4;  // EnCodec standard
         _codebookSize = 1024;  // EnCodec standard
-        _maxTextLength = 256;
+        _maxTextLength = _options.MaxTextLength;
 
         // Set audio base class properties
         SampleRate = _options.SampleRate;
@@ -418,9 +418,11 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         try
         {
-            textEncoder = new OnnxModel<T>(textEncoderPath);
-            languageModel = new OnnxModel<T>(languageModelPath);
-            audioDecoder = new OnnxModel<T>(audioDecoderPath);
+            // AudioGenOptions.OnnxOptions was declared and never passed to a single session, so
+            // every ONNX setting a caller configured was discarded silently.
+            textEncoder = new OnnxModel<T>(textEncoderPath, _options.OnnxOptions);
+            languageModel = new OnnxModel<T>(languageModelPath, _options.OnnxOptions);
+            audioDecoder = new OnnxModel<T>(audioDecoderPath, _options.OnnxOptions);
 
             _textEncoder = textEncoder;
             _languageModel = languageModel;

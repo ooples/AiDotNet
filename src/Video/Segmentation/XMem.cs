@@ -198,7 +198,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = 256;
+        _numFeatures = _options.NumFeatures;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();

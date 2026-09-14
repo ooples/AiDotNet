@@ -261,8 +261,8 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _inputChannels = 320;
-        _numLayers = 8;
+        _inputChannels = _options.InputChannels;
+        _numLayers = _options.NumLayers;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();

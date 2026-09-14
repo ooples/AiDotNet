@@ -265,10 +265,10 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = 120;
-        _numFrames = 6;
+        _embedDim = _options.EmbedDim;
+        _numFrames = _options.NumFrames;
         NumFrames = 6;
-        _numBlocks = 8;
+        _numBlocks = _options.NumBlocks;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();

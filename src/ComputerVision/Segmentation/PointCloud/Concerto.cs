@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using AiDotNet.Attributes;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -212,9 +213,230 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
             SetTrainingMode(false);
         }
     }
+
+    /// <summary>
+    /// Runs Concerto's self-supervised pretraining: cross-modal distillation from paired camera
+    /// views plus intra-modal self-distillation against a momentum teacher.
+    /// </summary>
+    /// <param name="samples">Point clouds with their paired views.</param>
+    /// <param name="optimizer">Optimizer to use; when null one is built at the configured LearningRate.</param>
+    /// <returns>The mean loss over the final epoch.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This teaches the model without any labels. It shows the network a
+    /// point cloud and photographs of the same scene, and asks the point features to agree with
+    /// what the camera sees at the same place. At the same time a slowly-moving copy of the network
+    /// (the "teacher") supplies a second opinion the network must match. After pretraining, the
+    /// usual labelled training needs far fewer examples.
+    /// </para>
+    /// <para>
+    /// The teacher forward pass runs BEFORE the gradient tape is opened, and the teacher branch is
+    /// additionally stop-gradiented inside the objective. The teacher is an exponential moving
+    /// average of the student, so back-propagating into it lets the pair satisfy the loss by both
+    /// drifting to a constant -- the standard collapse this formulation exists to avoid.
+    /// </para>
+    /// <para>
+    /// <c>IntraModalUpcastLevel</c> and <c>CrossModalUpcastLevel</c> select which decoder layer's
+    /// output feeds each objective, counted from the first decoder layer and clamped to the decoder
+    /// depth. The cross-modal level must produce as many channels as the paired views carry per
+    /// patch, because the objective takes a cosine similarity between the two; a mismatch throws
+    /// here rather than silently comparing vectors of different widths.
+    /// </para>
+    /// </remarks>
+    public T Pretrain(
+        IReadOnlyList<ConcertoPretrainingSample<T>> samples,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Pretraining is not supported in ONNX mode. Use the native mode constructor.");
+        if (samples is null) throw new ArgumentNullException(nameof(samples));
+        if (samples.Count == 0)
+            throw new ArgumentException("At least one pretraining sample is required.", nameof(samples));
+
+        var opt = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
+
+        var teacher = new Vector<T>(GetParameters().ToArray());
+        Tensor<T>? center = null;
+        T lastEpochLoss = NumOps.Zero;
+
+        SetTrainingMode(true);
+        try
+        {
+            for (int epoch = 0; epoch < _options.PretrainingEpochs; epoch++)
+            {
+                T epochLoss = NumOps.Zero;
+
+                foreach (var sample in samples)
+                {
+                    if (sample is null) throw new ArgumentException("A pretraining sample was null.", nameof(samples));
+
+                    // Teacher pass first, outside any tape: swapping parameters mid-tape would
+                    // record the teacher's ops against the student's graph.
+                    var studentParameters = GetParameters();
+                    Tensor<T> teacherLogits;
+                    UpdateParameters(teacher);
+                    try
+                    {
+                        teacherLogits = FlattenSpatial(
+                            ForwardToDecoderLevel(sample.Input, _options.IntraModalUpcastLevel));
+                    }
+                    finally
+                    {
+                        UpdateParameters(studentParameters);
+                    }
+
+                    using var tape = new GradientTape<T>();
+
+                    var studentIntra = FlattenSpatial(
+                        ForwardToDecoderLevel(sample.Input, _options.IntraModalUpcastLevel));
+                    var studentCross = FlattenSpatial(
+                        ForwardToDecoderLevel(sample.Input, _options.CrossModalUpcastLevel));
+
+                    ValidateCrossModalWidth(studentCross, sample);
+                    ValidatePointCount(studentCross, sample);
+
+                    var intraLoss = ConcertoIntraModalObjective<T>.ComputeTapeLoss(
+                        studentIntra, teacherLogits, center);
+                    var crossLoss = ConcertoCrossModalObjective<T>.ComputeTapeLoss(
+                        studentCross, sample.PointCoordinates, sample.Views,
+                        _options.VisibilityDepthToleranceMeters);
+
+                    var weighted = Engine.TensorAdd(
+                        Engine.TensorMultiplyScalar(intraLoss, NumOps.FromDouble(_options.IntraModalLossWeight)),
+                        Engine.TensorMultiplyScalar(crossLoss, NumOps.FromDouble(_options.CrossModalLossWeight)));
+
+                    T lossValue = weighted.Length > 0 ? weighted[0] : NumOps.Zero;
+                    epochLoss = NumOps.Add(epochLoss, lossValue);
+
+                    var trainable = CollectModelTrainableTensors();
+                    var allGradients = tape.ComputeGradients(weighted, sources: null);
+
+                    var gradients = new Dictionary<Tensor<T>, Tensor<T>>(
+                        AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    foreach (var parameter in trainable)
+                    {
+                        if (allGradients.TryGetValue(parameter, out var gradient))
+                        {
+                            gradients[parameter] = gradient;
+                        }
+                    }
+
+                    if (gradients.Count == 0) continue;
+
+                    MarkTrainMutationStarted();
+                    opt.Step(new TapeStepContext<T>(trainable, gradients, lossValue));
+                    InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+
+                    // EMA teacher and DINO centering, both AFTER the student moved -- updating the
+                    // teacher first would make it track the pre-step student and lag by one sample.
+                    ConcertoIntraModalObjective<T>.UpdateTeacher(
+                        teacher, GetParameters(), _options.TeacherMomentum);
+
+                    center ??= new Tensor<T>(new[] { teacherLogits.Shape[^1] });
+                    ConcertoIntraModalObjective<T>.UpdateCenter(center, teacherLogits);
+                }
+
+                lastEpochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(samples.Count));
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+
+        return lastEpochLoss;
+    }
     #endregion
 
     #region Private Methods
+    /// <summary>
+    /// Runs the encoder and the first <paramref name="decoderLevel"/> decoder layers.
+    /// </summary>
+    /// <remarks>
+    /// The level is clamped to the decoder depth rather than throwing: a published upcast level
+    /// describes the paper's decoder hierarchy, and this implementation's decoder head may be
+    /// shallower, in which case the deepest available features are the honest answer.
+    /// </remarks>
+    private Tensor<T> ForwardToDecoderLevel(Tensor<T> input, int decoderLevel)
+    {
+        bool hasBatch = input.Rank == 4;
+        var features = hasBatch ? input : AddBatchDimension(input);
+
+        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+
+        int decoderLayers = Layers.Count - _encoderLayerEnd;
+        int take = Math.Max(1, Math.Min(decoderLevel, decoderLayers));
+        for (int i = 0; i < take; i++) features = Layers[_encoderLayerEnd + i].Forward(features);
+
+        return features;
+    }
+
+    /// <summary>
+    /// Reshapes channel-first spatial features [batch, channels, height, width] into the
+    /// [points, featureDim] layout both pretraining objectives expect.
+    /// </summary>
+    private Tensor<T> FlattenSpatial(Tensor<T> features)
+    {
+        if (features.Rank != 4) return features;
+
+        int batch = features.Shape[0];
+        int channels = features.Shape[1];
+        int height = features.Shape[2];
+        int width = features.Shape[3];
+
+        // Channels last, so each spatial position contributes one contiguous feature vector.
+        var permuted = Engine.TensorPermute(features, new[] { 0, 2, 3, 1 });
+        return Engine.Reshape(permuted, new[] { batch * height * width, channels });
+    }
+
+    /// <summary>
+    /// Rejects a sample whose point count does not match the decoder's spatial positions.
+    /// </summary>
+    /// <remarks>
+    /// Each spatial position of the decoder output supplies exactly one point's feature vector, so
+    /// the coordinates must line up one-to-one. Without this check the mismatch surfaces deep inside
+    /// the engine as "Source array was not long enough", which says nothing about the real cause.
+    /// The encoder downsamples, so the position count is much smaller than the input resolution.
+    /// </remarks>
+    private static void ValidatePointCount(Tensor<T> studentCross, ConcertoPretrainingSample<T> sample)
+    {
+        int positions = studentCross.Shape[0];
+        int points = sample.PointCoordinates.Shape[0];
+        if (positions == points) return;
+
+        throw new ArgumentException(
+            $"The decoder level feeding the cross-modal objective produces {positions} spatial "
+            + $"positions but the sample supplies {points} point coordinates. Each position is one "
+            + "point's feature vector, so the two must match; note that the encoder downsamples, so "
+            + "the position count is far smaller than the input resolution.",
+            nameof(sample));
+    }
+
+    /// <summary>
+    /// Rejects a sample whose paired views carry a different feature width than the decoder level
+    /// feeding the cross-modal objective.
+    /// </summary>
+    private static void ValidateCrossModalWidth(Tensor<T> studentCross, ConcertoPretrainingSample<T> sample)
+    {
+        if (sample.Views.Count == 0) return;
+
+        int pointWidth = studentCross.Shape[^1];
+        int patchWidth = sample.Views[0].ImagePatchFeatures.Shape[^1];
+        if (pointWidth == patchWidth) return;
+
+        throw new ArgumentException(
+            $"CrossModalUpcastLevel produces {pointWidth} channels but the paired views carry "
+            + $"{patchWidth} per patch. The cross-modal objective is a cosine similarity between "
+            + "the two, so they must match: either select a decoder level of the right width or "
+            + "supply image features from an encoder of that width.",
+            nameof(sample));
+    }
+
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(ConcertoModelSize modelSize) => modelSize switch
     {
         ConcertoModelSize.Base => ([48, 96, 192, 384], [2, 2, 6, 2], 256),

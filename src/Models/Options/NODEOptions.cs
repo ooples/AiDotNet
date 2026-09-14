@@ -156,4 +156,16 @@ public class NODEOptions<T> : RiskModelOptions<T>
     /// <value>The activation function, defaulting to ReLU.</value>
     public IActivationFunction<T>? HiddenActivation { get; set; } = new ReLUActivation<T>();
 
+    /// <summary>
+    /// Gets or sets the hidden layer vector activation function (alternative to scalar activation).
+    /// </summary>
+    /// <value>The vector activation function, or null to use <see cref="HiddenActivation"/>.</value>
+    /// <remarks>
+    /// Applies to the optional feature-preprocessing layer NODEBase builds when
+    /// <see cref="UseFeaturePreprocessing"/> is set. This was briefly deleted on the grounds that
+    /// NODE is a tree ensemble with no hidden activation -- true of the LayerHelper path, and false
+    /// of NODEBase.
+    /// </remarks>
+    public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; }
+
 }

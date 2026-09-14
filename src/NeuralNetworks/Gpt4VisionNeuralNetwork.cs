@@ -211,12 +211,12 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _maxImagesPerRequest = _options.MaxImagesPerRequest;
         _maxImageResolution = (2048, 2048);
         _supportedDetailLevels = new List<string> { "low", "high", "auto" };
-        _vocabularySize = 128256;
+        _vocabularySize = _options.VocabSize;
         _hiddenDim = _options.EmbeddingDimension;
-        _numVisionLayers = 24;
-        _numLanguageLayers = 32;
-        _numHeads = 32;
-        _patchSize = 14;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLanguageLayers = _options.NumLanguageLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
 
         InitializeLayers();
     }

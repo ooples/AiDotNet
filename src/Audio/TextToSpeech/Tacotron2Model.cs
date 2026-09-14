@@ -375,16 +375,16 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 
         // Default architecture parameters (standard Tacotron2)
         _vocabSize = 148; // Standard phoneme vocabulary
-        _embeddingDim = 512;
-        _encoderDim = 512;
-        _decoderDim = 1024;
-        _attentionDim = 128;
-        _attentionFilters = 32;
-        _prenetDim = 256;
-        _postnetEmbeddingDim = 512;
-        _numEncoderConvLayers = 3;
-        _numPostnetConvLayers = 5;
-        _numMelsPerFrame = 2;
+        _embeddingDim = _options.EmbeddingDim;
+        _encoderDim = _options.EncoderDim;
+        _decoderDim = _options.DecoderDim;
+        _attentionDim = _options.AttentionDim;
+        _attentionFilters = _options.AttentionFilters;
+        _prenetDim = _options.PrenetDim;
+        _postnetEmbeddingDim = _options.PostnetEmbeddingDim;
+        _numEncoderConvLayers = _options.NumEncoderConvLayers;
+        _numPostnetConvLayers = _options.NumPostnetConvLayers;
+        _numMelsPerFrame = _options.NumMelsPerFrame;
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();

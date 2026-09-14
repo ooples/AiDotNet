@@ -367,7 +367,9 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         MelSpec = _melSpectrogram;
 
         // Load ONNX models with proper cleanup on failure
-        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        // Falls back to the declared option rather than a fresh default, which is what made
+        // WhisperOptions.OnnxOptions impossible to apply.
+        var onnxOpts = onnxOptions ?? _options.OnnxOptions;
         OnnxModel<T>? encoder = null;
 
         try
@@ -616,11 +618,15 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// </summary>
     /// <param name="audio">Audio waveform tensor [batch, samples] or [samples].</param>
     /// <param name="language">Optional language code. Auto-detected if null.</param>
-    /// <param name="includeTimestamps">Whether to include word-level timestamps.</param>
+    /// <param name="includeTimestamps">Whether to include word-level timestamps. When null,
+    /// the model's configured <c>ReturnTimestamps</c> is used.</param>
     /// <returns>Transcription result containing text and optional timestamps.</returns>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
+
+        // The declared ReturnTimestamps was unreachable while this defaulted to false: a caller
+        // who configured it still got no timestamps unless they also passed the argument.
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -647,7 +653,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             Language = effectiveLanguage,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = (double)audio.Length / SampleRate,
-            Segments = includeTimestamps ? ExtractSegments(tokens, text) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
@@ -657,7 +663,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);

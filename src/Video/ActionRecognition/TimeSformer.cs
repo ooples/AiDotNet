@@ -243,10 +243,10 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         _options.Validate();
 
         _embedDim = _options.EmbedDim;
-        _numHeads = 12;
-        _numLayers = 12;
-        _numFrames = 8;
-        _patchSize = 16;
+        _numHeads = _options.NumHeads;
+        _numLayers = _options.NumLayers;
+        _numFrames = _options.NumFrames;
+        _patchSize = _options.PatchSize;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _numClasses = _options.NumClasses;
         _attentionType = AttentionType.DividedSpaceTime;

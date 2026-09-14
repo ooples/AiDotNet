@@ -230,10 +230,10 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 
         _numClasses = _options.NumClasses;
         _numFrames = _options.NumFrames;
-        _numFeatures = 768;
+        _numFeatures = _options.NumFeatures;
         _patchSize = 16;
         _tubeletSize = 2;
-        _maskRatio = 0.9;
+        _maskRatio = _options.MaskRatio;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;

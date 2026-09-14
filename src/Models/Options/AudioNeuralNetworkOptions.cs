@@ -34,4 +34,20 @@ public class AudioNeuralNetworkOptions : ModelHyperparameterOptions
     protected void ValidateCore()
     {
     }
+
+    /// <summary>
+    /// Gets or sets whether transcription returns per-segment timestamps by default.
+    /// </summary>
+    /// <value>Defaults to <c>false</c>, matching the previous method-parameter default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Timestamps tell you WHEN each piece of text was spoken, not just
+    /// what was said. They cost a little extra work, so they are off unless you ask for them.</para>
+    /// <para>
+    /// Declared here rather than per model because every <c>ISpeechRecognizer</c> implementation --
+    /// 104 of them -- already branches on this flag; before this it could only be set per call, so
+    /// there was no way to configure a model to return timestamps by default. WhisperOptions
+    /// declared its own copy that nothing read.
+    /// </para>
+    /// </remarks>
+    public bool ReturnTimestamps { get; set; } = false;
 }

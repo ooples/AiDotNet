@@ -154,7 +154,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
-        _decoderDim = 256;
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
     #endregion

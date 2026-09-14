@@ -152,15 +152,15 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _numFeatures = 256;
+        _numFeatures = _options.NumFeatures;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();
 
         _numClasses = _options.NumClasses;
-        _highThreshold = 0.6;
-        _lowThreshold = 0.1;
-        _maxAge = 30;
+        _highThreshold = _options.HighThreshold;
+        _lowThreshold = _options.LowThreshold;
+        _maxAge = _options.MaxAge;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 1440;
         _lossFunction = new FocalLoss<T>();

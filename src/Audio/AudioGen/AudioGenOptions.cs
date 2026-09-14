@@ -64,9 +64,6 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         TopP = other.TopP;
         GuidanceScale = other.GuidanceScale;
         Channels = other.Channels;
-        TextEncoderPath = other.TextEncoderPath;
-        LanguageModelPath = other.LanguageModelPath;
-        AudioCodecPath = other.AudioCodecPath;
         OnnxOptions = other.OnnxOptions;
         TextHiddenDim = other.TextHiddenDim;
         LmHiddenDim = other.LmHiddenDim;
@@ -130,21 +127,6 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     /// Gets or sets the number of audio channels (1=mono, 2=stereo).
     /// </summary>
     public int Channels { get; set; } = 1;
-
-    /// <summary>
-    /// Gets or sets the path to the text encoder model.
-    /// </summary>
-    public string? TextEncoderPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to the language model.
-    /// </summary>
-    public string? LanguageModelPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to the audio codec (decoder) model.
-    /// </summary>
-    public string? AudioCodecPath { get; set; }
 
     /// <summary>
     /// Gets or sets the ONNX execution options.

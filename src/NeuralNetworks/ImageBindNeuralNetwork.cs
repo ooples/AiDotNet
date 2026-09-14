@@ -215,13 +215,13 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _imageSize = _options.ImageSize;
         _audioSampleRate = _options.AudioSampleRate;
         _audioMaxDuration = 10; // 10 seconds max
-        _patchSize = 14;
-        _hiddenDim = 1280;
-        _numEncoderLayers = 32;
-        _numHeads = 16;
-        _vocabularySize = 49408;
-        _imuTimesteps = 2000;
-        _numVideoFrames = 2;
+        _patchSize = _options.PatchSize;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabularySize = _options.VocabSize;
+        _imuTimesteps = _options.ImuTimesteps;
+        _numVideoFrames = _options.NumVideoFrames;
 
         _supportedModalities = new List<ModalityType>
         {

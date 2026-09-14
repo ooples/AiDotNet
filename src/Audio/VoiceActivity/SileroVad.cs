@@ -249,9 +249,9 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         _minSilenceDurationMs = _options.MinSilenceDurationMs;
 
         // Default architecture parameters (not used in ONNX mode)
-        _convFilters = 64;
-        _lstmHiddenDim = 64;
-        _numLstmLayers = 2;
+        _convFilters = _options.ConvFilters;
+        _lstmHiddenDim = _options.LstmHiddenDim;
+        _numLstmLayers = _options.NumLstmLayers;
 
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath);

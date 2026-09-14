@@ -384,10 +384,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _qformerHiddenDim = 768;
-        _numQformerLayers = 12;
-        _numHeads = 12;
-        _numQueryTokens = 32;
+        _qformerHiddenDim = _options.QformerHiddenDim;
+        _numQformerLayers = _options.NumQformerLayers;
+        _numHeads = _options.NumHeads;
+        _numQueryTokens = _options.NumQueryTokens;
         _patchSize = 14; // ViT-G uses 14x14 patches
         _vocabularySize = 30522; // BERT vocabulary size
         _visionHiddenDim = 1408; // ViT-G hidden dimension

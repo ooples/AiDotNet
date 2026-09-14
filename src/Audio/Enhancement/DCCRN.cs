@@ -293,13 +293,13 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SampleRate = _options.SampleRate;
         _fftSize = _options.FftSize;
         _hopSize = _options.HopSize;
-        _numStages = 6;
-        _baseChannels = 32;
-        _lstmHiddenDim = 256;
-        _numLstmLayers = 2;
-        _useComplexMask = true;
-        _kernelSize = 5;
-        _stride = 2;
+        _numStages = _options.NumStages;
+        _baseChannels = _options.BaseChannels;
+        _lstmHiddenDim = _options.LstmHiddenDim;
+        _numLstmLayers = _options.NumLstmLayers;
+        _useComplexMask = _options.UseComplexMask;
+        _kernelSize = _options.KernelSize;
+        _stride = _options.Stride;
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
 
         // Default loss function (MSE is standard for speech enhancement)

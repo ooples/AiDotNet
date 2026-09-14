@@ -333,13 +333,13 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _hopLength = _options.HopLength;
 
         // Default architecture parameters
-        _hiddenDim = 192;
-        _numHeads = 2;
-        _numEncoderLayers = 6;
-        _numFlowLayers = 4;
-        _speakerEmbeddingDim = 256;
-        _numSpeakers = 1;
-        _maxPhonemeLength = 256;
+        _hiddenDim = _options.HiddenDim;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numFlowLayers = _options.NumFlowLayers;
+        _speakerEmbeddingDim = _options.SpeakerEmbeddingDim;
+        _numSpeakers = _options.NumSpeakers;
+        _maxPhonemeLength = _options.MaxPhonemeLength;
         _phonemeVocabSize = DefaultPhonemeVocabSize;
         _upsampleRates = (int[])DefaultUpsampleRates.Clone();
 

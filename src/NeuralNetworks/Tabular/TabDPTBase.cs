@@ -228,10 +228,15 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         for (int i = 0; i < mlpDims.Length; i++)
         {
             bool isLast = i == mlpDims.Length - 1;
-            _mlpLayers[i] = new FullyConnectedLayer<T>(
-                inputDim,
-                mlpDims[i],
-                isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
+            _mlpLayers[i] = (isLast || Options.HiddenVectorActivation is null)
+                ? new FullyConnectedLayer<T>(
+                    inputDim,
+                    mlpDims[i],
+                    isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    inputDim,
+                    mlpDims[i],
+                    Options.HiddenVectorActivation);
             inputDim = mlpDims[i];
         }
 

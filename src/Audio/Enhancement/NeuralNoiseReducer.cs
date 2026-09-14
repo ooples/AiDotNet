@@ -282,9 +282,9 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
         NumChannels = _options.NumChannels;
         _fftSize = _options.FftSize;
         _hopSize = _options.HopSize;
-        _numStages = 4;
-        _baseFilters = 32;
-        _bottleneckDim = 256;
+        _numStages = _options.NumStages;
+        _baseFilters = _options.BaseFilters;
+        _bottleneckDim = _options.BottleneckDim;
         EnhancementStrength = _options.EnhancementStrength;
 
         // Load ONNX model

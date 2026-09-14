@@ -192,15 +192,15 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _imageSize = _options.ImageSize;
         _numPerceiverTokens = _options.NumPerceiverTokens;
         _maxImagesInContext = _options.MaxImagesInContext;
-        _visionHiddenDim = 1024;
-        _lmHiddenDim = 2048;
-        _numVisionLayers = 24;
-        _numLmLayers = 32;
-        _numHeads = 16;
+        _visionHiddenDim = _options.VisionHiddenDim;
+        _lmHiddenDim = _options.LmHiddenDim;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
         _patchSize = 14;
-        _vocabularySize = 32000;
+        _vocabularySize = _options.VocabSize;
         _languageModelBackbone = LanguageModelBackbone.Chinchilla;
-        _numPerceiverLayers = 6;
+        _numPerceiverLayers = _options.NumPerceiverLayers;
         // 1e-3 is the CODEBASE Adam default, chosen deliberately rather than taken from the paper.
         // Alayrac et al. 2022 specify their schedule in section 3 and Appendix B, and it is not a
         // single constant: a linear warm-up to 1e-4 over the first 5000 steps, then cosine decay,
@@ -208,7 +208,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         // from the middle of that schedule would look like a citation while reproducing none of it,
         // so the framework default is used and the deviation is stated here instead. Callers
         // reproducing the paper should pass their own optimizer with the published schedule.
-        _learningRate = 1e-3;
+        _learningRate = _options.LearningRate;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? languageModel = null;

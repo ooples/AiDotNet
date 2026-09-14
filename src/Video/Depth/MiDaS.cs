@@ -164,8 +164,8 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = 768;
-        _numLayers = 12;
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 384;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.

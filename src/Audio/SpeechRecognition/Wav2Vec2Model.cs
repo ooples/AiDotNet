@@ -278,10 +278,10 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         NumMels = 0; // Wav2Vec2 doesn't use mel spectrograms
 
         // Model dimensions (standard Wav2Vec2 Base)
-        _hiddenDim = 768;
-        _numTransformerLayers = 12;
-        _numHeads = 12;
-        _ffDim = 3072;
+        _hiddenDim = _options.HiddenDim;
+        _numTransformerLayers = _options.NumTransformerLayers;
+        _numHeads = _options.NumHeads;
+        _ffDim = _options.FfDim;
 
         // Initialize vocabulary
         _vocabulary = vocabulary ?? GetDefaultVocabulary();
@@ -510,7 +510,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// <summary>
     /// Transcribes audio to text.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
 
@@ -538,7 +538,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             Language = language ?? _language ?? "en",
             Confidence = NumOps.FromDouble(1.0),
             DurationSeconds = (double)audio.Shape[0] / SampleRate,
-            Segments = includeTimestamps ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
@@ -548,7 +548,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);

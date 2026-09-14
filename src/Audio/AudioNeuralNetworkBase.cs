@@ -243,6 +243,20 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     }
 
     /// <summary>
+    /// Resolves a per-call timestamps flag against the model's configured default.
+    /// </summary>
+    /// <param name="requested">The caller's choice, or null to use the configured default.</param>
+    /// <returns>Whether to emit timestamps.</returns>
+    /// <remarks>
+    /// Every ISpeechRecognizer implementation branches on this flag, but it used to arrive only
+    /// as a method parameter defaulting to false, so a model could not be CONFIGURED to return
+    /// timestamps -- the caller had to ask every time. Resolution lives here so all 104
+    /// implementations agree on what null means.
+    /// </remarks>
+    protected bool ResolveReturnTimestamps(bool? requested)
+        => requested ?? (Options as AudioNeuralNetworkOptions)?.ReturnTimestamps ?? false;
+
+    /// <summary>
     /// Creates the Adam/Transformer-schedule recipe used by Conformer-family ASR papers.
     /// </summary>
     /// <param name="modelDimension">Hidden width used by the inverse-square-root schedule.</param>

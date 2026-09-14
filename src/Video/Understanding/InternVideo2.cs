@@ -277,10 +277,10 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
         _options.Validate();
 
         _embedDim = _options.EmbedDim;
-        _numHeads = 12;
-        _numEncoderLayers = 12;
-        _numFrames = 8;
-        _patchSize = 14;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numFrames = _options.NumFrames;
+        _patchSize = _options.PatchSize;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _lossFunction = new MeanSquaredErrorLoss<T>();
 

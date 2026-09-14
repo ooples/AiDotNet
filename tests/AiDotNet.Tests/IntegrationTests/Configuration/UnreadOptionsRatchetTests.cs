@@ -171,8 +171,37 @@ public class UnreadOptionsRatchetTests
     /// generated clone registry mentions the name only as a string literal. Something marks it
     /// read and the path was not identified; until it is, this count may UNDER-report.
     /// </para>
+    /// <para>
+    /// 66 -> 50 with the Concerto and audio clusters.
+    /// </para>
+    /// <para>
+    /// <b>Concerto, 10.</b> The properties configured a self-supervised pretraining pipeline whose
+    /// pieces all existed -- two objectives, a paired-view type, a teacher EMA -- referenced only
+    /// by each other, with no orchestrator. A closed ring of mutually-referencing types is the
+    /// signature of an unimplemented subsystem, and it makes the decision "implement or remove a
+    /// feature" rather than "wire a property". Both objectives also computed in raw <c>double</c>
+    /// and returned a bare scalar, so a training loop built on them would have run, reported a
+    /// falling number, and updated nothing; they were rewritten in engine operations first.
+    /// <c>Pretrain</c> is covered by a test asserting the loss FALLS, which the non-differentiable
+    /// version would have failed and a "does it run" assertion would not.
+    /// </para>
+    /// <para>
+    /// <b>Audio, 11.</b> Three shapes, each treated on its merits. <c>ReturnTimestamps</c> now
+    /// lives once on <c>AudioNeuralNetworkOptions</c> with a resolver on the shared base: all 104
+    /// ISpeechRecognizer implementations already branched on the flag, but it arrived only as a
+    /// method parameter defaulting to false, so no model could be CONFIGURED to return timestamps.
+    /// <c>OnnxOptions</c> fell back to <c>new OnnxModelOptions()</c> instead of the declared
+    /// property -- AudioGen passed no options to any of its three sessions at all. The six ONNX
+    /// model-path properties were DELETED: each duplicates a required constructor parameter, and a
+    /// file the caller must supply is an input rather than a tunable.
+    /// </para>
+    /// <para>
+    /// Beware when auditing these: <c>CLAPModelOptions</c> declares a <c>TextEncoderPath</c> of its
+    /// own that IS read, so a name-only scan reports readers for AudioGen's that belong to a
+    /// different class entirely.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 66;
+    private const int UnreadBaseline = 50;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

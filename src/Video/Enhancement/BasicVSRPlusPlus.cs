@@ -363,7 +363,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _numFeatures = _options.NumFeatures;
         _numResidualBlocks = _options.NumResidualBlocks;
         _numPropagations = _options.NumPropagations;
-        _learningRate = 0.0001;
+        _learningRate = _options.LearningRate;
 
         _residualBlocks = [];
         _backwardAlignments = [];

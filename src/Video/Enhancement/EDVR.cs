@@ -152,9 +152,9 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _numFeatures = 64;
-        _numFrames = 5;
-        _numBlocks = 5;
+        _numFeatures = _options.NumFeatures;
+        _numFrames = _options.NumFrames;
+        _numBlocks = _options.NumBlocks;
         // Validated after the path checks so a missing model file reports itself
         // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();

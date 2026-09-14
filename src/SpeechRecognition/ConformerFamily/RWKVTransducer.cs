@@ -93,12 +93,12 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     /// Per the paper: replaces quadratic self-attention with linear RWKV in the attention branch,
     /// while retaining cgMLP for local patterns, then merges via enhanced depthwise-conv module.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
         var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        if (includeTimestamps)
+        if (ResolveReturnTimestamps(includeTimestamps))
             throw new NotSupportedException(
                 "RWKVTransducer does not produce word timestamps; SupportsWordTimestamps is false. " +
                 "Word alignment needs CTC forced alignment, which this model does not implement.");
@@ -108,7 +108,7 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = Array.Empty<TranscriptionSegment<T>>() };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     /// <summary>Not supported: this model has no language-identification head.</summary>
     /// <remarks>
     /// This ran a full forward pass and then classified by counting CJK versus Latin CODE POINTS in

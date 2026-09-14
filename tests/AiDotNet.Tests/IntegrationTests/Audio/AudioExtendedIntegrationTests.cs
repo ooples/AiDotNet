@@ -876,7 +876,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1.0, options.Energy, Tolerance);
         Assert.Null(options.SpeakerId);
         Assert.Null(options.Language);
-        Assert.Null(options.AcousticModelPath);
         Assert.Null(options.VocoderModelPath);
         Assert.True(options.UseGriffinLimFallback);
         Assert.Equal(60, options.GriffinLimIterations);
@@ -897,7 +896,6 @@ public class AudioExtendedIntegrationTests
             Energy = 0.8,
             SpeakerId = 3,
             Language = "fr",
-            AcousticModelPath = "/model/acoustic.onnx",
             VocoderModelPath = "/model/vocoder.onnx",
             UseGriffinLimFallback = false,
             GriffinLimIterations = 100,

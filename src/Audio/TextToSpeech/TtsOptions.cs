@@ -59,7 +59,6 @@ public class TtsOptions : AudioNeuralNetworkOptions
         Energy = other.Energy;
         SpeakerId = other.SpeakerId;
         Language = other.Language;
-        AcousticModelPath = other.AcousticModelPath;
         VocoderModelPath = other.VocoderModelPath;
         UseGriffinLimFallback = other.UseGriffinLimFallback;
         GriffinLimIterations = other.GriffinLimIterations;
@@ -106,11 +105,6 @@ public class TtsOptions : AudioNeuralNetworkOptions
     /// Gets or sets the language code for multi-lingual models.
     /// </summary>
     public string? Language { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to the acoustic model (FastSpeech2) ONNX file.
-    /// </summary>
-    public string? AcousticModelPath { get; set; }
 
     /// <summary>
     /// Gets or sets the path to the vocoder (HiFi-GAN) ONNX file.

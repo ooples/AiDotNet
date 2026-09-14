@@ -59,7 +59,6 @@ public class WhisperOptions : AudioNeuralNetworkOptions
         MaxTokens = other.MaxTokens;
         BeamSize = other.BeamSize;
         Temperature = other.Temperature;
-        ReturnTimestamps = other.ReturnTimestamps;
         WordTimestamps = other.WordTimestamps;
     }
 
@@ -131,11 +130,6 @@ public class WhisperOptions : AudioNeuralNetworkOptions
     /// Lower values make output more deterministic.
     /// </summary>
     public double Temperature { get; set; } = 0.0;
-
-    /// <summary>
-    /// Gets or sets whether to return timestamps with the transcription.
-    /// </summary>
-    public bool ReturnTimestamps { get; set; } = false;
 
     /// <summary>
     /// Gets or sets whether to include word-level timestamps.

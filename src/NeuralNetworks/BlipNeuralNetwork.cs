@@ -324,13 +324,13 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _hiddenDim = 768;
-        _numLayers = 12;
-        _numHeads = 12;
-        _mlpDim = 3072;
-        _patchSize = 16;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumEncoderLayers;
+        _numHeads = _options.NumHeads;
+        _mlpDim = _options.MlpDim;
+        _patchSize = _options.PatchSize;
         _vocabularySize = 30522; // BERT vocabulary size
-        _numDecoderLayers = 12;
+        _numDecoderLayers = _options.NumDecoderLayers;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? textEncoder = null;
