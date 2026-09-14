@@ -28,6 +28,7 @@ At each dispatch boundary, call `Select(envelope)` and execute its returned arti
 - Per-decision sign-test validity assumes independently sampled, predeclared pairs; shared pair indices support common random streams. Repeated selection on the same holdout invalidates that assumption. These gates are not family-wise competitor-superiority claims, GPU benchmarks or an API-spending authorization. Unknown failed quality is explicitly marked `HasQuality=false`, not compared as a measured zero. Provider exceptions propagate; absent receipts are not invented as zero cost.
 - Consecutive fixed monitoring windows are a configurable rollback heuristic, not a statistical change-point guarantee. Keep objective units and timing scope identical to the recorded validation protocol. The CPU AutoML fixture deliberately relaxes its latency gate to test functional integration, not speed superiority.
 - Source-pinned integration CI and ordinary published-package CI remain separate gates. A passing source build does not make unpublished dependency APIs available in NuGet.
+- Model serialization/restoration retains normal persistence-license enforcement. The repeated synthetic AutoML fixture alone uses the existing async-local internal persistence scope so CI and developer trial quotas are not consumed; it does not test entitlement. A separate denial-propagation regression ensures artifact creation does not swallow a model's licensing error. No production adapter opens that scope.
 
 ## Verification
 

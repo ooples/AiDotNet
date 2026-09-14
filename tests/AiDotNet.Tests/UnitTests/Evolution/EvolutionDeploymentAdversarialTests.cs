@@ -97,4 +97,23 @@ public sealed partial class EvolutionDeploymentLifecycleTests
         public void LoadModel(string path) => throw new NotSupportedException();
         public void Dispose() => throw new IOException("dispose failed");
     }
+
+    [Fact]
+    public void ModelArtifact_DoesNotSuppressPersistenceLicenseDenial()
+    {
+        var model = new DeniedPersistenceModel();
+        var error = Assert.Throws<AiDotNet.Exceptions.LicenseRequiredException>(() =>
+            EvolutionDeployableArtifact.FromModel(model, "denied-v1", Envelope()));
+        Assert.Same(model.Denial, error);
+        Assert.False(Directory.Exists(_root));
+    }
+
+    private sealed class DeniedPersistenceModel : IModelSerializer
+    {
+        internal readonly AiDotNet.Exceptions.LicenseRequiredException Denial = new("fixture entitlement denial");
+        public byte[] Serialize() => throw Denial;
+        public void Deserialize(byte[] data) => throw Denial;
+        public void SaveModel(string path) => throw Denial;
+        public void LoadModel(string path) => throw Denial;
+    }
 }

@@ -71,6 +71,10 @@ public sealed partial class EvolutionDeploymentLifecycleTests
     [Fact(Timeout = 120000)]
     public async Task AutoMLRetuning_PromotesReloadableTrainedWeightsUnderIndependentHoldoutValidation()
     {
+        // This fixture tests trained-state deployment, not entitlement. Keep repeated synthetic
+        // persistence in an existing AsyncLocal internal scope; never consume a developer's trial.
+        // Production adapters do not open this scope and retain normal license enforcement.
+        using var persistenceScope = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
         var trainX = new Matrix<double>(24, 2);
         var trainY = new Vector<double>(24);
         for (int i = 0; i < 24; i++)
