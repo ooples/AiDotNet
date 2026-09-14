@@ -12,6 +12,13 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
+      resume_deferred:
+        description: 'ISOLATED CANARY ONLY: exercise the production resumer on a real deferred push.'
+        type: boolean
+        default: false
+      resume_run_id:
+        description: 'Original deferred canary push run ID.'
+        required: false
       run_id:
         description: 'Optional: a specific marked coverage-everywhere Build & SonarCloud run.'
         required: false
@@ -28,7 +35,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  canary-resume:
+    if: inputs.resume_deferred == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - name: Exercise production resumer with GitHub token
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_RUN_ID: ${{ inputs.resume_run_id }}
+        run: |
+          ./tools/TestImpact/Resume-DeferredCi.ps1 -Repository $env:CI_REPOSITORY -RunId ([long] $env:CI_RUN_ID)
   build-map:
+    if: inputs.resume_deferred != true
     name: Build and audit shard map
     runs-on: ubuntu-latest
     outputs:
@@ -477,7 +505,7 @@ jobs:
     name: Dispatch next coverage-everywhere run
     needs: build-map
     # Bootstrap even when no source exists yet; explicit harvest-only invocations do not dispatch.
-    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id }}
+    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id && !inputs.resume_deferred }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

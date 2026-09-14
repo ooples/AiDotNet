@@ -51,7 +51,8 @@ on:
 concurrency:
   # Coverage-map runs are deliberately isolated from ordinary master activity. The Monday CodeQL
   # schedule and a master push must not cancel the full matrix that feeds the next map.
-  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || github.ref }}
+  # Isolate push retries: concurrency cancellation happens before the resolver can recheck the tip.
+  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || (github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id)) || github.ref }}
   # A synchronize event captured while a PR was still a draft can be delivered after the
   # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
   # so it must never cancel the real ready run and replace it with an all-skipped check suite.
@@ -185,7 +186,7 @@ jobs:
           # pull-request selection uses. Any failure here leaves both inputs unset, and reuse stays
           # exact-tree only - the pre-existing, fail-closed behaviour.
           & ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -Repository '${{ github.repository }}' `
-              -OutDirectory delta-map -ResultFile delta-map-resolution.json -MapBranch master
+              -OutDirectory delta-map -ResultFile delta-map-resolution.json -MapBranch fix/ci-map-reuse-20260914
           if ($LASTEXITCODE -ne 0) { throw "certified map resolver exited $LASTEXITCODE" }
           $resolution = Get-Content delta-map-resolution.json -Raw | ConvertFrom-Json
           if (-not $resolution.found) { throw 'no certified map is available' }
@@ -221,6 +222,12 @@ jobs:
         if: steps.resolve.outputs.deferred == 'true'
         run: |
           echo '::error::Validation deferred, not passed: waiting for the merged PR run. No duplicate matrix was scheduled.'
+          exit 1
+
+      - name: Block superseded or unverifiable push
+        if: steps.resolve.outputs.blocked == 'true'
+        run: |
+          echo '::error::Push is superseded or its branch tip could not be verified. Dependent work is disabled; this is not passing validation.'
           exit 1
 
       - name: Report resolver fallback
@@ -609,7 +616,8 @@ jobs:
           # Maps are only ever built on master. A ci-proof/** branch is master plus the CI change under
           # test, so a canary into it must select with master's map; looking for maps built on the
           # proof branch found none and sent every canary to the full matrix, proving nothing.
-          MAP_BRANCH: ${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}
+          # ISOLATED CANARY ONLY: use the real certified fix-branch audit. Never merge this override into master.
+          MAP_BRANCH: fix/ci-map-reuse-20260914
         run: |
           # Normal PRs may consume only an audited/certified map. The forced full-coverage run is
           # different: it consumes the exact candidate named by its dispatch input so that the next

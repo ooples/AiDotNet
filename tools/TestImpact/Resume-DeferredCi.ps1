@@ -66,6 +66,8 @@ function Invoke-DeferredReconciliation {
         # Failed/cancelled PRs resume too: the resolver must explicitly reject missing evidence
         # and validate, not leave the landed commit parked forever. No evidence is minted here.
         $jobId = [long] $deferred[0].id
+        $finalRef = Invoke-CiApi @("repos/$Repository/git/ref/heads/$([uri]::EscapeDataString($branch))")
+        if ([string] $finalRef.object.sha -cne $sha) { continue }
         Invoke-CiApi @('--method', 'POST', "repos/$Repository/actions/jobs/$jobId/rerun") | Out-Null
         Write-Host "Resumed deferred run $id ($sha), resolver job $jobId and its dependents."
     }
@@ -77,8 +79,9 @@ if ($SelfTest) {
     $head = '1123456789abcdef0123456789abcdef01234567'
     $cases = @('ready', 'pending', 'missing-pr-run', 'superseded', 'ordinary-failure',
         'cancelled-push', 'already-running', 'not-merged', 'wrong-branch', 'wrong-event',
-        'failed-pr', 'cancelled-pr', 'wrong-pr-head', 'duplicate-marker', 'unrelated-pending')
+        'failed-pr', 'cancelled-pr', 'wrong-pr-head', 'duplicate-marker', 'unrelated-pending', 'tip-advanced')
     foreach ($case in $cases) {
+        $script:refReads = 0
         $script:posts = [System.Collections.Generic.List[string]]::new()
         function Invoke-CiApi {
             param([string[]] $Arguments)
@@ -91,7 +94,9 @@ if ($SelfTest) {
                     head_branch = $(if ($case -eq 'wrong-branch') { 'feature' } else { 'master' }); head_sha = $sha }
             }
             if ($path -like '*/git/ref/*') {
-                return [pscustomobject]@{ object = @{ sha = $(if ($case -eq 'superseded') { $head } else { $sha }) } }
+                $script:refReads++
+                return [pscustomobject]@{ object = @{ sha = $(if ($case -eq 'superseded' -or
+                    ($case -eq 'tip-advanced' -and $script:refReads -gt 1)) { $head } else { $sha }) } }
             }
             if ($path -like '*/jobs?*') {
                 $step = @{ name = $(if ($case -eq 'ordinary-failure') { 'Checkout' } else { 'Defer until PR validation completes' }); conclusion = 'failure' }
