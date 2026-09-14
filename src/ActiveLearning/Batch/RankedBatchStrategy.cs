@@ -61,7 +61,7 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
     /// Initializes a new RankedBatchStrategy with default settings.
     /// </summary>
     public RankedBatchStrategy()
-        : this(minDiversityThreshold: 0.1, diversityTradeoff: 0.5)
+        : this(minDiversityThreshold: 0.1, diversityTradeoff: 0.5) // Isolated changed-base routing canary; no behavior change.
     {
     }
 
