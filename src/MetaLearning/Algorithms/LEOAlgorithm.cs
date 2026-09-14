@@ -492,8 +492,27 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private static Tensor<T> Scale(Tensor<T> unnormalized)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorClampMin(engine.TensorAddScalar(engine.TensorExp(unnormalized), Ops.FromDouble(-1.0)),
-            Ops.FromDouble(1e-10));
+        var shifted = engine.TensorAddScalar(engine.TensorExp(unnormalized), Ops.FromDouble(-1.0));
+
+        // max(shifted, 1e-10) built from RECORDED ops rather than TensorClampMin. ClampMin's backward writes its
+        // masked gradient with raw span loops, so under createGraph the outer tape cannot differentiate through
+        // it: every inner latent step whose support loss reaches a sampled weight scale silently dropped its
+        // second-order terms, and the body and encoder gradients disagreed with a central difference whenever
+        // sampling was on (dL/dh matched exactly with noise off, or with the latent step rate zeroed). The mask
+        // is a constant, so forward values and first-order gradients are identical to the clamp; only the
+        // second-order path changes, and it now flows through Multiply and Add, whose backward is recorded.
+        var floor = Ops.FromDouble(1e-10);
+        var shape = shifted.Shape.ToArray();
+        var keep = new Tensor<T>(shape);
+        var fill = new Tensor<T>(shape);
+        for (int i = 0; i < shifted.Length; i++)
+        {
+            bool above = !Ops.LessThan(shifted[i], floor);
+            keep[i] = above ? Ops.One : Ops.Zero;
+            fill[i] = above ? Ops.Zero : floor;
+        }
+
+        return engine.TensorAdd(engine.TensorMultiply(shifted, keep), fill);
     }
 
     /// <summary>Per-example codes: the shared encoder, or each example's class-slot encoder.</summary>
@@ -833,6 +852,73 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             : Noise.None;
         var (support, query) = Embed(task, episode);
         return Run(support, query, episode, new LeoWeights(this), noise).Objective[0];
+    }
+
+    /// <summary>
+    /// The stacked per-example embeddings the feature encoder produces for one task - exactly the tensor
+    /// the body gradient is taken with respect to.
+    /// </summary>
+    internal Tensor<T> EmbeddingsForTesting(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var episode = Episode(task);
+        using (new NoGradScope<T>())
+        {
+            return ClassifierOutputs<T>.AsRows(
+                MetaModel.Predict(ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput)));
+        }
+    }
+
+    /// <summary>
+    /// The task objective as a function of SUPPLIED embeddings, with the same fixed-seed noise
+    /// <see cref="EpisodeLossForTesting"/> uses.
+    /// </summary>
+    /// <remarks>
+    /// This is the composed objective the body gradient differentiates, exposed so a test can central
+    /// difference it IN EMBEDDING SPACE. The body gradient is the only one that disagrees with a finite
+    /// difference, and it is the only one routed through a separate tape:
+    /// <c>LinearEmbeddingModel.ComputeGradients</c> takes <c>dL/dh</c> from
+    /// <c>loss.ComputeGradient(...)</c> - which opens its own tape - and then applies the chain rule
+    /// through <c>h = Wx + b</c> by hand. Since that chain rule is a linear map and checkable by
+    /// inspection, comparing <c>dL/dh</c> against a difference of THIS function splits the remaining
+    /// space in two: a mismatch here is the tape, agreement here is the chain rule.
+    /// </remarks>
+    internal T ObjectiveFromEmbeddingsForTesting(
+        IMetaLearningTask<T, TInput, TOutput> task, Tensor<T> embeddings, bool training)
+    {
+        var episode = Episode(task);
+        var noise = training
+            ? Noise.Draw(RandomHelper.CreateSeededRandom(TestNoiseSeed), _leoOptions, episode.ClassSlots.Length,
+                episode.SupportSelector.Shape[0], episode.QuerySelector.Shape[0])
+            : Noise.None;
+
+        var engine = AiDotNetEngine.Current;
+        var support = CheckWidth(engine.TensorMatMul(episode.SupportSelector, embeddings));
+        var query = engine.TensorMatMul(episode.QuerySelector, embeddings);
+        return Run(support, query, episode, new LeoWeights(this), noise).Objective[0];
+    }
+
+    /// <summary>
+    /// <c>dL/dh</c> at supplied embeddings, taken through the SAME composed-objective tape
+    /// <see cref="EpisodeGradient"/> uses for the body gradient, with the same fixed-seed noise.
+    /// </summary>
+    internal Tensor<T> EmbeddingGradientForTesting(
+        IMetaLearningTask<T, TInput, TOutput> task, Tensor<T> embeddings, bool training)
+    {
+        var episode = Episode(task);
+        var noise = training
+            ? Noise.Draw(RandomHelper.CreateSeededRandom(TestNoiseSeed), _leoOptions, episode.ClassSlots.Length,
+                episode.SupportSelector.Shape[0], episode.QuerySelector.Shape[0])
+            : Noise.None;
+        var frozen = new LeoWeights(this);
+        var composed = new EmbeddingObjectiveLoss<T>(h =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var s = CheckWidth(engine.TensorMatMul(episode.SupportSelector, h));
+            var q = engine.TensorMatMul(episode.QuerySelector, h);
+            return Run(s, q, episode, frozen, noise).Objective;
+        });
+
+        return composed.ComputeGradient(embeddings, new Tensor<T>(new[] { episode.Rows, 1 }));
     }
 
     /// <summary>

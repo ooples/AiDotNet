@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AiDotNet.Data.Structures;
+using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
@@ -496,5 +497,125 @@ public class LEOExactGradientTests
         }
 
         Assert.True(unstable.Count == 0, report.ToString() + string.Join("; ", unstable));
+    }
+
+    private static LEOAlgorithm<double, Matrix<double>, Tensor<double>> SamplingOnlyLearner()
+        => CreateLearner(o =>
+        {
+            o.KLWeight = 0;
+            o.EntropyWeight = 0;
+            o.DropoutRate = 0;
+            o.EncoderPenaltyWeight = 0;
+            o.L2Regularization = 0;
+            o.OrthogonalityWeight = 0;
+            o.FineTuningSteps = 1;
+        });
+
+    /// <summary>
+    /// First half of the body-gradient split: is <c>dL/dh</c> - taken through the composed-objective tape the
+    /// body gradient uses - right? A central difference of the objective in embedding space is the reference.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EmbeddingGradient_MatchesCentralDifferences(bool training)
+    {
+        var learner = SamplingOnlyLearner();
+        var task = CreateTask(seed: 3);
+        var h = learner.EmbeddingsForTesting(task);
+        var analytic = learner.EmbeddingGradientForTesting(task, h, training);
+
+        var failures = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < h.Length && failures.Count < 4; i++)
+        {
+            int index = i;
+            // Incremental shift, as CentralDifference requires.
+            double numeric = CentralDifference(
+                () => learner.ObjectiveFromEmbeddingsForTesting(task, h, training),
+                delta => h[index] += delta,
+                1e-6);
+            if (Math.Abs(analytic[i] - numeric) > 1e-6 + 1e-4 * Math.Abs(numeric))
+            {
+                failures.Add($"dL/dh[{i}]: analytic {analytic[i]:G10} vs central difference {numeric:G10}.");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    /// <summary>
+    /// Sampling on, second-order paths removed (zero latent step rate, no fine-tuning). This passed while the
+    /// full sampled case failed, which is what isolated the fault to second-order terms through the scale clamp.
+    /// </summary>
+    [Fact]
+    public void EmbeddingGradient_WithSamplingButNoSecondOrderSteps_MatchesCentralDifferences()
+    {
+        var learner = CreateLearner(o =>
+        {
+            o.KLWeight = 0;
+            o.EntropyWeight = 0;
+            o.DropoutRate = 0;
+            o.EncoderPenaltyWeight = 0;
+            o.L2Regularization = 0;
+            o.OrthogonalityWeight = 0;
+            o.FineTuningSteps = 0;
+            o.AdaptationSteps = 1;
+        });
+        learner.LatentRatesForTesting = new Vector<double>(Latent);
+        var task = CreateTask(seed: 3);
+        var h = learner.EmbeddingsForTesting(task);
+        var analytic = learner.EmbeddingGradientForTesting(task, h, training: true);
+
+        var failures = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < h.Length && failures.Count < 4; i++)
+        {
+            int index = i;
+            double numeric = CentralDifference(
+                () => learner.ObjectiveFromEmbeddingsForTesting(task, h, training: true),
+                delta => h[index] += delta,
+                1e-6);
+            if (Math.Abs(analytic[i] - numeric) > 1e-6 + 1e-4 * Math.Abs(numeric))
+                failures.Add($"dL/dh[{i}]: analytic {analytic[i]:G10} vs central difference {numeric:G10}.");
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    /// <summary>
+    /// Second half: the body gradient must be exactly the chain rule of <c>dL/dh</c> through the linear
+    /// feature encoder <c>h = Wx + b</c> (W row-major, then b).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BodyGradient_IsTheChainRuleOfTheEmbeddingGradient(bool training)
+    {
+        var learner = SamplingOnlyLearner();
+        var task = CreateTask(seed: 3);
+        var h = learner.EmbeddingsForTesting(task);
+        var dLdh = learner.EmbeddingGradientForTesting(task, h, training);
+        var body = learner.EpisodeGradientForTesting(task, training).Body;
+        var x = ClassifierOutputs<double>.StackRows(task.SupportSetX, task.QuerySetX);
+
+        var failures = new System.Collections.Generic.List<string>();
+        for (int e = 0; e < Width; e++)
+        {
+            double bias = 0.0;
+            for (int r = 0; r < x.Rows; r++) bias += dLdh[r * Width + e];
+            for (int c = 0; c < Features; c++)
+            {
+                double expected = 0.0;
+                for (int r = 0; r < x.Rows; r++) expected += dLdh[r * Width + e] * x[r, c];
+                double actual = body[e * Features + c];
+                if (Math.Abs(actual - expected) > 1e-9 + 1e-7 * Math.Abs(expected))
+                    failures.Add($"W[{e},{c}]: body {actual:G10} vs chain rule {expected:G10}.");
+            }
+
+            double actualBias = body[Width * Features + e];
+            if (Math.Abs(actualBias - bias) > 1e-9 + 1e-7 * Math.Abs(bias))
+                failures.Add($"b[{e}]: body {actualBias:G10} vs chain rule {bias:G10}.");
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 }
