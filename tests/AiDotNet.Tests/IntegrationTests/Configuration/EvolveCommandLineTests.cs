@@ -81,6 +81,23 @@ evolution:
         Assert.Equal(ValidConfiguration, File.ReadAllText(path));
     }
 
+    [Theory]
+    [InlineData("--seed", "1", "--seed", "2")]
+    [InlineData("--seed", "1", "--SEED", "2")]
+    [InlineData("--max-evaluations", "1", "--max-evaluations", "100")]
+    [InlineData("--resume", "false")]
+    [InlineData("--resume", "--resume")]
+    public async Task AmbiguousBudgetAndResumeOptionsFailBeforeReadingOrRunningConfiguration(params string[] options)
+    {
+        string path = WriteConfig(ValidConfiguration);
+        string[] args = new[] { "validate", "--config", path }.Concat(options).ToArray();
+        (int code, string output, string error) = await Execute(args);
+        Assert.Equal(EvolveCommandLine.ExitUsage, code);
+        Assert.Empty(output);
+        Assert.Contains("option", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ValidConfiguration, File.ReadAllText(path));
+    }
+
     [Fact]
     public async Task AConfigurationMistakeIsReportedWithItsReasonAndANonZeroExitCode()
     {

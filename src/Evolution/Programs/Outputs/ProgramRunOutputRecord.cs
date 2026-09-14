@@ -11,8 +11,8 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 /// and the trigger and ordinal that identify which snapshot this was.
 /// </para>
 /// <para>
-/// Records are immutable and never contain program text, so they are safe to log, keep in a list, or return from a
-/// run without bounding them first.
+/// Records are immutable and never contain program text. Collections still require a retention bound;
+/// paths and identifiers can also disclose private information and should not be exported indiscriminately.
 /// </para>
 /// <para><b>For Beginners:</b> Every time the best program is saved, you get one of these back saying exactly which
 /// two files were written and which candidate they hold. Keep the last one and you always know where the run's
