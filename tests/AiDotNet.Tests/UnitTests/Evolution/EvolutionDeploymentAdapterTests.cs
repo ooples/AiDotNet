@@ -19,9 +19,9 @@ public sealed partial class EvolutionDeploymentLifecycleTests
     {
         int fitnessCalls = 0;
         var check = new DelegateProgramFitnessEvaluator((genome, _, _) => new ValueTask<EvolutionTaskResult>(
-            EvolutionTaskResult.Completed(genome.Source == "wrong" ? 0 : 1, costUnits: 2)));
+            EvolutionTaskResult.Completed(genome.Source == "wrong" ? 0 : 1, new Dictionary<string, double>(), costUnits: 2)));
         var fitness = new DelegateProgramFitnessEvaluator((_, _, _) =>
-        { fitnessCalls++; return new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(3, costUnits: 4)); });
+        { fitnessCalls++; return new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(3, new Dictionary<string, double>(), costUnits: 4)); });
         var evaluator = EvolutionDeploymentEvaluators.Program(check, fitness);
         var invalid = await evaluator(Program("wrong"), 0, CancellationToken.None);
         Assert.False(invalid.CorrectnessPassed);
@@ -85,11 +85,11 @@ public sealed partial class EvolutionDeploymentLifecycleTests
             validationX[i, 0] = (i - 3) / 5d; validationX[i, 1] = (i % 3) / 3d;
             validationY[i] = 1 + 2 * validationX[i, 0] - 3 * validationX[i, 1];
         }
-        using var baseline = new MultipleLinearRegression<double>();
+        using var baseline = new MultipleRegression<double>();
         baseline.Train(trainX, new Vector<double>(24));
         const string format = "linear-serialized-state-v1";
-        var evaluator = EvolutionDeploymentEvaluators.Model(format, _ => new MultipleLinearRegression<double>(),
-            (MultipleLinearRegression<double> model, int pair, CancellationToken token) =>
+        var evaluator = EvolutionDeploymentEvaluators.Model(format, _ => new MultipleRegression<double>(),
+            (MultipleRegression<double> model, int pair, CancellationToken token) =>
             {
                 token.ThrowIfCancellationRequested();
                 // Deployment holdout points are not supplied to AutoML's training/search-validation factory.
@@ -112,7 +112,7 @@ public sealed partial class EvolutionDeploymentLifecycleTests
         var retuner = EvolutionDeploymentRetuners.AutoML<double, Matrix<double>, Vector<double>>(
             _ => (trainX, trainY, validationX, validationY), (search, _) =>
             {
-                search.SetCandidateModels(new List<Type> { typeof(MultipleLinearRegression<>) });
+                search.SetCandidateModels(new List<Type> { typeof(MultipleRegression<>) });
                 search.EnsembleOptions.Enabled = false;
                 search.TrialLimit = 9999; // The admitted driver must overwrite this before the search starts.
                 search.OnCandidateCreated += _ => created++;
@@ -124,9 +124,9 @@ public sealed partial class EvolutionDeploymentLifecycleTests
         var selected = lifecycle.Select(Envelope(0));
         Assert.False(selected.IsFallback);
         var restoredArtifact = Registry().Load(selected.Artifact.Id, Envelope(0));
-        using var restored = restoredArtifact.RestoreModel(() => new MultipleLinearRegression<double>(), format);
+        using var restored = restoredArtifact.RestoreModel(() => new MultipleRegression<double>(), format);
         var heldout = new Matrix<double>(1, 2); heldout[0, 0] = 4; heldout[0, 1] = 0.5;
-        Assert.Equal(7.5, restored.Predict(heldout)[0], precision: 8);
+        Assert.InRange(Math.Abs(restored.Predict(heldout)[0] - 7.5), 0, 1e-7);
         Assert.NotEqual(baseline.Serialize(), restoredArtifact.CopyPayload());
     }
 

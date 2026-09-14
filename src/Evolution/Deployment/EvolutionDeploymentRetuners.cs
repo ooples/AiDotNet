@@ -44,7 +44,9 @@ public static class EvolutionDeploymentRetuners
                     MaxEvaluationAttempts = request.MaximumEvaluations, MaxProposals = request.MaximumProposals,
                     MaxGenerations = request.MaximumProposals, MaxDegreeOfParallelism = 1, ProposalBatchSize = 1,
                     MaxRetries = 0, EnableEvaluationCache = false, TimeLimit = request.Timeout,
-                    EvaluationTimeout = request.Timeout, EvaluationGracePeriod = TimeSpan.Zero
+                    // Keep uncooperative evaluation attached to this private search. The outer lifecycle
+                    // bounds waiting without releasing its admission until the search actually settles.
+                    EvaluationTimeout = request.Timeout, EvaluationGracePeriod = null
                 }, genomeCodec: new ProgramGenomeCodec());
             var result = await engine.RunAsync(options.CreateSeedGenomes(), token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
