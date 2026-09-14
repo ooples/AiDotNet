@@ -39,7 +39,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(5, options.BeamSize);
         Assert.Equal(0.0, options.Temperature, Tolerance);
         Assert.False(options.ReturnTimestamps);
-        Assert.False(options.WordTimestamps);
     }
 
     [Fact(Timeout = 120000)]
@@ -56,8 +55,7 @@ public class AudioExtendedIntegrationTests
             MaxTokens = 1024,
             BeamSize = 10,
             Temperature = 0.5,
-            ReturnTimestamps = true,
-            WordTimestamps = true
+            ReturnTimestamps = true
         };
         Assert.Equal(WhisperModelSize.LargeV3, options.ModelSize);
         Assert.Equal("en", options.Language);
@@ -69,7 +67,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(10, options.BeamSize);
         Assert.Equal(0.5, options.Temperature, Tolerance);
         Assert.True(options.ReturnTimestamps);
-        Assert.True(options.WordTimestamps);
     }
 
     #endregion

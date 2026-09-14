@@ -50,7 +50,6 @@ public class ConcertoOptions : SegmentationModelOptions
         IntraModalUpcastLevel = other.IntraModalUpcastLevel;
         CrossModalUpcastLevel = other.CrossModalUpcastLevel;
         ImagesPerPointCloud = other.ImagesPerPointCloud;
-        ImageEncoderResolution = other.ImageEncoderResolution;
         VisibilityDepthToleranceMeters = other.VisibilityDepthToleranceMeters;
         LearningRate = other.LearningRate;
         PretrainingEpochs = other.PretrainingEpochs;
@@ -104,11 +103,10 @@ public class ConcertoOptions : SegmentationModelOptions
     /// <value>Defaults to 4, the paper's value.</value>
     public int ImagesPerPointCloud { get; set; } = 4;
 
-    /// <summary>
-    /// Square input resolution of the frozen 2D image encoder.
-    /// </summary>
-    /// <value>Defaults to 518, matching the paper's DINOv2-L configuration.</value>
-    public int ImageEncoderResolution { get; set; } = 518;
+    // ImageEncoderResolution was declared here and never read. Concerto never sees an image: its
+    // cross-modal objective consumes ConcertoPairedView<T>.ImagePatchFeatures, which is the FROZEN
+    // 2D encoder's OUTPUT and is produced outside this model. The resolution that encoder was run
+    // at is a property of the caller's pipeline, and nothing inside Concerto can apply or check it.
 
     /// <summary>
     /// Depth agreement, in metres, required for a projected point to count as visible in an image.

@@ -57,7 +57,6 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
         TextEncoderHeads = other.TextEncoderHeads;
         ProjectionDim = other.ProjectionDim;
         InitialTemperature = other.InitialTemperature;
-        DropoutRate = other.DropoutRate;
         TextEncoderPath = other.TextEncoderPath;
     }
 
@@ -189,12 +188,18 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
     /// just the init.</para></remarks>
     public double InitialTemperature { get; init; } = 0.07;
 
-    /// <summary>Dropout rate inside the transformer blocks. CLAP §3.2: 0.1.</summary>
-    /// <value>Default 0.1 (CLAP paper §3.2).</value>
-    /// <remarks><para><b>For Beginners:</b> Dropout randomly zeroes a
-    /// fraction of activations during training to discourage overfitting.
-    /// 0.1 is the CLAP paper default.</para></remarks>
-    public double DropoutRate { get; init; } = 0.1;
+    // DropoutRate was declared here and never read. Both CLAP stacks are built from
+    // TransformerEncoderLayer(numHeads, feedForwardDim, embeddingSize), which has no dropout
+    // stage -- the same reason FTTransformer's AttentionDropoutRate/ResidualDropoutRate and
+    // SAINT's AttentionDropoutRate were deleted earlier on this branch.
+    //
+    // The unblock, stated so this is an obstacle on record rather than a closed door: give
+    // TransformerEncoderLayer a dropout sublayer -- a constructor parameter defaulting to 0.0
+    // (behaviour-preserving for all 108 LayerHelper call sites), built in EnsureInitialized,
+    // applied in BOTH Forward and ForwardGpu, with the same mask reused in its hand-written
+    // Backward. That single change would serve CLAP, FTTransformer and SAINT together. It is
+    // separate work because a wrong backward there corrupts gradients in every transformer
+    // stack in the repo, which is worse than an unwired option.
 
     /// <summary>
     /// Gets or sets the text encoder path.

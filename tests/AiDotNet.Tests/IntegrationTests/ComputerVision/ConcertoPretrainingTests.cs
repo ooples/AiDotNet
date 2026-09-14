@@ -105,6 +105,10 @@ public class ConcertoPretrainingTests
             // level 2 the layer before it.
             IntraModalUpcastLevel = 3,
             CrossModalUpcastLevel = 3,
+            // The fixture pairs a single view per cloud (the paper's default is 4). Pretrain holds
+            // a sample to the configured pairing count, so the count is stated rather than left to
+            // coincide with the default.
+            ImagesPerPointCloud = 1,
             LearningRate = 0.01
         });
 

@@ -299,6 +299,7 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
 
                     ValidateCrossModalWidth(studentCross, sample);
                     ValidatePointCount(studentCross, sample);
+                    ValidateViewCount(sample);
 
                     var intraLoss = ConcertoIntraModalObjective<T>.ComputeTapeLoss(
                         studentIntra, teacherLogits, center);
@@ -414,6 +415,31 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
             + $"positions but the sample supplies {points} point coordinates. Each position is one "
             + "point's feature vector, so the two must match; note that the encoder downsamples, so "
             + "the position count is far smaller than the input resolution.",
+            nameof(sample));
+    }
+
+    /// <summary>
+    /// Rejects a sample that pairs a different number of images with the point cloud than
+    /// <see cref="ConcertoOptions.ImagesPerPointCloud"/> configures.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Concerto does not sample the views itself -- the caller renders or selects them and hands
+    /// them over on the sample -- so holding the caller to the configured pairing count is the one
+    /// thing the model can do with the number. Without this, a sample carrying two views where the
+    /// options say four trains on a quarter less cross-modal signal per cloud than configured and
+    /// reports nothing.
+    /// </para>
+    /// </remarks>
+    private void ValidateViewCount(ConcertoPretrainingSample<T> sample)
+    {
+        int configured = _options.ImagesPerPointCloud;
+        if (sample.Views.Count == configured) return;
+
+        throw new ArgumentException(
+            $"The sample pairs {sample.Views.Count} view(s) with its point cloud, but "
+            + $"ImagesPerPointCloud is {configured}. Supply that many views, or set "
+            + "ImagesPerPointCloud to the number you intend to pair.",
             nameof(sample));
     }
 

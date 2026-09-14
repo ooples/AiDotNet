@@ -25,7 +25,12 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
     public MatryoshkaEmbeddingOptions()
     {
         VocabSize = 30522;
-        MaxEmbeddingDimension = 1536;
+        // 1536 was assigned to MaxEmbeddingDimension here, which nothing read, while the property
+        // that actually sizes the model -- EmbeddingDimension, inherited from
+        // TransformerEmbeddingOptions -- was left at its 768 default. So a model whose own
+        // documentation and whose ModelFamily test both describe a 1536-wide output was built 768
+        // wide, and EmbedResized rejected every rung of the nesting ladder above 768.
+        EmbeddingDimension = 1536;
         NestedDimensions = [64, 128, 256, 512, 768, 1024, 1536];
         MaxSequenceLength = 512;
         NumLayers = 12;
@@ -36,14 +41,11 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
     }
 
 
-    /// <summary>
-    /// Gets or sets the max embedding dimension.
-    /// </summary>
-    /// <remarks>
-    /// The ceiling on <see cref="NestedDimensions"/>: a nesting level wider than the full
-    /// embedding cannot be sliced out of it, so <c>Validate</c> rejects one.
-    /// </remarks>
-    public int MaxEmbeddingDimension { get; set; }
+    // MaxEmbeddingDimension was declared here, set to 1536, and never read. It duplicated the
+    // inherited EmbeddingDimension, which is the actual width of the embedding this model
+    // produces and which TransformerEmbeddingOptions sets to 768 -- so the two disagreed, and a
+    // caller adjusting the one that did nothing would have seen no effect. The ceiling on the
+    // nesting ladder is EmbeddingDimension, and Validate below enforces it against that.
 
     /// <summary>
     /// Gets or sets the nesting ladder — the prefix widths a single embedding can be
@@ -61,11 +63,11 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
 
     /// <summary>
     /// Throws if the nesting ladder cannot be honoured by an embedding of
-    /// <see cref="MaxEmbeddingDimension"/>.
+    /// <see cref="EmbeddingModelOptions.EmbeddingDimension"/>.
     /// </summary>
     /// <exception cref="ArgumentException">
     /// When the ladder is empty, contains a non-positive width, or names a width wider
-    /// than <see cref="MaxEmbeddingDimension"/>.
+    /// than <see cref="EmbeddingModelOptions.EmbeddingDimension"/>.
     /// </exception>
     public override void Validate()
     {
@@ -87,12 +89,12 @@ public class MatryoshkaEmbeddingOptions : TransformerEmbeddingOptions
                     nameof(NestedDimensions));
             }
 
-            if (dimension > MaxEmbeddingDimension)
+            if (dimension > EmbeddingDimension)
             {
                 throw new ArgumentException(
-                    $"NestedDimensions contains {dimension}, which exceeds "
-                    + $"MaxEmbeddingDimension {MaxEmbeddingDimension}. A prefix cannot be "
-                    + "wider than the embedding it is taken from.",
+                    $"NestedDimensions contains {dimension}, which exceeds EmbeddingDimension "
+                    + $"{EmbeddingDimension}. A prefix cannot be wider than the embedding it is "
+                    + "taken from, and EmbedResized rejects any dimension above it.",
                     nameof(NestedDimensions));
             }
         }

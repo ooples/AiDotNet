@@ -281,8 +281,45 @@ public class UnreadOptionsRatchetTests
     /// marked an entire class consumed. The count moved 21 -> 20, not 21 -> 3, which is the
     /// evidence that it did.
     /// </para>
+    /// <para>
+    /// 20 -> 3. What is left is not a backlog of wirings but three properties that each need a
+    /// subsystem built: <c>TabNetOptions.EnablePreTraining</c> and <c>PreTrainingMaskingRatio</c>
+    /// (TabNet's self-supervised stage needs a DECODER, which this implementation does not have --
+    /// encoder, attentive transformers and a single output layer are all that exist), and
+    /// <c>SpikingNeuralNetworkOptions.StdpWindow</c> (the unsupervised pair-based STDP rule it
+    /// bounds lives in <c>CalculateSTDPWeightChange</c>, which is never called from anywhere).
+    /// </para>
+    /// <para>
+    /// Wired: <c>AudioVisualEventLocalization.LearningRate</c> and
+    /// <c>LiquidStateMachine.ReadoutLearningRate</c> (both optimizers were built BARE);
+    /// <c>Finch.MinLearningRate</c> (<c>GradientBasedOptimizerOptions</c> already declares a
+    /// MinLearningRate that OptimizerBase clamps against); <c>Mambular.DeltaMin</c>/<c>DeltaMax</c>;
+    /// <c>Concerto.ImagesPerPointCloud</c>.
+    /// </para>
+    /// <para>
+    /// Deleted, each with the missing mechanism named at the declaration site: <c>Whisper</c>
+    /// WordTimestamps (duplicate of the shared <c>ReturnTimestamps</c>; word-level granularity has
+    /// no shape to be returned in), <c>CLAPModel</c> DropoutRate (TransformerEncoderLayer has no
+    /// dropout stage -- same reason as FTTransformer's and SAINT's), <c>CopulaSynth</c> all three
+    /// (its generator reads nothing off its options but Seed, and there is no KDE),
+    /// <c>TabNet.CategoricalEmbeddingDimension</c>, <c>NODE</c> FeatureSelectionDimension and
+    /// MLPHiddenDimensions, <c>GANDALF</c> UseFeatureGating and UseResidualGating (both offer to
+    /// switch off the mechanism the architecture is named for), and
+    /// <c>Matryoshka.MaxEmbeddingDimension</c>.
+    /// </para>
+    /// <para>
+    /// <b>Two latent defects surfaced by doing this, neither of them an unread property.</b>
+    /// <c>MatryoshkaEmbeddingOptions</c> assigned 1536 to <c>MaxEmbeddingDimension</c>, which
+    /// nothing read, and left the inherited <c>EmbeddingDimension</c> at its 768 default -- and the
+    /// model handed the RAW nullable parameter to its base while separately defaulting it, so with
+    /// no options supplied the base built a <c>TransformerEmbeddingOptions</c> and the derived
+    /// class a <c>MatryoshkaEmbeddingOptions</c>: two objects, and the one that sizes every layer
+    /// was the base's. A model documented and tested as 1536 wide was built 768 wide, and three
+    /// <c>MatryoshkaEmbeddingTests</c> had been failing on exactly that. Both are fixed; the tests
+    /// pass.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 20;
+    private const int UnreadBaseline = 3;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

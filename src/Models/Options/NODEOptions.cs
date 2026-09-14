@@ -76,11 +76,10 @@ public class NODEOptions<T> : RiskModelOptions<T>
     /// </remarks>
     public int TreeOutputDimension { get; set; } = 3;
 
-    /// <summary>
-    /// Gets or sets the hidden dimension for feature selection.
-    /// </summary>
-    /// <value>The hidden dimension, defaulting to 64.</value>
-    public int FeatureSelectionDimension { get; set; } = 64;
+    // FeatureSelectionDimension was declared here and never read. NODE's feature selection is a
+    // direct [TreeDepth, NumFeatures] weight matrix that entmax is taken over
+    // (NODEBase._featureSelectionWeights) -- exactly as in Popov et al. 2019. There is no hidden
+    // projection in that path for a hidden dimension to describe.
 
     /// <summary>
     /// Gets or sets the entmax alpha parameter for sparse attention.
@@ -139,11 +138,17 @@ public class NODEOptions<T> : RiskModelOptions<T>
     /// </remarks>
     public bool UseFeaturePreprocessing { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the hidden dimensions for the optional MLP head.
-    /// </summary>
-    /// <value>Array of hidden dimensions, defaulting to empty (direct output from trees).</value>
-    public int[] MLPHiddenDimensions { get; set; } = [];
+    // MLPHiddenDimensions was declared here and never read. Both heads are a single linear
+    // projection from TreeOutputDimension -- NODEClassifier._classificationHead and the regression
+    // equivalent -- so there is no multi-layer head for hidden dimensions to describe, and the
+    // property's own default (empty, "direct output from trees") is what the model always does.
+    //
+    // The unblock, if a head is wanted later: NODEBase already has the mechanism for it.
+    // GetExtraTrainableLayers discovers a subclass's parameter-bearing fields automatically, so a
+    // List<FullyConnectedLayer<T>> on each subclass would be registered, counted and checkpointed
+    // without touching the base. What makes it more than a wiring is that the head has to be
+    // threaded through both subclasses AND their dual XNetwork implementations, and through the
+    // manual parameter-update path rather than a tape.
 
     /// <summary>
     /// Gets the number of leaf nodes per tree.

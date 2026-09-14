@@ -6285,7 +6285,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Models.Options.CLAPModelOptions { AudioHiddenDim = 32, " +
                     "AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2, " +
                     "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
-                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4, DropoutRate = 0.0 })";
+                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4 })";
             }
             else if (model.ClassName == "ASTModel" && model.TypeParameterCount == 1
                      && typeName.StartsWith(

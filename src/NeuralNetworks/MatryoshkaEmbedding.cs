@@ -91,9 +91,21 @@ namespace AiDotNet.NeuralNetworks
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-            : base(architecture, options, tokenizer, optimizer, lossFunction)
+            // Materialize ONCE and hand the SAME instance to the base. Passing the raw parameter
+            // and separately defaulting it below gave the two halves of this model different
+            // options objects whenever the caller supplied none: the base built a
+            // TransformerEmbeddingOptions (EmbeddingDimension 768) while this class built a
+            // MatryoshkaEmbeddingOptions (1536), and EmbeddingDimension -- which sizes every layer
+            // and bounds EmbedResized -- is the base's. A model documented and tested as 1536 wide
+            // was therefore built 768 wide.
+            : base(
+                architecture,
+                options ??= new MatryoshkaEmbeddingOptions(),
+                tokenizer,
+                optimizer,
+                lossFunction)
         {
-        _options = options ?? new MatryoshkaEmbeddingOptions();
+        _options = options;
         _options.Validate();
             Options = _options;
             _vocabSize = _options.VocabSize;

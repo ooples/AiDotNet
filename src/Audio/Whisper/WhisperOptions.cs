@@ -57,7 +57,6 @@ public class WhisperOptions : AudioNeuralNetworkOptions
         MaxTokens = other.MaxTokens;
         BeamSize = other.BeamSize;
         Temperature = other.Temperature;
-        WordTimestamps = other.WordTimestamps;
     }
 
     /// <summary>
@@ -117,10 +116,14 @@ public class WhisperOptions : AudioNeuralNetworkOptions
     /// </summary>
     public double Temperature { get; set; } = 0.0;
 
-    /// <summary>
-    /// Gets or sets whether to include word-level timestamps.
-    /// </summary>
-    public bool WordTimestamps { get; set; } = false;
+    // WordTimestamps was declared here and never read. Timestamps are configured by
+    // AudioNeuralNetworkOptions.ReturnTimestamps, which Whisper honours via
+    // ResolveReturnTimestamps, so two switches described one behaviour and a caller could set
+    // the inert one. Word-level granularity is genuinely absent rather than merely unwired:
+    // TranscriptionSegment<T> carries Text/StartTime/EndTime/Confidence and has no per-word
+    // structure, so there is nothing for a word timestamp to be returned in. Adding it means
+    // a new shape on ISpeechRecognizer -- which 104 models implement -- plus cross-attention
+    // DTW alignment, and belongs in its own change rather than behind a bool.
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

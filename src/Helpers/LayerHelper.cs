@@ -18110,7 +18110,9 @@ public static partial class LayerHelper<T>
         int numLayers = 4,
         int numClasses = 2,
         double dropoutRate = 0.1,
-        IVectorActivationFunction<T>? hiddenVectorActivation = null)
+        IVectorActivationFunction<T>? hiddenVectorActivation = null,
+        double deltaMin = 0.001,
+        double deltaMax = 0.1)
     {
         // Feature tokenization: embed each feature into its OWN learnable token, producing a
         // [features, embedding] sequence that the Mamba blocks scan. Mambular (Thielmann et al.
@@ -18127,7 +18129,9 @@ public static partial class LayerHelper<T>
             yield return new MambaBlock<T>(
                 sequenceLength: numFeatures,
                 modelDimension: embeddingDimension,
-                stateDimension: stateDimension);
+                stateDimension: stateDimension,
+                deltaMin: deltaMin,
+                deltaMax: deltaMax);
         }
 
         // Per-token MLP head (GELU readout; tape-safe sequence pooling is unavailable so the head

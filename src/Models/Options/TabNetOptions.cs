@@ -231,11 +231,10 @@ public class TabNetOptions<T> : RiskModelOptions<T>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.0;
 
-    /// <summary>
-    /// Gets or sets the embedding dimension for categorical features.
-    /// </summary>
-    /// <value>The categorical embedding dimension, defaulting to 1 (simple embedding).</value>
-    public int CategoricalEmbeddingDimension { get; set; } = 1;
+    // CategoricalEmbeddingDimension was declared here and never read. This TabNet takes a
+    // numeric feature matrix: neither TabNetBase, TabNetNetwork nor TabNetEncoderLayer mentions
+    // categorical features, embeddings or cardinalities anywhere, so there is no embedding table
+    // for a dimension to size.
 
     /// <summary>
     /// Creates a copy of the options.
@@ -258,7 +257,6 @@ public class TabNetOptions<T> : RiskModelOptions<T>
             EnablePreTraining = EnablePreTraining,
             PreTrainingMaskingRatio = PreTrainingMaskingRatio,
             DropoutRate = DropoutRate,
-            CategoricalEmbeddingDimension = CategoricalEmbeddingDimension,
             MaxGradNorm = MaxGradNorm
         };
     }

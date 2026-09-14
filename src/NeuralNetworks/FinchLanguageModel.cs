@@ -100,6 +100,10 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _learningRate,
+                // The floor the decay schedule may not go below. OptimizerBase clamps
+                // CurrentLearningRate against Options.MinLearningRate, so the declared value
+                // lands on the optimizer's own knob rather than needing a second scheduler.
+                MinLearningRate = _options.MinLearningRate,
                 Beta1 = _options.Beta1,
                 Beta2 = _options.Beta2,
                 WeightDecay = _options.WeightDecay,
