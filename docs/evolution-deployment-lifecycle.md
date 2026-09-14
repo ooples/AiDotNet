@@ -32,4 +32,4 @@ At each dispatch boundary, call `Select(envelope)` and execute its returned arti
 
 ## Verification
 
-The maintained `AiDotNet.Evolution.Integration.Tests` project links the deployment regression tests and references the actual consumer library. `.github/workflows/evolution-csharp.yml` includes deployment-source changes and tests against a pinned Evolution source revision. Final run receipts will be recorded with this companion PR; authored tests alone are not a passing result.
+The maintained `AiDotNet.Evolution.Integration.Tests` project links the deployment regression tests and references the actual consumer library. `.github/workflows/evolution-csharp.yml` includes deployment-source changes and tests against a pinned Evolution source revision. [Verification evidence](evidence/us25/README.md) retains exact source identities, local pass/failure receipts and hosted-check boundaries; authored tests alone are not a passing result.
