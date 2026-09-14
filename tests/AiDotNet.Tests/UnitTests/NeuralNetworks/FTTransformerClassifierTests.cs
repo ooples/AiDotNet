@@ -30,9 +30,7 @@ public class FTTransformerClassifierTests
         NumHeads = 2,
         NumLayers = 1,
         FeedForwardMultiplier = 2,
-        DropoutRate = 0.0,
-        AttentionDropoutRate = 0.0,
-        ResidualDropoutRate = 0.0,
+        DropoutRate = 0.0
     };
 
     private static FTTransformerClassifier<double> NewModel() =>

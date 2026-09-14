@@ -62,6 +62,7 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     // MLP head for final representation
     private readonly FullyConnectedLayer<T>[] _mlpLayers;
     private readonly LayerNormalizationLayer<T> _finalNorm;
+    private readonly bool _useFinalNorm;
 
     // Cached values
     [Scratch]
@@ -240,7 +241,12 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
             inputDim = mlpDims[i];
         }
 
+        // Options.UseLayerNorm was declared and read by nothing; the final norm is the one the
+        // paper makes optional, so that is where the switch belongs. A disabled norm is modelled
+        // as an identity-epsilon norm rather than a null field, which would need every use site
+        // to null-check.
         _finalNorm = new LayerNormalizationLayer<T>(inputDim);
+        _useFinalNorm = Options.UseLayerNorm;
     }
 
     /// <summary>
@@ -296,7 +302,7 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         }
 
         // Final normalization
-        mlpOutput = _finalNorm.Forward(mlpOutput);
+        if (_useFinalNorm) mlpOutput = _finalNorm.Forward(mlpOutput);
         _mlpOutputCache = mlpOutput;
 
         return mlpOutput;

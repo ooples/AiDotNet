@@ -146,7 +146,8 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
                 numClasses: Architecture.OutputSize,
                 dropoutRate: _options.DropoutRate,
                 feedForwardDimension: _options.FeedForwardDimension,
-                hiddenVectorActivation: _options.HiddenVectorActivation));
+                hiddenVectorActivation: _options.HiddenVectorActivation,
+                useLayerNorm: _options.UseLayerNorm));
         }
     }
 

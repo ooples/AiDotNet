@@ -18157,7 +18157,8 @@ public static partial class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1,
         int? feedForwardDimension = null,
-        IVectorActivationFunction<T>? hiddenVectorActivation = null)
+        IVectorActivationFunction<T>? hiddenVectorActivation = null,
+        bool useLayerNorm = true)
     {
         // Feature tokenization: embed each feature into its OWN learnable vector, producing a
         // real [features, embedding] token sequence. TabDPT (Ma et al. 2024, "TabDPT: Scaling
@@ -18179,6 +18180,7 @@ public static partial class LayerHelper<T>
         // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
         // training). Final activation is task-dependent (GetTabularOutputActivation).
         yield return TabularHiddenDense(embeddingDimension / 2, hiddenVectorActivation, new GELUActivation<T>());
+        if (useLayerNorm) yield return new LayerNormalizationLayer<T>(embeddingDimension / 2);
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 

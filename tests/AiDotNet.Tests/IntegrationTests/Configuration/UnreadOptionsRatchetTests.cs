@@ -214,8 +214,30 @@ public class UnreadOptionsRatchetTests
     /// again -- worth remembering that recovering one file from HEAD undoes every earlier edit to
     /// it, not only the damage being reverted.
     /// </para>
+    /// <para>
+    /// 46 -> 40, applying the rule this branch has used throughout: WIRE a declared value if the
+    /// architecture can honour it, DELETE it if the architecture has no mechanism for it.
+    /// </para>
+    /// <para>
+    /// Wired: <c>FTTransformerOptions.LayerNormEpsilon</c> (LayerNormalizationLayer has a
+    /// <c>(featureSize, epsilon)</c> overload) and <c>TabDPTOptions.UseLayerNorm</c> (the paper
+    /// makes the final norm optional, so that is where the switch belongs).
+    /// </para>
+    /// <para>
+    /// Deleted: <c>AttentionDropoutRate</c> and <c>ResidualDropoutRate</c> on FTTransformer and
+    /// <c>AttentionDropoutRate</c> on SAINT -- all three route through TransformerEncoderLayer,
+    /// which takes <c>(numHeads, feedForwardDim)</c> and implements no dropout at all, so there is
+    /// no stage to configure. <c>AutoIntOptions.UseLayerNorm</c> -- neither AutoIntNetwork nor
+    /// AutoIntBase constructs a LayerNormalizationLayer anywhere.
+    /// </para>
+    /// <para>
+    /// Wiring TabDPT's UseLayerNorm into only the estimator path pushed
+    /// <c>TabularDualImplementationTests</c> from 49 to 50 within the same batch, which is the
+    /// dual-implementation guard catching the exact defect it was built for in a fresh change. The
+    /// LayerHelper path was wired too and the count returned to 49.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 46;
+    private const int UnreadBaseline = 40;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

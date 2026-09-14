@@ -182,12 +182,6 @@ public class SAINTOptions<T> : RiskModelOptions<T>
     public double EmbeddingInitScale { get; set; } = 0.02;
 
     /// <summary>
-    /// Gets or sets the attention dropout rate (separate from general dropout).
-    /// </summary>
-    /// <value>The attention dropout rate, defaulting to 0.0.</value>
-    public double AttentionDropoutRate { get; set; } = 0.0;
-
-    /// <summary>
     /// Gets or sets the hidden layer activation function.
     /// </summary>
     /// <value>The activation function, defaulting to GELU.</value>
