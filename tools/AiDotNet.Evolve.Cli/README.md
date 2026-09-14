@@ -218,27 +218,21 @@ for integrity-checked, bounded exports rather than mutable convenience outputs.
 
 ## Verification
 
-The previously committed slice passed **1,009 facade tests on .NET 10 and .NET 8**,
-with default analyzers and no skips, using
-the built AiDotNet assembly and explicit local Evolution US10 source dependency
-`255feb24369702a32ea9db7a3f8a0b7a847d2762`. New tests cover batch drain, 2→4 evaluation
-checkpoint resume, trace delivery despite observer failure, fatal exception
-preservation, parsed configuration snapshots, checkpoint winner files and sanitized
-output failure reporting. The actual CLI/worker project suite passed **89 tests**
-with no skips. Tests are maintained in `tests/AiDotNet.Evolve.Cli.Tests`; the lifecycle test sends a real
-local pipe pause during an evaluation and resumes the resulting engine checkpoint.
+Production revision `93b61112c6cf9156b2b6a24db0cd783703ee6bb8` passed the final
+default-analyzer gate: **1,012 facade tests on each of .NET 10 and .NET 8**, **99
+actual CLI/worker tests**, and **17 focused .NET Framework 4.7.1 compatibility
+tests**, zero skips/failures. CLI/worker builds had zero warnings/errors; facade
+builds retain baseline repository analyzer warnings. The explicit Evolution source
+dependency was `255feb24369702a32ea9db7a3f8a0b7a847d2762`.
 
-The current telemetry/template/timeout/cache-policy batch requires its final gate;
-the preceding counts are not evidence for untested changes. The pinned-source
-`Compiler-guided evolution` workflow also runs the actual CLI/worker and facade
-suites and retains TRX/coverage artifacts. Ordinary package-path builds remain a
-separate dependency/release gate. Initial failures are retained, not discarded.
+The source-pinned hosted workflow passed on Linux too: 1,012 facade and 79 compiler
+tests per framework, plus 99 CLI tests. Real pipe tests drain a running batch and
+resume its checkpoint; the final Python/script smoke rejects the wrong high-scoring
+candidate and preserves historical snapshot files, lifetime budgets and exact
+winner bytes through resume/inspect/export/compare, with no model requests.
 
-An actual CLI/Python smoke used `print(6)` against expected `7`. The old CLI exited
-0 and saved that wrong program with quality 0. With preflight it exits 3, reports
-one correctness cost unit and writes no winner. `print(7)` passes, records its
-separate one-unit preflight, and completes a one-evaluation search. Both use an
-empty manual model queue: no model response or paid API call is needed.
-
-This is local implementation evidence, not hosted CI approval, package publication,
-cross-platform pipe certification, competitor superiority or completion of US24.
+See [raw evidence, reproduction and limits](../../docs/evidence/us24/README.md).
+Initial fixture/build-order failures are retained. Ordinary package-path CI still
+depends on unpublished companion APIs: these results establish CLI review
+readiness, not merge/package readiness, scientific superiority or completion of
+the full roadmap. The optional dashboard remains separate.
