@@ -156,6 +156,6 @@ public class ICMFusionGradientTests
         learner.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { Task(1), Task(2) }));
 
         Assert.NotEqual(pretrained.ToArray(), learner.GetMetaModel().GetParameters().ToArray());
-        Assert.Equal(pretrained.ToArray(), learner.PretrainedParametersForTesting.ToArray());
+        Assert.Equal(pretrained.ToArray(), learner.PretrainedParametersForTesting());
     }
 }
