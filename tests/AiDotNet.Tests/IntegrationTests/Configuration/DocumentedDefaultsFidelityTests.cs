@@ -140,7 +140,7 @@ public class DocumentedDefaultsFidelityTests
 
                 checkedCount++;
 
-                string text = documented.Groups[1].Value.Replace(",", string.Empty, StringComparison.Ordinal);
+                string text = documented.Groups[1].Value.Replace(",", string.Empty);
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double documentedValue)
                     || !double.TryParse(declared, NumberStyles.Float, CultureInfo.InvariantCulture, out double declaredValue))
                 {

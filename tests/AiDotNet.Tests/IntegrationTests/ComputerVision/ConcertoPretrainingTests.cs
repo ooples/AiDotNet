@@ -121,8 +121,13 @@ public class ConcertoPretrainingTests
         double later = 0.0;
         for (int i = 0; i < 6; i++) later = model.Pretrain(samples);
 
-        Assert.True(double.IsFinite(first), $"First epoch loss was not finite: {first}");
-        Assert.True(double.IsFinite(later), $"Later epoch loss was not finite: {later}");
+        // double.IsFinite does not exist on net471, which this project also targets.
+        Assert.True(
+            !double.IsNaN(first) && !double.IsInfinity(first),
+            $"First epoch loss was not finite: {first}");
+        Assert.True(
+            !double.IsNaN(later) && !double.IsInfinity(later),
+            $"Later epoch loss was not finite: {later}");
         Assert.True(
             later < first,
             $"Pretraining did not reduce the loss: started at {first}, ended at {later}. "

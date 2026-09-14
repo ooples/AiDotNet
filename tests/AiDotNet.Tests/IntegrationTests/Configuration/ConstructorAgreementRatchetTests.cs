@@ -203,12 +203,12 @@ public class ConstructorAgreementRatchetTests
             while (j < lines.Length)
             {
                 parens += lines[j].Count(c => c == '(') - lines[j].Count(c => c == ')');
-                if (lines[j].Contains('(', StringComparison.Ordinal)) sawParen = true;
+                if (lines[j].IndexOf('(') >= 0) sawParen = true;
                 if (sawParen && parens <= 0) break;
                 j++;
             }
 
-            while (j < lines.Length && !lines[j].Contains('{', StringComparison.Ordinal)) j++;
+            while (j < lines.Length && lines[j].IndexOf('{') < 0) j++;
             if (j >= lines.Length) break;
 
             int depth = 0;
