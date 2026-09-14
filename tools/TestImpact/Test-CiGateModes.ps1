@@ -21,8 +21,6 @@ function Invoke-GateCase {
         [string] $Build = 'success',
         [string] $BuildCompat = 'success',
         [string] $Tests = 'success',
-        [string] $ParameterSweep = 'success',
-        [string] $ModelShape = 'success',
         [string] $Regression = 'success',
         [string] $Verdict = 'true',
         [string] $Aggregate = 'success',
@@ -37,7 +35,6 @@ function Invoke-GateCase {
     & $Gate -Stage $Stage -ReuseScope $ReuseScope -SourceResult $Source `
         -RequiresValidation $RequiresValidation -SelectResult $Select `
         -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
-        -ParameterSweepResult $ParameterSweep -ModelShapeResult $ModelShape `
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
         -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
         -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
@@ -57,7 +54,7 @@ Invoke-GateCase -Name validation_unenforced_test_failure -Stage Validation `
     -Tests failure -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_build_failure -Stage Validation -Build failure -ExpectedExit 1
 Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidation false `
-    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
 
 # No reuse requires both current validation and current quality.

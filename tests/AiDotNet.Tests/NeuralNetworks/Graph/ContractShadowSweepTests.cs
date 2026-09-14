@@ -54,9 +54,10 @@ public class ContractShadowSweepTests
     /// sweep in a gating shard is exactly what the plan said not to do, and doing it anyway turned an
     /// 84-test green shard into "Test Run Aborted" after 59 tests.
     ///
-    /// Category!=Sweep already appears in 45 shard filters, so this is excluded from all of them and
-    /// runs in the existing non-gating parameter-enumeration-sweep job: its own runner, 60-minute
-    /// budget, continue-on-error, findings uploaded as artifacts.
+    /// Category!=Sweep keeps it out of every ordinary shard filter. It runs in its own heavy shard,
+    /// "Sweep - Layer and Model Contract Surveys" in .github/test-shards.yml: its own runner, serialized,
+    /// a 35-minute hang limit. That shard is gating. (It used to claim a place in the old non-gating
+    /// parameter-enumeration-sweep job, which never ran it: that job's filter named only its own three classes.)
     /// </remarks>
     [Trait("Category", "Sweep")]
     [Fact(Timeout = 300000)]
