@@ -185,7 +185,6 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         // that must not mutate an options object the caller still holds.
         _options = options is null ? new SpeakerVerifierOptions() : new SpeakerVerifierOptions(options);
         _options.Validate();
-        _options.EmbeddingModelPath = embeddingModelPath;
 
         _useNativeMode = false;
         _embeddingModelPath = embeddingModelPath;

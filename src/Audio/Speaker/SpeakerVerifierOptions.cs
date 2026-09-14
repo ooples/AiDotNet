@@ -48,7 +48,6 @@ public class SpeakerVerifierOptions : SpeakerRecognitionOptions
         NumEncoderLayers = other.NumEncoderLayers;
         VerificationThreshold = other.VerificationThreshold;
         IdentificationThreshold = other.IdentificationThreshold;
-        EmbeddingModelPath = other.EmbeddingModelPath;
         OnnxOptions = other.OnnxOptions;
         MaxGradNorm = other.MaxGradNorm;
     }
@@ -75,11 +74,6 @@ public class SpeakerVerifierOptions : SpeakerRecognitionOptions
     /// </para>
     /// </remarks>
     public double IdentificationThreshold { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to an ONNX embedding model. Null selects the native trainable model.
-    /// </summary>
-    public string? EmbeddingModelPath { get; set; }
 
     /// <summary>
     /// Gets or sets the ONNX runtime options used when <see cref="EmbeddingModelPath"/> is supplied.

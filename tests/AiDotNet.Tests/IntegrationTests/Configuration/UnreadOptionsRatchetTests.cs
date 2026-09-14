@@ -200,8 +200,22 @@ public class UnreadOptionsRatchetTests
     /// own that IS read, so a name-only scan reports readers for AudioGen's that belong to a
     /// different class entirely.
     /// </para>
+    /// <para>
+    /// 50 -> 46: four more ONNX model-path properties, all WRITE-ONLY. SpeakerVerifier and
+    /// SpeakerEmbeddingExtractor each assigned <c>_options.X = modelPath</c> in the constructor and
+    /// then used a local field, so the property existed only to be written to -- the comment above
+    /// one of them explained that the options object was copied first so the write could not mutate
+    /// the caller's, which is careful handling of a value nobody reads.
+    /// </para>
+    /// <para>
+    /// Whisper's Encoder/DecoderModelPath are in this count twice over. They were deleted once,
+    /// then silently restored when a <c>git checkout --</c> recovered this file from a bad regex
+    /// edit, and the revert reached the commit. Nothing noticed until this ratchet listed them
+    /// again -- worth remembering that recovering one file from HEAD undoes every earlier edit to
+    /// it, not only the damage being reverted.
+    /// </para>
     /// </remarks>
-    private const int UnreadBaseline = 50;
+    private const int UnreadBaseline = 46;
 
     /// <summary>
     /// Zero. A ratchet with headroom is a ratchet that drifts; the constructor ratchets carry

@@ -196,11 +196,10 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         if (modelPath is null)
             throw new ArgumentNullException(nameof(modelPath));
 
-        // Copied rather than held by reference: the path is recorded on the instance below, and
-        // that must not mutate an options object the caller still holds.
+        // Copied rather than held by reference so nothing here can mutate an options object the
+        // caller still holds.
         _options = options is null ? new SpeakerEmbeddingOptions() : new SpeakerEmbeddingOptions(options);
         _options.Validate();
-        _options.ModelPath = modelPath;
 
         _useNativeMode = false;
         _modelPath = modelPath;

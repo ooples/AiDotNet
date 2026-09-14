@@ -54,8 +54,6 @@ public class WhisperOptions : AudioNeuralNetworkOptions
         NumMels = other.NumMels;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         OnnxOptions = other.OnnxOptions;
-        EncoderModelPath = other.EncoderModelPath;
-        DecoderModelPath = other.DecoderModelPath;
         MaxTokens = other.MaxTokens;
         BeamSize = other.BeamSize;
         Temperature = other.Temperature;
@@ -101,18 +99,6 @@ public class WhisperOptions : AudioNeuralNetworkOptions
     /// Gets or sets the ONNX execution options.
     /// </summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets the path to the encoder ONNX model.
-    /// If null, the model will be downloaded automatically.
-    /// </summary>
-    public string? EncoderModelPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to the decoder ONNX model.
-    /// If null, the model will be downloaded automatically.
-    /// </summary>
-    public string? DecoderModelPath { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum number of tokens to generate.

@@ -54,7 +54,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
         MinimumDurationSeconds = other.MinimumDurationSeconds;
         MaxFrames = other.MaxFrames;
         DropoutRate = other.DropoutRate;
-        ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         MaxGradNorm = other.MaxGradNorm;
     }
@@ -102,11 +101,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     /// </para>
     /// </remarks>
     public double DropoutRate { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to an ONNX embedding model. Null selects the native trainable model.
-    /// </summary>
-    public string? ModelPath { get; set; }
 
     /// <summary>
     /// Gets or sets the ONNX runtime options used when <see cref="ModelPath"/> is supplied.

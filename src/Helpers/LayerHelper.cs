@@ -9447,9 +9447,9 @@ public static partial class LayerHelper<T>
         int inputHeight = 480,
         int inputWidth = 640,
         int numFeatures = 768,
-        int numEncoderBlocks = 12)
+        int numEncoderBlocks = 12,
+        int patchSize = 16)
     {
-        int patchSize = 16;
         int numHeads = System.Math.Max(1, numFeatures / 64); // ViT convention: head dim = 64
         int ffnDim = numFeatures * 4;
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;

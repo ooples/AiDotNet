@@ -530,7 +530,8 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
                 _height,
                 _width,
                 _numFeatures,
-                _numEncoderBlocks));
+                _numEncoderBlocks,
+                _patchSize));
         }
 
         // EncodeImage / DecodeDepth split Layers positionally as
