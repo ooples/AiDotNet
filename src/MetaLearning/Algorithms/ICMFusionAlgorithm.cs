@@ -63,6 +63,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// of its entries, a decoded block is written to all of its entries, and a gradient reaches a block as the sum over
 /// its entries - the chain rule of that write.
 /// </para>
+/// <para><b>For Beginners:</b> Fine-tuning a model on one task gives a small set of changes to its weights (an
+/// adapter). Fine-tuning on another task gives different changes, and simply averaging the two often makes the
+/// model worse at both. ICM-Fusion trains a small variational autoencoder to squeeze each adapter into a short
+/// code, blends the codes, and turns the blend back into one adapter that works for both tasks. The original
+/// weights are never overwritten: the model you get is always "original weights + blended adapter".</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
@@ -662,5 +667,5 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
     internal double[] DecoderParametersForTesting => ToDoubles(_decoderParams);
 
-    internal Vector<T> PretrainedParametersForTesting => _pretrainedParams.Clone();
+    internal double[] PretrainedParametersForTesting() => ToDoubles(_pretrainedParams);
 }
