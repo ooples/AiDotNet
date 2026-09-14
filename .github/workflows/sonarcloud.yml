@@ -648,13 +648,21 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          # NOT the event's base sha: that is the base branch as it stood when the pull request was
+          # opened, so for a pull request behind master it attributes every commit master
+          # has gained since to the pull request. The selector verifies the checked-out merge commit's
+          # second parent is this head and diffs against its first parent - the base actually tested.
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
             Write-Host '::error::.github/test-shards.yml yielded no shards'
             exit 1
           }
+          # Test sources are never instrumented, so the coverage map cannot route them; the selector
+          # routes them through these same filters instead.
+          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+            Set-Content -LiteralPath shard-manifest.json -Encoding utf8
 
           function Read-RequiredJsonBoolean {
             param(
@@ -734,7 +742,7 @@ jobs:
             $pathRequiresValidation = $true
             try {
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
-                  -BaseSha $env:PR_BASE_SHA -OutFile path-classification.json
+                  -PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
               $pathRequiresValidation = Read-RequiredJsonBoolean `
@@ -750,12 +758,14 @@ jobs:
               $selected = @()
             }
             elseif ($mapCertified) {
-              # No base ref: coverage selection diffs from the map's own commit, which is the only
-              # reference whose line numbers the map's ranges are expressed in.
+              # Line ranges still come from the map's own commit, the only reference whose line
+              # numbers the map's ranges are expressed in; the pull request head only decides WHICH
+              # paths are this pull request's change.
               try {
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
-                    -BaseSha $env:PR_BASE_SHA `
+                    -PullRequestHeadSha $env:PR_HEAD_SHA `
+                    -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
                 if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
