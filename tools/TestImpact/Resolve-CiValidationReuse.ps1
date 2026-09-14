@@ -66,6 +66,23 @@ enum CiDeltaReuseMode {
     Partial
 }
 
+enum CiPushTipState {
+    Current
+    Superseded
+    Unverifiable
+}
+
+function Get-PushTipState {
+    try {
+        $tip = Invoke-GhJson @('api', "repos/$Repository/git/ref/heads/$([uri]::EscapeDataString($ExpectedBaseBranch))")
+        $tipSha = [string] $tip.object.sha
+        if ($tipSha -cnotmatch '^[0-9a-f]{40}$') { return [CiPushTipState]::Unverifiable }
+        if ($tipSha -cne $CommitSha) { return [CiPushTipState]::Superseded }
+        return [CiPushTipState]::Current
+    }
+    catch { return [CiPushTipState]::Unverifiable }
+}
+
 function ConvertTo-RequiredBooleanProperty {
     param($Object, [string] $Name)
     if (-not $Object.PSObject.Properties[$Name] -or $Object.$Name -isnot [bool]) {
@@ -365,6 +382,19 @@ function Write-ReuseDecision {
 
     # Empty imports must not authorize the workflow's coverage-artifact download. Keep this
     # output invariant here so partial reruns and whole-result reuse cannot emit stale metadata.
+    # Recheck at output emission, after artifact inspection. Never throw into the
+    # workflow's full-validation fallback when a queued push has become superseded.
+    $blocked = $false
+    if ($EventName -ceq 'push' -and -not $Deferred) {
+        $tipState = Get-PushTipState
+        if ($tipState -ne [CiPushTipState]::Current) {
+            $blocked = $true
+            $DecisionScope = [CiValidationReuseScope]::None
+            $RunId = 0; $TestedSha = ''; $DeltaMode = $null
+            $PartialShards = @(); $ImportShards = @()
+            $Summary = "Push validation blocked ($tipState): this commit is not the verified current branch tip. No dependent validation or evidence promotion is authorized."
+        }
+    }
     if ($ImportShards.Count -eq 0) {
         $ImportRunId = 0
         $ImportSha = ''
@@ -384,8 +414,9 @@ function Write-ReuseDecision {
         "reuse_quality=$($reuseQuality.ToString().ToLowerInvariant())",
         "reused_requires_validation=$($RequiresValidation.ToString().ToLowerInvariant())",
         "deferred=$($Deferred.IsPresent.ToString().ToLowerInvariant())",
-        "execute_validation=$(((-not $reuse -and -not $Deferred)).ToString().ToLowerInvariant())",
-        "execute_quality=$(((-not $reuseQuality -and -not $Deferred)).ToString().ToLowerInvariant())",
+        "blocked=$($blocked.ToString().ToLowerInvariant())",
+        "execute_validation=$(((-not $reuse -and -not $Deferred -and -not $blocked)).ToString().ToLowerInvariant())",
+        "execute_quality=$(((-not $reuseQuality -and -not $Deferred -and -not $blocked)).ToString().ToLowerInvariant())",
         "delta_mode=$DeltaMode",
         "partial_shards=$(ConvertTo-Json -InputObject @($PartialShards) -Compress)",
         "import_run_id=$(if ($ImportRunId -gt 0) { $ImportRunId } else { '' })",
@@ -546,6 +577,33 @@ if ($SelfTest) {
         }
         Assert-True ($deferredOutput.deferred -ceq 'true' -and $deferredOutput.reuse_scope -ceq 'None') 'deferred output is not explicitly incomplete'
         Assert-Rejected { Write-ReuseDecision -DecisionScope Complete -Deferred } 'deferral accepted a passing reuse scope'
+        $EventName = 'push'; $CommitSha = $sha; $Repository = 'fixture/repo'; $ExpectedBaseBranch = 'master'
+        function Invoke-GhJson {
+            param([string[]] $Arguments)
+            if ($script:tipFixture -eq 'api-failure') { throw 'simulated API failure' }
+            return [pscustomobject]@{ object = @{ sha = $script:tipFixture } }
+        }
+        foreach ($scope in [Enum]::GetValues[CiValidationReuseScope]()) {
+            foreach ($tip in @($sha, $tree, 'invalid-sha', 'api-failure')) {
+                $script:tipFixture = $tip
+                Write-ReuseDecision -DecisionScope $scope -RunId 10 -TestedSha $sha `
+                    -ImportRunId 10 -ImportSha $sha -ImportShards @('Alpha') -PartialShards @('Beta')
+                $values = @{}
+                foreach ($line in Get-Content -LiteralPath $GitHubOutput) {
+                    $pair = $line -split '=', 2
+                    $values[$pair[0]] = $pair[1]
+                }
+                if ($tip -ceq $sha) {
+                    Assert-True ($values.blocked -ceq 'false') 'current push tip was blocked'
+                } else {
+                    Assert-True ($values.blocked -ceq 'true' -and $values.execute_validation -ceq 'false' -and
+                        $values.execute_quality -ceq 'false' -and $values.reuse -ceq 'false' -and
+                        $values.import_run_id -ceq '' -and $values.run_id -ceq '' -and
+                        $values.partial_shards -ceq '[]') 'superseded/unverifiable push authorized dependent work'
+                }
+            }
+        }
+        $EventName = ''
     }
     finally {
         if (Test-Path -LiteralPath $GitHubOutput) { Remove-Item -LiteralPath $GitHubOutput -Force }

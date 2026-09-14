@@ -82,6 +82,7 @@ param([string] $CasePath, [string] $GitHubOutput, [string] $MapFile, [string] $S
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $env:GITHUB_STEP_SUMMARY = ''
+$EventName = ''
 '@
 $fixturePlan = @'
 $case = Get-Content -LiteralPath $CasePath -Raw | ConvertFrom-Json

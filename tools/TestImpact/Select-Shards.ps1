@@ -673,7 +673,9 @@ function Select-ImpactedShards {
         }
     }
 
-    if ($Changed.Count -eq 0) {
+    # Audits must exercise the mandatory shard set even when the only changes since
+    # the candidate map are non-runtime. Ordinary docs-only PRs still select nothing.
+    if ($Changed.Count -eq 0 -or ($AuditUnchangedMap -and $mappedPaths.Count -eq 0 -and -not $escalate)) {
         if ($AuditUnchangedMap) {
             foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
             # Certificate policy requires both a nonempty selected set and a nonempty skipped set.
@@ -683,7 +685,7 @@ function Select-ImpactedShards {
                 return [pscustomobject]@{
                     Escalate           = $false
                     RequiresValidation = $true
-                    Reasons            = @('map and audited tree are unchanged')
+                    Reasons            = @('audited tree has no runtime delta; exercising mandatory shards')
                     Shards             = @($selected | Sort-Object)
                     Routes             = @($selected | Sort-Object | ForEach-Object { "$_ <= is always run" })
                 }
@@ -693,7 +695,8 @@ function Select-ImpactedShards {
         return [pscustomobject]@{
             Escalate            = $true
             RequiresValidation = $true
-            Reasons             = @('changed path set was empty')
+            Reasons             = @($(if ($Changed.Count -eq 0) { 'changed path set was empty' }
+                else { 'audit has no mandatory shards and no runtime delta' }))
             Shards              = @()
             Routes              = @()
         }
@@ -1575,6 +1578,24 @@ if ($SelfTest) {
     $r = Select-ImpactedShards -Map $fullyMapped -Changed @{} -AuditUnchangedMap
     Assert-True $r.Escalate `
         'a vacuous unchanged audit with no always-run shards must not authorize certification'
+
+    $docsOnly = @{
+        '.github/AUTOMATED_RELEASE_SETUP.md' = @(1, 2)
+        '.github/VERSIONING.md' = @(1, 2)
+        '.github/workflows/release-please.yml' = @(1, 2)
+    }
+    $r = Select-ImpactedShards -Map $map -Changed $docsOnly -CurrentPaths @() -AuditUnchangedMap
+    Assert-True (-not $r.Escalate -and $r.RequiresValidation -and
+        ($r.Shards -join ',') -ceq 'HeavyNoCoverage') `
+        'a non-runtime historical audit dropped the mandatory shard set'
+    Assert-True ($r.Routes.Count -eq 1) 'a mandatory audit shard lacked its route explanation'
+    $r = Select-ImpactedShards -Map $map -Changed $docsOnly
+    Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+        'an ordinary docs-only PR was forced to run audit-only validation'
+    $r = Select-ImpactedShards -Map $fullyMapped -Changed $docsOnly -CurrentPaths @() -AuditUnchangedMap
+    Assert-True $r.Escalate 'a non-runtime audit with no mandatory shards authorized vacuous certification'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2) } -AuditUnchangedMap
+    Assert-True $r.Escalate 'audit-only mandatory routing suppressed a broad dependency change'
 
     foreach ($edge in @(10, 20)) {
         $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
