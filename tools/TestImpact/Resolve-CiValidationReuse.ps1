@@ -278,7 +278,8 @@ function Invoke-DeltaPlan {
     <#
         Everything delta reuse decides from Git alone: rebuild the validated tree from the tested
         merge commit's parents, select over what the checked-out landed commit adds to it, and
-        intersect with the shards the pull request ran. Returns a failure string, or the plan.
+        rerun every delta-affected shard and import unaffected shards from the pull request run.
+        Returns a failure string, or the plan.
     #>
     param(
         [Parameter(Mandatory)] [string] $BaseSha,
