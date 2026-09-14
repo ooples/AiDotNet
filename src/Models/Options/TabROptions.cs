@@ -157,25 +157,6 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// <value>True to use layer normalization; false otherwise. Defaults to true.</value>
     public bool UseLayerNorm { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the activation function type.
-    /// </summary>
-    /// <value>The activation type, defaulting to "ReLU".</value>
-    public string ActivationType { get; set; } = "ReLU";
-
-    /// <summary>
-    /// Gets or sets whether to use feature-wise linear modulation.
-    /// </summary>
-    /// <value>True to use FiLM; false otherwise. Defaults to false.</value>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FiLM (Feature-wise Linear Modulation) allows the context
-    /// from neighbors to modulate the feature processing. It can help when the
-    /// relationship between features changes based on context.
-    /// </para>
-    /// </remarks>
-    public bool UseFiLM { get; set; } = false;
-
 
 
     /// <summary>
@@ -201,8 +182,6 @@ public class TabROptions<T> : RiskModelOptions<T>
             NormalizeEmbeddings = NormalizeEmbeddings,
             NumContextLayers = NumContextLayers,
             UseLayerNorm = UseLayerNorm,
-            ActivationType = ActivationType,
-            UseFiLM = UseFiLM,
             WeightDecay = WeightDecay,
             MaxGradNorm = MaxGradNorm
         };

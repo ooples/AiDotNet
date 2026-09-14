@@ -130,20 +130,6 @@ public class TabMOptions<T> : RiskModelOptions<T>
     public bool UseBias { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the activation function type.
-    /// </summary>
-    /// <value>The activation type, defaulting to "ReLU".</value>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The activation function controls how neurons respond:
-    /// - "ReLU": Fast and effective, most common choice
-    /// - "GELU": Smoother, often better for deep networks
-    /// - "SiLU": Similar to GELU, good for modern architectures
-    /// </para>
-    /// </remarks>
-    public string ActivationType { get; set; } = "ReLU";
-
-    /// <summary>
     /// Gets or sets whether to average ensemble predictions or concatenate.
     /// </summary>
     /// <value>True to average predictions; false to concatenate then project. Defaults to true.</value>
@@ -200,7 +186,6 @@ public class TabMOptions<T> : RiskModelOptions<T>
             UseLayerNorm = UseLayerNorm,
             RankInitScale = RankInitScale,
             UseBias = UseBias,
-            ActivationType = ActivationType,
             AverageEnsemble = AverageEnsemble,
             UseFeatureEmbeddings = UseFeatureEmbeddings,
             FeatureEmbeddingDimension = FeatureEmbeddingDimension,
