@@ -6,6 +6,8 @@ on:
       - 'src/AiDotNet.Evolution.CSharp/**'
       - 'src/Evolution/Programs/**'
       - 'src/Configuration/ProgramEvolution*.cs'
+      - 'src/Configuration/ProgramNoiseEvaluationOptions.cs'
+      - 'benchmarks/EvolutionNoise/**'
       - 'src/AiModelBuilder.Evolution.cs'
       - 'src/Interfaces/IProgramMeasurementEvidenceStore.cs'
       - 'src/AiDotNet.csproj'
@@ -57,7 +59,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Evolution
-          ref: 76d8343939f9ec1a58c4994384a249e6ecc93dc0
+          ref: e1a791c8d6549adc9ef0f5b40e1668ff7fb12dec
           # Keep sibling repositories separate: nesting core under the consumer inherits its CPM file.
           path: evolution
           persist-credentials: false
@@ -88,6 +90,14 @@ jobs:
           -c Release -f ${{ matrix.framework }} -p:UseLocalEvolution=true -m:2
           --logger "trx;LogFileName=consumer.trx" --results-directory TestResults/compiler-${{ matrix.framework }}/consumer
           --collect:"XPlat Code Coverage" -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=[AiDotNet]AiDotNet.Evolution.*,[AiDotNet]AiDotNet.AiModelBuilder*"
+      - name: Validate fresh consumer training and runtime noise policies
+        if: matrix.framework == 'net10.0'
+        shell: pwsh
+        run: |
+          dotnet build benchmarks/EvolutionNoise/EvolutionNoise.csproj -c Release -p:UseLocalEvolution=true -m:2
+          if ($LASTEXITCODE -ne 0) { throw 'Consumer noise study build failed.' }
+          dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll > TestResults/compiler-net10.0/noise-study.json
+          if ($LASTEXITCODE -ne 0) { throw 'Consumer noise study failed; retain all observations.' }
       - name: Verify CLI module and runtime pilot coverage
         if: matrix.framework == 'net10.0'
         shell: pwsh
