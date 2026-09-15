@@ -731,6 +731,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
           ./tools/TestImpact/Test-CiWorkloads.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Workload partition proof failed' }
+          ./tools/TestImpact/Test-CiPolicyImpact.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI execution-impact proof failed' }
           ./tools/TestImpact/Test-AuxiliaryEvidence.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence proof failed' }
           ./tools/TestImpact/Test-AuxiliaryInventory.ps1

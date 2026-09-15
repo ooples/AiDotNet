@@ -262,6 +262,10 @@ foreach ($output in 'execute_validation', 'execute_quality') {
 }
 Assert-Contract ($resolver.Contains('steps.resolve.outputs.reuse_scope || steps.defaults.outputs.reuse_scope')) `
     'validation-source does not publish the typed reuse scope'
+$policySelfTest = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Verify the impact tooling'
+Assert-Contract ($policySelfTest -match '(?m)^\s+\./tools/TestImpact/Test-CiPolicyImpact\.ps1\s*\r?$' -and
+    $policySelfTest -match '(?m)^\s+if \(\$LASTEXITCODE -ne 0\) \{ throw ''CI execution-impact proof failed'' \}\s*\r?$') `
+    'CI execution-impact contracts must execute and block failed policy validation'
 $resolveStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve exact-tree PR run'
 Assert-Contract ([bool] $resolveStep) `
     'the exact-tree resolver step is absent'

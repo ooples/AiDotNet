@@ -606,7 +606,9 @@ function Select-ImpactedShards {
         [AllowEmptyCollection()] [string[]] $CurrentPaths = @(),
         [switch] $ScopeToCurrentPaths,
         [hashtable] $TestRoutes = @{},
-        [switch] $AuditUnchangedMap
+        [switch] $AuditUnchangedMap,
+        [string[]] $ReviewedControlPaths = @(),
+        [string[]] $RequiredShards = @()
     )
 
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -617,6 +619,11 @@ function Select-ImpactedShards {
     # different map in the same process cannot reuse another map's directory owners.
     $directoryOwnerIndex = $null
     $escalate = $false
+    foreach ($name in $RequiredShards) {
+        if ($name -cnotin (@($Map.knownShards) + @($Map.alwaysRun))) { throw "Required policy workload is absent from the map: $name" }
+        [void] $selected.Add($name)
+        [void] $routes.Add("$name <= its manifest or execution policy changed")
+    }
     $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
         @($CurrentPaths)
@@ -649,6 +656,7 @@ function Select-ImpactedShards {
         $changedPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $Changed.Keys) { [void] $changedPathSet.Add(([string] $key).Replace('\', '/')) }
         foreach ($currentPath in ($currentPathSet | Sort-Object)) {
+            if ($currentPath -cin $ReviewedControlPaths) { continue }
             if ((Get-ChangedPathImpact -Path $currentPath) -eq [ChangedPathImpact]::NonRuntime) { continue }
             if (-not $changedPathSet.Contains($currentPath)) {
                 $escalate = $true
@@ -662,6 +670,7 @@ function Select-ImpactedShards {
             continue
         }
         $impact = Get-ChangedPathImpact -Path $path
+        if ($path -cin $ReviewedControlPaths) { continue }
         switch ($impact) {
             ([ChangedPathImpact]::NonRuntime) { continue }
             ([ChangedPathImpact]::SelectionControl) {
@@ -718,12 +727,15 @@ function Select-ImpactedShards {
     # A non-runtime-only change is a deliberate empty selection, distinct from a selector failure.
     # Keep that state typed here and expose only a JSON boolean at the workflow boundary.
     if ($mappedPaths.Count -eq 0) {
+        if ($selected.Count -gt 0) {
+            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+        }
         return [pscustomobject]@{
             Escalate          = $escalate
-            RequiresValidation = $escalate
+            RequiresValidation = $escalate -or $selected.Count -gt 0
             Reasons           = $reasons
-            Shards            = @()
-            Routes            = @()
+            Shards            = @($selected | Sort-Object)
+            Routes            = @($routes)
         }
     }
 
@@ -1505,6 +1517,20 @@ if ($SelfTest) {
     Assert-True ($r.Shards -contains 'Alpha') 'a change on Alpha lines must select Alpha'
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change outside Beta lines must not select Beta'
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'always-run shards must always be selected'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tools/TestImpact/Select-Shards.ps1' = @(1, 3); 'src/Covered.cs' = @(12, 14) } `
+        -ReviewedControlPaths @('tools/TestImpact/Select-Shards.ps1') -RequiredShards @('Beta')
+    Assert-True (-not $r.Escalate -and ($r.Shards -join ',') -ceq 'Alpha,Beta,HeavyNoCoverage') `
+        'Reviewed policy impact lost either runtime coverage or explicitly affected workloads.'
+    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/test-shards.yml' = @(1, 3) } `
+        -ReviewedControlPaths @('.github/test-shards.yml') -RequiredShards @('Beta')
+    Assert-True (-not $r.Escalate -and $r.RequiresValidation -and ($r.Shards -join ',') -ceq 'Beta,HeavyNoCoverage') `
+        'Manifest-only changes did not run the changed shard and mandatory workloads.'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tools/TestImpact/Select-Shards.ps1' = @(1, 3) } `
+        -ReviewedControlPaths @('tools/TestImpact/Select-Shards.ps1')
+    Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+        'Tooling-only changes unnecessarily required model execution.'
+    Assert-Throws { Select-ImpactedShards -Map $map -Changed @{ '.github/test-shards.yml' = @(1, 3) } -RequiredShards @('Unknown') } `
+        'A required workload absent from the map was silently dropped.'
 
     # An unexecuted range in a mapped file routes to every shard that executes the file. Before this
     # it escalated, and #2100's field declarations and between-method insertions - lines coverage
@@ -2167,11 +2193,17 @@ if ($ClassifyOnly) {
             $reason = 'changed-path-set-empty'
         }
         else {
+            $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
+            if (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1") {
+                . "$PSScriptRoot/CiPolicyImpact.ps1"
+                $reviewed = Get-ReviewedCiPolicyImpact -BaseSha $BaseSha -Paths $changedFiles
+            }
             $requiresValidation = [bool] @(
                 $changedFiles | Where-Object {
+                    $_ -cnotin $reviewed.Paths -and
                     (Get-ChangedPathImpact -Path ([string] $_)) -ne [ChangedPathImpact]::NonRuntime
                 }
-            ).Count
+            ).Count -or $reviewed.Shards.Count -gt 0
             $reason = $(if ($requiresValidation) { 'runtime-or-unknown' } else { 'non-runtime-only' })
         }
     }
@@ -2299,9 +2331,18 @@ try {
             -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names }
     }
 
+    $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
+    if ($BaseSha -and (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1")) {
+        try {
+            . "$PSScriptRoot/CiPolicyImpact.ps1"
+            $reviewed = Get-ReviewedCiPolicyImpact -BaseSha $BaseSha -Paths $currentPaths
+            Write-Host "CI policy review: $($reviewed.Paths.Count) control paths handled; $($reviewed.Shards.Count) execution workloads required."
+        }
+        catch { Write-Warning "CI execution impact is unproven; retaining full-validation controls: $($_.Exception.Message)" }
+    }
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
-        -AuditUnchangedMap:$AuditUnchangedMap
+        -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards
 
     if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
         @($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {

@@ -7,14 +7,21 @@ enum CiWorkloadKind {
 
 function Get-CiWorkloadKind {
     param([Parameter(Mandatory)] [object] $Shard)
-    $property = $Shard.PSObject.Properties['workload']
-    if ($null -eq $property) { return [CiWorkloadKind]::Tests }
+    if ($Shard -is [Collections.IDictionary]) {
+        if (-not $Shard.Contains('workload')) { return [CiWorkloadKind]::Tests }
+        $value = $Shard['workload']
+    }
+    else {
+        $property = $Shard.PSObject.Properties['workload']
+        if ($null -eq $property) { return [CiWorkloadKind]::Tests }
+        $value = $property.Value
+    }
     # Reject numeric enum aliases and misspellings instead of silently dropping a workload.
-    if ($property.Value -isnot [string] -or
-        $property.Value -cnotin [Enum]::GetNames([CiWorkloadKind])) {
+    if ($value -isnot [string] -or
+        $value -cnotin [Enum]::GetNames([CiWorkloadKind])) {
         throw "Unknown workload kind for '$($Shard.name)'."
     }
-    return [CiWorkloadKind] $property.Value
+    return [CiWorkloadKind] $value
 }
 
 function Split-CiWorkloads {

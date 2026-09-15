@@ -19,6 +19,16 @@ if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
 }
 $cases = @(
     [pscustomobject]@{
+        Name = 'execution-impact-proof-commented'
+        Reason = 'CI execution-impact contracts must execute'
+        Content = $workflow.Replace('./tools/TestImpact/Test-CiPolicyImpact.ps1', '# ./tools/TestImpact/Test-CiPolicyImpact.ps1')
+    },
+    [pscustomobject]@{
+        Name = 'execution-impact-failure-ignored'
+        Reason = 'CI execution-impact contracts must execute'
+        Content = $workflow.Replace("throw 'CI execution-impact proof failed'", "Write-Warning 'CI execution-impact proof failed'")
+    },
+    [pscustomobject]@{
         Name = 'superseded-push-green'
         Reason = 'superseded push must explicitly block'
         Content = $workflow.Replace("if: steps.resolve.outputs.blocked == 'true'", "if: steps.resolve.outputs.blocked == 'false'")
