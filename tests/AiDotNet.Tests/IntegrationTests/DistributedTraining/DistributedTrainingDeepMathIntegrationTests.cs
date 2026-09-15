@@ -23,6 +23,60 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 [Collection("ConvergenceSensitive")]
 public class DistributedTrainingDeepMathIntegrationTests
 {
+    [Theory]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.DDP)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO1)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO2)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO3)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.FSDP)]
+    public void ParameterResize_InvalidatesOldGradientsButAllowsFreshTraining(AiDotNet.Enums.DistributedStrategy strategy)
+    {
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString("N"));
+        try
+        {
+            var model = new ResizableDistributedModel();
+            var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+            ShardedModelBase<double, Vector<double>, Vector<double>> sharded = strategy switch
+            {
+                AiDotNet.Enums.DistributedStrategy.DDP => new DDPModel<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO1 => new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO2 => new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO3 => new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.FSDP => new FSDPModel<double, Vector<double>, Vector<double>>(model, config),
+                _ => throw new ArgumentOutOfRangeException(nameof(strategy))
+            };
+            var input = new Vector<double>(new double[4]);
+            sharded.Train(input, input);
+            Assert.Equal(7, sharded.GetParameters().Length);
+            Assert.Equal(1, model.GradientCalls);
+            // An unchanged layout must retain valid gradients.
+            sharded.SynchronizeGradients();
+            model.SetParameters(new Vector<double>(new double[11]));
+            Assert.Throws<InvalidOperationException>(() => sharded.SynchronizeGradients());
+            Assert.Equal(11, sharded.GetParameters().Length);
+            sharded.Train(input, input);
+            sharded.SynchronizeGradients();
+            Assert.Equal(11, sharded.GetParameters().Length);
+            Assert.Equal(2, model.GradientCalls);
+        }
+        finally { backend.Shutdown(); }
+    }
+
+    private sealed class ResizableDistributedModel : DistributedTrainingIntegrationTests.MockDistributedModel,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>
+    {
+        public ResizableDistributedModel() : base(4) { }
+        public new long ParameterCount => GetParameters().Length;
+        public int GradientCalls { get; private set; }
+        public new Vector<double> ComputeGradients(Vector<double> input, Vector<double> expectedOutput,
+            ILossFunction<double>? lossFunction = null)
+        {
+            if (++GradientCalls == 1) SetParameters(new Vector<double>(new double[7]));
+            return base.ComputeGradients(input, expectedOutput, lossFunction);
+        }
+    }
+
     // ============================
     // ActivationCheckpointConfig: Defaults
     // ============================

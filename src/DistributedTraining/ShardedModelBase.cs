@@ -242,6 +242,7 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         {
             _isShardingInitialized = false;
             CachedFullParameters = null;
+            InvalidateGradientState();
             OnBeforeInitializeSharding();
             InitializeSharding();
             _initializedWrappedParameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
@@ -261,6 +262,17 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     protected virtual void OnBeforeInitializeSharding()
     {
         // Default implementation does nothing
+    }
+
+    /// <summary>Clears gradient caches belonging to a previous parameter layout.</summary>
+    protected virtual void InvalidateGradientState() { }
+
+    /// <summary>Refreshes a lazily materialized layout before publishing its newly computed gradients.</summary>
+    protected Vector<T> ComputeGradientsForCurrentLayout(TInput input, TOutput expectedOutput)
+    {
+        var gradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        EnsureShardingInitialized();
+        return gradients;
     }
 
     /// <summary>

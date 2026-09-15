@@ -592,8 +592,8 @@ public static class LayerCloning
             // Constructors can forward shapes directly to LayerBase without retaining their own
             // fields. Retry only after existing factories decline, preserving explicitly saved keys.
             var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
-            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = source.GetInputShape();
-            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = source.GetOutputShape();
+            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = (int[])source.GetInputShape().Clone();
+            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = (int[])source.GetOutputShape().Clone();
             if (!LayerFactoryRegistry<T>.TryCreate(
                     type, definition, new LayerStateBag(withShapes, type.Name),
                     source.ScalarActivation, source.VectorActivation, out rebuilt))

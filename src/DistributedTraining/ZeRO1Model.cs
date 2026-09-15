@@ -68,6 +68,13 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
+    /// <inheritdoc/>
+    protected override void InvalidateGradientState()
+    {
+        base.InvalidateGradientState();
+        _computedGradients = null;
+    }
+
     /// <summary>
     /// Creates a new ZeRO-1 model wrapping an existing model.
     /// </summary>
@@ -99,6 +106,7 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
+        EnsureShardingInitialized();
         if (_computedGradients == null)
         {
             throw new InvalidOperationException(
@@ -128,7 +136,7 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Compute TRUE gradients using the model's gradient computation
-        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        _computedGradients = ComputeGradientsForCurrentLayout(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {

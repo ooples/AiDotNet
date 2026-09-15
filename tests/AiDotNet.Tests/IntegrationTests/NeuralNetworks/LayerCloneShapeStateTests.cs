@@ -29,6 +29,8 @@ public class LayerCloneShapeStateTests
         Assert.Equal(shape, clone.GetInputShape());
         Assert.Equal(shape, clone.GetOutputShape());
         Assert.Equal(source.ParameterCount, clone.ParameterCount);
+        Assert.NotSame(source.GetInputShape(), clone.GetInputShape());
+        Assert.NotSame(source.GetOutputShape(), clone.GetOutputShape());
     }
 
     [Fact]
@@ -39,6 +41,10 @@ public class LayerCloneShapeStateTests
         Assert.NotSame(source, clone);
         Assert.Equal(new[] { 2, 3 }, clone.GetInputShape());
         Assert.Equal(new[] { 2, 3 }, clone.GetOutputShape());
+        clone.GetInputShape()[0] = 7;
+        clone.GetOutputShape()[1] = 9;
+        Assert.Equal(new[] { 2, 3 }, source.GetInputShape());
+        Assert.Equal(new[] { 2, 3 }, source.GetOutputShape());
     }
 
     public sealed class ConsumerShapeLayer : InputLayer<double>
