@@ -40,8 +40,9 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://github.com/ultralytics/ultralytics",
     Year = 2024,
     Authors = "Glenn Jocher, Jing Qiu")]
-public partial class YOLOv11<T> : ObjectDetectorBase<T>
+public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
+    private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;
     private readonly List<AttentionBlock<T>> _attentionBlocks;
@@ -80,6 +81,8 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
+        _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
+            _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
 
@@ -92,6 +95,21 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (1.33, 1.25),
         _ => (0.67, 0.75)
     };
+
+    /// <summary>Trains the head with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
+    /// <remarks>
+    /// Uses the YOLOv8-family objective (alpha 0.5, beta 6, top-10; box/class/DFL gains 7.5/0.5/1.5); override it
+    /// with <see cref="ObjectDetectionOptions{T}.TaskAlignedLoss"/>. Inputs are model-ready NCHW tensors, as for
+    /// Predict, and targets are normalized against that input size.
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        YoloDetectionTraining.Validate(input, targets, Options.NumClasses, "YOLOv11");
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        TrainWithTargets(input, targets, (heads, batch) => YoloDetectionTraining.HeadLoss(
+            _detectionLoss, heads, 0, _strides.Length, _strides, height, width, batch, _detectionLoss.TopK));
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)

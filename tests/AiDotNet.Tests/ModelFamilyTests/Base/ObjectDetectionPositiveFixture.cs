@@ -103,7 +103,10 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     {
         if (profile == HeadProfile.Yolo)
         {
-            var biases = trainable.Where(chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 2).ToArray();
+            // YOLOv10's one-to-many head is trained jointly but never runs at inference, so only the head
+            // Predict and Detect decode (the one-to-one head) is configured.
+            var biases = trainable.Where(chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 2
+                && !chunk.StableId.Contains("::_auxHead/")).ToArray();
             Assert.Equal(3, biases.Length);
             double[] odds = { 1, 3, 7 };
             for (int level = 0; level < biases.Length; level++)
@@ -132,12 +135,13 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
                 embedding.Tensor[1, 0] = ToT(1);
                 embedding.Tensor[1, 1] = ToT(-1);
             }
-            var weights = Assert.Single(trainable, chunk => HasMatrixShape(chunk.Tensor, hidden, 3)).Tensor;
+            int classes = ClassColumns(profile);
+            var weights = Assert.Single(trainable, chunk => HasMatrixShape(chunk.Tensor, hidden, classes)).Tensor;
             weights[0, 0] = ToT(1); // Actual Dense storage is [input,output], not [output,input].
-            var bias = Assert.Single(trainable, chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 3).Tensor;
-            bias[0] = ToT(-4);
+            var bias = Assert.Single(trainable, chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == classes).Tensor;
+            bias[0] = ToT(ForegroundBias(profile));
             bias[1] = ToT(-20);
-            bias[2] = ToT(2); // DETR background is the last class.
+            if (classes == 3) bias[2] = ToT(2); // DETR background is the last class.
             return;
         }
 
@@ -199,17 +203,20 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     private static List<ExpectedDetection> ExpectedDetr(Tensor<T> raw, HeadProfile profile)
     {
         int queries = profile == HeadProfile.Detr ? 50 : 100;
-        Assert.Equal(new[] { 1, queries * 7 }, raw.Shape.ToArray());
+        int classes = ClassColumns(profile);
+        Assert.Equal(new[] { 1, queries * (classes + 4) }, raw.Shape.ToArray());
         var expected = new List<ExpectedDetection>();
         for (int query = 0; query < queries; query++)
         {
-            double classLogit = NormalizedQueryFirstCoordinate(query, profile == HeadProfile.Dino ? 2 : 1) - 4;
-            AssertClose(classLogit, ToD(raw[0, query * 3]));
-            AssertClose(-20, ToD(raw[0, query * 3 + 1]));
-            AssertClose(2, ToD(raw[0, query * 3 + 2]));
-            // The decoder's public score storage is float. Include the actual background
-            // probability, rather than treating the class logit as a sigmoid.
-            double score = (float)(1 / (1 + Math.Exp(-20 - classLogit) + Math.Exp(2 - classLogit)));
+            double classLogit = NormalizedQueryFirstCoordinate(query, profile == HeadProfile.Dino ? 2 : 1) + ForegroundBias(profile);
+            AssertClose(classLogit, ToD(raw[0, query * classes]));
+            AssertClose(-20, ToD(raw[0, query * classes + 1]));
+            if (classes == 3) AssertClose(2, ToD(raw[0, query * classes + 2]));
+            // The decoder's public score storage is float. DETR's softmax includes the actual
+            // background probability; DINO and RT-DETR score each class with its own sigmoid.
+            double score = classes == 3
+                ? (float)(1 / (1 + Math.Exp(-20 - classLogit) + Math.Exp(2 - classLogit)))
+                : (float)(1 / (1 + Math.Exp(-classLogit)));
             if (query < 2)
             {
                 Assert.True(score > 0.05);
@@ -217,9 +224,18 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             }
             else Assert.True(score < 0.05);
         }
-        for (int index = queries * 3; index < raw.Length; index++) AssertClose(0, ToD(raw[0, index]));
+        for (int index = queries * classes; index < raw.Length; index++) AssertClose(0, ToD(raw[0, index]));
         return expected.OrderByDescending(candidate => candidate.Score).ToList();
     }
+
+    /// <summary>DETR's softmax head has a trailing no-object column; DINO and RT-DETR use per-class sigmoids.</summary>
+    private static int ClassColumns(HeadProfile profile) => profile == HeadProfile.Detr ? 3 : 2;
+
+    /// <summary>
+    /// Class-0 bias. A sigmoid score is not diluted by a background column, so the sigmoid profiles use
+    /// a lower bias to keep the two controlled queries strictly between the 0.05 and 0.99 thresholds.
+    /// </summary>
+    private static double ForegroundBias(HeadProfile profile) => profile == HeadProfile.Detr ? -4 : -6;
 
     private static double NormalizedQueryFirstCoordinate(int query, int embeddingCount)
     {

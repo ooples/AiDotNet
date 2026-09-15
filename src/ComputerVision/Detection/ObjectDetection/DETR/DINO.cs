@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2203.03605",
     Year = 2023,
     Authors = "Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, Heung-Yeung Shum")]
-public partial class DINO<T> : ObjectDetectorBase<T>
+public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
     private readonly DINOEncoder<T> _encoder;
     private readonly DINODecoder<T> _decoder;
@@ -48,6 +48,8 @@ public partial class DINO<T> : ObjectDetectorBase<T>
     private readonly int _hiddenDim;
     private readonly int _numQueries;
     private readonly NMS<T> _nms;
+    private readonly AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T> _detectionLoss;
+    private readonly int _trainingClassCount;
 
     /// <inheritdoc/>
     public override string Name => $"DINO-{Options.Size}";
@@ -75,6 +77,12 @@ public partial class DINO<T> : ObjectDetectorBase<T>
         // DINO decoder with contrastive denoising
         _decoder = new DINODecoder<T>(hiddenDim, numHeads, numDecoderLayers, numQueries, options.NumClasses);
 
+        var lossOptions = options.SetPredictionLoss ?? AiDotNet.ComputerVision.Detection.Losses.DetrSetLossOptions.ForDino();
+        if (lossOptions.ClassificationLoss == SetPredictionClassificationLoss.SoftmaxCrossEntropy)
+            throw new ArgumentException("DINO's class head has independent sigmoid classes and no no-object class; use a sigmoid focal or varifocal set loss.", nameof(options));
+        _trainingClassCount = options.NumClasses;
+        _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T>(options.NumClasses, lossOptions);
+
         _nms = new NMS<T>();
     }
 
@@ -87,6 +95,38 @@ public partial class DINO<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (512, 8, 6, 6, 900),
         _ => (256, 8, 6, 6, 300)
     };
+
+    /// <summary>Trains the final DINO heads with exact assignment, sigmoid focal loss, L1 and GIoU.</summary>
+    /// <remarks>
+    /// <para>
+    /// Uses DINO's published recipe by default (Zhang et al. 2022, Table 8): focal loss with alpha 0.25
+    /// and gamma 2, matching costs 2/5/2 and loss weights 1/5/2 for class/L1/GIoU. Override it with
+    /// <see cref="ObjectDetectionOptions{T}.SetPredictionLoss"/>.
+    /// </para>
+    /// <para>
+    /// Inputs are model-ready NCHW tensors, as for Predict. Targets use normalized center-format boxes.
+    /// An image with more targets than queries is rejected before any update. This architecture
+    /// exposes only its final decoder heads, so the paper's per-layer auxiliary, query-selection and
+    /// contrastive denoising losses are not claimed.
+    /// </para>
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (input.Rank != 4 || input.Shape[0] <= 0 || input.Shape[1] != 3 || input.Shape[2] <= 0 || input.Shape[3] <= 0)
+            throw new ArgumentException("DINO training requires a nonempty NCHW three-channel image batch.", nameof(input));
+        targets.ValidateForModel(input.Shape[0], _trainingClassCount, _numQueries);
+        TrainWithTargets(input, targets, ComputeDetectionLoss);
+    }
+
+    private Tensor<T> ComputeDetectionLoss(List<Tensor<T>> heads, DetectionTrainingBatch<T> targets)
+    {
+        if (heads.Count != 2)
+            throw new InvalidOperationException("DINO training requires the actual final class and box heads.");
+        // Forward exposes raw box logits and DecodeOutputs applies sigmoid; apply it on the tape here.
+        return _detectionLoss.ComputeTapeLoss(heads[0], Engine.Sigmoid(heads[1]), targets);
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -561,7 +601,7 @@ internal class DINODecoder<T> : CvParameterModule<T>
         _contentQueries = InitializeQueries(numQueries, hiddenDim);
         _positionQueries = InitializeQueries(numQueries, hiddenDim);
 
-        _classHead = new Dense<T>(hiddenDim, numClasses + 1);
+        _classHead = new Dense<T>(hiddenDim, numClasses); // Sigmoid classes; no no-object column.
         _boxHead = new Dense<T>(hiddenDim, 4);
     }
 
@@ -611,28 +651,13 @@ internal class DINODecoder<T> : CvParameterModule<T>
         {
             for (int q = 0; q < numQueries; q++)
             {
-                // Softmax over classes
-                double maxLogit = double.NegativeInfinity;
-                for (int c = 0; c < numClasses; c++)
-                {
-                    double logit = _numOps.ToDouble(classLogits[b, q, c]);
-                    maxLogit = Math.Max(maxLogit, logit);
-                }
-
-                var probs = new double[numClasses];
-                double sumExp = 0;
-                for (int c = 0; c < numClasses; c++)
-                {
-                    double logit = _numOps.ToDouble(classLogits[b, q, c]);
-                    probs[c] = Math.Exp(logit - maxLogit);
-                    sumExp += probs[c];
-                }
-
+                // DINO classifies each query with independent per-class sigmoids trained by focal
+                // loss (Zhang et al. 2022); there is no no-object column.
                 double maxScore = 0;
                 int maxClassId = 0;
-                for (int c = 0; c < numClasses - 1; c++)
+                for (int c = 0; c < numClasses; c++)
                 {
-                    double prob = probs[c] / sumExp;
+                    double prob = Sigmoid(_numOps.ToDouble(classLogits[b, q, c]));
                     if (prob > maxScore)
                     {
                         maxScore = prob;

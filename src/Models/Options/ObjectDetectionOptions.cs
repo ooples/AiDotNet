@@ -130,6 +130,29 @@ public class ObjectDetectionOptions<T> : ModelOptions
     /// Random seed for reproducibility.
     /// </summary>
     public int? RandomSeed { get; set; } = 42;
+
+    /// <summary>
+    /// Set prediction loss used by <c>TrainDetections</c> on DETR-family detectors, or null for the
+    /// detector's published recipe (DETR, DINO or RT-DETR).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Leave this empty to train with the settings from the model's paper.
+    /// Set it to change the matching costs, loss weights or focal parameters. The classification form
+    /// must match the detector's class head: softmax for DETR, sigmoid focal or varifocal for DINO and
+    /// RT-DETR.</para>
+    /// </remarks>
+    public AiDotNet.ComputerVision.Detection.Losses.DetrSetLossOptions? SetPredictionLoss { get; set; }
+
+    /// <summary>
+    /// Task-aligned assignment and loss used by <c>TrainDetections</c> on anchor-free YOLO detectors
+    /// (YOLOv8, YOLOv9, YOLOv10, YOLOv11), or null for the published defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Leave this empty to train with the published YOLO settings. Set it to
+    /// change how many grid cells learn from each object or how strongly boxes, classes and box-edge
+    /// distributions are corrected.</para>
+    /// </remarks>
+    public AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions? TaskAlignedLoss { get; set; }
 }
 
 /// <summary>
