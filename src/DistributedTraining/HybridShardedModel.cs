@@ -90,6 +90,13 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
+    /// <inheritdoc/>
+    protected override void InvalidateGradientState()
+    {
+        base.InvalidateGradientState();
+        _computedGradients = null;
+    }
+
     // Static ThreadLocal to pass constructor parameters before base constructor call.
     // This is necessary because C# doesn't allow derived class code to run before base constructor.
     private static readonly ThreadLocal<(int pp, int tp, int dp)?> PendingConfig = new();
@@ -250,6 +257,7 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
+        EnsureShardingInitialized();
         if (_computedGradients == null)
         {
             throw new InvalidOperationException(
@@ -422,7 +430,7 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
 
         // Compute TRUE gradients using the model's gradient computation
-        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        _computedGradients = ComputeGradientsForCurrentLayout(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {

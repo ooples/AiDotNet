@@ -127,6 +127,9 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     /// </summary>
     private bool _isShardingInitialized;
 
+    [AiDotNet.Attributes.Scratch]
+    private long _initializedWrappedParameterCount = -1;
+
     /// <inheritdoc/>
     public IFullModel<T, TInput, TOutput> WrappedModel => _wrappedModel;
 
@@ -232,10 +235,17 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     /// </remarks>
     protected void EnsureShardingInitialized()
     {
-        if (!_isShardingInitialized)
+        // Inspect the wrapped model directly: the tensor-parallel authoritative source calls this
+        // initializer, so querying this wrapper's ParameterCount would recurse.
+        var parameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+        if (!_isShardingInitialized || _initializedWrappedParameterCount != parameterCount)
         {
+            _isShardingInitialized = false;
+            CachedFullParameters = null;
+            InvalidateGradientState();
             OnBeforeInitializeSharding();
             InitializeSharding();
+            _initializedWrappedParameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
             _isShardingInitialized = true;
         }
     }
@@ -252,6 +262,17 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     protected virtual void OnBeforeInitializeSharding()
     {
         // Default implementation does nothing
+    }
+
+    /// <summary>Clears gradient caches belonging to a previous parameter layout.</summary>
+    protected virtual void InvalidateGradientState() { }
+
+    /// <summary>Refreshes a lazily materialized layout before publishing its newly computed gradients.</summary>
+    protected Vector<T> ComputeGradientsForCurrentLayout(TInput input, TOutput expectedOutput)
+    {
+        var gradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        EnsureShardingInitialized();
+        return gradients;
     }
 
     /// <summary>
