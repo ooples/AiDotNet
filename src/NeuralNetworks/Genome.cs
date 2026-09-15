@@ -316,9 +316,9 @@ public class Genome<T>
         // logistic sigmoid, the activation NEAT uses for those nodes. Input nodes pass their values
         // through unchanged, as do source-only nodes the genome gives no incoming connection.
         IActivationFunction<T> sigmoid = new AiDotNet.ActivationFunctions.SigmoidActivation<T>();
-        foreach (var conn in Connections)
+        foreach (var conn in Connections.Where(c => c.IsEnabled && c.ToNode >= InputSize))
         {
-            if (conn.IsEnabled && conn.ToNode >= InputSize) nodeActivations[conn.ToNode] = sigmoid;
+            nodeActivations[conn.ToNode] = sigmoid;
         }
 
         // Applies a node's activation exactly once. In topological order a node's weighted input

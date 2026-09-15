@@ -118,7 +118,7 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int g = 0; g < numGroups; g++)
                 sumSquaredRankSums += rankSums[g] * rankSums[g] / groupSizes[g];
 
-            double H = 12.0 / ((double)n * (n + 1)) * sumSquaredRankSums - 3 * (n + 1);
+            double H = 12.0 / ((double)n * (n + 1)) * sumSquaredRankSums - 3.0 * (n + 1);
 
             // Tie correction
             // (simplified - full correction would count ties)

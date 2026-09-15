@@ -100,7 +100,7 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
             sumRankSquaredOverN += (rankSums[g] * rankSums[g]) / groupSizes[g];
         }
 
-        double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3 * (N + 1);
+        double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3.0 * (N + 1);
 
         // Tie correction
         var tieGroups = sorted.GroupBy(x => x.value).Where(g => g.Count() > 1).Select(g => g.Count()).ToList();

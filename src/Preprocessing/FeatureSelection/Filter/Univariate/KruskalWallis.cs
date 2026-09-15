@@ -127,7 +127,7 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 sumTerm += (Ri * Ri) / ni;
             }
 
-            _hStatistics[j] = (12.0 / ((double)n * (n + 1))) * sumTerm - 3 * (n + 1);
+            _hStatistics[j] = (12.0 / ((double)n * (n + 1))) * sumTerm - 3.0 * (n + 1);
 
             // Tie correction (optional for large samples)
             // For simplicity, we skip the exact tie correction
