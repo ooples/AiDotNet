@@ -113,6 +113,13 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     private readonly List<LayerNormalizationLayer<T>> _attnNorms = new();
     private readonly List<LayerNormalizationLayer<T>> _ffnNorms = new();
 
+    // Residual dropout, one per transformer block, driven by
+    // TabTransformerGenOptions.DropoutRate. Parameterless, so unlike every list above it
+    // is not registered into Layers -- Layers exists to collect trainable parameters --
+    // which is also why the rehydration path has to recreate these rather than cast them
+    // back out of Layers.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Column decoders: one decoder head per column [embDim -> colWidth].
     private readonly List<FullyConnectedLayer<T>> _colDecoders = new();
 
@@ -134,7 +141,6 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     /// <param name="options">TabTransformerGen-specific options for transformer configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TabTransformer-Gen network.
@@ -159,17 +165,20 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     {
     }
 
-    public TabTransformerGenGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabTransformerGenGenerator(NeuralNetworkArchitecture<T> architecture,
         TabTransformerGenOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerGenOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabTransformerGenOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -239,6 +248,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         _ffn2.Clear();
         _attnNorms.Clear();
         _ffnNorms.Clear();
+        _ffnDropouts.Clear();
         _colDecoders.Clear();
         Layers.Clear();
 
@@ -258,6 +268,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             _ffn2.Add(new FullyConnectedLayer<T>(embDim, identity));
             _attnNorms.Add(new LayerNormalizationLayer<T>());
             _ffnNorms.Add(new LayerNormalizationLayer<T>());
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
 
         // Column decoders: [embDim -> colWidth].
@@ -288,8 +299,9 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, columns);
@@ -317,18 +329,29 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         var rowOrder = new int[data.Rows];
         for (int i = 0; i < data.Rows; i++) rowOrder[i] = i;
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        // BatchSize bounds how many rows one batch covers, as it does in every other
+        // generator in this folder. The order was already reshuffled per epoch, so each
+        // batch is a fresh random sample rather than a fixed slice.
+        int batchSize = Math.Max(1, Math.Min(_options.BatchSize, rowOrder.Length));
+        int numBatches = Math.Max(1, rowOrder.Length / batchSize);
+
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             ShuffleInPlace(rowOrder);
-            for (int oi = 0; oi < rowOrder.Length; oi++)
+            for (int batch = 0; batch < numBatches; batch++)
             {
-                int r = rowOrder[oi];
-                var fullRow = GetRow(transformedData, r);
-                var maskedRow = ApplyColumnMask(fullRow, maskedCols);
+                int start = batch * batchSize;
+                int end = Math.Min(start + batchSize, rowOrder.Length);
+                for (int oi = start; oi < end; oi++)
+                {
+                    int r = rowOrder[oi];
+                    var fullRow = GetRow(transformedData, r);
+                    var maskedRow = ApplyColumnMask(fullRow, maskedCols);
 
-                var inputTensor = VectorToTensor(maskedRow);
-                var targetTensor = VectorToTensor(fullRow);
-                Train(inputTensor, targetTensor);
+                    var inputTensor = VectorToTensor(maskedRow);
+                    var targetTensor = VectorToTensor(fullRow);
+                    Train(inputTensor, targetTensor);
+                }
             }
         }
 
@@ -373,12 +396,13 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         return Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, ct);
     }
 
@@ -490,6 +514,11 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             // Position-wise feed-forward.
             var ff = _ffn1[layer].Forward(seq);                       // [numColumns, ffnDim]
             ff = _ffn2[layer].Forward(ff);                            // [numColumns, embDim]
+            if (layer < _ffnDropouts.Count)
+            {
+                _ffnDropouts[layer].SetTrainingMode(IsTrainingMode);
+                ff = _ffnDropouts[layer].Forward(ff);
+            }
             seq = Engine.TensorAdd(seq, ff);                          // residual
             seq = _ffnNorms[layer].Forward(seq);                      // LayerNorm
         }
@@ -631,6 +660,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         _ffn2.Clear();
         _attnNorms.Clear();
         _ffnNorms.Clear();
+        _ffnDropouts.Clear();
         _colDecoders.Clear();
 
         int idx = 0;
@@ -645,6 +675,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             _ffn2.Add((FullyConnectedLayer<T>)Layers[idx++]);
             _attnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
             _ffnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
         for (int c = 0; c < _numColumns; c++)
             _colDecoders.Add((FullyConnectedLayer<T>)Layers[idx++]);

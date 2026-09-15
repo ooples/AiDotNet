@@ -131,12 +131,8 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="architecture">The configuration defining the model's structural metadata.</param>
         /// <param name="tokenizer">Optional tokenizer for text processing.</param>
         /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="vocabSize">The size of the shared vocabulary (default: 30522).</param>
-        /// <param name="embeddingDimension">The dimension of the shared embeddings (default: 768).</param>
-        /// <param name="maxSequenceLength">The maximum allowed input length (default: 512).</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Mean Squared Error — see
         /// remarks on why contrastive loss is NOT the default for the single-tower training path.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         /// <remarks>
         /// The shared-tower <see cref="Predict"/> emits an EMBEDDING, and the standard
         /// <c>Train(input, expectedOutput)</c> path optimises that embedding toward a target embedding
@@ -149,24 +145,19 @@ namespace AiDotNet.NeuralNetworks
         /// Contrastive/triplet pair training (Bromley 1993 / Koch 2015) is exposed through the
         /// dedicated pair API; the generic single-input Train path uses MSE.
         /// </remarks>
-        public SiameseNeuralNetwork(
-            NeuralNetworkArchitecture<T> architecture,
+        public SiameseNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 30522,
-            int embeddingDimension = 768,
-            int maxSequenceLength = 512,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
             SiameseNeuralNetworkOptions? options = null)
-            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), (options ??= new SiameseNeuralNetworkOptions()).MaxGradNorm)
         {
-            _options = options ?? new SiameseNeuralNetworkOptions();
+            _options = options;
             Options = _options;
             _tokenizer = tokenizer;
-            _vocabSize = vocabSize;
-            _embeddingDimension = embeddingDimension;
-            _maxSequenceLength = maxSequenceLength;
+            _vocabSize = options.VocabSize;
+            _embeddingDimension = options.EmbeddingDimension;
+            _maxSequenceLength = options.MaxSequenceLength;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

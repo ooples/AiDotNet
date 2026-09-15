@@ -97,7 +97,8 @@ public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
     /// </summary>
     /// <param name="audio">Audio waveform tensor [batch, samples] or [samples].</param>
     /// <param name="language">Optional language code (e.g., "en", "es"). Auto-detected if null.</param>
-    /// <param name="includeTimestamps">Whether to include word-level timestamps.</param>
+    /// <param name="includeTimestamps">When null, the implementation uses its own configured default.
+    /// Whether to include word-level timestamps.</param>
     /// <returns>Transcription result containing text and optional timestamps.</returns>
     /// <remarks>
     /// <para>
@@ -106,7 +107,7 @@ public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
     /// - Get back the transcribed text
     /// </para>
     /// </remarks>
-    TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false);
+    TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null);
 
     /// <summary>
     /// Transcribes audio to text asynchronously.
@@ -119,7 +120,7 @@ public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
     Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

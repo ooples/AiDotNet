@@ -102,15 +102,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
     public GraphNeuralOperator(
             NeuralNetworkArchitecture<T> architecture,
-            int numLayers = 4,
-            int hiddenDim = 64,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int inputDim = 0,
-            bool normalizeAdjacency = true,
             GraphNeuralOperatorOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new GraphNeuralOperatorOptions();
+            _options = options ??= new GraphNeuralOperatorOptions();
             Options = _options;
 
             if (architecture == null)
@@ -118,25 +114,28 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentNullException(nameof(architecture));
             }
 
-            if (numLayers <= 0)
+            if (_options.NumLayers <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options), "Number of layers must be positive.");
             }
 
-            if (hiddenDim <= 0)
+            if (_options.HiddenDim <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options), "Hidden dimension must be positive.");
             }
 
-            _numMessagePassingLayers = numLayers;
-            _hiddenDim = hiddenDim;
-            _inputDim = inputDim > 0 ? inputDim : architecture.InputSize;
+            _numMessagePassingLayers = _options.NumLayers;
+            _hiddenDim = _options.HiddenDim;
+            // InputDim defaults to 0, meaning "take the width from the architecture". That is why it
+            // is range-checked here rather than passed to Require() on the options class, which
+            // rejects zero.
+            _inputDim = _options.InputDim > 0 ? _options.InputDim : architecture.InputSize;
             if (_inputDim <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(inputDim), "Input dimension must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options), "Input dimension must be positive.");
             }
 
-            _normalizeAdjacency = normalizeAdjacency;
+            _normalizeAdjacency = _options.NormalizeAdjacency;
             _graphLayers = new List<GraphConvolutionalLayer<T>>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;

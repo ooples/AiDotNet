@@ -56,19 +56,20 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// Initializes a new instance of the MCDropoutNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The network architecture (should include MC dropout layers).</param>
-    /// <param name="numSamples">Number of forward passes for uncertainty estimation (default: 50).</param>
     /// <remarks>
     /// <b>For Beginners:</b> Make sure your architecture includes MCDropoutLayer instances.
     /// The more samples you use, the better the uncertainty estimate, but prediction becomes slower.
     /// 50 samples is a good default that balances accuracy and speed.
     /// </remarks>
-    public MCDropoutNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numSamples = 50)
+    public MCDropoutNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        MCDropoutNeuralNetworkOptions? options = null)
         : base(architecture)
     {
-        if (numSamples < 1)
-            throw new ArgumentException("Number of samples must be at least 1", nameof(numSamples));
+        options ??= new MCDropoutNeuralNetworkOptions();
+        if (options.NumSamples < 1)
+            throw new ArgumentException("Number of samples must be at least 1", nameof(options.NumSamples));
 
-        _numSamples = numSamples;
+        _numSamples = options.NumSamples;
     }
 
     /// <summary>

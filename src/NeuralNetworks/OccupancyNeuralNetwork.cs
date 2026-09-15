@@ -112,8 +112,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the OccupancyNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="includeTemporalData">Whether to include temporal data processing capabilities.</param>
-    /// <param name="historyWindowSize">The number of previous time steps to include when using temporal data.</param>
     /// <exception cref="InvalidInputTypeException">Thrown when the input type does not match the required type based on configuration.</exception>
     /// <remarks>
     /// <para>
@@ -140,21 +138,19 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public OccupancyNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        bool includeTemporalData = false,
-        int historyWindowSize = 5,
+    public OccupancyNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
         OccupancyNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new OccupancyNeuralNetworkOptions();
+        options ??= new OccupancyNeuralNetworkOptions();
+        _options = options;
         Options = _options;
-        _includeTemporalData = includeTemporalData;
-        _historyWindowSize = includeTemporalData ? Math.Max(1, historyWindowSize) : 0;
+        _includeTemporalData = options.IncludeTemporalData;
+        _historyWindowSize = options.IncludeTemporalData ? Math.Max(1, options.HistoryWindowSize) : 0;
         _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
 
-        if (includeTemporalData)
+        if (options.IncludeTemporalData)
         {
             ArchitectureValidator.ValidateInputType(architecture, InputType.ThreeDimensional, nameof(OccupancyNeuralNetwork<T>));
         }

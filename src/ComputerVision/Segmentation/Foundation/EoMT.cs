@@ -120,11 +120,7 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW as in the paper).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of output classes (default: 150 for ADE20K).</param>
-    /// <param name="numQueries">Number of mask queries inserted into ViT (default: 100).</param>
-    /// <param name="modelSize">DINOv2 backbone size (default: Base).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model hyperparameters. Defaults to EoMT's published values.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Creates a trainable EoMT. The queries are injected directly into the
@@ -135,21 +131,39 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 100,
-        EoMTModelSize modelSize = EoMTModelSize.Base,
-        double dropRate = 0.1,
         EoMTOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : this(options ?? new EoMTOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new EoMTOptions();
-        Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+    }
 
-        (_embedDim, _depths, _decoderDim) = GetModelConfig(modelSize);
+    /// <summary>
+    /// Initializes EoMT from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base constructor needs NumClasses, and a base initializer runs before the body, so the
+    /// options must exist before it. Chaining through here resolves them exactly once. Options
+    /// come first so this signature differs from the public one: a nullable and a non-nullable
+    /// reference type are the same type to the compiler, and the overload would otherwise be a
+    /// duplicate.
+    /// </para>
+    /// </remarks>
+    private EoMT(
+        EoMTOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+        : base(architecture, optimizer, lossFunction, options.NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
+    {
+        options.Validate();
+        _options = options;
+        Options = _options;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
+
+        (_embedDim, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -158,10 +172,7 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of output classes (default: 150).</param>
-    /// <param name="numQueries">Number of mask queries (default: 100).</param>
-    /// <param name="modelSize">DINOv2 backbone size for metadata (default: Base).</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model hyperparameters. Defaults to EoMT's published values.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained EoMT from ONNX for fast inference.
@@ -173,20 +184,32 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
     public EoMT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 100,
-        EoMTModelSize modelSize = EoMTModelSize.Base,
         EoMTOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : this(options ?? new EoMTOptions(), architecture, onnxModelPath)
     {
-        _options = options ?? new EoMTOptions();
+    }
+
+    /// <summary>
+    /// Initializes ONNX-mode EoMT from an already-resolved options instance.
+    /// </summary>
+    private EoMT(
+        EoMTOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+        : base(architecture, onnxModelPath, options.NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
+    {
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+
+        // Inference mode runs the network deterministically, so dropout is off whatever
+        // DropRate says. This was hardcoded to 0.0 before the migration too.
         _dropRate = 0.0;
 
-        (_embedDim, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDim, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }

@@ -37,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "MisGAN: Learning from Incomplete Data with GANs" (Li et al., ICLR 2019)
 /// </para>
 /// </remarks>
-public class MisGANOptions<T> : RiskModelOptions<T>
+public class MisGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the expected rate of missing values in the data.

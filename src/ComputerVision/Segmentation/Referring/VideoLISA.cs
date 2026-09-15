@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new VideoLISA&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new VideoLISA&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new VideoLISA&lt;double&gt;(architecture,
+///     options: new VideoLISAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for temporal reasoning segmentation
-/// var onnxModel = new VideoLISA&lt;double&gt;(architecture, "videolisa.onnx", numClasses: 1);
+/// var onnxModel = new VideoLISA&lt;double&gt;(architecture, "videolisa.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -99,8 +102,6 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: binary cross-entropy with logits for one mask class; otherwise cross-entropy with logits).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -109,21 +110,20 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// </remarks>
     public VideoLISA(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         VideoLISAOptions? options = null)
         // VideoLISA's own loss default is preserved verbatim - the base would otherwise substitute
         // plain CrossEntropyWithLogitsLoss, which is wrong for the single-mask (numClasses == 1) case.
         // `optimizer` is passed straight through INCLUDING null: the base resolves it lazily through
         // CreateDefaultOptimizer() below, which builds the same AdamW this constructor used to.
-        : base(architecture, optimizer, lossFunction ?? (numClasses == 1
+        : base(architecture, optimizer, lossFunction ?? ((options ??= new VideoLISAOptions()).NumClasses == 1
             ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>(classAxis: 1)), numClasses)
+            : new CrossEntropyWithLogitsLoss<T>(classAxis: 1)), (options ??= new VideoLISAOptions()).NumClasses)
     {
-        _options = options is null ? new VideoLISAOptions() : new VideoLISAOptions(options);
+        _options = new VideoLISAOptions(options);
         ValidateOptions(_options);
         Options = _options;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.EncoderDepths.Clone();
         _decoderDim = _options.DecoderDimension;
@@ -135,7 +135,6 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -145,15 +144,15 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public VideoLISA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public VideoLISA(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         VideoLISAOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new VideoLISAOptions()).NumClasses)
     {
-        _options = options is null ? new VideoLISAOptions() : new VideoLISAOptions(options);
+        _options = new VideoLISAOptions(options);
         ValidateOptions(_options);
         Options = _options;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.EncoderDepths.Clone();
         _decoderDim = _options.DecoderDimension;

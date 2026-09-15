@@ -159,8 +159,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <param name="architecture">The overall architecture (mainly for metadata).</param>
         /// <param name="branchArchitecture">Architecture for the branch network.</param>
         /// <param name="trunkArchitecture">Architecture for the trunk network.</param>
-        /// <param name="latentDimension">Dimension p of the latent space (number of basis functions).</param>
-        /// <param name="numSensors">Number of sensor locations where input function is sampled.</param>
         /// <remarks>
         /// For Beginners:
         ///
@@ -190,18 +188,16 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// - Architecture: Deep feedforward network
         /// - Typical: 3-5 layers, 100-200 neurons per layer
         /// </remarks>
-        public DeepOperatorNetwork(
-            NeuralNetworkArchitecture<T> architecture,
+        public DeepOperatorNetwork(NeuralNetworkArchitecture<T> architecture,
             NeuralNetworkArchitecture<T> branchArchitecture,
             NeuralNetworkArchitecture<T> trunkArchitecture,
-            int latentDimension = 128,
-            int numSensors = 100,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             DeepOperatorNetworkOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
                 NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new DeepOperatorNetworkOptions();
+            options ??= new DeepOperatorNetworkOptions();
+            _options = options;
             Options = _options;
 
             if (branchArchitecture == null)
@@ -214,27 +210,27 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentNullException(nameof(trunkArchitecture));
             }
 
-            if (latentDimension <= 0)
+            if (options.LatentDimension <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(latentDimension), "Latent dimension must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options.LatentDimension), "Latent dimension must be positive.");
             }
 
-            if (numSensors <= 0)
+            if (options.NumSensors <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(numSensors), "Number of sensors must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options.NumSensors), "Number of sensors must be positive.");
             }
 
-            _p = latentDimension;
-            _numSensors = numSensors;
+            _p = options.LatentDimension;
+            _numSensors = options.NumSensors;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
 
             // Create branch network
-            var branchNetArchitecture = EnsureOutputSize(branchArchitecture, latentDimension, "Branch");
+            var branchNetArchitecture = EnsureOutputSize(branchArchitecture, options.LatentDimension, "Branch");
             _branchNet = new FeedForwardNeuralNetwork<T>(branchNetArchitecture);
 
             // Create trunk network
-            var trunkNetArchitecture = EnsureOutputSize(trunkArchitecture, latentDimension, "Trunk");
+            var trunkNetArchitecture = EnsureOutputSize(trunkArchitecture, options.LatentDimension, "Trunk");
             _trunkNet = new FeedForwardNeuralNetwork<T>(trunkNetArchitecture);
 
             InitializeLayers();

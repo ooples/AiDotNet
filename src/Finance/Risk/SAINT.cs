@@ -171,7 +171,9 @@ public partial class SAINT<T> : RiskModelBase<T>
                 _options.NumLayers,
                 _options.BatchSize,
                 1,
-                _options.DropoutRate));
+                _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

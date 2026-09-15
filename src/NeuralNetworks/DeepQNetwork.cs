@@ -184,7 +184,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="DeepQNetwork{T}"/> class with the specified architecture and exploration rate.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epsilon">The initial exploration rate (probability of taking random actions). Default is 1.0 for full exploration.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Deep Q-Network with the specified architecture and exploration rate.
@@ -221,13 +220,18 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// signature, so adding it removed the arity already-compiled callers bind to and they would
     /// fail with MissingMethodException.
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, DeepQNetworkOptions? options) :
-        this(architecture, lossFunction, epsilon, options, null)
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction,
+        DeepQNetworkOptions? options) :
+        this(architecture, lossFunction, isTargetNetwork: false, options: options ??= new DeepQNetworkOptions(), optimizer: null)
     {
     }
 
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
-        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options, optimizer: optimizer)
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
+        DeepQNetworkOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
+        this(architecture, lossFunction, isTargetNetwork: false, options: options ??= new DeepQNetworkOptions(), optimizer: optimizer)
     {
     }
 
@@ -236,14 +240,15 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="lossFunction">The loss function to use for training.</param>
-    /// <param name="epsilon">The initial exploration rate.</param>
     /// <param name="isTargetNetwork">If true, this is a target network and won't create its own target network.</param>
-    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
+    /// <param name="options">Configuration options; the target network is given the SAME options as
+    /// its parent so the two cannot drift apart.</param>
+    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, bool isTargetNetwork, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new DeepQNetworkOptions();
+        _options = options ??= new DeepQNetworkOptions();
         Options = _options;
-        _epsilon = NumOps.FromDouble(epsilon);
+        _epsilon = NumOps.FromDouble(_options.Epsilon);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // THE PUBLISHED OPTIMIZER, NOT WHATEVER THE BASE DEFAULTS TO. _trainOptimizer was declared
@@ -271,7 +276,8 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)
         {
-            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction: lossFunction, epsilon, isTargetNetwork: true);
+            _targetNetwork = new DeepQNetwork<T>(
+                architecture, lossFunction: lossFunction, isTargetNetwork: true, options: _options);
         }
 
         InitializeLayers();

@@ -397,6 +397,66 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Creates a layer with known input and output sizes and a vector activation function.
+    /// </summary>
+    /// <param name="inputSize">Number of inputs.</param>
+    /// <param name="outputSize">Number of outputs.</param>
+    /// <param name="vectorActivationFunction">
+    /// Activation applied across the whole output vector rather than element by element.
+    /// </param>
+    /// <returns>A layer using the supplied vector activation.</returns>
+    /// <remarks>
+    /// A factory rather than a constructor overload, following the convention this class already
+    /// documents for <c>DenseLayer</c>. An overload taking
+    /// <c>IVectorActivationFunction&lt;T&gt;</c> alongside the existing
+    /// <c>IActivationFunction&lt;T&gt;?</c> makes every <c>new FullyConnectedLayer&lt;T&gt;(a, b, null)</c>
+    /// ambiguous, and the codebase has dozens of those.
+    /// </remarks>
+    public static FullyConnectedLayer<T> WithVectorActivation(
+        int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+    {
+        if (vectorActivationFunction is null)
+            throw new ArgumentNullException(nameof(vectorActivationFunction));
+
+        return new FullyConnectedLayer<T>(vectorActivationFunction, inputSize, outputSize);
+    }
+
+    /// <summary>
+    /// Creates a layer with known input and output sizes and a vector activation function.
+    /// </summary>
+    /// <param name="vectorActivationFunction">Activation applied across the output vector.</param>
+    /// <param name="inputSize">Number of inputs.</param>
+    /// <param name="outputSize">Number of outputs.</param>
+    /// <remarks>
+    /// The activation comes FIRST so this cannot collide with
+    /// <c>(int inputSize, int outputSize, IActivationFunction&lt;T&gt;?)</c>: with the vector type in
+    /// third position every existing <c>new FullyConnectedLayer&lt;T&gt;(a, b, null)</c> becomes
+    /// ambiguous, and the codebase has dozens of those. Public rather than private because
+    /// LayerStateGenerator emits a clone factory for every constructor and cannot reach a
+    /// private one; prefer <see cref="WithVectorActivation"/> at call sites, which reads in the
+    /// conventional argument order.
+    /// </remarks>
+    public FullyConnectedLayer(
+        IVectorActivationFunction<T> vectorActivationFunction, int inputSize, int outputSize)
+        : base(new[] { inputSize }, new[] { outputSize }, vectorActivationFunction)
+    {
+        _inputSize = inputSize;
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
+
+        _outputSize = outputSize;
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _biases = new Tensor<T>([outputSize]);
+        InitializeParameters();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FullyConnectedLayer{T}"/> class with a vector activation function.
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>

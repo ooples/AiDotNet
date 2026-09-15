@@ -147,29 +147,45 @@ public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 100,
-        XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
-        double dropRate = 0.1,
         XDecoderOptions? options = null)
+        : this(options ?? new XDecoderOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    /// <summary>
+    /// Initializes X-Decoder from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs NumClasses and the stuff/thing split, and it runs before the
+    /// body, so the options must be resolved first. Options come first in the parameter list
+    /// because a nullable and a non-nullable reference type are the same type to the compiler:
+    /// ordering is what keeps this from being a duplicate signature.
+    /// </para>
+    /// </remarks>
+    private XDecoder(
+        XDecoderOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
         // The base resolves geometry, class count, native mode and the stuff/thing split. `optimizer`
         // passes through even when null - the base defaults it lazily via CreateDefaultOptimizer(),
         // which is what the old `optimizer ?? new AdamWOptimizer<...>(this)` could never express here
         // because `this` is unavailable in a base-constructor argument.
-        : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), numClasses,
-               StuffClassCount(numClasses, options), numClasses - StuffClassCount(numClasses, options))
+        : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), options.NumClasses,
+               StuffClassCount(options.NumClasses, options),
+               options.NumClasses - StuffClassCount(options.NumClasses, options))
     {
-        if (numQueries <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
-        _options = options ?? new XDecoderOptions();
+        // Both former constructor guards now live on the options: ValidateCore requires NumQueries,
+        // and the NumStuffClasses/NumClasses cross-check moved across with the values it compares.
+        options.Validate();
+        _options = options;
         Options = _options;
-        if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
-            throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -193,26 +209,35 @@ public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
     public XDecoder(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 100,
-        XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
         XDecoderOptions? options = null)
-        // The base validates the path, sets ONNX mode, resolves geometry and opens the InferenceSession.
-        : base(architecture, onnxModelPath, numClasses,
-               StuffClassCount(numClasses, options), numClasses - StuffClassCount(numClasses, options))
+        : this(options ?? new XDecoderOptions(), architecture, onnxModelPath)
     {
-        if (numQueries <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
-        _options = options ?? new XDecoderOptions();
-        Options = _options;
-        if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
-            throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
+    }
 
-        _numQueries = numQueries;
-        _modelSize = modelSize;
+    /// <summary>
+    /// Initializes ONNX-mode X-Decoder from an already-resolved options instance.
+    /// </summary>
+    private XDecoder(
+        XDecoderOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+        // The base validates the path, sets ONNX mode, resolves geometry and opens the InferenceSession.
+        : base(architecture, onnxModelPath, options.NumClasses,
+               StuffClassCount(options.NumClasses, options),
+               options.NumClasses - StuffClassCount(options.NumClasses, options))
+    {
+        // Validated after the base has checked the ONNX path, so a missing model file still reports
+        // itself as FileNotFoundException rather than being pre-empted by the options.
+        options.Validate();
+        _options = options;
+        Options = _options;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+
+        // Inference runs deterministically, so dropout is off whatever DropRate says.
         _dropRate = 0.0;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }

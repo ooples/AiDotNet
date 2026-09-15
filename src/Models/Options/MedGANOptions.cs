@@ -39,7 +39,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </example>
 /// </remarks>
-public class MedGANOptions<T> : RiskModelOptions<T>
+public class MedGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the autoencoder's embedding dimension — the width of the latent space the

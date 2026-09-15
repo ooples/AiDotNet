@@ -6,7 +6,7 @@ namespace AiDotNet.Attributes;
 /// on parameter-name strings. Reflection-based construction and validation can therefore preserve
 /// attention geometry even when a parameter is renamed.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class ModelDimensionRoleAttribute : Attribute
 {
     /// <summary>Initializes a new role declaration.</summary>

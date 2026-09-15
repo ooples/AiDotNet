@@ -117,7 +117,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="multiScalePDE">The multi-scale PDE specification.</param>
         /// <param name="boundaryConditions">Boundary conditions for the problem.</param>
         /// <param name="initialCondition">Initial condition for time-dependent problems (optional).</param>
-        /// <param name="numCollocationPointsPerScale">Number of collocation points per scale.</param>
         /// <param name="trainingOptions">Options for multi-scale training.</param>
         /// <param name="optimizer">Optimization algorithm.</param>
         /// <remarks>
@@ -131,18 +130,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// - Fewer points for coarse scale (smooth variations)
         /// - More points for fine scales (detailed features)
         /// </remarks>
-        public MultiScalePINN(
-            NeuralNetworkArchitecture<T> architecture,
+        public MultiScalePINN(NeuralNetworkArchitecture<T> architecture,
             IMultiScalePDE<T> multiScalePDE,
             IBoundaryCondition<T>[] boundaryConditions,
             IInitialCondition<T>? initialCondition = null,
-            int numCollocationPointsPerScale = 5000,
             MultiScaleTrainingOptions<T>? trainingOptions = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             MultiScalePINNOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new MultiScalePINNOptions();
+            options ??= new MultiScalePINNOptions();
+            _options = options;
             Options = _options;
 
             Guard.NotNull(multiScalePDE);
@@ -150,7 +148,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             Guard.NotNull(boundaryConditions);
             _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
-            _numCollocationPointsPerScale = numCollocationPointsPerScale;
+            _numCollocationPointsPerScale = options.NumCollocationPointsPerScale;
             _trainingOptions = trainingOptions ?? new MultiScaleTrainingOptions<T>();
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

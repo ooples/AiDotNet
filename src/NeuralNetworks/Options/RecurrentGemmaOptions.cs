@@ -13,7 +13,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// so the model silently inherited whatever the base supplied.
 /// </para>
 /// </remarks>
-public class RecurrentGemmaOptions : NeuralNetworkOptions
+public class RecurrentGemmaOptions : SequenceModelOptions
 {
     /// <summary>
     /// Gets or sets whether the input embeddings are multiplied by the square root of the model width.
@@ -66,6 +66,10 @@ public class RecurrentGemmaOptions : NeuralNetworkOptions
         Epsilon = 1e-8;
         EnableGradientClipping = true;
         MaxGradientNorm = 1.0;
+        VocabSize = 256000;
+        ModelDimension = 256;
+        NumLayers = 4;
+        MaxSequenceLength = 512;
     }
 
     /// <summary>Initializes an options instance by copying another.</summary>
@@ -74,7 +78,7 @@ public class RecurrentGemmaOptions : NeuralNetworkOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
+            Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         ScaleEmbeddingsBySqrtWidth = other.ScaleEmbeddingsBySqrtWidth;
         LearningRate = other.LearningRate;
@@ -84,5 +88,20 @@ public class RecurrentGemmaOptions : NeuralNetworkOptions
         Epsilon = other.Epsilon;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
+        VocabSize = other.VocabSize;
+        ModelDimension = other.ModelDimension;
+        NumLayers = other.NumLayers;
+        MaxSequenceLength = other.MaxSequenceLength;
+    }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore(requiresHeads: false, requiresState: false);
     }
 }

@@ -125,17 +125,17 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
 
     public E2FGVI(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128,
         E2FGVIOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new E2FGVIOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 432;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 240;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
+        _numFeatures = _options.NumFeatures;
 
         _flowNet = [];
         _encoder = [];

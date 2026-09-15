@@ -114,16 +114,6 @@ public class ScoreGradOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int ForecastHorizon { get; set; } = 24;
 
-    /// <summary>
-    /// Gets or sets the number of features.
-    /// </summary>
-    /// <value>The number of features, defaulting to 1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many variables are measured at each time step.
-    /// ScoreGrad handles multivariate time series naturally.
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the hidden dimension of the score network.

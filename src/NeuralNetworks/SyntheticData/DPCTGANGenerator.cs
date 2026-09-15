@@ -178,7 +178,6 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <param name="options">DP-CTGAN-specific options for privacy, generator, and discriminator configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a DP-CTGAN network. The key privacy parameters
@@ -197,15 +196,13 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
     }
 
-    public DPCTGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public DPCTGANGenerator(NeuralNetworkArchitecture<T> architecture,
         DPCTGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new DPCTGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new DPCTGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -346,7 +343,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     /// <param name="data">The real data matrix.</param>
     /// <param name="columns">Column metadata.</param>
-    /// <param name="epochs">Number of training epochs (may stop early if privacy budget exhausted).</param>
+    /// <param name="epochs">Number of training epochs (may stop early if privacy budget exhausted). When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Training proceeds like CTGAN but with privacy protections.
@@ -355,9 +352,10 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// privacy was actually consumed.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -383,7 +381,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var transformedData = _transformer.Transform(data);
 
         // Step 6: Compute noise multiplier from privacy budget
-        ComputeNoiseMultiplier(data.Rows, epochs);
+        ComputeNoiseMultiplier(data.Rows, epochCount);
         _cumulativeEpsilon = 0;
 
         // Step 7: Training loop with privacy budget check
@@ -394,7 +392,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
         bool privacyBudgetExhausted = false;
-        for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
+        for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
         {
             if (_cumulativeEpsilon >= _options.Epsilon)
             {
@@ -436,9 +434,10 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -462,7 +461,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
             var transformedData = _transformer.Transform(data);
 
-            ComputeNoiseMultiplier(data.Rows, epochs);
+            ComputeNoiseMultiplier(data.Rows, epochCount);
             _cumulativeEpsilon = 0;
 
             T lr = NumOps.FromDouble(_options.LearningRate);
@@ -472,7 +471,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
             bool privacyBudgetExhausted = false;
-            for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
+            for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 if (_cumulativeEpsilon >= _options.Epsilon) break;

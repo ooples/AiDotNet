@@ -49,10 +49,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new SegFormer&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new SegFormer&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SegFormer&lt;double&gt;(architecture,
+///     options: new SegFormerOptions { NumClasses = 150, DropRate = 0.1, ModelSize = SegFormerModelSize.B0 });
 ///
 /// // Or load a pre-trained ONNX model for autonomous driving
-/// var onnxModel = new SegFormer&lt;double&gt;(architecture, "segformer_b0.onnx", numClasses: 150);
+/// var onnxModel = new SegFormer&lt;double&gt;(architecture, "segformer_b0.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -136,12 +139,6 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// learning rates with decoupled weight decay for better generalization.</param>
     /// <param name="lossFunction">The loss function used to measure prediction error during training
     /// (default: CrossEntropyLoss, the standard for multi-class segmentation tasks).</param>
-    /// <param name="numClasses">Number of semantic classes to predict. Set this to match your dataset
-    /// (default: 150 for the ADE20K benchmark, use 21 for Pascal VOC, or your custom class count).</param>
-    /// <param name="modelSize">Model size variant B0–B5 controlling the number of parameters and
-    /// accuracy (default: B0, the smallest and fastest variant with 3.8M parameters).</param>
-    /// <param name="dropRate">Dropout rate applied within transformer blocks for regularization
-    /// (default: 0.1). Higher values reduce overfitting but may slow convergence.</param>
     /// <param name="options">Optional model options including random seed for reproducibility.</param>
     /// <remarks>
     /// <para>
@@ -155,13 +152,9 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// class prediction map through a lightweight MLP decoder.
     /// </para>
     /// </remarks>
-    public SegFormer(
-        NeuralNetworkArchitecture<T> architecture,
+    public SegFormer(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        SegFormerModelSize modelSize = SegFormerModelSize.B0,
-        double dropRate = 0.1,
         SegFormerOptions? options = null)
         // The base now resolves height/width/channels/numClasses/native-mode from the architecture,
         // which is exactly what the twelve deleted lines below used to do by hand.
@@ -170,14 +163,14 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
         // CreateDefaultOptimizer(), which is what makes this base usable at all: the old
         // `optimizer ?? new AdamWOptimizer<...>(this)` could never be written in a base-constructor
         // argument, because `this` is not available there.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SegFormerOptions()).NumClasses)
     {
-        _options = options ?? new SegFormerOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }
@@ -189,10 +182,6 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// should match the ONNX model's expected input (typically 512x512x3 or 1024x1024x3).</param>
     /// <param name="onnxModelPath">Absolute or relative path to the pre-trained ONNX model file.
     /// Pre-trained SegFormer ONNX models can be exported from Hugging Face or NVIDIA's model zoo.</param>
-    /// <param name="numClasses">Number of semantic classes the ONNX model was trained to predict
-    /// (default: 150 for ADE20K). This must match the model's training configuration.</param>
-    /// <param name="modelSize">Model size variant for metadata purposes (default: B0). This should
-    /// match the ONNX model's architecture so metadata accurately reflects the model.</param>
     /// <param name="options">Optional model options including random seed for reproducibility.</param>
     /// <remarks>
     /// <para>
@@ -208,22 +197,19 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found at the specified path.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load or parse the model file.</exception>
-    public SegFormer(
-        NeuralNetworkArchitecture<T> architecture,
+    public SegFormer(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        SegFormerModelSize modelSize = SegFormerModelSize.B0,
         SegFormerOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SegFormerOptions()).NumClasses)
     {
-        _options = options ?? new SegFormerOptions();
+        _options = options;
         Options = _options;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }
@@ -319,7 +305,6 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// Returns the architecture configuration (embedding dimensions, transformer depths,
     /// attention head counts, and decoder dimension) for a given SegFormer model size.
     /// </summary>
-    /// <param name="modelSize">The SegFormer model size variant (B0–B5).</param>
     /// <returns>A tuple containing the embed dims per stage, depths per stage, heads per stage,
     /// and the decoder hidden dimension. These values come directly from the SegFormer paper.</returns>
     /// <remarks>

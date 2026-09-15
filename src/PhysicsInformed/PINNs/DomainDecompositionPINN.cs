@@ -135,18 +135,34 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         List<SubdomainDefinition<T>> subdomains,
         List<PhysicsInformedNeuralNetwork<T>>? subdomainNetworks = null,
         IInitialCondition<T>? initialCondition = null,
-        int numCollocationPointsPerSubdomain = 5000,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        double pdeWeight = 1.0,
-        double boundaryWeight = 1.0,
-        double interfaceWeight = 10.0,
-        double interfaceGradientWeight = 1.0,
-        int schwarzIterations = 1,
         DomainDecompositionPINNOptions? options = null)
-        : base(architecture, pdeSpecification, boundaryConditions, initialCondition,
-               numCollocationPointsPerSubdomain, optimizer, null, pdeWeight, boundaryWeight, null)
+        : this(options ?? new DomainDecompositionPINNOptions(), architecture, pdeSpecification,
+               boundaryConditions, subdomains, subdomainNetworks, initialCondition, optimizer)
     {
-        _options = options ?? new DomainDecompositionPINNOptions();
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    private DomainDecompositionPINN(
+        DomainDecompositionPINNOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IPDESpecification<T> pdeSpecification,
+        IBoundaryCondition<T>[] boundaryConditions,
+        List<SubdomainDefinition<T>> subdomains,
+        List<PhysicsInformedNeuralNetwork<T>>? subdomainNetworks,
+        IInitialCondition<T>? initialCondition,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : base(architecture, pdeSpecification, boundaryConditions, initialCondition, optimizer,
+               new PhysicsInformedNeuralNetworkOptions
+               {
+                   NumCollocationPoints = options.NumCollocationPointsPerSubdomain,
+                   PdeWeight = options.PdeWeight,
+                   BoundaryWeight = options.BoundaryWeight,
+               })
+    {
+        _options = options;
         Options = _options;
 
         if (subdomains == null || subdomains.Count == 0)
@@ -154,11 +170,12 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
             throw new ArgumentException("At least one subdomain must be specified.", nameof(subdomains));
         }
 
+        options.Validate();
         _subdomains = subdomains;
-        _pdeWeight = pdeWeight;
-        _interfaceWeight = interfaceWeight;
-        _interfaceGradientWeight = interfaceGradientWeight;
-        _schwarzIterations = schwarzIterations;
+        _pdeWeight = options.PdeWeight;
+        _interfaceWeight = options.InterfaceWeight;
+        _interfaceGradientWeight = options.InterfaceGradientWeight;
+        _schwarzIterations = options.SchwarzIterations;
         _subdomainNetworks = new List<PhysicsInformedNeuralNetwork<T>>();
         _subdomainOptimizers = new List<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>();
 
@@ -177,12 +194,12 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
                     pdeSpecification,
                     boundaryConditions,
                     initialCondition,
-                    numCollocationPointsPerSubdomain,
-                    null,
-                    null,
-                    pdeWeight,
-                    boundaryWeight,
-                    null);
+                    options: new PhysicsInformedNeuralNetworkOptions
+                    {
+                        NumCollocationPoints = options.NumCollocationPointsPerSubdomain,
+                        PdeWeight = options.PdeWeight,
+                        BoundaryWeight = options.BoundaryWeight,
+                    });
                 _subdomainNetworks.Add(subNetwork);
             }
         }

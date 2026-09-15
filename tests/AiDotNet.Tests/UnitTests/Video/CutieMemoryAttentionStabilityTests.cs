@@ -1,4 +1,6 @@
 using AiDotNet.Enums;
+using AiDotNet.Video.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Video.Segmentation;
 using Xunit;
@@ -17,7 +19,7 @@ public class CutieMemoryAttentionStabilityTests
             inputWidth: 4,
             inputDepth: 3,
             outputSize: 1);
-        using var model = new Cutie<double>(architecture, numFeatures: 2, memorySize: 1);
+        using var model = new Cutie<double>(architecture, options: new CutieOptions { NumFeatures = 2, MemorySize = 1 });
         using var query = new Tensor<double>([1, 2, 1, 1]);
         using var key = new Tensor<double>([1, 2, 1, 1]);
         query[0] = 2.0;
@@ -41,7 +43,7 @@ public class CutieMemoryAttentionStabilityTests
             inputWidth: 4,
             inputDepth: 3,
             outputSize: 1);
-        using var model = new Cutie<double>(architecture, numFeatures: 2, memorySize: 1);
+        using var model = new Cutie<double>(architecture, options: new CutieOptions { NumFeatures = 2, MemorySize = 1 });
         using var query = new Tensor<double>([1, 2, 1, 1]);
         using var key = new Tensor<double>([1, 2, 1, 1]);
         query.Fill(double.MaxValue);

@@ -387,14 +387,41 @@ public class PrivBayesDifferentialPrivacyTests
     }
 
     /// <summary>
-    /// A budget entirely allocated to one phase must not break the other. At fraction 1.0 the marginal
-    /// phase gets zero budget, and at 0.0 the structure phase does; both must degrade gracefully
-    /// instead of dividing by zero.
+    /// A budget allocated entirely to one phase is rejected rather than accepted and degraded.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This test previously asserted that fractions of 0.0 and 1.0 "degrade gracefully instead of
+    /// dividing by zero", which was the contract when degenerate splits were permitted. They are
+    /// not permitted any more, and the reason is on the setter: at 1.0 the marginal phase receives
+    /// no budget, so the conditional distributions are published with NO privacy noise while the
+    /// object still reports differential privacy as enabled -- a privacy failure that presents as a
+    /// working configuration. Producing finite numbers in that state is precisely the wrong
+    /// outcome, so the assertion is inverted rather than relaxed.
+    /// </para>
+    /// </remarks>
     [Theory]
     [InlineData(0.0)]
     [InlineData(1.0)]
-    public void DegenerateBudgetSplit_DoesNotProduceNaN(double fraction)
+    public void DegenerateBudgetSplit_IsRejected(double fraction)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BayesianNetworkSynthOptions<double>
+        {
+            Seed = 5,
+            MaxParents = 2,
+            NumBins = 5,
+            StructureBudgetFraction = fraction
+        });
+    }
+
+    /// <summary>
+    /// A split close to either extreme is still valid, and must produce finite output -- the
+    /// numerical property the rejected test was reaching for, asserted where it applies.
+    /// </summary>
+    [Theory]
+    [InlineData(0.01)]
+    [InlineData(0.99)]
+    public void NearDegenerateBudgetSplit_DoesNotProduceNaN(double fraction)
     {
         var m = FitAndGenerate(new BayesianNetworkSynthOptions<double>
         {

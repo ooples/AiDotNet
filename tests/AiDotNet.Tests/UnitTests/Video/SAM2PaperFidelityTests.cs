@@ -28,7 +28,11 @@ public sealed class SAM2PaperFidelityTests
         DecoderHeadCount = 4,
         MemoryAttentionLayerCount = 4,
         MaskDecoderDepth = 2,
-        MaskDecoderMlpDimension = 64
+        MaskDecoderMlpDimension = 64,
+        // ModelSize and MemoryBankSize used to be passed at the call site; they belong on the
+        // options object now, alongside every other bound this fixture sets.
+        ModelSize = SAM2ModelSize.Tiny,
+        MemoryBankSize = 2
     };
 
     private static NeuralNetworkArchitecture<double> CreateArchitecture() => new(
@@ -44,8 +48,6 @@ public sealed class SAM2PaperFidelityTests
 
     private static SAM2<double> CreateModel() => new(
         CreateArchitecture(),
-        modelSize: SAM2ModelSize.Tiny,
-        memoryBankSize: 2,
         options: CreateBoundedOptions());
 
     private static Tensor<double> CreateImage(double offset = 0.0)

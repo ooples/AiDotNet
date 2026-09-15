@@ -274,18 +274,17 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         NeuralNetworkArchitecture<T> discriminatorA,
         NeuralNetworkArchitecture<T> discriminatorB,
         InputType inputType,
+        CycleGANOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorAtoBOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorBtoAOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorAOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorBOptimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double cycleConsistencyLambda = 10.0,
-        double identityLambda = 5.0,
-        CycleGANOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(CreateCycleGANArchitecture(generatorAtoB, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _options = options ?? new CycleGANOptions();
+        _options.Validate();
         Options = _options;
 
         // Validate constructor inputs
@@ -305,17 +304,17 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         {
             throw new ArgumentNullException(nameof(discriminatorB), "Discriminator B architecture cannot be null.");
         }
-        if (cycleConsistencyLambda < 0)
+        if (_options.CycleConsistencyLambda < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(cycleConsistencyLambda), cycleConsistencyLambda, "Cycle consistency lambda must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(_options.CycleConsistencyLambda), _options.CycleConsistencyLambda, "Cycle consistency lambda must be non-negative.");
         }
-        if (identityLambda < 0)
+        if (_options.IdentityLambda < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(identityLambda), identityLambda, "Identity lambda must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(_options.IdentityLambda), _options.IdentityLambda, "Identity lambda must be non-negative.");
         }
 
-        _cycleConsistencyLambda = NumOps.FromDouble(cycleConsistencyLambda);
-        _identityLambda = NumOps.FromDouble(identityLambda);
+        _cycleConsistencyLambda = NumOps.FromDouble(_options.CycleConsistencyLambda);
+        _identityLambda = NumOps.FromDouble(_options.IdentityLambda);
 
         GeneratorAtoB = CreateNetworkForInputType(generatorAtoB, inputType);
         GeneratorBtoA = CreateNetworkForInputType(generatorBtoA, inputType);

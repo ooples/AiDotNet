@@ -248,22 +248,27 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     public LiquidStateMachine(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize,
-        double connectionProbability = 0.1,
-        double spectralRadius = 0.9,
-        double inputScaling = 1.0,
-        double leakingRate = 0.3, // Jaeger & Haas (2004): leakingRate < 1 for temporal dynamics
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new LiquidStateMachineOptions();
+        options ??= _options;
+        // Built with the rate this model publishes. Bare, the optimizer would fall back to
+        // Adam's own default and ReadoutLearningRate would be configuration nothing reads --
+        // and in an LSM the readout is the only trained part, so that rate is the whole of
+        // what training responds to.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.ReadoutLearningRate });
+        _options.Validate();
         Options = _options;
-        _leakingRate = NumOps.FromDouble(leakingRate);
-        _inputScaling = NumOps.FromDouble(inputScaling);
-        _spectralRadius = NumOps.FromDouble(spectralRadius);
+        _leakingRate = NumOps.FromDouble(options.LeakingRate);
+        _inputScaling = NumOps.FromDouble(options.InputScaling);
+        _spectralRadius = NumOps.FromDouble(options.SpectralRadius);
         _reservoirSize = reservoirSize;
-        _connectionProbability = NumOps.FromDouble(connectionProbability);
+        _connectionProbability = NumOps.FromDouble(options.ConnectionProbability);
 
         InitializeLayers();
     }

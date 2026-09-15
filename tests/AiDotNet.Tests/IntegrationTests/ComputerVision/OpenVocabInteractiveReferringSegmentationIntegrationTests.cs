@@ -203,7 +203,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegGPT_Construction_Succeeds()
     {
-        var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
+        var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -211,7 +211,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegGPT_Predict_ReturnsOutput()
     {
-        var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
+        var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -231,7 +231,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SEEM_Construction_Succeeds()
     {
-        var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
+        var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -239,7 +239,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SEEM_Predict_ReturnsOutput()
     {
-        var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
+        var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

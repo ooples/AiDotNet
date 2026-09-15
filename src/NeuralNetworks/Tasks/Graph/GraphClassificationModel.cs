@@ -96,6 +96,11 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly GraphClassificationOptions _options;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
+
     private readonly GraphPooling _poolingType;
     [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
@@ -115,23 +120,6 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     private Tensor<T>? _graphEmbedding;
     private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
 
-    /// <summary>
-    /// Graph pooling methods for aggregating node embeddings.
-    /// </summary>
-    public enum GraphPooling
-    {
-        /// <summary>Mean pooling: Average all node embeddings.</summary>
-        Mean,
-
-        /// <summary>Max pooling: Take max across all node embeddings.</summary>
-        Max,
-
-        /// <summary>Sum pooling: Sum all node embeddings.</summary>
-        Sum,
-
-        /// <summary>Attention pooling: Weighted average with learned attention.</summary>
-        Attention
-    }
 
     /// <summary>
     /// Gets the number of input features per node.
@@ -209,14 +197,21 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 
     public GraphClassificationModel(
         NeuralNetworkArchitecture<T> architecture,
-        int hiddenDim = 64,
-        int embeddingDim = 128,
-        int numGnnLayers = 3,
-        double dropoutRate = 0.5,
-        GraphPooling poolingType = GraphPooling.Mean,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        GraphClassificationOptions? options = null)
+        : this(options ?? new GraphClassificationOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    private GraphClassificationModel(
+        GraphClassificationOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
         // The classification head emits RAW LOGITS (PredictCore returns Forward(input) with no
         // Softmax), so the numerically-stable, industry-standard pairing is CrossEntropyWithLogitsLoss
         // — it applies LogSoftmax internally (matching PyTorch nn.CrossEntropyLoss, which also takes
@@ -226,15 +221,18 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         // objective (which DECREASES as training sharpens the correct-class logits) instead of
         // MSE-against-a-random-target (which GROWS as logits sharpen, mis-reading healthy training as
         // "loss increased"). This is the logits variant the prior comment said callers should adopt.
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), options.MaxGradNorm)
     {
+        options.Validate();
+        _options = options;
+        Options = _options;
         InputFeatures = architecture.InputSize;
         NumClasses = architecture.OutputSize;
-        HiddenDim = hiddenDim;
-        EmbeddingDim = embeddingDim;
-        NumGnnLayers = numGnnLayers;
-        DropoutRate = dropoutRate;
-        _poolingType = poolingType;
+        HiddenDim = options.HiddenDim;
+        EmbeddingDim = options.EmbeddingDim;
+        NumGnnLayers = options.NumGnnLayers;
+        DropoutRate = options.DropoutRate;
+        _poolingType = options.PoolingType;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

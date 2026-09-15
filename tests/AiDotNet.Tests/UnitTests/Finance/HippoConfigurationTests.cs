@@ -47,6 +47,7 @@ public class HippoConfigurationTests
         var options = new HippoOptions<double>
         {
             ContextLength = 12,
+            NumFeatures = 4,
             ForecastHorizon = 3,
             ModelDimension = 16,
             StateDimension = 8,
@@ -63,7 +64,7 @@ public class HippoConfigurationTests
             UseNormalization = true
         };
 
-        using var model = new Hippo<double>(CreateArchitecture(12, 3), options, numFeatures: 4);
+        using var model = new Hippo<double>(CreateArchitecture(12, 3), options);
         var cells = model.Layers.OfType<HippoMemoryCellLayer<double>>().ToArray();
 
         Assert.Equal(2, cells.Length);

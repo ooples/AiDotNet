@@ -86,20 +86,15 @@ public partial class MemFlow<T> : OpticalFlowBase<T>
 
     public MemFlow(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
         MemFlowOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
-        if (numFeatures <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
-        if (numLayers <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
         _options = options ?? new MemFlowOptions();
+        _options.Validate();
         Options = _options;
 
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
+        _numFeatures = _options.NumFeatures;
+        _numLayers = _options.NumLayers;
         _processingBlocks = [];
 
         InitializeNativeLayers(architecture);

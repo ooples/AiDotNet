@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 80);
-/// var model = new UniVS&lt;double&gt;(architecture, numClasses: 80);
+/// var model = new UniVS&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new UniVS&lt;double&gt;(architecture,
+///     options: new UniVSOptions { NumClasses = 80, DropRate = 0.1, ModelSize = UniVSModelSize.R50 });
 ///
 /// // Or load a pre-trained ONNX model for video instance/panoptic segmentation
-/// var onnxModel = new UniVS&lt;double&gt;(architecture, "univs.onnx", numClasses: 80);
+/// var onnxModel = new UniVS&lt;double&gt;(architecture, "univs.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -94,9 +97,6 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 80).</param>
-    /// <param name="modelSize">Model size variant (default: R50).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -105,19 +105,18 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
     /// </remarks>
     public UniVS(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 80,
-        UniVSModelSize modelSize = UniVSModelSize.R50, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         UniVSOptions? options = null)
         // `optimizer` is passed straight through INCLUDING null, exactly as before: UniVS must NOT
         // get a defaulted AdamW, because GetOrCreateBaseOptimizer below installs its own tuned
         // warmup Adam whenever the caller supplied nothing. The base stores the argument verbatim
         // and only ever defaults it lazily through the Optimizer property, which UniVS never reads.
-        : base(architecture, optimizer, lossFunction, numClasses, maxTrackedObjects: 256)
+        : base(architecture, optimizer, lossFunction, (options ??= new UniVSOptions()).NumClasses, maxTrackedObjects: 256)
     {
-        _options = options ?? new UniVSOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = dropRate;
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
         // Materialize every lazy conv/BN layer up front (one real eval-mode forward). DeepCopy /
         // Clone serialize the trained weights then rebuild a fresh instance and apply them via
@@ -132,8 +131,6 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 80).</param>
-    /// <param name="modelSize">Model size for metadata (default: R50).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -143,14 +140,14 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public UniVS(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 80, UniVSModelSize modelSize = UniVSModelSize.R50,
+    public UniVS(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         UniVSOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 256)
+        : base(architecture, onnxModelPath, (options ??= new UniVSOptions()).NumClasses, maxTrackedObjects: 256)
     {
-        _options = options ?? new UniVSOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

@@ -186,20 +186,14 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="SpiralNet{T}"/> class with simple parameters.
     /// </summary>
     /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="inputFeatures">Number of input features per vertex. Default is 3.</param>
-    /// <param name="spiralLength">Length of spiral sequences. Default is 9.</param>
     /// <param name="lossFunction">The loss function. Defaults based on task type if null.</param>
     public SpiralNet(
         int numClasses,
-        int inputFeatures = 3,
-        int spiralLength = 9,
         ILossFunction<T>? lossFunction = null)
         : this(
             new SpiralNetOptions
             {
-                NumClasses = numClasses,
-                InputFeatures = inputFeatures,
-                SpiralLength = spiralLength
+                NumClasses = numClasses
             },
             null,
             lossFunction)

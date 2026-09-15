@@ -156,24 +156,6 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the dropout rate specifically for attention weights.
-    /// </summary>
-    /// <value>The attention dropout rate, defaulting to 0.0.</value>
-    /// <remarks>
-    /// <para>
-    /// Separate dropout applied to attention weights. Set to 0 in the original
-    /// FT-Transformer paper.
-    /// </para>
-    /// </remarks>
-    public double AttentionDropoutRate { get; set; } = 0.0;
-
-    /// <summary>
-    /// Gets or sets the dropout rate applied to the residual connections.
-    /// </summary>
-    /// <value>The residual dropout rate, defaulting to 0.0.</value>
-    public double ResidualDropoutRate { get; set; } = 0.0;
-
-    /// <summary>
     /// Gets or sets whether to use layer normalization before attention (Pre-LN) or after (Post-LN).
     /// </summary>
     /// <value>True to use Pre-LN; false for Post-LN. Defaults to true.</value>
@@ -223,18 +205,6 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
     public int[]? CategoricalCardinalities { get; set; }
 
     /// <summary>
-    /// Gets or sets whether to enable gradient clipping.
-    /// </summary>
-    /// <value>True to enable gradient clipping; false otherwise. Defaults to true.</value>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for clipping.
-    /// </summary>
-    /// <value>The maximum gradient norm, defaulting to 1.0.</value>
-    public double MaxGradientNorm { get; set; } = 1.0;
-
-    /// <summary>
     /// Gets or sets the weight decay (L2 regularization) coefficient.
     /// </summary>
     /// <value>The weight decay, defaulting to 1e-5.</value>
@@ -265,17 +235,14 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
             NumLayers = NumLayers,
             FeedForwardMultiplier = FeedForwardMultiplier,
             DropoutRate = DropoutRate,
-            AttentionDropoutRate = AttentionDropoutRate,
-            ResidualDropoutRate = ResidualDropoutRate,
             UsePreLayerNorm = UsePreLayerNorm,
             LayerNormEpsilon = LayerNormEpsilon,
             EmbeddingInitScale = EmbeddingInitScale,
             UseNumericalBias = UseNumericalBias,
             CategoricalCardinalities = CategoricalCardinalities?.ToArray(),
-            EnableGradientClipping = EnableGradientClipping,
-            MaxGradientNorm = MaxGradientNorm,
             WeightDecay = WeightDecay,
-            UseReGLU = UseReGLU
+            UseReGLU = UseReGLU,
+            MaxGradNorm = MaxGradNorm
         };
     }
 }

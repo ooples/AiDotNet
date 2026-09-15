@@ -359,7 +359,6 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for MOIRAI.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -368,10 +367,8 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// or fine-tune on your specific time series data.
     /// </para>
     /// </remarks>
-    public MOIRAI(
-        NeuralNetworkArchitecture<T> architecture,
+    public MOIRAI(NeuralNetworkArchitecture<T> architecture,
         MOIRAIOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -424,7 +421,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         _numMixtures = options.NumMixtures;
         _dropout = options.DropoutRate;
         _maskRatio = options.MaskRatio;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new MOIRAIOptions<T>()).NumFeatures;
         _modelSize = options.ModelSize;
         _useDecoderOnly = options.UseDecoderOnly;
         _numQuantiles = options.NumQuantiles;

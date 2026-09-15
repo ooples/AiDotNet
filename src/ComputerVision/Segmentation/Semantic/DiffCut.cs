@@ -49,10 +49,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new DiffCut&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new DiffCut&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new DiffCut&lt;double&gt;(architecture,
+///     options: new DiffCutOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for unsupervised segmentation
-/// var onnxModel = new DiffCut&lt;double&gt;(architecture, "diffcut.onnx", numClasses: 150);
+/// var onnxModel = new DiffCut&lt;double&gt;(architecture, "diffcut.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -95,8 +98,6 @@ public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW, consistent with diffusion
     /// model fine-tuning practices).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of semantic classes (default: 150).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -105,18 +106,15 @@ public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
     /// the diffusion feature extractor for specific domains.
     /// </para>
     /// </remarks>
-    public DiffCut(
-        NeuralNetworkArchitecture<T> architecture,
+    public DiffCut(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        double dropRate = 0.1,
         DiffCutOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new DiffCutOptions()).NumClasses)
     {
-        _options = options ?? new DiffCutOptions();
+        _options = options;
         Options = _options;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 4, 2];
@@ -130,7 +128,6 @@ public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of classes (default: 150).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -140,16 +137,14 @@ public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if file not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if ONNX load fails.</exception>
-    public DiffCut(
-        NeuralNetworkArchitecture<T> architecture,
+    public DiffCut(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
         DiffCutOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new DiffCutOptions()).NumClasses)
     {
-        _options = options ?? new DiffCutOptions();
+        _options = options;
         Options = _options;
-        _dropRate = 0.0;
+        _dropRate = _options.DropRate;
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 4, 2];

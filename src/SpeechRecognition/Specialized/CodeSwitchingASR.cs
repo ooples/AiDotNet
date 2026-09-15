@@ -273,7 +273,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     /// <summary>
     /// Transcribes code-switched speech with the hybrid model, decoding the CTC branch.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -302,12 +302,12 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
             Language = detected,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null,
-        bool includeTimestamps = false, CancellationToken cancellationToken = default)
+        bool? includeTimestamps = null, CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     /// <summary>

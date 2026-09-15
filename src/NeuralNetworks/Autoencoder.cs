@@ -202,8 +202,6 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     /// </summary>
     /// <param name="architecture">The architecture specification for the autoencoder.</param>
     /// <param name="learningRate">The learning rate for training the autoencoder.</param>
-    /// <param name="epochs">The number of training epochs to perform.</param>
-    /// <param name="batchSize">The batch size to use during training.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, Mean Squared Error will be used.</param>
     /// <remarks>
     /// <para>
@@ -233,17 +231,21 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     {
     }
 
-    public Autoencoder(NeuralNetworkArchitecture<T> architecture, int epochs = 1, int batchSize = 32, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, AutoencoderOptions? options = null)
+    public Autoencoder(NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        AutoencoderOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        options ??= new AutoencoderOptions();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _options = options ?? new AutoencoderOptions();
+        _options = options;
         Options = _options;
 
         EncodedSize = 0;
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
-        _epochs = epochs;
-        _batchSize = batchSize;
+        _epochs = options.Epochs;
+        _batchSize = options.BatchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // Initialize fields that require NumOps (must be done in constructor, not field initializers)

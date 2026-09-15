@@ -108,15 +108,12 @@ public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
         int imageChannels,
         int imageHeight,
         int imageWidth,
-        int numClasses = 0,
-        int generatorChannels = 64,
-        int discriminatorChannels = 64,
+        SAGANOptions? options = null,
         int[]? attentionLayers = null,
-        ILossFunction<T>? lossFunction = null,
-        SAGANOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(
-            CreateSAGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorChannels),
-            CreateSAGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorChannels),
+            CreateSAGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, (options?.GeneratorChannels ?? 64)),
+            CreateSAGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, (options?.DiscriminatorChannels ?? 64)),
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
@@ -132,14 +129,15 @@ public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
             defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0004, 0.0, 0.9))
     {
         _options = options ?? new SAGANOptions();
+        _options.Validate();
         Options = _options;
         _latentSize = latentSize;
-        _numClasses = numClasses;
+        _numClasses = _options.NumClasses;
         _imageChannels = imageChannels;
         _imageHeight = imageHeight;
         _imageWidth = imageWidth;
-        _generatorChannels = generatorChannels;
-        _discriminatorChannels = discriminatorChannels;
+        _generatorChannels = _options.GeneratorChannels;
+        _discriminatorChannels = _options.DiscriminatorChannels;
         _attentionLayers = attentionLayers ?? [2, 3];
         UseSpectralNormalization = true;
     }
@@ -167,23 +165,13 @@ public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
     public SAGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
-        int latentSize = 128,
-        int imageChannels = 3,
-        int imageHeight = 64,
-        int imageWidth = 64,
-        int numClasses = 0,
-        int generatorChannels = 64,
-        int discriminatorChannels = 64,
+        SAGANOptions? options = null,
         int[]? attentionLayers = null,
-        InputType inputType = InputType.TwoDimensional,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0001,
-        SAGANOptions? options = null)
-        : this(latentSize,
-               imageChannels > 0 ? imageChannels : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
-               imageHeight > 0 ? imageHeight : (discriminatorArchitecture.InputHeight > 0 ? discriminatorArchitecture.InputHeight : 64),
-               imageWidth > 0 ? imageWidth : (discriminatorArchitecture.InputWidth > 0 ? discriminatorArchitecture.InputWidth : 64),
-               numClasses, generatorChannels, discriminatorChannels, attentionLayers, lossFunction, options)
+        ILossFunction<T>? lossFunction = null)
+        : this((options?.LatentSize ?? 128),
+               (options?.ImageChannels ?? 3) > 0 ? (options?.ImageChannels ?? 3) : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
+               (options?.ImageHeight ?? 64) > 0 ? (options?.ImageHeight ?? 64) : (discriminatorArchitecture.InputHeight > 0 ? discriminatorArchitecture.InputHeight : 64),
+               (options?.ImageWidth ?? 64) > 0 ? (options?.ImageWidth ?? 64) : (discriminatorArchitecture.InputWidth > 0 ? discriminatorArchitecture.InputWidth : 64), attentionLayers: attentionLayers, lossFunction: lossFunction, options: options)
     {
     }
 
@@ -196,14 +184,11 @@ public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
     /// <param name="options">Optional SAGAN options.</param>
     public SAGAN(
         NeuralNetworkArchitecture<T> architecture,
-        int latentSize = 128,
-        int numClasses = 0,
         SAGANOptions? options = null)
-        : this(latentSize,
+        : this((options?.LatentSize ?? 128),
                architecture.InputDepth > 0 ? architecture.InputDepth : 3,
                architecture.InputHeight > 0 ? architecture.InputHeight : 64,
-               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
-               numClasses, options: options)
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64, options: options)
     {
     }
 

@@ -103,14 +103,12 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     /// dimension adaptation internally.
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public ConvolutionalNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
-        ConvolutionalNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ConvolutionalNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ConvolutionalNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new ConvolutionalNeuralNetworkOptions();
+        _options = options;
         Options = _options;
         // Default to AMSGrad to suppress Adam's post-convergence drift on
         // fixed-input regression invariants (MoreData_ShouldNotDegrade).

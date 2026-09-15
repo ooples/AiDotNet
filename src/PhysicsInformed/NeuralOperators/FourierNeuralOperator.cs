@@ -137,10 +137,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Initializes a new instance of the Fourier Neural Operator.
         /// </summary>
         /// <param name="architecture">The network architecture.</param>
-        /// <param name="modes">Number of Fourier modes to retain (higher = more detail, but more computation).</param>
-        /// <param name="width">Channel width of the network (similar to hidden layer size).</param>
         /// <param name="spatialDimensions">Dimensions of the input function domain (e.g., [64, 64] for 64x64 grid).</param>
-        /// <param name="numLayers">Number of Fourier layers.</param>
         /// <remarks>
         /// For Beginners:
         ///
@@ -167,28 +164,25 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// - More layers = more expressive, but diminishing returns
         /// - Typical: 4-8 layers
         /// </remarks>
-        public FourierNeuralOperator(
-            NeuralNetworkArchitecture<T> architecture,
-            int modes = 16,
-            int width = 64,
+        public FourierNeuralOperator(NeuralNetworkArchitecture<T> architecture,
             int[]? spatialDimensions = null,
-            int numLayers = 4,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             FourierNeuralOperatorOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _options = options ?? new FourierNeuralOperatorOptions();
+            options ??= new FourierNeuralOperatorOptions();
+            _options = options;
             Options = _options;
 
-            _modes = modes;
-            _width = width;
+            _modes = options.Modes;
+            _width = options.Width;
             _spatialDimensions = spatialDimensions ?? new int[] { 64, 64 }; // Default 2D
             _fourierLayers = new List<FourierLayer<T>>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
 
             InitializeLayers();
-            InitializeFourierLayers(numLayers);
+            InitializeFourierLayers(options.NumLayers);
         }
 
         protected override void InitializeLayers()

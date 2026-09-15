@@ -123,18 +123,17 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
 
     public DIFRINT(
         NeuralNetworkArchitecture<T> architecture,
+        DIFRINTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 64,
-        int numIterations = 3,
-        DIFRINTOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DIFRINTOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _numFeatures = numFeatures;
-        _numIterations = numIterations;
+        _numFeatures = _options.NumFeatures;
+        _numIterations = _options.NumIterations;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
 
@@ -148,7 +147,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         DIFRINTOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DIFRINTOptions();
         Options = _options;
@@ -159,8 +158,12 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _numFeatures = 64;
-        _numIterations = 3;
+        // Validated after the path check so a missing model file reports itself as
+        // FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numFeatures = _options.NumFeatures;
+        _numIterations = _options.NumIterations;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _lossFunction = new MeanSquaredErrorLoss<T>();

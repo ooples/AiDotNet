@@ -60,6 +60,7 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
+        MaxGradNorm = other.MaxGradNorm;
         Seed = other.Seed;
         LearningRate = other.LearningRate;
         EmbeddingDimension = other.EmbeddingDimension;
@@ -67,7 +68,6 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
         NumHeads = other.NumHeads;
         FeedForwardMultiplier = other.FeedForwardMultiplier;
         DropoutRate = other.DropoutRate;
-        MaxFeatures = other.MaxFeatures;
         MaxContextSamples = other.MaxContextSamples;
         MaxClasses = other.MaxClasses;
         UsePositionalEncoding = other.UsePositionalEncoding;
@@ -80,7 +80,6 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
             ? []
             : (int[])other.OutputHeadDimensions.Clone();
         UseEnsemble = other.UseEnsemble;
-        NumEnsembles = other.NumEnsembles;
         CategoricalCardinalities = other.CategoricalCardinalities is null ? null : (int[])other.CategoricalCardinalities.Clone();
         HiddenActivation = other.HiddenActivation;
         HiddenVectorActivation = other.HiddenVectorActivation;
@@ -145,12 +144,6 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
     public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets the maximum number of features supported.
-    /// </summary>
-    /// <value>The maximum features, defaulting to 100.</value>
-    public int MaxFeatures { get; set; } = 100;
-
-    /// <summary>
     /// Gets or sets the maximum number of training samples in context.
     /// </summary>
     /// <value>The maximum context samples, defaulting to 1024.</value>
@@ -203,12 +196,6 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
     /// </para>
     /// </remarks>
     public bool UseEnsemble { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the number of ensemble members.
-    /// </summary>
-    /// <value>The number of ensembles, defaulting to 16.</value>
-    public int NumEnsembles { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the cardinalities of categorical features.

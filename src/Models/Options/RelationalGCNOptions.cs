@@ -58,6 +58,7 @@ public class RelationalGCNOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public RelationalGCNOptions()
     {
+        NumFeatures = 16;
     }
 
     /// <summary>
@@ -124,16 +125,6 @@ public class RelationalGCNOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int NumNodes { get; set; } = 100;
 
-    /// <summary>
-    /// Gets or sets the number of input features per node.
-    /// </summary>
-    /// <value>The number of features, defaulting to 16.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many attributes each entity has.
-    /// Common features: market cap, sector encoding, recent returns, etc.
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the number of relation types.

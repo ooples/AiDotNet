@@ -110,4 +110,24 @@
     <Content Include="IntegrationTests\Clustering\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    Same upstream defect as the target of this name in AiDotNet.Storage.Sqlite.csproj, which
+    carries the full explanation: SQLitePCLRaw.lib.e_sqlite3 2.1.12 declares
+    runtimes\win-arm\native\e_sqlite3.dll as Content but no longer ships it.
+
+    It has to be repeated here rather than fixed once in the Sqlite project because the package's
+    buildTransitive targets flow into every .NET Framework project that references it, and this
+    one does so through AiDotNet.Storage.Sqlite. Suppressing the flow with
+    PrivateAssets="buildTransitive" would also withhold the win-x64 content this project genuinely
+    needs at run time, so the broken item is removed rather than the whole asset group.
+  -->
+  <Target Name="DropMissingWinArmSqliteContent"
+          AfterTargets="ResolvePackageAssets"
+          Condition="'$(TargetFramework)' == 'net471'">
+    <ItemGroup>
+      <Content Remove="@(Content)"
+               Condition="$([System.String]::Copy('%(Identity)').Contains('win-arm\native\e_sqlite3.dll'))" />
+    </ItemGroup>
+  </Target>
+
 </Project>

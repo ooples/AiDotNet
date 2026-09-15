@@ -58,7 +58,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         _roiPoolSize = 7;
 
         // Backbone
-        _backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        _backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Feature Pyramid Network
         _fpn = new FPN<T>(new[] { 256, 512, 1024, 2048 }, 256);

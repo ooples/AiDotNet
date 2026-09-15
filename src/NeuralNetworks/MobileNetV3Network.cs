@@ -90,17 +90,14 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="configuration">The MobileNetV3-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
-    public MobileNetV3Network(
-        NeuralNetworkArchitecture<T> architecture,
+    public MobileNetV3Network(NeuralNetworkArchitecture<T> architecture,
         MobileNetV3Configuration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         MobileNetV3Options? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MobileNetV3Options()).MaxGradNorm)
     {
-        _options = options ?? new MobileNetV3Options();
+        _options = options;
         Options = _options;
         Guard.NotNull(configuration);
         _configuration = configuration;

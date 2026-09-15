@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -234,9 +235,7 @@ public class RWKV7LanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Model_Constructor_ValidParameters_CreatesModel()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(),
-            vocabSize: 100, modelDimension: 32, numLayers: 2, numHeads: 4);
+        var model = new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, ModelDimension = 32, NumLayers = 2, NumHeads = 4 });
 
         Assert.Equal(100, model.VocabSize);
         Assert.Equal(32, model.ModelDimension);
@@ -249,42 +248,41 @@ public class RWKV7LanguageModelTests
     public async Task Model_Constructor_ThrowsWhenVocabSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(1), vocabSize: 0));
+            new RWKV7LanguageModel<float>(CreateArch(1), new RWKV7Options { VocabSize = 0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Model_Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, ModelDimension = 0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Model_Constructor_ThrowsWhenNumLayersNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, NumLayers = 0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Model_Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numHeads: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, NumHeads = 0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Model_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 33, numHeads: 4));
+            new RWKV7LanguageModel<float>(CreateArch(), new RWKV7Options { VocabSize = 100, ModelDimension = 33, NumHeads = 4 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Model_SupportsTraining_ReturnsTrue()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(30), 30, 16, 2, 2);
+        var model = new RWKV7LanguageModel<float>(CreateArch(30), new RWKV7Options { VocabSize = 30, ModelDimension = 16, NumLayers = 2, NumHeads = 2 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -300,9 +298,7 @@ public class RWKV7LanguageModelTests
         int vocabSize = 50;
         int modelDim = 32;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, NumHeads = 4, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -318,9 +314,7 @@ public class RWKV7LanguageModelTests
         int vocabSize = 50;
         int modelDim = 32;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, NumHeads = 4, MaxSequenceLength = seqLen });
 
         // One unbatched sequence of ids. [1, seq] in, [1, seq, vocab] logits out.
         var input = CreateTokenInput(1, seqLen, vocabSize);
@@ -336,9 +330,7 @@ public class RWKV7LanguageModelTests
         int seqLen = 4;
         int vocabSize = 20;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -368,9 +360,7 @@ public class RWKV7LanguageModelTests
         int seqLen = 4;
         int vocabSize = 20;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(1, seqLen, vocabSize);
         var expected = CreateOneHotTarget(1, seqLen, vocabSize, seed: 99);
@@ -390,9 +380,7 @@ public class RWKV7LanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Model_GetParameters_SetParameters_RoundTrip()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(30),
-            30, 16, numLayers: 2, numHeads: 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(CreateArch(30), new RWKV7Options { VocabSize = 30, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = 4 });
 
         var params1 = model.GetParameters();
         Assert.True(params1.Length > 0);
@@ -409,8 +397,7 @@ public class RWKV7LanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Model_SetParameters_ThrowsOnWrongLength()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(30), 30, 16, 2, 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(CreateArch(30), new RWKV7Options { VocabSize = 30, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = 4 });
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
@@ -420,12 +407,8 @@ public class RWKV7LanguageModelTests
         int seqLen = 4;
         int vocabSize = 20;
 
-        var model1 = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
-        var model2 = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
+        var model1 = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = seqLen });
+        var model2 = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = seqLen });
 
         model2.SetParameters(model1.GetParameters());
 
@@ -449,8 +432,7 @@ public class RWKV7LanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Model_ResetState_AllowsReuse()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(20), 20, 16, 2, 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(CreateArch(20), new RWKV7Options { VocabSize = 20, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = 4 });
         var input = CreateTokenInput(1, 4, 20);
 
         model.Predict(input);
@@ -468,8 +450,7 @@ public class RWKV7LanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Model_GetModelMetadata_ContainsExpectedKeys()
     {
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(100), 100, 64, 4, 8, maxSeqLength: 32);
+        var model = new RWKV7LanguageModel<float>(CreateArch(100), new RWKV7Options { VocabSize = 100, ModelDimension = 64, NumLayers = 4, NumHeads = 8, MaxSequenceLength = 32 });
         var metadata = model.GetModelMetadata();
 
 
@@ -495,9 +476,7 @@ public class RWKV7LanguageModelTests
         int seqLen = 4;
         int vocabSize = 20;
 
-        var model = new RWKV7LanguageModel<double>(
-            CreateDoubleArch(vocabSize),
-            vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<double>(CreateDoubleArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, NumHeads = 2, MaxSequenceLength = seqLen });
 
         var input = CreateTokenDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -516,9 +495,7 @@ public class RWKV7LanguageModelTests
         int seqLen = 4;
         int vocabSize = 20;
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, 16, numLayers: 4, numHeads: 2, maxSeqLength: seqLen);
+        var model = new RWKV7LanguageModel<float>(CreateArch(vocabSize), new RWKV7Options { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 4, NumHeads = 2, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -602,14 +579,7 @@ public class RWKV7LanguageModelTests
             MaxSequenceLength = 8
         };
 
-        var model = new RWKV7LanguageModel<float>(
-            CreateArch(options.VocabSize),
-            options.VocabSize,
-            options.ModelDimension,
-            options.NumLayers,
-            options.NumHeads,
-            options.FFNMultiplier,
-            options.MaxSequenceLength);
+        var model = new RWKV7LanguageModel<float>(CreateArch(options.VocabSize), new RWKV7Options { VocabSize = options.VocabSize, ModelDimension = options.ModelDimension, NumLayers = options.NumLayers, NumHeads = options.NumHeads, FfnMultiplier = options.FFNMultiplier, MaxSequenceLength = options.MaxSequenceLength });
 
         Assert.Equal(options.VocabSize, model.VocabSize);
         Assert.Equal(options.ModelDimension, model.ModelDimension);

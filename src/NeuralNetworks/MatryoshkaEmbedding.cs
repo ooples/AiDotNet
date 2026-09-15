@@ -86,29 +86,33 @@ namespace AiDotNet.NeuralNetworks
         /// Initializes a new instance of the MatryoshkaEmbedding model.
         /// </summary>
         public MatryoshkaEmbedding(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 30522,
-            int maxEmbeddingDimension = 1536,
-            int[]? nestedDimensions = null,
-            int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.ClsToken,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            MatryoshkaEmbeddingOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, maxEmbeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        MatryoshkaEmbeddingOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            // Materialize ONCE and hand the SAME instance to the base. Passing the raw parameter
+            // and separately defaulting it below gave the two halves of this model different
+            // options objects whenever the caller supplied none: the base built a
+            // TransformerEmbeddingOptions (EmbeddingDimension 768) while this class built a
+            // MatryoshkaEmbeddingOptions (1536), and EmbeddingDimension -- which sizes every layer
+            // and bounds EmbedResized -- is the base's. A model documented and tested as 1536 wide
+            // was therefore built 768 wide.
+            : base(
+                architecture,
+                options ??= new MatryoshkaEmbeddingOptions(),
+                tokenizer,
+                optimizer,
+                lossFunction)
         {
-            _options = options ?? new MatryoshkaEmbeddingOptions();
+        _options = options;
+        _options.Validate();
             Options = _options;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
-            _nestedDimensions = nestedDimensions ?? new[] { 64, 128, 256, 512, 768, 1024, 1536 };
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
+            _nestedDimensions = _options.NestedDimensions;
 
             InitializeLayersCore(false);
         }

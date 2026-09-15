@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new OpenVocabSAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new OpenVocabSAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new OpenVocabSAM&lt;double&gt;(architecture,
+///     options: new OpenVocabSAMOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for 20,000+ category segmentation
-/// var onnxModel = new OpenVocabSAM&lt;double&gt;(architecture, "openvocabsam.onnx", numClasses: 1);
+/// var onnxModel = new OpenVocabSAM&lt;double&gt;(architecture, "openvocabsam.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -88,8 +91,6 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -98,19 +99,18 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
     /// </remarks>
     public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         OpenVocabSAMOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // lazily via CreateDefaultOptimizer(), which is now an override of the base's hook rather
         // than a private helper the base could never reach.
-        : base(architecture, optimizer, lossFunction, numClasses, MaxCategoriesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new OpenVocabSAMOptions()).NumClasses, MaxCategoriesSupported)
     {
-        _options = options ?? new OpenVocabSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         // Open-Vocabulary SAM defaults to 1024x1024, not the base's 512x512, so the fallback stays.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         ValidateOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();
@@ -124,7 +124,6 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -134,17 +133,17 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         OpenVocabSAMOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses, MaxCategoriesSupported)
+        : base(architecture, onnxModelPath, (options ??= new OpenVocabSAMOptions()).NumClasses, MaxCategoriesSupported)
     {
-        _options = options ?? new OpenVocabSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         ValidateOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();

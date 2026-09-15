@@ -124,18 +124,11 @@ public class GANDALFOptions<T> : RiskModelOptions<T>
     /// </remarks>
     public int LeafDimension { get; set; } = 1;
 
-    /// <summary>
-    /// Gets or sets whether to use feature-specific gating.
-    /// </summary>
-    /// <value>True for feature-specific gating; false for shared gating. Defaults to true.</value>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Feature-specific gating learns separate importance
-    /// weights for each feature, while shared gating uses a single attention
-    /// mechanism across all features.
-    /// </para>
-    /// </remarks>
-    public bool UseFeatureGating { get; set; } = true;
+    // UseFeatureGating was declared here and never read, and is deleted rather than wired because
+    // it offers to switch off the mechanism the architecture is named for. GANDALF is a stack of
+    // Gated Feature Learning Units; GANDALFBase always builds the gating network and
+    // GandalfGFLULayer always gates. Neither has an ungated path, and adding one would produce a
+    // model that is not GANDALF while appearing to be one.
 
     /// <summary>
     /// Gets or sets the initialization scale for tree parameters.
@@ -149,11 +142,9 @@ public class GANDALFOptions<T> : RiskModelOptions<T>
     /// <value>The weight decay, defaulting to 1e-5.</value>
     public double WeightDecay { get; set; } = 1e-5;
 
-    /// <summary>
-    /// Gets or sets whether to use residual connections in gating.
-    /// </summary>
-    /// <value>True to use residual connections; false otherwise. Defaults to true.</value>
-    public bool UseResidualGating { get; set; } = true;
+    // UseResidualGating was declared here and never read. Same reason: the gated residual update
+    // h <- g*glu + (1-g)*h is the defining step of a GFLU (GandalfGFLULayer, stage (3)), not an
+    // option the layer has an alternative to.
 
     /// <summary>
     /// Gets the number of leaves per tree (2^depth).

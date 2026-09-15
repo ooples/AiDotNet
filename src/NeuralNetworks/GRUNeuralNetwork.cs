@@ -97,7 +97,10 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     {
     }
 
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        GRUOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType),
              // Tighter grad-norm clip than the base default of 1.0 because GRU
              // gates compound gradients across the unrolled sequence. 0.5
@@ -107,6 +110,7 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
              // high-loss phase.
              maxGradNorm: 0.5)
     {
+        options ??= new GRUOptions();
         // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). GRU's
         // recurrent through-gate Jacobian doesn't decay as quickly as
         // feed-forward Adam expects, so the bias-corrected m̂ / √v̂ ratio
@@ -117,22 +121,22 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // (v̂_max is non-decreasing, so the denominator can only grow).
         // Issue #1332 cluster 6. Callers who pass an explicit `optimizer`
         // keep their own choice unchanged.
-        // Thread the constructor's `learningRate` argument through to the
+        // Thread the constructor's `options.LearningRate` argument through to the
         // default optimizer's InitialLearningRate. Prior to PR #1350 review
         // the parameter was stored in _learningRate but the default
         // AdamOptimizer was built with a hardcoded LR, so a caller passing
-        // learningRate=0.002 silently trained at 1e-3. Callers who supply
+        // options.LearningRate=0.002 silently trained at 1e-3. Callers who supply
         // their own `optimizer` retain full control of LR scheduling.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 UseAMSGrad = true,
-                InitialLearningRate = learningRate
+                InitialLearningRate = options.LearningRate
             });
-        _options = options ?? new GRUOptions();
+        _options = options;
         Options = _options;
-        _learningRate = NumOps.FromDouble(learningRate);
+        _learningRate = NumOps.FromDouble(options.LearningRate);
         InitializeGRULayers();
     }
 
