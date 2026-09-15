@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -91,8 +90,10 @@ internal static class Program
         };
         try
         {
+            var observer = new EvaluationRecorder();
             var engine = new EvolutionEngine<ProgramGenome>(task, variation,
-                _ => new MapElitesArchive<ProgramGenome>(new[] { new EvolutionDescriptorDefinition("length", 0, 65536, 64) }), options);
+                _ => new MapElitesArchive<ProgramGenome>(new[] { new EvolutionDescriptorDefinition("length", 0, 65536, 64) }), options,
+                observer: observer);
             EvolutionRunResult<ProgramGenome> result = await engine.RunAsync(new[] { new ProgramGenome(source, ProgramLanguage.Python) });
             await JsonSerializer.SerializeAsync(output, new
             {
@@ -105,6 +106,7 @@ internal static class Program
                 engine = new { result.StopReason, result.Counters, result.StateHash },
                 usage = variation.GetUsage(),
                 attempts = variation.GetRecentAttempts(),
+                evaluations = observer.Evaluations,
                 artifacts = new[] { typeof(Program).Assembly.Location, typeof(ProgramGenome).Assembly.Location,
                     typeof(EvolutionEngineOptions).Assembly.Location }.ToDictionary(path => Path.GetFileName(path)!, path => Hash(File.ReadAllBytes(path))),
                 limitations = "Native AiDotNet prompts with full rewrite/no retries; sequential one-island length archive. Broker receipts determine actual work. No candidate execution occurs in this host. Provider token usage remains in broker transport receipts."
@@ -127,6 +129,17 @@ internal static class Program
     }
 
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private sealed class EvaluationRecorder : IEvolutionObserver<ProgramGenome>
+    {
+        internal List<EvolutionEvaluation> Evaluations { get; } = new();
+        public ValueTask OnEventAsync(EvolutionEvent<ProgramGenome> evolutionEvent, CancellationToken cancellationToken = default)
+        {
+            if (evolutionEvent.Kind == EvolutionEventKind.Evaluated && evolutionEvent.Evaluation is { } evaluation)
+                Evaluations.Add(evaluation);
+            return default;
+        }
+    }
 }
 
 internal sealed class BrokerClient : IChatClient<double>, IDisposable
@@ -154,7 +167,13 @@ internal sealed class BrokerClient : IChatClient<double>, IDisposable
 
     public async Task<JsonElement> CallAsync(string operation, object payload, CancellationToken cancellation)
     {
-        using var response = await _http.PostAsJsonAsync(operation, payload, cancellation);
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+        if (bytes.Length > 256 * 1024) throw new InvalidDataException("Broker request exceeds its byte bound.");
+        // JsonContent streams with chunked framing; the bounded broker requires
+        // a verified Content-Length before reading any payload.
+        using var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        using var response = await _http.PostAsync(operation, content, cancellation);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellation));
         if (document.RootElement.GetProperty("status").GetString() != "ok") throw new InvalidDataException("Broker rejected work.");
