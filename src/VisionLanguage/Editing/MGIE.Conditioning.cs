@@ -39,7 +39,7 @@ public partial class MGIE<T>
         if (instructionTokenIds is null) throw new ArgumentNullException(nameof(instructionTokenIds));
         var visual = PrepareVisionImage(NormalizeImageLayout(image));
         var joint = _instructionEncoder.EncodeJointHiddenStates(visual, instructionTokenIds, _editMapper.EditTokenEmbeddings);
-        var editStates = Engine.TensorNarrow(joint, 1, joint.Shape[1] - _options.EditTokenCount, _options.EditTokenCount);
+        var editStates = Engine.TensorNarrow(joint, 1, joint.Shape[1] - _editOptions.EditTokenCount, _editOptions.EditTokenCount);
         var guidance = _editMapper.Forward(editStates);
         // Both nested stacks may have acquired lazy weights on this first actual joint forward.
         InvalidateTrainableParametersCache();
@@ -80,19 +80,19 @@ public partial class MGIE<T>
             _instructionEncoder.SetTrainingMode(false);
             _editMapper.SetTrainingMode(false);
             var guidance = EncodeStringGuidance(sourceImage, instruction);
-            var nullStates = new Tensor<T>(new[] { sourceImage.Shape[0], _options.EditTokenCount, _options.DecoderDim });
+            var nullStates = new Tensor<T>(new[] { sourceImage.Shape[0], _editOptions.EditTokenCount, _editOptions.DecoderDim });
             var nullGuidance = _editMapper.Forward(nullStates);
-            var resizedSource = ResizeImage(sourceImage, _options.OutputImageSize);
+            var resizedSource = ResizeImage(sourceImage, _editOptions.OutputImageSize);
             var sourceLatent = _vae.Encode(resizedSource, sampleMode: false);
             if (sourceLatent.Rank != 4 || sourceLatent.Shape[1] != LATENT_CHANNELS)
                 throw new InvalidOperationException("The source VAE must produce [batch,4,height,width] latents.");
             var edited = Denoise(sourceLatent, guidance, nullGuidance, seed, standardNoise);
             var decoded = DecodeFromLatent(edited);
             if (decoded.Rank != 4 || decoded.Shape[0] != sourceImage.Shape[0] || decoded.Shape[1] != 3 ||
-                decoded.Shape[2] != _options.OutputImageSize || decoded.Shape[3] != _options.OutputImageSize)
+                decoded.Shape[2] != _editOptions.OutputImageSize || decoded.Shape[3] != _editOptions.OutputImageSize)
                 throw new InvalidOperationException("The VAE output geometry does not match OutputImageSize.");
             return unbatched
-                ? Engine.Reshape(decoded, new[] { 3, _options.OutputImageSize, _options.OutputImageSize })
+                ? Engine.Reshape(decoded, new[] { 3, _editOptions.OutputImageSize, _editOptions.OutputImageSize })
                 : decoded;
         }
         finally
@@ -110,7 +110,7 @@ public partial class MGIE<T>
         // These survive every arena reset. Only transient noisy inputs/predictions live in a step.
         var sourceBranches = Engine.TensorConcatenate(new[] { sourceLatent, sourceLatent, zeroSource }, axis: 0);
         var contexts = Engine.TensorConcatenate(new[] { guidance, nullGuidance, nullGuidance }, axis: 0);
-        return GenerateConditioned(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps, seed, standardNoise,
+        return GenerateConditioned(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps, seed, standardNoise,
             (normalizedNoisyLatent, timestep) =>
             {
                 var targets = Engine.TensorConcatenate(
@@ -125,9 +125,9 @@ public partial class MGIE<T>
                 var imageOnly = Engine.TensorNarrow(predictions, 0, batch, batch);
                 var unconditional = Engine.TensorNarrow(predictions, 0, 2 * batch, batch);
                 var textDelta = Engine.TensorMultiplyScalar(Engine.TensorSubtract(textImage, imageOnly),
-                    NumOps.FromDouble(_options.GuidanceScale));
+                    NumOps.FromDouble(_editOptions.GuidanceScale));
                 var imageDelta = Engine.TensorMultiplyScalar(Engine.TensorSubtract(imageOnly, unconditional),
-                    NumOps.FromDouble(_options.ImageGuidanceScale));
+                    NumOps.FromDouble(_editOptions.ImageGuidanceScale));
                 return Engine.TensorAdd(unconditional, Engine.TensorAdd(textDelta, imageDelta));
             });
     }
@@ -135,7 +135,7 @@ public partial class MGIE<T>
     private Tensor<T> EncodeStringGuidance(Tensor<T> image, string instruction)
     {
         var originalTokens = _instructionEncoder.EncodeInstructionTokens(instruction);
-        if (!_options.EnableExpressiveInstructions)
+        if (!_editOptions.EnableExpressiveInstructions)
             return EncodeEditGuidance(image, originalTokens);
 
         // Generation's public contract is one unbatched image. Preserve that contract for each row,
@@ -145,12 +145,12 @@ public partial class MGIE<T>
         {
             var row = Engine.TensorNarrow(image, 0, batch, 1);
             var vision = PrepareVisionImage(row);
-            var unbatchedVision = Engine.Reshape(vision, new[] { 3, _options.ImageSize, _options.ImageSize });
-            int available = _options.MaxSequenceLength - _instructionEncoder.NumVisualTokens - 1 -
-                _options.EditTokenCount - originalTokens.Count;
+            var unbatchedVision = Engine.Reshape(vision, new[] { 3, _editOptions.ImageSize, _editOptions.ImageSize });
+            int available = _editOptions.MaxSequenceLength - _instructionEncoder.NumVisualTokens - 1 -
+                _editOptions.EditTokenCount - originalTokens.Count;
             if (available < 0)
                 throw new ArgumentException("The image and instruction exceed the joint sequence limit.", nameof(instruction));
-            int generationLength = Math.Min(_options.MaxGenerationLength, available);
+            int generationLength = Math.Min(_editOptions.MaxGenerationLength, available);
             // A one-token nucleus is greedy and deterministic, while retaining the existing
             // LLaVA generation implementation and configured tokenizer/weights.
             string continuation = generationLength == 0 ? string.Empty :
@@ -178,14 +178,14 @@ public partial class MGIE<T>
 
     private Tensor<T> PrepareVisionImage(Tensor<T> image)
     {
-        var resized = ResizeImage(image, _options.ImageSize);
+        var resized = ResizeImage(image, _editOptions.ImageSize);
         var unitRange = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(resized, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.5));
         var mean = new Tensor<T>(new[] { 1, 3, 1, 1 });
         var inverseStd = new Tensor<T>(new[] { 1, 3, 1, 1 });
         for (int channel = 0; channel < 3; channel++)
         {
-            mean[channel] = NumOps.FromDouble(_options.ImageMean[channel]);
-            inverseStd[channel] = NumOps.FromDouble(1.0 / _options.ImageStd[channel]);
+            mean[channel] = NumOps.FromDouble(_editOptions.ImageMean[channel]);
+            inverseStd[channel] = NumOps.FromDouble(1.0 / _editOptions.ImageStd[channel]);
         }
         return Engine.TensorMultiply(Engine.TensorSubtract(unitRange, mean), inverseStd);
     }
@@ -197,18 +197,18 @@ public partial class MGIE<T>
     private LLaVANeuralNetwork<T> CreateInstructionEncoder(int? seed)
     {
         var architecture = new NeuralNetworkArchitecture<T>(inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.Regression, inputDepth: 3, inputHeight: _options.ImageSize,
-            inputWidth: _options.ImageSize, outputSize: _options.DecoderDim)
-        { RandomSeed = seed ?? _options.Seed ?? Architecture?.RandomSeed };
+            taskType: NeuralNetworkTaskType.Regression, inputDepth: 3, inputHeight: _editOptions.ImageSize,
+            inputWidth: _editOptions.ImageSize, outputSize: _editOptions.DecoderDim)
+        { RandomSeed = seed ?? _editOptions.Seed ?? Architecture?.RandomSeed };
         // This is a native training tokenizer, not a claim to load a pretrained LLaVA vocabulary.
         // Checkpoint users inject a native encoder configured with their matching tokenizer.
         var tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA,
-            vocabSize: _options.VocabSize);
-        return new LLaVANeuralNetwork<T>(architecture, imageSize: _options.ImageSize, channels: 3,
-            patchSize: _options.VisionPatchSize, vocabularySize: _options.VocabSize,
-            maxSequenceLength: _options.MaxSequenceLength, embeddingDimension: _options.DecoderDim,
-            visionHiddenDim: _options.VisionDim, numVisionLayers: _options.NumVisionLayers,
-            numLmLayers: _options.NumDecoderLayers, numHeads: _options.NumHeads, tokenizer: tokenizer);
+            vocabSize: _editOptions.VocabSize);
+        return new LLaVANeuralNetwork<T>(architecture, imageSize: _editOptions.ImageSize, channels: 3,
+            patchSize: _editOptions.VisionPatchSize, vocabularySize: _editOptions.VocabSize,
+            maxSequenceLength: _editOptions.MaxSequenceLength, embeddingDimension: _editOptions.DecoderDim,
+            visionHiddenDim: _editOptions.VisionDim, numVisionLayers: _editOptions.NumVisionLayers,
+            numLmLayers: _editOptions.NumDecoderLayers, numHeads: _editOptions.NumHeads, tokenizer: tokenizer);
     }
 
     private static void ValidateEditingOptions(MGIEOptions options)

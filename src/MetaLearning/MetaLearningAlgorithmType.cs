@@ -1286,13 +1286,23 @@ public enum MetaLearningAlgorithmType
     MetaTask,
 
     /// <summary>
-    /// ATAML - Adaptive Task Augmentation for Meta-Learning (2024).
-    /// Adaptively augments tasks during meta-training for improved robustness.
+    /// ATAML - Attentive Task-Agnostic Meta-Learning (Jiang et al., 2018).
+    /// Separates a shared task-agnostic representation from task-specific attentive adaptation.
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Apply task-level augmentation (not just data augmentation) such as
-    /// varying N-way, K-shot, adding noise classes, or mixing task domains.
-    /// <para><b>Use When:</b> Meta-training tasks are too easy or lack diversity.</para>
+    /// <b>Key Idea:</b> On top of MAML, split the parameters. The encoder theta_E is shared across
+    /// tasks and never adapted; only theta_T = {theta_ATT, theta_W} - a content-based attention
+    /// vector over the encoder's states and a softmax classifier - are adapted per task, and the
+    /// meta-step then moves both through the post-adaptation loss (Algorithm 1).
+    /// <para><b>Use When:</b> Few-shot classification where a shared representation should stay
+    /// fixed and only a small attentive head should specialise, as in the paper's text setting.</para>
+    /// <para>
+    /// <b>Corrected.</b> This entry previously described "Adaptive Task Augmentation for
+    /// Meta-Learning (2024)" - varying N-way/K-shot, adding noise classes, mixing task domains - and
+    /// grouped ATAML under Task Augmentation. No such paper exists; searching returns only unrelated
+    /// task-augmentation work. ATAML is the acronym of Jiang et al. 2018, which is what the class
+    /// implements and cites.
+    /// </para>
     /// </remarks>
     ATAML,
 

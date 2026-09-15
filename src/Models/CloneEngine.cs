@@ -625,6 +625,19 @@ public static partial class CloneEngine
             return true;
         }
 
+        // COLLECTIONS ARE TESTED BEFORE THE Clone() PROBE, and that order is the whole point: every Array
+        // carries a public parameterless Clone(), and Array.Clone() is SHALLOW. Probing first therefore
+        // matched every array-typed field, handed back a copy still holding the source's own elements, and
+        // left this branch unreachable for arrays. A Vector<T>[] of weights then aliased its source, so
+        // meta-training a clone wrote straight through into the original. Duplicate -> CopyArray replaces
+        // each element with DuplicateCollectionElement, which is the deep copy that was intended.
+        if (value is Array || value is IDictionary || value is IList
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)))
+        {
+            copy = Duplicate(value);
+            return true;
+        }
+
         var clone = type.GetMethod("Clone", BindingFlags.Public | BindingFlags.Instance, binder: null, Type.EmptyTypes, modifiers: null);
         if (clone is not null && clone.ReturnType != typeof(void))
         {
@@ -634,13 +647,6 @@ public static partial class CloneEngine
                 copy = cloned;
                 return true;
             }
-        }
-
-        if (value is Array || value is IDictionary || value is IList
-            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)))
-        {
-            copy = Duplicate(value);
-            return true;
         }
 
         return false;
@@ -946,7 +952,35 @@ public static partial class CloneEngine
         if (!ReferenceEquals(componentCopy, value)) return componentCopy;
         if (value is null || value is string || value.GetType().IsValueType) return value;
 
-        var plan = CloneRegistry.GetPlan(value.GetType());
+        var elementType = value.GetType();
+
+        // A nested container - double[][], List<Vector<T>>[] - is duplicated as a container, which walks
+        // its own elements through this same method. Without this the OUTER array was copied while every
+        // inner array stayed shared.
+        if (value is Array || value is IDictionary || value is IList
+            || (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(HashSet<>)))
+        {
+            return Duplicate(value);
+        }
+
+        // An element that can duplicate itself does so. Vector<T> and Matrix<T> carry a public
+        // parameterless Clone() but do NOT implement AiDotNet.Interfaces.ICloneable<T>, so the
+        // clone-contract probe below never matched them: a Vector<T>[] or List<Vector<T>> was copied as a
+        // container of the ORIGINAL vectors, and training the copy wrote through into its original. That
+        // is invisible to an equality check right after the copy and only shows up once one side trains,
+        // which is exactly what the family clone test asserts.
+        var clone = elementType.GetMethod(
+            "Clone", BindingFlags.Public | BindingFlags.Instance, binder: null, Type.EmptyTypes, modifiers: null);
+        if (clone is not null && clone.ReturnType != typeof(void))
+        {
+            object? cloned = clone.Invoke(value, null);
+            if (cloned is not null && elementType.IsInstanceOfType(cloned) && !ReferenceEquals(cloned, value))
+            {
+                return cloned;
+            }
+        }
+
+        var plan = CloneRegistry.GetPlan(elementType);
         bool ownsCloneableComponent = false;
         foreach (var entry in plan.Entries)
         {
