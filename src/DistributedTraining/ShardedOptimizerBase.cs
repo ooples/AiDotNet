@@ -254,6 +254,9 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         var paramModel = InterfaceGuard.Parameterizable(model);
         var gradModel = InterfaceGuard.GradientComputable(model);
 
+        // Backward may materialize lazy parameters. Snapshot only after it resolves their layout,
+        // without an extra warm-up pass or optimizer update.
+        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         var originalParams = paramModel.GetParameters();
         if (originalParams is null || originalParams.Length == 0)
             return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
@@ -267,7 +270,6 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         int myStart = Rank * shardSize;
 
         // 1. Backward only — gradients WITHOUT advancing optimizer state.
-        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         if (gradients is null || gradients.Length == 0)
             return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
         if (gradients.Length != totalParams)
@@ -378,12 +380,13 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         var paramModel = InterfaceGuard.Parameterizable(model);
         var gradModel = InterfaceGuard.GradientComputable(model);
 
+        // Resolve lazy parameters before the snapshot; compute gradients exactly once.
+        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         var originalParams = paramModel.GetParameters();
         if (originalParams is null || originalParams.Length == 0)
             return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
 
         // 1. Backward only — full gradient WITHOUT advancing optimizer state through a local loop.
-        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         if (gradients is null || gradients.Length == 0)
             return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
         if (gradients.Length != originalParams.Length)

@@ -35,9 +35,9 @@ param(
     # Delta reuse inputs. Without a certified map there is nothing to select with, and an
     # exact-tree mismatch keeps failing closed exactly as before.
     [Parameter(ParameterSetName = 'Resolve')]
-    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $MapFile,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [AllowEmptyString()] [string] $MapFile,
     [Parameter(ParameterSetName = 'Resolve')]
-    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [string] $ShardManifestFile,
+    [Parameter(Mandatory, ParameterSetName = 'PlanDelta')] [AllowEmptyString()] [string] $ShardManifestFile,
     [Parameter(ParameterSetName = 'Resolve')]
     [Parameter(ParameterSetName = 'PlanDelta')] [string] $SelectorPath = "$PSScriptRoot/Select-Shards.ps1",
     # Offline delta planning against the checked-out landed commit, for tests and diagnosis:
@@ -620,6 +620,9 @@ if ($SelfTest) {
 }
 
 if ($PlanDelta) {
+    if ([string]::IsNullOrWhiteSpace($MapFile) -or [string]::IsNullOrWhiteSpace($ShardManifestFile)) {
+        throw 'PlanDelta requires a nonempty MapFile and ShardManifestFile.'
+    }
     $shards = @()
     if (-not [string]::IsNullOrWhiteSpace($PullRequestShardsJson)) {
         $shards = @($PullRequestShardsJson | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })

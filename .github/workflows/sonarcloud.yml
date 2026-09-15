@@ -139,6 +139,18 @@ jobs:
       import_shards: ${{ steps.resolve.outputs.import_shards || steps.defaults.outputs.import_shards }}
 
     steps:
+      - name: Report validation trigger
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Report only scheduling inputs, never the full event or GitHub context.
+          printf 'event=%s action=%s draft=%s head=%s\n' "$EVENT_NAME" "$EVENT_ACTION" "$PR_DRAFT" "$HEAD_REF"
+          printf 'Validation trigger: event=%s, action=%s, draft=%s, head=%s\n' "$EVENT_NAME" "$EVENT_ACTION" "$PR_DRAFT" "$HEAD_REF" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Initialize fail-closed validation decision
         id: defaults
         shell: bash
