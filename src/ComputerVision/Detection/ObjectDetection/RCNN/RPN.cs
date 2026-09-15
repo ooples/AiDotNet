@@ -101,6 +101,9 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
     /// </summary>
     public int LevelCount => _levelStrides.Length;
 
+    /// <summary>Anchor shapes laid out at every feature position (aspect ratios times scales).</summary>
+    internal int AnchorsPerLocation => _numAnchors;
+
     /// <summary>
     /// Forward pass through the RPN.
     /// </summary>

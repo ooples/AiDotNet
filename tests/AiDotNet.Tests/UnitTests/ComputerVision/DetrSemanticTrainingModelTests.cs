@@ -17,7 +17,6 @@ public sealed class DetrSemanticTrainingModelTests
     public DetrSemanticTrainingModelTests() => TestModuleInitializer.EnsureInitialized();
 
     public enum StepMutation { NoUpdate, DoubleUpdate, RawMse }
-    public enum UnsupportedFamily { FasterRcnn, CascadeRcnn }
 
     [Theory(Timeout = 180000)]
     [InlineData(false, 0.0)]
@@ -131,65 +130,39 @@ public sealed class DetrSemanticTrainingModelTests
     }
 
     [Fact]
-    public void CapabilityDoesNotClaimOtherDetectorLossFamiliesOrSilentlyFallback()
+    public void EveryDetectorFamilyImplementsItsPublishedDetectionObjective()
     {
-        foreach (Type family in new[] { typeof(DETR<double>), typeof(RTDETR<double>), typeof(DINO<double>),
-            typeof(YOLOv8<double>), typeof(YOLOv9<double>), typeof(YOLOv10<double>), typeof(YOLOv11<double>) })
-            Assert.True(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(family));
-        foreach (Type family in new[] { typeof(FasterRCNN<double>), typeof(CascadeRCNN<double>) })
-            Assert.False(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(family));
-        using var model = new FasterRCNN<double>(ObjectDetectionPositiveFixture<double>.CreateOptions());
-        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>().ConfigureModel(model);
-        Assert.Throws<NotSupportedException>(() => builder.TrainDetections(new Tensor<double>(new[] { 1, 3, 64, 64 }), EmptyBatch()));
-        Assert.Equal(0, model.GetLastLoss());
+        foreach (Type family in new[]
+                 {
+                     typeof(DETR<double>), typeof(RTDETR<double>), typeof(DINO<double>),
+                     typeof(YOLOv8<double>), typeof(YOLOv9<double>), typeof(YOLOv10<double>), typeof(YOLOv11<double>),
+                     typeof(FasterRCNN<double>), typeof(CascadeRCNN<double>)
+                 })
+            Assert.True(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(family), family.Name);
     }
 
-    [Theory(Timeout = 180000)]
-    [InlineData(UnsupportedFamily.FasterRcnn)]
-    [InlineData(UnsupportedFamily.CascadeRcnn)]
-    public async Task FacadeRejectsEveryUnimplementedFamilyBeforeParameterOrLossMutation(UnsupportedFamily family)
+    [Fact(Timeout = 180000)]
+    public async Task FacadeRejectsANonDetectionModelBeforeAnyParameterMutation()
     {
         await Task.Yield();
-        var options = ObjectDetectionPositiveFixture<double>.CreateOptions();
-        using ObjectDetectorBase<double> model = family switch
-        {
-            UnsupportedFamily.FasterRcnn => new FasterRCNN<double>(options),
-            UnsupportedFamily.CascadeRcnn => new CascadeRCNN<double>(options),
-            _ => throw new ArgumentOutOfRangeException(nameof(family))
-        };
+        // Semantic detection training never falls back to raw regression: a model without the capability is refused.
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        using var model = new AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<double>(architecture);
         Assert.False(model is IDetectionTrainingModel<double>);
+        using (model.Predict(new Tensor<double>(new[] { 1, 4 }))) { }
+        var before = model.GetParameters().ToArray();
+        Assert.NotEmpty(before);
+
         var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>().ConfigureModel(model);
         using var input = new Tensor<double>(new[] { 1, 3, 64, 64 });
         using var coco = new Tensor<double>(new[] { 1, 1, 5 });
-        var manifest = Assert.IsAssignableFrom<IParameterManifestProvider>(model);
-        var unresolved = manifest.ParameterLayout;
-        Assert.Equal(ParameterReadiness.ShapeDeferred, unresolved.Readiness);
-
         Assert.Throws<NotSupportedException>(() => builder.TrainDetections(input, EmptyBatch()));
         Assert.Throws<NotSupportedException>(() => builder.TrainCocoDetections(input, coco));
-        var stillUnresolved = manifest.ParameterLayout;
-        Assert.Equal(unresolved.Readiness, stillUnresolved.Readiness);
-        Assert.Equal(unresolved.Fingerprint, stillUnresolved.Fingerprint);
-        Assert.Equal(unresolved.MaterializedParameterCount, stillUnresolved.MaterializedParameterCount);
-        Assert.Equal(0, model.GetLastLoss());
-
-        // Chunk enumeration deliberately rejects unresolved layouts. Resolve through an actual
-        // inference first, then separately prove rejection preserves every live tensor value.
-        using var prediction = model.Predict(input);
-        var before = model.GetParameterStateChunks()
-            .Select(chunk => (chunk.StableId, chunk.Tensor, Values: chunk.Tensor.ToArray())).ToArray();
-        Assert.NotEmpty(before);
-        Assert.Throws<NotSupportedException>(() => builder.TrainDetections(input, EmptyBatch()));
-        Assert.Throws<NotSupportedException>(() => builder.TrainCocoDetections(input, coco));
-
-        Assert.Equal(0, model.GetLastLoss());
-        var after = model.GetParameterStateChunks().ToArray();
-        Assert.Equal(before.Select(chunk => chunk.StableId), after.Select(chunk => chunk.StableId));
-        for (int index = 0; index < before.Length; index++)
-        {
-            Assert.Same(before[index].Tensor, after[index].Tensor);
-            Assert.Equal(before[index].Values, after[index].Tensor.ToArray());
-        }
+        Assert.Equal(before, model.GetParameters().ToArray());
     }
 
     [Fact(Timeout = 180000)]

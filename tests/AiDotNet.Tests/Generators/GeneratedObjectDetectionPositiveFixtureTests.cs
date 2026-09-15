@@ -39,8 +39,8 @@ public sealed class GeneratedObjectDetectionPositiveFixtureTests
         var methods = declaration.Members.OfType<MethodDeclarationSyntax>()
             .Where(method => method.Identifier.ValueText == methodName).ToArray();
         bool implemented = typeof(AiDotNet.Interfaces.IDetectionTrainingModel<double>).IsAssignableFrom(ModelType(kind));
-        // Explicit census of the families that implement their published detection objective.
-        Assert.Equal(kind is not (DetectorKind.FasterRcnn or DetectorKind.CascadeRcnn), implemented);
+        // Every object detector family implements its published detection objective.
+        Assert.True(implemented);
         if (implemented)
         {
             var method = Assert.Single(methods);
