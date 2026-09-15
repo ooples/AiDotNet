@@ -30,6 +30,34 @@ public sealed class GeneratedObjectDetectionPositiveFixtureTests
     public GeneratedObjectDetectionPositiveFixtureTests() => TestModuleInitializer.EnsureInitialized();
     public static IEnumerable<object[]> Models => Enum.GetValues(typeof(DetectorKind)).Cast<DetectorKind>().Select(kind => new object[] { kind });
 
+    [Theory]
+    [MemberData(nameof(Models))]
+    public void SemanticTrainingInvariant_IsEmittedOnlyForTheActualTypedCapability(DetectorKind kind)
+    {
+        const string methodName = "TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads";
+        var declaration = Assert.Single(GeneratedFixtures.Value[kind].GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>());
+        var methods = declaration.Members.OfType<MethodDeclarationSyntax>()
+            .Where(method => method.Identifier.ValueText == methodName).ToArray();
+        bool implemented = typeof(AiDotNet.Interfaces.IDetectionTrainingModel<double>).IsAssignableFrom(ModelType(kind));
+        Assert.Equal(kind == DetectorKind.Detr, implemented); // Explicit, nonempty first-slice census.
+        if (implemented)
+        {
+            var method = Assert.Single(methods);
+            Assert.Contains(method.DescendantNodes().OfType<InvocationExpressionSyntax>(),
+                call => call.Expression.ToString() == "VerifySemanticDetectionTraining");
+        }
+        else Assert.Empty(methods);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task GeneratedDetrSemanticInvariant_RunsTheActualFinalHeadTraining()
+    {
+        var fixture = CreateFixture(DetectorKind.Detr);
+        var method = fixture.GetType().GetMethod("TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads");
+        Assert.NotNull(method);
+        await Assert.IsAssignableFrom<Task>(method.Invoke(fixture, null));
+    }
+
     [Theory(Timeout = 120000)]
     [MemberData(nameof(Models))]
     public async Task GeneratedPositiveFactory_UsesTheTypedOptionsConstructor(DetectorKind kind)

@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -41,13 +42,16 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2005.12872",
     Year = 2020,
     Authors = "Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko")]
-public partial class DETR<T> : ObjectDetectorBase<T>
+public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
     private readonly DETREncoder<T> _encoder;
     private readonly DETRDecoder<T> _decoder;
     private readonly Conv2D<T> _inputProj;
     private readonly int _hiddenDim;
     private readonly NMS<T> _nms;
+    private readonly DETRSetLoss<T> _detectionLoss;
+    private readonly int _trainingClassCount;
+    private readonly int _trainingQueryCount;
 
     /// <inheritdoc/>
     public override string Name => $"DETR-{Options.Size}";
@@ -60,6 +64,9 @@ public partial class DETR<T> : ObjectDetectorBase<T>
     {
         var (hiddenDim, numHeads, numEncoderLayers, numDecoderLayers, numQueries) = GetSizeConfig(options.Size);
         _hiddenDim = hiddenDim;
+        _trainingClassCount = options.NumClasses;
+        _trainingQueryCount = numQueries;
+        _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1));
 
         // Initialize backbone (ResNet-50 by default)
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
@@ -89,6 +96,33 @@ public partial class DETR<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (512, 8, 6, 6, 500),
         _ => (256, 8, 6, 6, 100)
     };
+
+    /// <summary>Trains the final DETR heads with exact assignment, no-object CE, L1 and GIoU.</summary>
+    /// <remarks>
+    /// Inputs are model-ready NCHW tensors, as for Predict; this method does not implicitly resize
+    /// or normalize them. Targets use normalized center-format boxes. An image with more targets
+    /// than this model has queries is rejected before initialization or update. Intermediate decoder
+    /// outputs are not exposed by this architecture, so no auxiliary decoder objective is claimed.
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (input.Rank != 4 || input.Shape[0] <= 0 || input.Shape[1] != 3 || input.Shape[2] <= 0 || input.Shape[3] <= 0)
+            throw new ArgumentException("DETR training requires a nonempty NCHW three-channel image batch.", nameof(input));
+        targets.ValidateForModel(input.Shape[0], _trainingClassCount, _trainingQueryCount);
+        TrainWithTargets(input, targets, ComputeDetectionLoss);
+    }
+
+    private Tensor<T> ComputeDetectionLoss(List<Tensor<T>> heads, DetectionTrainingBatch<T> targets)
+    {
+        if (heads.Count != 2)
+            throw new InvalidOperationException("DETR training requires the actual final class and box heads.");
+        // Forward/Predict intentionally expose raw box logits; DecodeOutputs applies sigmoid for
+        // inference. Apply that same transformation on the tape for semantic training only, keeping
+        // both the normalized-box loss contract and raw-output regression API unchanged.
+        return _detectionLoss.ComputeTapeLoss(heads[0], Engine.Sigmoid(heads[1]), targets);
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)

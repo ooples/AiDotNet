@@ -65,6 +65,19 @@ internal static class TensorModelTrainer<T>
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>>? loss = null)
+        => StepWithTargets(model, input, target, learningRate, forward, loss ?? MeanSquaredError);
+
+    /// <summary>
+    /// Runs the same single update for structured heads and typed task targets, without flattening
+    /// away their meaning. Forward outputs and the loss are consumed inside the tape/arena lifetime.
+    /// </summary>
+    public static T StepWithTargets<TPrediction, TTarget>(
+        ModelBase<T, Tensor<T>, Tensor<T>> model,
+        Tensor<T> input,
+        TTarget target,
+        T learningRate,
+        Func<Tensor<T>, TPrediction> forward,
+        Func<TPrediction, TTarget, Tensor<T>> loss)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -99,7 +112,7 @@ internal static class TensorModelTrainer<T>
         using (var tape = new GradientTape<T>())
         {
             var predicted = forward(input);
-            var objective = (loss ?? MeanSquaredError)(predicted, target);
+            var objective = loss(predicted, target);
             var gradients = tape.ComputeGradients(objective, parameters);
 
             // The update runs INSIDE the tape's scope. Disposing the outermost tape rewinds the
