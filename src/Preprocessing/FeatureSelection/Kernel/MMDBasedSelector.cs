@@ -133,7 +133,7 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 kXX += Math.Exp(-_gamma * diff * diff);
             }
         }
-        kXX /= (n1 * n1);
+        kXX /= ((double)n1 * n1);
 
         // E[k(Y, Y')]
         double kYY = 0;
@@ -145,7 +145,7 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 kYY += Math.Exp(-_gamma * diff * diff);
             }
         }
-        kYY /= (n2 * n2);
+        kYY /= ((double)n2 * n2);
 
         // E[k(X, Y)]
         double kXY = 0;
@@ -157,7 +157,7 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 kXY += Math.Exp(-_gamma * diff * diff);
             }
         }
-        kXY /= (n1 * n2);
+        kXY /= ((double)n1 * n2);
 
         // MMD^2 = E[k(X,X')] + E[k(Y,Y')] - 2*E[k(X,Y)]
         double mmdSquared = kXX + kYY - 2 * kXY;
