@@ -12,6 +12,20 @@ namespace AiDotNetTests.UnitTests.Evolution.Programs;
 
 public sealed class ProgramRunOutputTests
 {
+    [Fact]
+    public void SourceHashMatchesTheExactCompleteArtifact()
+    {
+        using var directory = new TemporaryDirectory();
+        const string source = "text = '''value \r\nend'''\r\n";
+        var writer = new ProgramRunOutputWriter(directory.Path);
+        var record = writer.WriteFinal(Entry(source, 1));
+        var info = JObject.Parse(File.ReadAllText(record.InfoPath));
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        string expected = BitConverter.ToString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(source))).Replace("-", "").ToLowerInvariant();
+        Assert.Equal(source, File.ReadAllText(record.ProgramPath));
+        Assert.Equal(2, (int?)info["SchemaVersion"]); Assert.Equal(expected, (string?)info["SourceSha256"]);
+    }
+
     private static EvolutionArchiveEntry<ProgramGenome> Entry(
         string source,
         double quality,

@@ -9,17 +9,17 @@ namespace AiDotNet.Configuration;
 /// (<c>ServingSandboxLimitOptions</c>): five seconds of wall clock, 256 MB of memory, one CPU, 200,000 source
 /// characters, 100,000 standard-input characters, and 64,000 characters each of captured standard output and
 /// standard error, with at most four executions running concurrently. Keeping the two sets of numbers identical
-/// means a run that scores candidates locally and a run that scores them through a serving deployment agree on
-/// which candidates time out, so a fitness landscape does not silently change shape when the sandbox does.
+/// does not make local-process and container measurements equivalent: startup, scheduling and enforcement differ.
 /// </para>
 /// <para>
-/// Every limit is enforced, not merely advertised. The time limit cancels the run and kills the whole process tree;
-/// the memory limit becomes a Windows job-object cap or a <c>ulimit</c> on Unix; the output caps bound the reader
+/// The process runner attempts tree termination on timeout; memory limits use a Windows job object or a
+/// <c>ulimit</c> on Unix, but enforcement failures are not currently fail-closed or attested per execution.
+/// The output caps bound the reader
 /// buffers, so a program that prints without stopping cannot exhaust the host's memory and is reported with the
 /// truncation flag set; and the concurrency limit is a semaphore held for the duration of each execution.
 /// </para>
 /// <para><b>For Beginners:</b> These numbers are the leash on a program that a model wrote and nobody reviewed.
-/// The time limit stops infinite loops, the memory limit stops runaway allocation, the output limits stop a program
+/// The time limit targets infinite loops, attempted memory limits constrain allocation when successfully applied, and output limits stop a program
 /// that prints forever from filling your disk or your logs, and the concurrency limit stops a large population from
 /// starting hundreds of processes at once. The defaults suit small algorithmic tasks; raise the time and memory
 /// limits if your candidates legitimately need longer, and lower them if you want a tighter feedback loop.</para>
@@ -42,7 +42,8 @@ public sealed class ProgramSandboxLimitOptions
     /// <remarks>
     /// Enforced through a Windows job object on Windows and through <c>ulimit -v</c> on Unix when a POSIX shell is
     /// available. Where neither mechanism is available the limit is not applied and the wall-clock limit remains the
-    /// effective bound; the response never claims a limit was applied when it was not.
+    /// effective bound. Job creation/assignment and shell-limit failures can also leave memory uncapped.
+    /// The response does not currently attest whether enforcement succeeded.
     /// </remarks>
     public int MemoryLimitMb { get; set; } = 256;
 

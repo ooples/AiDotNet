@@ -34,6 +34,9 @@ namespace AiDotNet.Evolution.Programs;
 /// raw payloads into a log. <see cref="VersionHash"/> folds in the examples and the comparison mode, so changing the
 /// test set correctly invalidates older checkpoints.
 /// </para>
+/// <para>Truncated standard output is never a passing answer, even when its retained prefix matches. Cost units
+/// count dispatched runner calls, including canceled calls, not runtime or money. Fatal engine failures propagate
+/// so an enclosing resource ledger can retain unknown consumption. Raw engine failure payloads are not exported.</para>
 /// <para><b>For Beginners:</b> This runs a generated program once per example, compares what it printed with what
 /// it should have printed, and reports the fraction it got right. Because you supply the runner, you decide how
 /// dangerous code is contained — a separate process or a container, never this one. When a program fails, the
@@ -92,8 +95,10 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
     /// <inheritdoc/>
     public string VersionHash { get; }
 
-    /// <summary>Gets the input/output cases this evaluator scores against.</summary>
-    public IReadOnlyList<ProgramInputOutputExample> Examples => _examples;
+    /// <summary>Gets an independently owned copy of the input/output cases this evaluator scores against.</summary>
+    public IReadOnlyList<ProgramInputOutputExample> Examples => _examples
+        .Select(example => new ProgramInputOutputExample { Input = example.Input, ExpectedOutput = example.ExpectedOutput })
+        .ToList().AsReadOnly();
 
     /// <summary>Gets how captured output is compared with expected output.</summary>
     public ProgramOutputComparison Comparison => _comparison;
@@ -132,10 +137,10 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
             }
             catch (OperationCanceledException)
             {
-                return Canceled(index);
+                return Canceled(index + 1);
             }
 #pragma warning disable CA1031
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
 #pragma warning restore CA1031
             {
                 AddDiagnostic(diagnostics, index, "engine_threw", exception.GetType().Name);
@@ -154,7 +159,7 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
                 continue;
             }
 
-            if (Matches(response.StdOut, example.ExpectedOutput))
+            if (!response.StdOutTruncated && Matches(response.StdOut, example.ExpectedOutput))
             {
                 passed++;
             }
@@ -165,7 +170,7 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
                     index,
                     "output_mismatch",
                     response.StdOutTruncated
-                        ? "The captured output did not match the expected output and was truncated at the sandbox output cap."
+                        ? "The captured output was truncated at the sandbox output cap and cannot establish a passing answer."
                         : "The captured output did not match the expected output.");
             }
         }
@@ -185,9 +190,9 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
             diagnostics: diagnostics);
     }
 
-    private static EvolutionTaskResult Canceled(int completedExamples) => new(
+    private static EvolutionTaskResult Canceled(int dispatchedExamples) => new(
         EvolutionEvaluationStatus.Canceled,
-        costUnits: completedExamples,
+        costUnits: dispatchedExamples,
         diagnostics: new[] { new EvolutionDiagnostic("program_sandbox_canceled", "Evaluation was canceled.") });
 
     private static string DescribeFailure(ProgramExecuteResponse response) => response.ErrorCode switch
@@ -214,7 +219,7 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
         }
         else
         {
-            reason = error;
+            reason = "The engine reported a failure; its untrusted message was withheld.";
         }
         return string.Concat(
             reason,
@@ -260,7 +265,7 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
     {
         var components = new List<string>
         {
-            "program-sandbox-evaluator-v1",
+            "program-sandbox-evaluator-v2-complete-output-owned-cases-private-receipts",
             ((int)comparison).ToString(CultureInfo.InvariantCulture)
         };
 

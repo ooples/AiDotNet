@@ -57,7 +57,7 @@ public sealed class ProgramGenomeCodecTests
     public void IdentityIsStable()
     {
         Assert.Equal("program-genome", Codec.Id);
-        Assert.Equal("program-genome-v1", Codec.VersionHash);
+        Assert.Equal("program-genome-v2-exact-source", Codec.VersionHash);
     }
 
     [Theory]

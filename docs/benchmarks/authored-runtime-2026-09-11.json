@@ -1,0 +1,1960 @@
+{
+  "Methodology": "authored-fibonacci-end-to-end-v1",
+  "Limitations": "Fixed authored catalog; no LLM, competitor, sealed tests or isolated algorithm timing. Stopwatch includes fresh process startup, compilation, execution and cleanup. Shared-host load is uncontrolled. Repetitions are not independent task families; no significance or superiority claim. Process supervision is not a security sandbox. Worker paths/binaries must be trusted. No paid services.",
+  "CostUnit": "authored-csharp-worker-dispatch-v1",
+  "CostMeaning": "One dispatched worker request, including failed/cancelled calls; compiler setup, CPU, RAM and model work are not independently metered. Unknown receipts retain the reservation maximum.",
+  "TimeLimitSeconds": 30,
+  "AttemptedMemoryLimitMb": 4096,
+  "ConfiguredWorkerGcHeapHardLimitBytes": 268435456,
+  "CorrectnessInputs": [
+    0,
+    1,
+    10,
+    20
+  ],
+  "SearchInput": 39,
+  "ConfirmationInput": 40,
+  "SearchProtocol": "Seed=index; minimize median milliseconds; baseline seed; incorrect then iterative proposals; max evaluations/proposals=3 including seed; generations=2; proposal batch=1; fresh default EvolutionOptions otherwise.",
+  "Started": "2026-09-11T02:50:05.578922+00:00",
+  "Finished": "2026-09-11T02:52:20.1433966+00:00",
+  "Measurements": 3,
+  "Runtime": ".NET 10.0.12",
+  "RuntimeScope": "Runtime identifies the controller. WorkerRequestedFramework is read from its validated runtimeconfig; the resolved child runtime and OS limit enforcement are not independently attested.",
+  "WorkerRequestedFramework": "Microsoft.NETCore.App/10.0.0",
+  "Platform": "Microsoft Windows 10.0.26200",
+  "Architecture": "X64",
+  "ProcessorCount": 128,
+  "BinaryHashes": {
+    "AiDotNet.CSharp.Worker.dll": "A08F812C7CDED81A478A3AF37F838442B36A9A3F040999254926908C65FFC8C2",
+    "AiDotNet.CSharp.Worker.runtimeconfig.json": "2C910ABB368C1FD5C87DF680800AEB960E205E77385301BB94695311F50CF586",
+    "AiDotNet.CSharp.Worker.deps.json": "D6DEF1AF7CE4A9EA39789C66D0C4D92C324E6656D110DF2F0845F3F009F5364C",
+    "Microsoft.CodeAnalysis.dll": "55618D457128EEC582017545B8929EBF195669003B6EC737110F9519E1711D28",
+    "Microsoft.CodeAnalysis.CSharp.dll": "FC571A6647AC45B0B0DC1866B795529BB2EEB93ADF9BE97FCD5903CF482F700A",
+    "aidotnet-evolve.dll": "EE61DAEB2DCEBDFA376AB8075CA1AABC20F7843F0682F18503704F1A0E750199",
+    "AiDotNet.dll": "B437774757794A5B1A0A77FDBB85DA09B5AD0201FEDD369F12B8241A214E6767",
+    "AiDotNet.Evolution.dll": "A5C62D892576390741DBB4199B72F3B89B4A1476A406E7CB5065FC14C5487E69",
+    "dotnet.exe": "21A46F1E5235CF4E844B9DE5429F0E198B9C97A41F0503A66442F1D639CA3EE6",
+    "System.Private.CoreLib.dll": "1125ACC8106C43FC8BAD2D203C4C4485DF6182D292846C2FFF415C1040C54678"
+  },
+  "BinariesUnchanged": true,
+  "Catalog": {
+    "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980": "public static class P { public static long F(int n) { return n < 2 ? n : F(n - 1) + F(n - 2); } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+    "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88": "public static class P { public static long F(int n) { return -1; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+    "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }"
+  },
+  "Runs": [
+    {
+      "Index": 0,
+      "Status": "completed",
+      "ErrorType": null,
+      "Search": {
+        "StopReason": "EvaluationBudgetReached",
+        "StateHash": "e00a033fea5bf09c0857ae20d1d77a3962beaa1580572628163aa008b6b438fa",
+        "Counters": {
+          "Proposals": 3,
+          "EvaluationAttempts": 3,
+          "CompletedEvaluations": 2,
+          "StatusCounts": {
+            "Completed": 2,
+            "Rejected": 1
+          },
+          "AbandonedEvaluations": 0
+        },
+        "Direction": "Minimize",
+        "BestProgram": {
+          "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "NormalizedSource": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "Language": "CSharp",
+          "Description": null,
+          "Id": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "LineCount": 1
+        },
+        "BestQuality": 1282.9716,
+        "BestDescriptors": {
+          "length": 359
+        },
+        "Elites": [
+          {
+            "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+            "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+            "IsSourceTruncated": false,
+            "Language": "CSharp",
+            "Quality": 1282.9716,
+            "Descriptors": {
+              "length": 359
+            },
+            "Metrics": {},
+            "Cell": [
+              4
+            ],
+            "Island": 0,
+            "EvaluationId": 2
+          }
+        ],
+        "ArchiveCount": 1,
+        "IslandCount": 1,
+        "LlmUsage": {
+          "Proposals": 2,
+          "ChatCalls": 0,
+          "Retries": 0,
+          "AbandonedProposals": 0,
+          "ProviderErrors": 0,
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "AbandonRate": 0,
+          "CallsPerProposal": 0
+        },
+        "CheckpointPath": null,
+        "HasBestProgram": true
+      },
+      "Resources": {
+        "Spent": {
+          "cost_units": 24
+        },
+        "Reserved": {
+          "cost_units": 0
+        },
+        "Receipts": [
+          {
+            "OperationId": "evaluation/0/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/1/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 4
+              }
+            },
+            "Outcome": "Rejected",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/2/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/100/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/101/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          }
+        ],
+        "Admitted": 5,
+        "Settled": 5,
+        "Denied": 0,
+        "Unknown": 0,
+        "MaximumViolated": false,
+        "DroppedReceipts": 0
+      },
+      "Samples": [
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1581.6132,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1303.5126,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1297.16,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1282.3052,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1609.6631,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1960.0914,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1595.7472,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 0,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1266.5864,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 1,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1294.736,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 10,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1298.5711,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 20,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1375.4392,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1347.8236,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1286.7488,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1322.9246,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1334.4638,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1311.0607,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1281.4936,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1282.9716,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1625.6424,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1635.669,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1605.8254,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1299.7355,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1305.2734,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1305.7142,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        }
+      ],
+      "Confirmation": [
+        {
+          "Role": "baseline",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "Status": "Completed",
+          "MedianMilliseconds": 1625.6424
+        },
+        {
+          "Role": "winner",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "Status": "Completed",
+          "MedianMilliseconds": 1305.2734
+        }
+      ]
+    },
+    {
+      "Index": 1,
+      "Status": "completed",
+      "ErrorType": null,
+      "Search": {
+        "StopReason": "EvaluationBudgetReached",
+        "StateHash": "94585305682ee448a2bac61c504f73351c90427018e68583730f436966476605",
+        "Counters": {
+          "Proposals": 3,
+          "EvaluationAttempts": 3,
+          "CompletedEvaluations": 2,
+          "StatusCounts": {
+            "Completed": 2,
+            "Rejected": 1
+          },
+          "AbandonedEvaluations": 0
+        },
+        "Direction": "Minimize",
+        "BestProgram": {
+          "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "NormalizedSource": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "Language": "CSharp",
+          "Description": null,
+          "Id": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "LineCount": 1
+        },
+        "BestQuality": 1301.5344,
+        "BestDescriptors": {
+          "length": 359
+        },
+        "Elites": [
+          {
+            "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+            "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+            "IsSourceTruncated": false,
+            "Language": "CSharp",
+            "Quality": 1301.5344,
+            "Descriptors": {
+              "length": 359
+            },
+            "Metrics": {},
+            "Cell": [
+              4
+            ],
+            "Island": 0,
+            "EvaluationId": 2
+          }
+        ],
+        "ArchiveCount": 1,
+        "IslandCount": 1,
+        "LlmUsage": {
+          "Proposals": 2,
+          "ChatCalls": 0,
+          "Retries": 0,
+          "AbandonedProposals": 0,
+          "ProviderErrors": 0,
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "AbandonRate": 0,
+          "CallsPerProposal": 0
+        },
+        "CheckpointPath": null,
+        "HasBestProgram": true
+      },
+      "Resources": {
+        "Spent": {
+          "cost_units": 24
+        },
+        "Reserved": {
+          "cost_units": 0
+        },
+        "Receipts": [
+          {
+            "OperationId": "evaluation/0/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/1/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 4
+              }
+            },
+            "Outcome": "Rejected",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/2/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/100/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/101/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          }
+        ],
+        "Admitted": 5,
+        "Settled": 5,
+        "Denied": 0,
+        "Unknown": 0,
+        "MaximumViolated": false,
+        "DroppedReceipts": 0
+      },
+      "Samples": [
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1269.0825,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1256.5691,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1225.2844,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1218.0457,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1468.3329,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1506.7846,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1569.755,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 0,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1212.9216,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 1,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1226.7164,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 10,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1218.8258,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 20,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1203.5092,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1282.0823,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1300.0036,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1336.9271,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1326.6641,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1312.7614,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1297.4067,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1301.5344,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1289.9025,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1297.9471,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1286.2498,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1625.0147,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1631.6772,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1631.8508,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        }
+      ],
+      "Confirmation": [
+        {
+          "Role": "winner",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "Status": "Completed",
+          "MedianMilliseconds": 1289.9025
+        },
+        {
+          "Role": "baseline",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "Status": "Completed",
+          "MedianMilliseconds": 1631.6772
+        }
+      ]
+    },
+    {
+      "Index": 2,
+      "Status": "completed",
+      "ErrorType": null,
+      "Search": {
+        "StopReason": "EvaluationBudgetReached",
+        "StateHash": "fadd6e81091d3026332d0a07e572110b247432363c1e2da8c5c0c333fe4ae492",
+        "Counters": {
+          "Proposals": 3,
+          "EvaluationAttempts": 3,
+          "CompletedEvaluations": 2,
+          "StatusCounts": {
+            "Completed": 2,
+            "Rejected": 1
+          },
+          "AbandonedEvaluations": 0
+        },
+        "Direction": "Minimize",
+        "BestProgram": {
+          "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "NormalizedSource": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "Language": "CSharp",
+          "Description": null,
+          "Id": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "LineCount": 1
+        },
+        "BestQuality": 1334.3445,
+        "BestDescriptors": {
+          "length": 359
+        },
+        "Elites": [
+          {
+            "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+            "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+            "IsSourceTruncated": false,
+            "Language": "CSharp",
+            "Quality": 1334.3445,
+            "Descriptors": {
+              "length": 359
+            },
+            "Metrics": {},
+            "Cell": [
+              4
+            ],
+            "Island": 0,
+            "EvaluationId": 2
+          }
+        ],
+        "ArchiveCount": 1,
+        "IslandCount": 1,
+        "LlmUsage": {
+          "Proposals": 2,
+          "ChatCalls": 0,
+          "Retries": 0,
+          "AbandonedProposals": 0,
+          "ProviderErrors": 0,
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "AbandonRate": 0,
+          "CallsPerProposal": 0
+        },
+        "CheckpointPath": null,
+        "HasBestProgram": true
+      },
+      "Resources": {
+        "Spent": {
+          "cost_units": 24
+        },
+        "Reserved": {
+          "cost_units": 0
+        },
+        "Receipts": [
+          {
+            "OperationId": "evaluation/0/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/1/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 4
+              }
+            },
+            "Outcome": "Rejected",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/2/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/100/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/101/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          }
+        ],
+        "Admitted": 5,
+        "Settled": 5,
+        "Denied": 0,
+        "Unknown": 0,
+        "MaximumViolated": false,
+        "DroppedReceipts": 0
+      },
+      "Samples": [
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1257.4016,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1267.8431,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1261.1177,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1254.107,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1580.2258,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1594.0504,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1492.9679,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 0,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1259.3111,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 1,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1230.6084,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 10,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1242.2368,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 20,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1259.2741,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1314.8042,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1282.8421,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1284.8299,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1279.5063,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1307.4116,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1339.1745,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1334.3445,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1645.7661,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1625.9062,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1606.455,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1376.8513,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1383.8596,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1387.6084,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        }
+      ],
+      "Confirmation": [
+        {
+          "Role": "baseline",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "Status": "Completed",
+          "MedianMilliseconds": 1625.9062
+        },
+        {
+          "Role": "winner",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "Status": "Completed",
+          "MedianMilliseconds": 1383.8596
+        }
+      ]
+    },
+    {
+      "Index": 3,
+      "Status": "completed",
+      "ErrorType": null,
+      "Search": {
+        "StopReason": "EvaluationBudgetReached",
+        "StateHash": "adedc9ec0d11d49bd16ad7998ddaa66d257b7f74c4399f4539c15e0719e9e290",
+        "Counters": {
+          "Proposals": 3,
+          "EvaluationAttempts": 3,
+          "CompletedEvaluations": 2,
+          "StatusCounts": {
+            "Completed": 2,
+            "Rejected": 1
+          },
+          "AbandonedEvaluations": 0
+        },
+        "Direction": "Minimize",
+        "BestProgram": {
+          "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "NormalizedSource": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+          "Language": "CSharp",
+          "Description": null,
+          "Id": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "LineCount": 1
+        },
+        "BestQuality": 1367.4944,
+        "BestDescriptors": {
+          "length": 359
+        },
+        "Elites": [
+          {
+            "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+            "Source": "public static class P { public static long F(int n) { long a = 0, b = 1; for (int i = 0; i < n; i++) { long next = a + b; a = b; b = next; } return a; } public static void Main() { System.Console.Write(F(int.Parse(System.Console.ReadLine()!, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture)); } }",
+            "IsSourceTruncated": false,
+            "Language": "CSharp",
+            "Quality": 1367.4944,
+            "Descriptors": {
+              "length": 359
+            },
+            "Metrics": {},
+            "Cell": [
+              4
+            ],
+            "Island": 0,
+            "EvaluationId": 2
+          }
+        ],
+        "ArchiveCount": 1,
+        "IslandCount": 1,
+        "LlmUsage": {
+          "Proposals": 2,
+          "ChatCalls": 0,
+          "Retries": 0,
+          "AbandonedProposals": 0,
+          "ProviderErrors": 0,
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "AbandonRate": 0,
+          "CallsPerProposal": 0
+        },
+        "CheckpointPath": null,
+        "HasBestProgram": true
+      },
+      "Resources": {
+        "Spent": {
+          "cost_units": 24
+        },
+        "Reserved": {
+          "cost_units": 0
+        },
+        "Receipts": [
+          {
+            "OperationId": "evaluation/0/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/1/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 4
+              }
+            },
+            "Outcome": "Rejected",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/2/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 7
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/100/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          },
+          {
+            "OperationId": "evaluation/101/attempt/1/stage/-1",
+            "Stage": "Evaluation",
+            "Attempt": 1,
+            "Estimated": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Maximum": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Charged": {
+              "Amounts": {
+                "cost_units": 3
+              }
+            },
+            "Outcome": "Completed",
+            "ExceededEstimate": false,
+            "ExceededMaximum": false
+          }
+        ],
+        "Admitted": 5,
+        "Settled": 5,
+        "Denied": 0,
+        "Unknown": 0,
+        "MaximumViolated": false,
+        "DroppedReceipts": 0
+      },
+      "Samples": [
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1283.2451,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1265.4645,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1273.1383,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1271.1627,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1576.5814,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1616.8953,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 0,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1593.3268,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 0,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1312.1751,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 1,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1280.4979,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 10,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1274.2484,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "002e58012e33206d17ff027ab73d8bca808574a1efbbde8a25300a29fc1beb88",
+          "EvaluationId": 1,
+          "Input": 20,
+          "Status": "failed",
+          "ElapsedMilliseconds": 1229.0195,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 0,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1306.3765,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 1,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1312.3451,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 10,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1344.0611,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "correctness",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 20,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1441.7614,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1403.3442,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1332.0886,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "search",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 2,
+          "Input": 39,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1367.4944,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1327.632,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1327.8348,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "EvaluationId": 100,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1372.4827,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1746.7493,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1747.0551,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        },
+        {
+          "Phase": "confirmation",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "EvaluationId": 101,
+          "Input": 40,
+          "Status": "passed",
+          "ElapsedMilliseconds": 1730.4098,
+          "ExitCode": 0,
+          "ExecutionErrorCode": null,
+          "StdOutTruncated": false
+        }
+      ],
+      "Confirmation": [
+        {
+          "Role": "winner",
+          "GenomeId": "c8a77c37f921d0a6a0f3d407fb153aadf1bf234aa6bba8d82b0cc616d365bf9d",
+          "Status": "Completed",
+          "MedianMilliseconds": 1327.8348
+        },
+        {
+          "Role": "baseline",
+          "GenomeId": "fd377be3d17f57c567374723718243c4ec580b4aca2fdd623e8e0a894f092980",
+          "Status": "Completed",
+          "MedianMilliseconds": 1746.7493
+        }
+      ]
+    }
+  ],
+  "ExportProvenance": {
+    "OriginalReport": "TestResults/authored-runtime-configured/report.json",
+    "OriginalSha256": "7fa3e8d6bcc6bf41a3dc7fbae536b946cf67535f51b9b730925a617c8ef8eac7",
+    "Transform": "BinaryHashes keys reduced to unique filenames to omit local absolute paths; JSON whitespace/numeric spelling normalized. Every run, sample, receipt, source and hash value retained."
+  }
+}

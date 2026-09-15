@@ -40,8 +40,8 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 /// </remarks>
 public sealed class ProgramRunOutputWriter
 {
-    private const int InfoSchemaVersion = 1;
-    private const int ProgramSchemaVersion = 1;
+    private const int InfoSchemaVersion = 2;
+    private const int ProgramSchemaVersion = 2;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -136,7 +136,7 @@ public sealed class ProgramRunOutputWriter
             ProgramFileName = Path.GetFileName(programPath),
             SourceLength = genome.Source.Length,
             SourceLineCount = genome.LineCount,
-            SourceSha256 = EvolutionHash.Compute(genome.NormalizedSource),
+            SourceSha256 = EvolutionHash.Compute(genome.Source),
             IsSourceTruncated = truncated,
             Description = Bound(genome.Description),
             Status = evaluation.Status.ToString(),
@@ -225,7 +225,7 @@ public sealed class ProgramRunOutputWriter
             Source = bounded,
             IsSourceTruncated = truncated,
             SourceLength = genome.Source.Length,
-            SourceSha256 = EvolutionHash.Compute(genome.NormalizedSource),
+            SourceSha256 = EvolutionHash.Compute(genome.Source),
             Description = Bound(genome.Description),
             IsDescriptionTruncated = genome.Description is { } full && full.Length > MaxDescriptionLength,
             Status = evaluation.Status.ToString(),

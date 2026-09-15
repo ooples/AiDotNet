@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- Reuse the existing test-only friend identity; this subset runs independently, not beside
+         the main AiDotNetTests assembly in the same test-host process. -->
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Xunit.SkippableFact" />
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" Link="GlobalUsings.cs" />
+    <Compile Include="../AiDotNet.Tests/Helpers/MockFullModel.cs" Link="Helpers/MockFullModel.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Evolution/**/*.cs" Link="Evolution/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/Evolution/EvolutionFacadeIntegrationTests.cs" Link="Facade/EvolutionFacadeIntegrationTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/AutoML/MapElitesAutoMLIntegrationTests.cs" Link="Facade/MapElitesAutoMLIntegrationTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/Configuration/EvolutionYamlConfigTests.cs" Link="Facade/EvolutionYamlConfigTests.cs" />
+  </ItemGroup>
+</Project>

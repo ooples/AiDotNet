@@ -9,7 +9,7 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ProgramSynthesis.Execution;
 
-/// <summary>Runs an untrusted candidate program in an isolated, resource-limited child process.</summary>
+/// <summary>Runs a candidate program in a child process with output, concurrency and wall-clock controls.</summary>
 /// <remarks>
 /// <para>
 /// This is the execution boundary the core library ships: it needs no container runtime, no network, and no extra
@@ -19,18 +19,23 @@ namespace AiDotNet.ProgramSynthesis.Execution;
 /// streams redirected, and deletes the workspace afterwards — including after a timeout, a kill, or a crash.
 /// </para>
 /// <para>
-/// Five limits are enforced rather than advertised. The child inherits a pinned <c>PATH</c> and a scrubbed
-/// environment, so it cannot resolve an executable from an attacker-controlled directory and cannot read the API
-/// keys, tokens, or connection strings held in the host's environment. Standard output and standard error are
+/// The child inherits a pinned <c>PATH</c> and a scrubbed environment rather than the host's environment variables.
+/// Use trusted absolute executable paths; these controls do not prevent executable replacement or access to
+/// credentials stored in files or services. Standard output and standard error are
 /// drained concurrently into fixed-size buffers, so a program that prints without stopping is truncated and
 /// reported as truncated instead of exhausting host memory, and it never blocks on a full pipe. A wall-clock limit
 /// cancels the run and kills the whole process tree — <c>Kill(entireProcessTree)</c> where the framework offers it,
-/// with a <c>taskkill /T /F</c> fallback on Windows — so a detached grandchild cannot outlive its parent. Memory is
-/// capped by a Windows job object with a kill-on-close limit, or by <c>ulimit -v</c> inside a POSIX shell;
-/// <see cref="CanEnforceMemoryLimit"/> reports honestly when neither mechanism is available on this machine. A
+/// with a <c>taskkill /T /F</c> fallback on Windows. Process-tree termination is best effort and is not containment
+/// of arbitrary detached or reparented descendants. Memory limits are attempted through a Windows job object or
+/// <c>ulimit -v</c> inside a POSIX shell; creation, assignment or shell-limit failure does not fail the run closed.
+/// <see cref="CanEnforceMemoryLimit"/> reports platform capability, not per-execution enforcement. A
 /// semaphore bounds how many executions run at once, and the wall-clock limit starts only after that semaphore is
 /// acquired, so a queued candidate is never charged for time it spent waiting.
 /// </para>
+/// <para><b>Security boundary:</b> This runner does not restrict filesystem access, networking, operating-system
+/// identity or system calls. It must itself run inside an independently provisioned least-privilege OS/container
+/// boundary for hostile candidates. Do not expose secrets, sealed test answers or unrelated runs to that boundary.
+/// A working directory, scrubbed environment and separate process do not provide those protections.</para>
 /// <para>
 /// Ordinary failure is never an exception. A program that will not compile, exits non-zero, times out, prints too
 /// much, or names a language with no configured interpreter comes back as a <see cref="ProgramExecuteResponse"/>
@@ -42,10 +47,10 @@ namespace AiDotNet.ProgramSynthesis.Execution;
 /// </para>
 /// <para><b>For Beginners:</b> When a language model writes a program, the only way to find out whether it works is
 /// to run it — and that is exactly the dangerous part, because nobody reviewed the code. This class runs it the
-/// careful way: in a separate process, in a throwaway folder, with a stopwatch, a memory ceiling, a limit on how
+/// in a separate process, in a throwaway folder, with a stopwatch, attempted memory limits, and a limit on how
 /// much it may print, and with your environment variables hidden from it. If the program hangs, it and everything
-/// it started are killed. If it misbehaves, you get a result object describing what went wrong instead of an
-/// exception, so an evolution run simply scores that candidate poorly and carries on.</para>
+/// it started are targeted for termination. If it misbehaves, you get a result object describing what went wrong.
+/// Untrusted code additionally needs filesystem/network isolation configured outside this runner.</para>
 /// </remarks>
 public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDisposable
 {
@@ -97,12 +102,13 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
         }
     }
 
-    /// <summary>Gets whether this machine can enforce the configured memory limit on a sandboxed child.</summary>
+    /// <summary>Gets whether this platform has a memory-limit mechanism that the runner can attempt to use.</summary>
     /// <remarks>
     /// <c>true</c> on Windows, where a job object applies the cap, and on any system carrying a POSIX shell at
     /// <c>/bin/sh</c>, where <c>ulimit -v</c> does. When this is <c>false</c> the wall-clock limit and the output
     /// caps still apply, but memory is not bounded; the property exists so a caller can say so rather than assume a
-    /// protection that is not there.
+    /// protection that is not there. A true value does not prove successful job creation, assignment or shell-limit
+    /// application for any particular execution, and the response does not currently attest that enforcement.
     /// </remarks>
     public bool CanEnforceMemoryLimit => WindowsHost || File.Exists(PosixShellPath);
 
