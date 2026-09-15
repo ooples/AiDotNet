@@ -8,7 +8,7 @@ using AiDotNet.Evolution.Programs;
 namespace AiDotNet.Evolution.CSharp;
 
 /// <summary>Serial, bounded compiler-guided proposals; all policy state is explicit and all failed work remains charged.</summary>
-internal sealed class CSharpProposalSource<T> : ICostedEvolutionProposalSource<ProgramGenome>
+internal sealed class CSharpProposalSource<T> : ICostedProgramProposalSource
 {
     private const int MaximumAuditBytes = 2 * 1024 * 1024;
     private const string Instructions = "Optimize the supplied C# algorithm while preserving its required behavior. " +
@@ -77,7 +77,7 @@ internal sealed class CSharpProposalSource<T> : ICostedEvolutionProposalSource<P
     public string VersionHash { get; }
     internal string CostUnitVersionHash => _options.CostUnitVersionHash;
     internal EvolutionResources MaximumProposalResources { get; }
-    internal ProgramEvolutionLlmUsage GetUsage() => new(Interlocked.Read(ref _proposals), Interlocked.Read(ref _calls),
+    public ProgramEvolutionLlmUsage GetUsage() => new(Interlocked.Read(ref _proposals), Interlocked.Read(ref _calls),
         Interlocked.Read(ref _retries), Interlocked.Read(ref _abandoned), Interlocked.Read(ref _providerErrors),
         Interlocked.Read(ref _inputTokens), Interlocked.Read(ref _outputTokens));
 

@@ -476,6 +476,9 @@ public sealed class ProgramEvolutionOptions
 
         if (CustomVariation is not null && _provenance?.Enabled == true)
             throw new ArgumentException("Custom variation owns proposal provenance; disable the built-in provenance sink.", nameof(CustomVariation));
+        if (CustomVariation is IProgramResourceLedgerProvider owner &&
+            (ResourceAccounting is null || !ReferenceEquals(owner.Ledger, ResourceAccounting.Ledger)))
+            throw new ArgumentException("Program variation and evaluation must use the same live resource ledger.", nameof(CustomVariation));
         if (CustomVariation is IEvolutionProposalCostProvider costed && ResourceAccounting is { } resources &&
             !string.Equals(costed.CostUnitVersionHash, resources.CostUnitVersionHash, StringComparison.Ordinal))
             throw new ArgumentException("Proposal and evaluator cost-unit semantics must match.", nameof(ResourceAccounting));

@@ -9,6 +9,12 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 
+if (args.Length != 0 && (args.Length != 2 || args[0] != "--output"))
+    throw new ArgumentException("Usage: EvolutionNoise [--output new-report.json]");
+// A dedicated stream keeps native-library stdout diagnostics out of machine-readable evidence.
+// CreateNew refuses an existing report before any observations run.
+using var reportStream = args.Length == 2 ? new FileStream(args[1], FileMode.CreateNew, FileAccess.Write) : null;
+
 // Frozen before execution: two screening presets, six roots, no fitted thresholds or optional stopping.
 // These are trusted built-in configurations, never dynamically executed program text.
 ulong[] seeds = { 1103, 2207, 3301, 4409, 5519, 6607 };
@@ -126,11 +132,17 @@ foreach (ulong seed in seeds)
         PresetApproved = screen.IsComplete && screen.Entries.Any(row => row.Passed) && screen.Audit is not null && screen.Audit.FalseRejectionRateUpper <= .1,
         Checks = checks, Invocations = invocations, Ledger = ledger.Snapshot(), Observations = observations });
 }
-Console.WriteLine(JsonSerializer.Serialize(new
+var reportJson = JsonSerializer.Serialize(new
 {
     Schema = "us06-consumer-noise-study-v1", Valid = valid, Seeds = seeds, ScreeningThresholds = thresholds, Runs = rows,
     Assemblies = new[] { typeof(ProgramNoiseEvaluationSession).Assembly.Location, typeof(EvolutionIncumbentChallenge<>).Assembly.Location,
         typeof(Matrix<>).Assembly.Location }.ToDictionary(path => Path.GetFileName(path)!, path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))),
     Interpretation = "Fresh AiDotNet RidgeRegression training and actual trusted sorting on fixed roots/presets. Report failures and wide intervals. No fitted thresholds, arbitrary code execution, external data or paid calls. Evidence applies to these workloads/environment, not universal production superiority."
-}, new JsonSerializerOptions { WriteIndented = true }));
+}, new JsonSerializerOptions { WriteIndented = true });
+if (reportStream is null) Console.WriteLine(reportJson);
+else
+{
+    using var writer = new StreamWriter(reportStream, new System.Text.UTF8Encoding(false));
+    writer.Write(reportJson);
+}
 return valid ? 0 : 1;

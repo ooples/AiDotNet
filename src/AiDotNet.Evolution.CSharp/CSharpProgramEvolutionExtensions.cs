@@ -38,28 +38,29 @@ public static class CSharpProgramEvolutionExtensions
         program.Validate();
         if (program.Engine.Resume || program.Engine.CheckpointInterval > 0)
             throw new NotSupportedException("Compiler accounting requires coordinated ledger/engine checkpoints; automatic resume is not yet supported.");
-        var source = CSharpProposalSource<T>.Create(client, compiler, program, resources.Ledger);
-        program.CustomVariation = new CompilerVariation<T>(source, resources.Ledger);
+        program.CustomVariation = CreateCSharpProgramVariation(client, program, compiler, resources);
         return builder.ConfigureProgramEvolution(program);
     }
 
-    private sealed class CompilerVariation<T> : IProgramVariationOperator, IOutcomeAwareVariationOperator<ProgramGenome>, IEvolutionProposalCostProvider
+    /// <summary>Creates a metered compiler-guided arm for an explicitly configured program portfolio.</summary>
+    /// <remarks>Charges compiler setup immediately. Use distinct compiler IDs and audit directories per arm,
+    /// the same evaluator/proposal cost identity, and a caller-owned shared ledger. Compilation, repairs and
+    /// audit work remain in the proposal receipt. No model is contacted during construction.</remarks>
+    public static MeteredProgramVariationOperator CreateCSharpProgramVariation<T>(IChatClient<T> client,
+        ProgramEvolutionOptions programOptions, CSharpProgramEvolutionOptions compilerOptions, ProgramEvolutionResourceOptions resources)
     {
-        private readonly CSharpProposalSource<T> _source;
-        private readonly ResourceMeteredVariationOperator<ProgramGenome> _metered;
-        internal CompilerVariation(CSharpProposalSource<T> source, EvolutionResourceLedger ledger)
-        {
-            _source = source;
-            _metered = new(source, ledger, source.MaximumProposalResources, source.CostUnitVersionHash);
-        }
-        public string Id => _metered.Id;
-        public string VersionHash => _metered.VersionHash;
-        public string CostUnitVersionHash => _metered.CostUnitVersionHash;
-        public ValueTask<ProgramGenome> ProposeAsync(EvolutionVariationContext<ProgramGenome> context, CancellationToken cancellationToken = default) => _metered.ProposeAsync(context, cancellationToken);
-        public void Observe(EvolutionEvaluation evaluation, EvolutionArchiveInsertionResult? insertionResult) => _metered.Observe(evaluation, insertionResult);
-        public string CaptureState() => _metered.CaptureState();
-        public void RestoreState(string state) => _metered.RestoreState(state);
-        public EvolutionProposalCost GetProposalCost(long generation) => _metered.GetProposalCost(generation);
-        public ProgramEvolutionLlmUsage GetUsage() => _source.GetUsage();
+        if (client is null) throw new ArgumentNullException(nameof(client));
+        if (programOptions is null) throw new ArgumentNullException(nameof(programOptions));
+        if (compilerOptions is null) throw new ArgumentNullException(nameof(compilerOptions));
+        if (resources is null) throw new ArgumentNullException(nameof(resources));
+        var compiler = compilerOptions.Snapshot();
+        if (!string.Equals(compiler.CostUnitVersionHash, resources.CostUnitVersionHash, StringComparison.Ordinal))
+            throw new ArgumentException("Compiler and evaluator cost-unit identities must match.", nameof(resources));
+        var program = programOptions.Clone();
+        if (program.Language == ProgramLanguage.Generic) program.Language = ProgramLanguage.CSharp;
+        if (program.Language != ProgramLanguage.CSharp) throw new ArgumentException("CSharp program language is required.", nameof(programOptions));
+        program.Validate();
+        var source = CSharpProposalSource<T>.Create(client, compiler, program, resources.Ledger);
+        return new(source, resources.Ledger, source.MaximumProposalResources, source.CostUnitVersionHash);
     }
 }

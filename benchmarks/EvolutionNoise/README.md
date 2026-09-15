@@ -34,9 +34,11 @@ across all study rows is not claimed. The per-challenge family and each audit ha
 
 ```powershell
 dotnet build benchmarks/EvolutionNoise/EvolutionNoise.csproj -c Release -p:UseLocalEvolution=true -p:EvolutionProjectPath=C:/path/to/Evolution/src/AiDotNet.Evolution/AiDotNet.Evolution.csproj -m:2
-dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll > noise-study.json
+dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll --output noise-study.json
 ./benchmarks/EvolutionNoise/Verify-Study.ps1 -Report noise-study.json
 ```
+
+Use a new report path: `--output` refuses overwrites before measurements start and isolates JSON from native-library stdout diagnostics. A failed run may leave an incomplete report; retain it and choose a new path.
 
 The JSON contains all raw fitness draws/timing observations, failed/incomplete reports, selected reject identities,
 policy hashes, sample contexts, ledger totals and hashes of actual consumer/core/tensor assemblies.
