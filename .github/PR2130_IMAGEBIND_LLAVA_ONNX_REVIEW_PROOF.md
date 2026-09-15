@@ -70,8 +70,21 @@ From the repository root, build normally so the matching native assets are
 copied (the local low-disk copy suppression is intentionally not used here):
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+$compositeReplayResults = "artifacts/pr2130-imagebind-llava/replay-$([Guid]::NewGuid().ToString('N'))"
 dotnet build tests/AiDotNet.CompositeOnnxReview/AiDotNet.CompositeOnnxReview.csproj -c Release -f net10.0 -m:1 -p:UseSharedCompilation=false
-dotnet test tests/AiDotNet.CompositeOnnxReview/AiDotNet.CompositeOnnxReview.csproj -c Release -f net10.0 --no-build --no-restore
+if ($LASTEXITCODE -ne 0) { throw 'Composite ONNX build failed' }
+dotnet test tests/AiDotNet.CompositeOnnxReview/AiDotNet.CompositeOnnxReview.csproj -c Release -f net10.0 --no-build --no-restore `
+    --logger 'trx;LogFileName=imagebind-llava-blip-native-closure-after.trx' --results-directory $compositeReplayResults
+if ($LASTEXITCODE -ne 0) { throw 'Composite ONNX tests failed' }
+[xml]$compositeReport = Get-Content -LiteralPath "$compositeReplayResults/imagebind-llava-blip-native-closure-after.trx" -ErrorAction Stop
+$compositeCounters = $compositeReport.TestRun.ResultSummary.Counters
+$compositeResults = @($compositeReport.TestRun.Results.UnitTestResult)
+if ([int]$compositeCounters.total -ne 80 -or [int]$compositeCounters.passed -ne 80 -or
+    [int]$compositeCounters.failed -ne 0 -or [int]$compositeCounters.notExecuted -ne 0 -or
+    $compositeResults.Count -ne 80 -or @($compositeResults | Where-Object outcome -ne 'Passed').Count -ne 0) {
+    throw 'Unexpected composite ONNX census; expected 80 passed, zero failed/skipped'
+}
 ```
 
 The other focused projects are `AiDotNet.OnnxOptionsReview`,

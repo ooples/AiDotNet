@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -21,7 +23,8 @@ public sealed class CustomObjectiveTrainingContractTests
         Assert.False(model.Extra.IsShapeResolved);
         model.Step(Input(), Target(), optimizer);
         Assert.True(model.Extra.IsShapeResolved);
-        Assert.True(optimizer.ParameterElements >= 5);
+        Assert.Equal(5, optimizer.ParameterElements);
+        Assert.Equal(2, optimizer.ParameterTensors);
         Assert.True(optimizer.NonzeroGradients > 0);
         Assert.True(optimizer.ParameterChanged);
         Assert.Equal(1, model.ForwardCalls);
@@ -175,8 +178,13 @@ public sealed class CustomObjectiveTrainingContractTests
 
     private static Tensor<double> Target() => Tensor<double>.CreateDefault(new[] { 2, 1 }, 0.4);
 
-    private sealed class ObjectiveNetwork : NeuralNetworkBase<double>
+    // [batch, 4] features in, [batch, 1] out through the single-output Extra branch.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class ObjectiveNetwork : NeuralNetworkBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         public override bool SupportsTraining => true;
         internal FullyConnectedLayer<double> Extra { get; } = new(1, (AiDotNet.Interfaces.IActivationFunction<double>)new IdentityActivation<double>());
         internal DropoutLayer<double> Dropout { get; }
@@ -211,8 +219,13 @@ public sealed class CustomObjectiveTrainingContractTests
             }, optimizer);
     }
 
-    private sealed class CompositeObjectiveNetwork : NeuralNetworkBase<double>
+    // [batch, 4] features in, [batch, 1] out through CompositeBranch.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class CompositeObjectiveNetwork : NeuralNetworkBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         internal CompositeBranch Branch { get; } = new();
         internal bool TrainBiasOnly { get; set; }
         public override bool SupportsTraining => true;
@@ -238,8 +251,25 @@ public sealed class CustomObjectiveTrainingContractTests
                 => new MeanSquaredErrorLoss<double>().ComputeTapeLoss(Branch.Forward(currentInput), currentTarget), optimizer);
     }
 
-    private sealed class CompositeBranch : LayerBase<double>
+    /// <summary>Batch passes through and the feature axis becomes one output, for a rank-1 or rank-2 input.</summary>
+    private static IReadOnlyList<OutputAxisContract>? SingleFeatureOutput(int inputRank)
     {
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(1));
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), features },
+            _ => null,
+        };
+    }
+
+    // A 4 -> 1 feature map, declared like FullyConnectedLayer.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class CompositeBranch : LayerBase<double>, IShapeContract
+    {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         internal FullyConnectedLayer<double> Dense { get; } = new(1,
             (AiDotNet.Interfaces.IActivationFunction<double>)new IdentityActivation<double>());
         internal ObservedDropout Dropout { get; } = new();

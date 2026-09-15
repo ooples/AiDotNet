@@ -34,7 +34,7 @@ public sealed class AudioVisualCorrespondenceExecutionTests
     }
 
     [Fact]
-    public void CustomLayersRetainPredictionWithoutInventingModalityRoles()
+    public void CustomLayersDrivePredictWhileEveryModalityApiKeepsWorking()
     {
         var architecture = CreateArchitecture();
         architecture.Layers.Add(new DenseLayer<float>(2, (AiDotNet.Interfaces.IActivationFunction<float>?)null));
@@ -42,13 +42,101 @@ public sealed class AudioVisualCorrespondenceExecutionTests
         var prediction = model.Predict(Features());
         Assert.Equal(new[] { 2, 2 }, prediction.Shape.ToArray());
         Assert.Single(model.Layers);
-        Assert.Equal(model.Layers.Sum(layer => layer.ParameterCount), model.ParameterCount);
+
+        // The custom list replaces only Predict's stack; the adapters, shared encoder, trunk and heads still exist.
+        var audio = Audio();
+        var frames = new[] { Frame() };
+        AssertUnitEmbedding(model.GetAudioEmbedding(audio, 16000), 16);
+        AssertUnitEmbedding(model.GetVisualEmbedding(frames), 16);
+        var (offset, _) = model.CheckSynchronization(audio, frames);
+        Assert.False(double.IsNaN(offset) || double.IsInfinity(offset));
+        AssertFinite(model.SeparateAudioByVisual(audio, frames[0]));
+
         var parameters = model.GetParameters().ToArray();
-        Assert.NotEmpty(parameters);
         Assert.Equal(model.ParameterCount, parameters.Length);
-        var error = Assert.Throws<NotSupportedException>(() => model.GetAudioEmbedding(Audio(), 16000));
-        Assert.Contains("custom Architecture.Layers", error.Message);
-        Assert.Equal(parameters, model.GetParameters().ToArray());
+        Assert.True(model.ParameterCount > model.Layers.Sum(layer => layer.ParameterCount),
+            "The modality path must be registered alongside the custom layers, not hidden state.");
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void CorrespondenceHeadWidthFollowsTheDeclaredOutputSize(int outputSize)
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
+            NeuralNetworkTaskType.BinaryClassification, inputSize: 32, outputSize: outputSize) { RandomSeed = 1337 };
+        using var model = new AudioVisualCorrespondenceNetwork<float>(architecture, CreateOptions(16));
+        Assert.Equal(new[] { 2, outputSize }, model.Predict(Features()).Shape.ToArray());
+    }
+
+    [Fact]
+    public void SynchronizationTrainingMovesThePredictedOffsetTowardTheTarget()
+    {
+        using var model = CreateModel(16);
+        var audio = Audio();
+        var frames = new[] { Frame() };
+        const double target = 0.5;
+        double before = Math.Abs(model.CheckSynchronization(audio, frames).OffsetSeconds - target);
+        model.LearnSynchronization(new[] { audio }, new[] { frames.AsEnumerable() }, new[] { target }, epochs: 20);
+        double after = Math.Abs(model.CheckSynchronization(audio, frames).OffsetSeconds - target);
+        Assert.True(after < before, $"The synchronization error did not shrink: {before} -> {after}.");
+        Assert.Throws<ArgumentException>(() => model.LearnSynchronization(
+            new[] { audio }, new[] { frames.AsEnumerable() }, new[] { double.NaN }, epochs: 1));
+    }
+
+    [Fact]
+    public void SeparationTrainingReducesTheMaskLossAndRejectsMasksOfTheWrongWidth()
+    {
+        using var model = new CorrespondenceProbe(16);
+        var audio = Audio();
+        var frame = Frame();
+        var mask = new Tensor<float>(new[] { 128 });
+        for (int bin = 0; bin < 128; bin++) mask[bin] = bin < 64 ? 1f : 0f;
+        model.LearnSeparation(new[] { audio }, new[] { frame }, new[] { mask }, epochs: 1);
+        float first = model.ObservedLoss;
+        model.LearnSeparation(new[] { audio }, new[] { frame }, new[] { mask }, epochs: 20);
+        Assert.True(model.ObservedLoss < first, $"The separation loss did not fall: {first} -> {model.ObservedLoss}.");
+        AssertFinite(model.SeparateAudioByVisual(audio, frame));
+        Assert.Throws<ArgumentException>(() => model.LearnSeparation(
+            new[] { audio }, new[] { frame }, new[] { new Tensor<float>(new[] { 2 }) }, epochs: 1));
+    }
+
+    [Fact]
+    public void ScenePrototypesClassifyTheirOwnExamplesAndSurviveSerialization()
+    {
+        // The shipped network type: the scene prototypes must survive its own serialization and clone plan.
+        using var model = CreateModel(16);
+        var musicAudio = Audio();
+        var musicFrames = new[] { Frame() };
+        var speechAudio = new Tensor<float>(musicAudio.Shape.ToArray());
+        for (int index = 0; index < speechAudio.Length; index++)
+            speechAudio[index] = (float)(Math.Sin(index * 0.071) + 0.2 * Math.Cos(index * 0.023));
+        var speechFrame = new Tensor<float>(musicFrames[0].Shape.ToArray());
+        for (int index = 0; index < speechFrame.Length; index++) speechFrame[index] = 1.0f - musicFrames[0][index];
+        var speechFrames = new[] { speechFrame };
+        var labels = new[] { "music", "speech" };
+
+        model.LearnScene(musicAudio, musicFrames, "music");
+        model.LearnScene(speechAudio, speechFrames, "speech");
+        var music = model.ClassifyScene(musicAudio, musicFrames, labels);
+        var speech = model.ClassifyScene(speechAudio, speechFrames, labels);
+        Assert.True(music["music"] > music["speech"], "A clip must be closest to its own label's prototype.");
+        Assert.True(speech["speech"] > speech["music"], "A clip must be closest to its own label's prototype.");
+        Assert.InRange(music.Values.Sum(), 0.99999f, 1.00001f);
+
+        var error = Assert.Throws<InvalidOperationException>(() => model.ClassifyScene(musicAudio, musicFrames, new[] { "music", "rain" }));
+        Assert.Contains("rain", error.Message);
+
+        var state = model.Serialize();
+        using var restored = CreateModel(16);
+        restored.Deserialize(state);
+        var restoredMusic = restored.ClassifyScene(musicAudio, musicFrames, labels);
+        Assert.InRange(Math.Abs(restoredMusic["music"] - music["music"]), 0f, 1e-5f);
+
+        // A clone's prototypes are its own.
+        using var clone = Assert.IsAssignableFrom<AudioVisualCorrespondenceNetwork<float>>(model.Clone());
+        clone.LearnScene(speechAudio, speechFrames, "music");
+        Assert.InRange(Math.Abs(model.ClassifyScene(musicAudio, musicFrames, labels)["music"] - music["music"]), 0f, 1e-6f);
     }
 
     [Theory]
@@ -197,6 +285,8 @@ public sealed class AudioVisualCorrespondenceExecutionTests
                 Assert.InRange(confidence, 0.0f, 1.00001f);
                 break;
             case PairTask.SceneClassification:
+                model.LearnScene(audio, frames, "music");
+                model.LearnScene(audio, frames, "speech");
                 var classes = model.ClassifyScene(audio, frames, new[] { "music", "speech" });
                 Assert.Equal(2, classes.Count);
                 Assert.InRange(classes.Values.Sum(), 0.99999f, 1.00001f);

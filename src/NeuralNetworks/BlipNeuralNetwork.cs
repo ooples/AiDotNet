@@ -107,6 +107,17 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.Vector
         | OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
 
+    // The exported BLIP text decoder (Li et al. 2022; the Hugging Face BLIP export) predicts next-token logits from
+    // the running token ids while cross-attending to the vision transformer's token states.
+    private const string VisionHiddenStatesOutput = "last_hidden_state";
+    private const string DecoderInputIds = "input_ids";
+    private const string DecoderAttentionMask = "attention_mask";
+    private const string DecoderEncoderStates = "encoder_hidden_states";
+    private const string DecoderLogitsOutput = "logits";
+
+    /// <summary>The decoder's declared encoder-state width, or null when the export leaves it symbolic.</summary>
+    private readonly int? _decoderStateWidth;
+
     /// <summary>
     /// Path to the vision encoder ONNX model file (for ONNX mode).
     /// </summary>
@@ -349,15 +360,33 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
             var visionGraph = new OnnxGraphSignature(OnnxModelRole.ImageEncoder, visionEncoder);
             var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textEncoder);
-            // The existing caption path does not execute this decoder. Expose its actual
-            // signature without pretending that native decoder options configure it.
             var decoderGraph = new OnnxGraphSignature(OnnxModelRole.TextDecoder, textDecoder);
             visionGraph.RequireInputSet("pixel_values");
             visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
             textGraph.RequireInputSet("input_ids", "attention_mask");
             textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
             textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
-            string visionOutput = visionGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
+            // The vision graph now also exposes token states, so the pooled embedding is chosen by name rather than
+            // by declaration order.
+            string visionOutput = visionGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts,
+                "image_embeds", "pooler_output");
+
+            // Caption and VQA decoding execute the decoder, so its whole contract is validated here instead of
+            // failing at the first generation call.
+            int? visionStateWidth = visionGraph.RequireTokenFeatureOutput(VisionHiddenStatesOutput);
+            decoderGraph.RequireInputSet(DecoderInputIds, DecoderAttentionMask, DecoderEncoderStates);
+            decoderGraph.RequireInputAxes(DecoderInputIds, OnnxTensors.TensorElementType.Int64, 1, null);
+            decoderGraph.RequireInputAxes(DecoderAttentionMask, OnnxTensors.TensorElementType.Int64, 1, null);
+            decoderGraph.RequireInputAxes(DecoderEncoderStates, OnnxTensors.TensorElementType.Float, 1, null, null);
+            _decoderStateWidth = decoderGraph.Inputs[DecoderEncoderStates].Dimensions[2] ?? visionStateWidth;
+            if (decoderGraph.Inputs[DecoderEncoderStates].Dimensions[2] is int decoderWidth
+                && visionStateWidth is int visionWidth && decoderWidth != visionWidth)
+            {
+                throw new ArgumentException(
+                    $"ONNX {OnnxModelRole.TextDecoder} input '{DecoderEncoderStates}' has width {decoderWidth}, but the " +
+                    $"{OnnxModelRole.ImageEncoder} output '{VisionHiddenStatesOutput}' has width {visionWidth}.", "options");
+            }
+            decoderGraph.RequireLogitsOutput(DecoderLogitsOutput, _tokenizer.VocabularySize);
             string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
             var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
                 _imageSize, _tokenizer.VocabularySize, null, 3, visionGraph, textGraph, decoderGraph);
@@ -1314,11 +1343,109 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// </summary>
     private Vector<T> GetImageEmbeddingOnnx(Tensor<T> image)
     {
-        if (_visionEncoder is null)
+        var encoder = _visionEncoder ?? throw new InvalidOperationException("Vision encoder not initialized.");
+        var inputs = new List<NamedOnnxValue>
         {
-            throw new InvalidOperationException("Vision encoder not initialized.");
+            NamedOnnxValue.CreateFromTensor("pixel_values", CreatePixelValuesOnnx(image))
+        };
+
+        using var results = encoder.Run(inputs, new[] { _visionOutputName });
+        var output = results.First().AsTensor<float>();
+
+        return ExtractEmbeddingFromOnnxTensor(output, OnnxModelRole.ImageEncoder);
+    }
+
+    /// <summary>
+    /// Runs the vision encoder once and copies its token states, which the text decoder cross-attends to.
+    /// </summary>
+    private OnnxTensors.DenseTensor<float> RunVisionHiddenStatesOnnx(Tensor<T> image)
+    {
+        var encoder = _visionEncoder ?? throw new InvalidOperationException("Vision encoder not initialized.");
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("pixel_values", CreatePixelValuesOnnx(image))
+        };
+
+        using var results = encoder.Run(inputs, new[] { VisionHiddenStatesOutput });
+        var states = results.First().AsTensor<float>();
+        var dimensions = states.Dimensions;
+        if (dimensions.Length != 3 || dimensions[0] != 1 || dimensions[1] <= 0 || dimensions[2] <= 0
+            || (_decoderStateWidth is int width && dimensions[2] != width))
+        {
+            throw new InvalidOperationException(
+                $"ONNX {OnnxModelRole.ImageEncoder} output '{VisionHiddenStatesOutput}' has shape " +
+                $"[{string.Join(", ", dimensions.ToArray())}], expected [1, tokens, {_decoderStateWidth?.ToString() ?? "width"}].");
         }
 
+        // The session owns the result buffer; the decoder runs after it is released, so the states are copied.
+        var copy = new OnnxTensors.DenseTensor<float>(new[] { 1, dimensions[1], dimensions[2] });
+        for (int token = 0; token < dimensions[1]; token++)
+            for (int column = 0; column < dimensions[2]; column++)
+                copy[0, token, column] = states[0, token, column];
+        return copy;
+    }
+
+    /// <summary>
+    /// Greedy next-token decoding through the exported text decoder. Appends to <paramref name="tokens"/> until the
+    /// decoder emits EOS, <paramref name="maxNewTokens"/> tokens have been added, or the sequence reaches
+    /// MaxSequenceLength.
+    /// </summary>
+    private void DecodeGreedyOnnx(List<int> tokens, OnnxTensors.DenseTensor<float> visionStates, int maxNewTokens)
+    {
+        var decoder = _textDecoder ?? throw new InvalidOperationException("ONNX text decoder not initialized.");
+        int vocabulary = _tokenizer.VocabularySize;
+        int eos = GetEosTokenId();
+        int budget = Math.Min(maxNewTokens, _maxSequenceLength - tokens.Count);
+        for (int step = 0; step < budget; step++)
+        {
+            var inputIds = new OnnxTensors.DenseTensor<long>(new[] { 1, tokens.Count });
+            var attentionMask = new OnnxTensors.DenseTensor<long>(new[] { 1, tokens.Count });
+            for (int position = 0; position < tokens.Count; position++)
+            {
+                inputIds[0, position] = tokens[position];
+                attentionMask[0, position] = 1;
+            }
+
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor(DecoderInputIds, inputIds),
+                NamedOnnxValue.CreateFromTensor(DecoderAttentionMask, attentionMask),
+                NamedOnnxValue.CreateFromTensor(DecoderEncoderStates, visionStates)
+            };
+
+            using var results = decoder.Run(inputs, new[] { DecoderLogitsOutput });
+            var logits = results.First().AsTensor<float>();
+            var dimensions = logits.Dimensions;
+            if (dimensions.Length != 3 || dimensions[0] != 1 || dimensions[1] <= 0 || dimensions[2] != vocabulary)
+            {
+                throw new InvalidOperationException(
+                    $"ONNX {OnnxModelRole.TextDecoder} output '{DecoderLogitsOutput}' has shape " +
+                    $"[{string.Join(", ", dimensions.ToArray())}], expected [1, sequence, {vocabulary}].");
+            }
+
+            int last = dimensions[1] - 1;
+            int next = -1;
+            float best = 0f;
+            for (int token = 0; token < vocabulary; token++)
+            {
+                float value = logits[0, last, token];
+                if (float.IsNaN(value) || float.IsInfinity(value))
+                    throw new InvalidOperationException($"ONNX {OnnxModelRole.TextDecoder} produced a non-finite logit for token {token}.");
+                if (next < 0 || value > best)
+                {
+                    best = value;
+                    next = token;
+                }
+            }
+
+            if (next == eos) break;
+            tokens.Add(next);
+        }
+    }
+
+    /// <summary>Validates one [3,H,W] or [1,3,H,W] image against the loaded geometry and copies it to <c>pixel_values</c>.</summary>
+    private OnnxTensors.DenseTensor<float> CreatePixelValuesOnnx(Tensor<T> image)
+    {
         if (image.Rank != 3 && image.Rank != 4)
             throw new ArgumentException("ONNX image must have shape [3,H,W] or [1,3,H,W].", nameof(image));
         if (image.Rank == 4 && image.Shape[0] != 1)
@@ -1343,24 +1470,26 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             }
         }
 
-        var inputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor("pixel_values", inputTensor)
-        };
-
-        using var results = _visionEncoder.Run(inputs, new[] { _visionOutputName });
-        var output = results.First().AsTensor<float>();
-
-        return ExtractEmbeddingFromOnnxTensor(output, OnnxModelRole.ImageEncoder);
+        return inputTensor;
     }
 
     /// <summary>
-    /// Generates caption using ONNX decoder.
+    /// Generates a caption with the exported text decoder, conditioned on the vision encoder's token states.
     /// </summary>
+    /// <remarks>
+    /// Decoding is greedy, as on the native path: <paramref name="numBeams"/> must be positive but beam search is not
+    /// performed. The caption starts from BOS and stops at EOS, after <paramref name="maxLength"/> new tokens, or at
+    /// MaxSequenceLength.
+    /// </remarks>
     private string GenerateCaptionOnnx(Tensor<T> image, int maxLength, int numBeams)
     {
-        // Simplified implementation - actual ONNX captioning would need the decoder model
-        return "[Caption generation requires ONNX decoder model]";
+        if (maxLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxLength), "Caption length must be positive.");
+        if (numBeams <= 0) throw new ArgumentOutOfRangeException(nameof(numBeams), "Beam count must be positive.");
+
+        var visionStates = RunVisionHiddenStatesOnnx(image);
+        var tokens = new List<int> { GetBosTokenId() };
+        DecodeGreedyOnnx(tokens, visionStates, maxLength);
+        return DecodeTokens(tokens);
     }
 
     /// <summary>
@@ -1375,12 +1504,30 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     }
 
     /// <summary>
-    /// Answers question using ONNX.
+    /// Answers a question by continuing the question tokens with the exported text decoder.
     /// </summary>
+    /// <remarks>
+    /// The question is encoded without padding: the decoder reads every supplied id as text, so pad tokens would be
+    /// decoded as part of the prompt. Only the generated continuation is returned.
+    /// </remarks>
     private string AnswerQuestionOnnx(Tensor<T> image, string question, int maxLength)
     {
-        // Simplified implementation
-        return "[VQA requires ONNX decoder model]";
+        if (question is null) throw new ArgumentNullException(nameof(question));
+        if (maxLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxLength), "Answer length must be positive.");
+
+        var visionStates = RunVisionHiddenStatesOnnx(image);
+        var encoded = _tokenizer.Encode(question, new EncodingOptions
+        {
+            MaxLength = _maxSequenceLength,
+            Padding = false,
+            Truncation = true,
+            AddSpecialTokens = true
+        });
+        var tokens = new List<int>(encoded.TokenIds);
+        if (tokens.Count == 0) tokens.Add(GetBosTokenId());
+        int promptLength = tokens.Count;
+        DecodeGreedyOnnx(tokens, visionStates, maxLength);
+        return DecodeTokens(tokens.Skip(promptLength));
     }
 
     /// <summary>
@@ -1544,14 +1691,22 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
             return new ModelMetadata<T>
             {
+                // The common metadata contract holds in both execution modes; only the layer inventory, which
+                // an ONNX graph set does not have, is native-only.
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     [nameof(OnnxConfiguration)] = configuration,
+                    ["ModelType"] = nameof(BlipNeuralNetwork<T>),
+                    ["TaskType"] = Architecture.TaskType.ToString(),
+                    ["ParameterCount"] = ParameterCount,
+                    ["InputShape"] = new[] { 3, _imageSize, _imageSize },
+                    ["OutputShape"] = new[] { _embeddingDimension },
                     ["EmbeddingDimension"] = _embeddingDimension,
                     ["MaxSequenceLength"] = _maxSequenceLength,
                     ["ImageSize"] = _imageSize,
                     ["UseNativeMode"] = false
-                }
+                },
+                ModelData = SerializeForMetadata()
             };
         }
         return new ModelMetadata<T>

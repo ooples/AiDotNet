@@ -82,6 +82,12 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private readonly string _audioOutputName = string.Empty;
     private const OnnxEmbeddingLayouts EmbeddingLayouts = OnnxEmbeddingLayouts.Vector
         | OnnxEmbeddingLayouts.BatchedVector | OnnxEmbeddingLayouts.FirstToken;
+
+    /// <summary>
+    /// Mel bins in the audio spectrogram. The ONNX audio graph's frequency axis and the feature extractor that fills
+    /// it must agree, so both read this one value.
+    /// </summary>
+    private const int AudioMelBins = 128;
     private readonly string? _imageEncoderPath;
     private readonly string? _textEncoderPath;
     private readonly string? _audioEncoderPath;
@@ -255,7 +261,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             audioGraph.RequireInputSet("input_values");
             // Waveform duration determines the time axis at execution; it is not the
             // native encoder's AudioMaxDuration/AudioSampleRate capacity calculation.
-            audioGraph.RequireInputAxes("input_values", OnnxTensors.TensorElementType.Float, 1, 1, 128, null);
+            audioGraph.RequireInputAxes("input_values", OnnxTensors.TensorElementType.Float, 1, 1, AudioMelBins, null);
             string imageOutput = imageGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
             string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
             string audioOutput = audioGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
@@ -539,8 +545,11 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
         else
         {
-            // Fall back to image encoding in ONNX mode
-            return EncodeImageOnnx(thermalImage);
+            // Fall back to image encoding in ONNX mode. A thermal map is single-channel and the image graph takes
+            // three, so it is expanded exactly as the depth path does; passing it through unchanged failed the
+            // image-shape contract on every call.
+            var thermalAs3D = ExpandToThreeChannels(thermalImage);
+            return EncodeImageOnnx(thermalAs3D);
         }
     }
 
@@ -1194,7 +1203,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         // Simplified mel spectrogram computation
         int numSamples = waveform.Shape.Length == 1 ? waveform.Shape[0] : waveform.Shape[1];
         int hopLength = 160;
-        int numMelBins = 128;
+        int numMelBins = AudioMelBins;
         int numFrames = Math.Max(1, numSamples / hopLength);
 
         var melSpec = Tensor<T>.CreateDefault([numMelBins, numFrames], NumOps.Zero);

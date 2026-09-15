@@ -242,11 +242,29 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             _textOutputName = textOutputName;
             OnnxConfiguration = configuration;
         }
-        catch
+        catch (Exception constructionFailure)
         {
-            try { textEncoder?.Dispose(); }
-            finally { videoEncoder?.Dispose(); }
+            // Release each session independently so one failed Dispose neither skips the other nor replaces the
+            // construction failure the caller needs to see.
+            ReleaseAfterFailedConstruction(textEncoder, constructionFailure);
+            ReleaseAfterFailedConstruction(videoEncoder, constructionFailure);
             throw;
+        }
+    }
+
+    /// <summary>Disposes a session created by a constructor that is failing, without masking that failure.</summary>
+    private static void ReleaseAfterFailedConstruction(InferenceSession? session, Exception constructionFailure)
+    {
+        if (session is null) return;
+        try
+        {
+            session.Dispose();
+        }
+        catch (Exception cleanupFailure)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"VideoCLIP: disposing an ONNX session after construction failed ({constructionFailure.GetType().Name}) " +
+                $"also failed: {cleanupFailure}");
         }
     }
 

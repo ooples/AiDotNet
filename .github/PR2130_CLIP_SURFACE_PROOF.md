@@ -91,13 +91,26 @@ Actual-library cohort under `artifacts/pr2130-clip-surface/native-final/bin/AiDo
 ## Reproduce
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+$clipReplayResults = "artifacts/pr2130-clip-surface/replay-$([Guid]::NewGuid().ToString('N'))"
+function Assert-ClipReplayCensus([string]$Path, [int]$Expected) {
+    [xml]$report = Get-Content -LiteralPath $Path -ErrorAction Stop
+    $counters = $report.TestRun.ResultSummary.Counters
+    $results = @($report.TestRun.Results.UnitTestResult)
+    if ([int]$counters.total -ne $Expected -or [int]$counters.passed -ne $Expected -or
+        [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0 -or
+        $results.Count -ne $Expected -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+        throw "Unexpected CLIP replay census in $Path; expected $Expected passed, zero failed/skipped"
+    }
+}
 foreach ($clipTfm in @('net10.0', 'net8.0', 'net471')) {
     dotnet test tests/AiDotNet.OptionsContractTests/AiDotNet.OptionsContractTests.csproj `
         -c Release -f $clipTfm --artifacts-path artifacts/pr2130-clip-surface/scalar-build `
         -m:1 -p:UseSharedCompilation=false `
         --logger "trx;LogFileName=clip-depth-final-$clipTfm.trx" `
-        --results-directory artifacts/pr2130-clip-surface/results -v:quiet
+        --results-directory $clipReplayResults -v:quiet
     if ($LASTEXITCODE -ne 0) { throw "CLIP/depth scalar suite failed on $clipTfm" }
+    Assert-ClipReplayCensus "$clipReplayResults/clip-depth-final-$clipTfm.trx" 421
 }
 $env:AIDOTNET_FORCE_CPU = '1'
 $env:DOTNET_gcServer = '0'
@@ -112,8 +125,9 @@ pwsh -NoProfile -File .github/scripts/harden-xunit-runner.ps1 -RunnerJson "$clip
 if ($LASTEXITCODE -ne 0) { throw 'CLIP runner hardening failed.' }
 dotnet vstest "$clipNativeBin/AiDotNetTests.dll" `
     '--Logger:trx;LogFileName=clip-depth-native-final.trx' `
-    '--ResultsDirectory:artifacts/pr2130-clip-surface/results'
+    "--ResultsDirectory:$clipReplayResults"
 if ($LASTEXITCODE -ne 0) { throw 'CLIP native cohort failed.' }
+Assert-ClipReplayCensus "$clipReplayResults/clip-depth-native-final.trx" 553
 ```
 
 ## Adversarial review and limits

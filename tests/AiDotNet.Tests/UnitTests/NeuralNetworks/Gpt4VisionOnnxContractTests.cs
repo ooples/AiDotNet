@@ -151,6 +151,29 @@ public sealed class Gpt4VisionOnnxContractTests
         Assert.Contains("input_ids", error.Message);
     }
 
+    [Fact]
+    public void StaticTextContextWithAttentionMaskEncodesShortInputsLikeTheExactContext()
+    {
+        using var fixture = new OnnxVisionLanguageFixture();
+        var options = Options();
+        Gpt4VisionNeuralNetwork<float> Build(bool dynamicInputs) => new(Architecture(),
+            fixture.WriteEncoder(EncoderKind.Image, image: options.ImageSize, embedding: options.VisionDim,
+                dynamicInputs: dynamicInputs, outputKind: OutputKind.FirstTokenEmbedding),
+            fixture.WriteEncoder(EncoderKind.Text, context: options.MaxSequenceLength, dynamicInputs: dynamicInputs,
+                outputKind: OutputKind.FirstTokenEmbedding, textInputKind: TextInputKind.TokensAndMask),
+            ClipTokenizerFactory.CreateShapeCompatibleForTesting(512, new[] { "a" }), options);
+
+        // A fixed-context graph that takes attention_mask is padded and masked, so a short prompt works and matches
+        // the same graph family run at exactly the prompt's length.
+        using var fixedContext = Build(dynamicInputs: false);
+        using var exactContext = Build(dynamicInputs: true);
+        var padded = fixedContext.GetTextEmbedding("a");
+        var exact = exactContext.GetTextEmbedding("a");
+        Assert.Equal(exact.Length, padded.Length);
+        for (int index = 0; index < exact.Length; index++) Assert.Equal(exact[index], padded[index]);
+        Assert.Throws<ArgumentException>(() => fixedContext.GetTextEmbedding(string.Join(" ", Enumerable.Repeat("a", 20))));
+    }
+
     [Theory]
     [InlineData("a")]
     [InlineData("a a a a a a")]

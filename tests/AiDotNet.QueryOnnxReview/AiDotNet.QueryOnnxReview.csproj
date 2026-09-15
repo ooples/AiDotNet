@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+    <!-- Real ONNX inference is executed only on net10.0 (the proof replay and CI); listing net8.0/net471 claimed
+         coverage those frameworks never received. Their compatibility build is the main test project's job. -->
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>

@@ -33758,14 +33758,21 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>Builds the shared Dense encoder and its separate correspondence fusion path.</summary>
+    /// <param name="embeddingDimension">Width of the shared embedding.</param>
+    /// <param name="numEncoderLayers">Dense/LayerNorm/Tanh encoder blocks.</param>
+    /// <param name="outputSize">Width of the correspondence head that ends the fusion path; the paper's 2-way
+    /// correspondence softmax by default, and a model passes its declared output size.</param>
     internal static (List<ILayer<T>> Encoder, List<ILayer<T>> Fusion) CreateAudioVisualCorrespondenceLayout(
         int embeddingDimension,
-        int numEncoderLayers)
+        int numEncoderLayers,
+        int outputSize = 2)
     {
         if (embeddingDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
         if (numEncoderLayers <= 0)
             throw new ArgumentOutOfRangeException(nameof(numEncoderLayers));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
 
         var encoder = new List<ILayer<T>>();
         IActivationFunction<T>? linear = null;
@@ -33790,7 +33797,7 @@ public static partial class LayerHelper<T>
             new DenseLayer<T>(fusionWidth, linear),
             new LayerNormalizationLayer<T>(fusionWidth),
             new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>()),
-            new DenseLayer<T>(2, linear)
+            new DenseLayer<T>(outputSize, linear)
         };
         return (encoder, fusion);
     }

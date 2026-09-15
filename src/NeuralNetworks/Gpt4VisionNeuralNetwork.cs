@@ -85,6 +85,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
     private readonly string? _languageModelPath;
     private string _visionOutputName = string.Empty;
     private string _textOutputName = string.Empty;
+    private bool _textAcceptsAttentionMask;
 
     #endregion
 
@@ -287,7 +288,11 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
             var textGraph = new OnnxGraphSignature(OnnxModelRole.TextEncoder, textSession);
             visionGraph.RequireInputSet("pixel_values");
             visionGraph.RequireInput("pixel_values", OnnxTensors.TensorElementType.Float, 1, 3, _imageSize, _imageSize);
-            textGraph.RequireInputSet("input_ids");
+            bool textAcceptsAttentionMask = textGraph.CanSupplyInputSet("input_ids", "attention_mask");
+            if (textAcceptsAttentionMask)
+                textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
+            else
+                textGraph.RequireInputSet("input_ids");
             textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, _maxSequenceLength);
             string visionOutput = visionGraph.RequireEmbeddingOutput(_visionEmbeddingDim, OnnxEmbeddingLayouts.TokenFeatures);
             string textOutput = textGraph.RequireEmbeddingOutput(_embeddingDimension, OnnxEmbeddingLayouts.TokenFeatures);
@@ -297,6 +302,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
             _languageModel = textSession;
             _visionOutputName = visionOutput;
             _textOutputName = textOutput;
+            _textAcceptsAttentionMask = textAcceptsAttentionMask;
             OnnxConfiguration = configuration;
         }
         catch
@@ -1145,23 +1151,50 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         if (tokens.Length == 0 || tokens.Length > _maxSequenceLength)
             throw new ArgumentException($"ONNX token count must be between 1 and {_maxSequenceLength}.", nameof(tokens));
         var configuration = OnnxConfiguration ?? throw new InvalidOperationException("ONNX graph configuration is missing.");
-        configuration.Graphs[OnnxModelRole.TextEncoder].RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, tokens.Length);
+        var textGraph = configuration.Graphs[OnnxModelRole.TextEncoder];
+        int tokenCount = tokens.Length;
 
-        var inputData = new long[tokens.Length];
-        for (int i = 0; i < tokens.Length; i++)
+        // A graph that takes attention_mask can be padded to its fixed context: the mask removes the padding from
+        // attention, as ClipNeuralNetwork does. A token-only graph cannot tell padding from text, so padding it would
+        // change every real token's encoding; it receives exactly the caller's tokens, and a fixed-length token-only
+        // export accepts only inputs of that length.
+        int sequenceLength = _textAcceptsAttentionMask && textGraph.Inputs["input_ids"].Dimensions[1] is int fixedLength
+            ? fixedLength
+            : tokenCount;
+        textGraph.RequireInput("input_ids", OnnxTensors.TensorElementType.Int64, 1, sequenceLength);
+
+        var inputData = new long[sequenceLength];
+        for (int i = 0; i < tokenCount; i++)
         {
             inputData[i] = (long)NumOps.ToDouble(tokens[i]);
         }
 
-        var inputTensor = new OnnxTensors.DenseTensor<long>(inputData, new[] { 1, tokens.Length });
+        var inputTensor = new OnnxTensors.DenseTensor<long>(inputData, new[] { 1, sequenceLength });
         var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
         };
+        if (_textAcceptsAttentionMask)
+        {
+            textGraph.RequireInput("attention_mask", OnnxTensors.TensorElementType.Int64, 1, sequenceLength);
+            var mask = new long[sequenceLength];
+            for (int i = 0; i < tokenCount; i++) mask[i] = 1;
+            inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask",
+                new OnnxTensors.DenseTensor<long>(mask, new[] { 1, sequenceLength })));
+        }
 
         using var results = session.Run(inputs, new[] { _textOutputName });
         var output = results.First().AsTensor<float>();
-        return OnnxEmbeddingContract.ReadTokenFeatures<T>(output, _embeddingDimension, OnnxModelRole.TextEncoder);
+        var features = OnnxEmbeddingContract.ReadTokenFeatures<T>(output, _embeddingDimension, OnnxModelRole.TextEncoder);
+        if (sequenceLength == tokenCount || features.Rows != sequenceLength) return features;
+
+        // Per-position features of the padded context: keep the real tokens only, so padding is neither pooled into
+        // the text embedding nor appended to the multimodal sequence.
+        var realTokens = Matrix<T>.CreateDefault(tokenCount, features.Columns, NumOps.Zero);
+        for (int row = 0; row < tokenCount; row++)
+            for (int column = 0; column < features.Columns; column++)
+                realTokens[row, column] = features[row, column];
+        return realTokens;
     }
 
     private Matrix<T> CombineImageTextFeatures(List<Matrix<T>> imageFeatures, Tensor<T> tokens)

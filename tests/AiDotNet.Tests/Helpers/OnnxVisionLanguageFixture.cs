@@ -28,8 +28,12 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         OutputKind outputKind = OutputKind.FixedEmbedding,
         TensorProto.Types.DataType tokenType = TensorProto.Types.DataType.Int64,
         int channels = 3, bool extraRequiredInput = false, bool auxiliarySequenceOutput = false,
-        TextInputKind textInputKind = TextInputKind.TokensAndMask, int audioBins = 128)
+        TextInputKind textInputKind = TextInputKind.TokensAndMask, int audioBins = 128,
+        int hiddenStatesWidth = 0)
     {
+        if (hiddenStatesWidth > 0 && (kind != EncoderKind.Image || outputKind is OutputKind.SpatialTokenFeatures
+            or OutputKind.ContextTokenFeatures or OutputKind.TokenSequence))
+            throw new ArgumentException("Hidden-state outputs are written for pooled image encoders only.", nameof(hiddenStatesWidth));
         var builder = new OnnxGraphBuilder(new OnnxExportOptions { OpsetVersion = 17 });
         string valueInput;
         string outputName;
@@ -124,6 +128,17 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
                 Enumerable.Range(1, embedding * repeats).Select(value => (float)value).ToArray(), outputShape);
             builder.AddOp("Add", new[] { "input_sum", offsets }, new[] { outputName });
             builder.AddOutput(TensorInfo(outputName, TensorProto.Types.DataType.Float, outputShape));
+
+            if (hiddenStatesWidth > 0)
+            {
+                // Two token states, each input_sum + (1..width): the sign of their total follows the pixels, which is
+                // what WriteTextDecoder's logits key on.
+                string stateOffsets = builder.AddFloatInitializer("state_offsets",
+                    Enumerable.Range(1, 2 * hiddenStatesWidth).Select(value => (float)value).ToArray(),
+                    new[] { 1, 2, hiddenStatesWidth });
+                builder.AddOp("Add", new[] { "input_sum", stateOffsets }, new[] { "last_hidden_state" });
+                builder.AddOutput(TensorInfo("last_hidden_state", TensorProto.Types.DataType.Float, new[] { 1, 2, hiddenStatesWidth }));
+            }
         }
 
         if (auxiliarySequenceOutput)
@@ -153,6 +168,43 @@ internal sealed class OnnxVisionLanguageFixture : IDisposable
         {
             Name = "to", Type = AttributeProto.Types.AttributeType.Int, I = (long)TensorProto.Types.DataType.Float
         });
+    }
+
+    /// <summary>
+    /// A BLIP-style text decoder: inputs <c>input_ids</c>, <c>attention_mask</c> and <c>encoder_hidden_states</c>,
+    /// output <c>logits [1, 1, vocabulary]</c>. The logits are <c>sum(encoder_hidden_states) * w</c> with
+    /// <c>w[positiveToken] = 1</c> and <c>w[negativeToken] = -1</c>, so greedy decoding emits
+    /// <paramref name="positiveToken"/> for bright images and <paramref name="negativeToken"/> for dark ones.
+    /// </summary>
+    internal string WriteTextDecoder(int vocabulary, int positiveToken, int negativeToken, int hiddenWidth = 4,
+        bool omitEncoderStates = false, int? declaredVocabulary = null)
+    {
+        var builder = new OnnxGraphBuilder(new OnnxExportOptions { OpsetVersion = 17 });
+        builder.AddInput(TensorInfo("input_ids", TensorProto.Types.DataType.Int64, new[] { 1, -1 }));
+        builder.AddInput(TensorInfo("attention_mask", TensorProto.Types.DataType.Int64, new[] { 1, -1 }));
+        // The logits the graph computes and the logits it declares have the same width, as in any real
+        // export. A graph whose initializer contradicted its declared output would be silently re-shaped by
+        // ONNX Runtime's lenient shape merge, hiding the declared width from signature validation.
+        int logitsWidth = declaredVocabulary ?? vocabulary;
+        var weights = new float[logitsWidth];
+        if (positiveToken < logitsWidth) weights[positiveToken] = 1f;
+        if (negativeToken < logitsWidth) weights[negativeToken] = -1f;
+        string weightName = builder.AddFloatInitializer("token_weights", weights, new[] { 1, 1, logitsWidth });
+        if (omitEncoderStates)
+        {
+            builder.AddOp("Identity", new[] { weightName }, new[] { "logits" });
+        }
+        else
+        {
+            builder.AddInput(TensorInfo("encoder_hidden_states", TensorProto.Types.DataType.Float, new[] { 1, -1, hiddenWidth }));
+            var reduce = builder.AddOp("ReduceSum", new[] { "encoder_hidden_states" }, new[] { "state_sum" });
+            reduce.Attribute.Add(new AttributeProto { Name = "keepdims", Type = AttributeProto.Types.AttributeType.Int, I = 0 });
+            builder.AddOp("Mul", new[] { "state_sum", weightName }, new[] { "logits" });
+        }
+        builder.AddOutput(TensorInfo("logits", TensorProto.Types.DataType.Float, new[] { 1, -1, declaredVocabulary ?? vocabulary }));
+        string path = Path.Combine(_directory, "decoder-" + _nextFile++ + ".onnx");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) builder.WriteTo(stream);
+        return path;
     }
 
     internal string WriteEmbeddedLanguageModel(int width = 4, bool extraRequiredInput = false)

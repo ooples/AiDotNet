@@ -105,7 +105,8 @@ public sealed class LLaVAOnnxContractTests
         options.ImageSize = 7;
         using var model = Create(fixture, options);
         using var image = new Tensor<float>(new[] { 3, 7, 7 });
-        Assert.Equal(4, model.GetImageEmbedding(image).Length);
+        image.Fill(2f);
+        AssertNormalizedFixtureEmbedding(model.GetImageEmbedding(image), image.Length * 2, firstOffset: 3);
         Assert.Equal(2, model.NumVisualTokens);
     }
 
@@ -143,11 +144,20 @@ public sealed class LLaVAOnnxContractTests
         using var model = new LLaVANeuralNetwork<float>(Architecture(), fixture.WriteEncoder(EncoderKind.Image),
             fixture.WriteEmbeddedLanguageModel(), ClipTokenizerFactory.CreateShapeCompatibleForTesting(512, new[] { "a" }), Options());
         using var image = new Tensor<float>(new[] { 3, 16, 16 });
+        image.Fill(2f);
         using var features = model.ExtractVisualFeatures(image);
         Assert.Equal(new[] { 1, 4 }, features.Shape);
         Assert.Equal(1, model.NumVisualTokens);
-        Assert.Equal(4, model.GetImageEmbedding(image).Length);
+        AssertNormalizedFixtureEmbedding(model.GetImageEmbedding(image), image.Length * 2, firstOffset: 1);
         Assert.NotNull(model.OnnxConfiguration);
+    }
+
+    private static void AssertNormalizedFixtureEmbedding(Vector<float> embedding, double pixelSum, int firstOffset)
+    {
+        Assert.Equal(4, embedding.Length);
+        double norm = Math.Sqrt(Enumerable.Range(firstOffset, 4).Sum(offset => (pixelSum + offset) * (pixelSum + offset)));
+        for (int column = 0; column < 4; column++)
+            Assert.Equal((pixelSum + column + firstOffset) / norm, embedding[column], 6);
     }
 
     private static LLaVANeuralNetwork<float> Create(OnnxVisionLanguageFixture fixture, LLaVAOptions options, bool dynamicInput = false)

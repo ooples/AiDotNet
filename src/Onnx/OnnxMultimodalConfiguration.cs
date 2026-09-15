@@ -130,8 +130,11 @@ public sealed class OnnxGraphSignature
 
     internal string RequireEmbeddingOutput(int width, OnnxEmbeddingLayouts layouts, params string[] supportedNames)
     {
-        string? name = _outputNames.FirstOrDefault(output => supportedNames.Length == 0
-            || supportedNames.Contains(output, StringComparer.Ordinal));
+        // supportedNames is a priority list. Scanning the graph's declaration order instead let an export that
+        // declares last_hidden_state before image_embeds silently return hidden-state tokens for a pooled embedding.
+        string? name = supportedNames.Length == 0
+            ? _outputNames.FirstOrDefault()
+            : supportedNames.FirstOrDefault(candidate => _outputNames.Contains(candidate, StringComparer.Ordinal));
         if (name is null) throw Conflict("has no output supported by this embedding wrapper");
         var output = Outputs[name];
         if (!output.IsTensor) throw Conflict($"output '{name}' is a {output.ValueType} value, not an embedding tensor");
@@ -140,6 +143,39 @@ public sealed class OnnxGraphSignature
         string? mismatch = OnnxEmbeddingContract.FindMismatch(output.Dimensions, width, layouts);
         if (mismatch is not null) throw Conflict($"output '{name}' {mismatch}");
         return name;
+    }
+
+    /// <summary>
+    /// Requires a single-example Float token-feature output <c>[1, tokens, width]</c> and returns its declared width,
+    /// or null when the export leaves that axis symbolic.
+    /// </summary>
+    internal int? RequireTokenFeatureOutput(string name)
+    {
+        var output = RequireFloatOutput(name, 3, "[batch, tokens, width]");
+        if (output.Dimensions[2] is int width && width <= 0)
+            throw Conflict($"output '{name}' width axis is {width}");
+        return output.Dimensions[2];
+    }
+
+    /// <summary>Requires single-example Float next-token logits <c>[1, sequence, vocabularySize]</c>.</summary>
+    internal void RequireLogitsOutput(string name, int vocabularySize)
+    {
+        var output = RequireFloatOutput(name, 3, "[batch, sequence, vocabulary]");
+        if (output.Dimensions[2] is int vocabulary && vocabulary != vocabularySize)
+            throw Conflict($"output '{name}' vocabulary axis is {vocabulary}, but the tokenizer has {vocabularySize} tokens");
+    }
+
+    private OnnxValueSignature RequireFloatOutput(string name, int rank, string layout)
+    {
+        if (!Outputs.TryGetValue(name, out var output)) throw Conflict($"does not declare output '{name}'");
+        if (!output.IsTensor) throw Conflict($"output '{name}' is a {output.ValueType} value, not a tensor");
+        if (output.ElementType != TensorElementType.Float)
+            throw Conflict($"output '{name}' must contain Float values, not {output.ElementType}");
+        if (output.Dimensions.Count != rank)
+            throw Conflict($"output '{name}' has rank {output.Dimensions.Count}, expected {layout}");
+        if (output.Dimensions[0] is int batch && batch != 1)
+            throw Conflict($"output '{name}' batch axis is {batch}, but the wrapper runs one example");
+        return output;
     }
 
     private ArgumentException Conflict(string detail) => new($"ONNX {Role} {detail}.", "options");
