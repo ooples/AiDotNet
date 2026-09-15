@@ -66,7 +66,10 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         _hiddenDim = hiddenDim;
         _trainingClassCount = options.NumClasses;
         _trainingQueryCount = numQueries;
-        _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1));
+        var lossOptions = options.SetPredictionLoss ?? DetrSetLossOptions.ForDetr();
+        if (lossOptions.ClassificationLoss != SetPredictionClassificationLoss.SoftmaxCrossEntropy)
+            throw new ArgumentException("DETR's class head is a softmax with a no-object class; use a softmax cross-entropy set loss.", nameof(options));
+        _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1), lossOptions);
 
         // Initialize backbone (ResNet-50 by default)
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);

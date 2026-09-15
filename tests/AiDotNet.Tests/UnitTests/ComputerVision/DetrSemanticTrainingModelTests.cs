@@ -17,7 +17,7 @@ public sealed class DetrSemanticTrainingModelTests
     public DetrSemanticTrainingModelTests() => TestModuleInitializer.EnsureInitialized();
 
     public enum StepMutation { NoUpdate, DoubleUpdate, RawMse }
-    public enum UnsupportedFamily { Yolo8, Yolo9, Yolo10, Yolo11, RtDetr, Dino, FasterRcnn, CascadeRcnn }
+    public enum UnsupportedFamily { FasterRcnn, CascadeRcnn }
 
     [Theory(Timeout = 180000)]
     [InlineData(false, 0.0)]
@@ -133,22 +133,18 @@ public sealed class DetrSemanticTrainingModelTests
     [Fact]
     public void CapabilityDoesNotClaimOtherDetectorLossFamiliesOrSilentlyFallback()
     {
-        Assert.True(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(typeof(DETR<double>)));
-        foreach (Type family in new[] { typeof(RTDETR<double>), typeof(DINO<double>), typeof(YOLOv8<double>), typeof(FasterRCNN<double>) })
+        foreach (Type family in new[] { typeof(DETR<double>), typeof(RTDETR<double>), typeof(DINO<double>),
+            typeof(YOLOv8<double>), typeof(YOLOv9<double>), typeof(YOLOv10<double>), typeof(YOLOv11<double>) })
+            Assert.True(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(family));
+        foreach (Type family in new[] { typeof(FasterRCNN<double>), typeof(CascadeRCNN<double>) })
             Assert.False(typeof(IDetectionTrainingModel<double>).IsAssignableFrom(family));
-        using var model = new YOLOv8<double>(ObjectDetectionPositiveFixture<double>.CreateOptions());
+        using var model = new FasterRCNN<double>(ObjectDetectionPositiveFixture<double>.CreateOptions());
         var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>().ConfigureModel(model);
         Assert.Throws<NotSupportedException>(() => builder.TrainDetections(new Tensor<double>(new[] { 1, 3, 64, 64 }), EmptyBatch()));
         Assert.Equal(0, model.GetLastLoss());
     }
 
     [Theory(Timeout = 180000)]
-    [InlineData(UnsupportedFamily.Yolo8)]
-    [InlineData(UnsupportedFamily.Yolo9)]
-    [InlineData(UnsupportedFamily.Yolo10)]
-    [InlineData(UnsupportedFamily.Yolo11)]
-    [InlineData(UnsupportedFamily.RtDetr)]
-    [InlineData(UnsupportedFamily.Dino)]
     [InlineData(UnsupportedFamily.FasterRcnn)]
     [InlineData(UnsupportedFamily.CascadeRcnn)]
     public async Task FacadeRejectsEveryUnimplementedFamilyBeforeParameterOrLossMutation(UnsupportedFamily family)
@@ -157,12 +153,6 @@ public sealed class DetrSemanticTrainingModelTests
         var options = ObjectDetectionPositiveFixture<double>.CreateOptions();
         using ObjectDetectorBase<double> model = family switch
         {
-            UnsupportedFamily.Yolo8 => new YOLOv8<double>(options),
-            UnsupportedFamily.Yolo9 => new YOLOv9<double>(options),
-            UnsupportedFamily.Yolo10 => new YOLOv10<double>(options),
-            UnsupportedFamily.Yolo11 => new YOLOv11<double>(options),
-            UnsupportedFamily.RtDetr => new RTDETR<double>(options),
-            UnsupportedFamily.Dino => new DINO<double>(options),
             UnsupportedFamily.FasterRcnn => new FasterRCNN<double>(options),
             UnsupportedFamily.CascadeRcnn => new CascadeRCNN<double>(options),
             _ => throw new ArgumentOutOfRangeException(nameof(family))

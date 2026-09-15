@@ -348,6 +348,9 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
     /// <param name="inputChannels">Input channels for each feature level.</param>
     /// <param name="numClasses">Number of detection classes.</param>
     /// <param name="regMax">Maximum value for regression distribution (default 16).</param>
+    /// <summary>Distribution bins predicted per box side.</summary>
+    internal int RegMax => _regMax;
+
     public YOLOv8Head(int[] inputChannels, int numClasses, int regMax = 16)
     {
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();

@@ -1,33 +1,39 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Solvers.Assignment;
 using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.ComputerVision.Detection.Losses;
 
-/// <summary>DETR set prediction loss with exact Hungarian assignment.</summary>
+/// <summary>DETR-family set prediction loss with exact Hungarian assignment.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Foreground queries are assigned using negative class probability, center-format L1 distance and
-/// negative GIoU. Every query receives cross-entropy supervision, including unmatched queries and
-/// empty images. The no-object class has weight 0.1. Classification uses a weighted mean; matched
-/// L1 and GIoU sums are normalized by the total foreground target count across the local batch.
+/// Foreground queries are assigned with a weighted sum of a classification cost, center-format L1
+/// distance and negative GIoU. The matched boxes receive L1 and GIoU losses normalized by the
+/// total foreground target count across the local batch. Every query receives classification
+/// supervision, including unmatched queries and empty images.
 /// </para>
 /// <para>
-/// Reference: Carion et al., "End-to-End Object Detection with Transformers", ECCV 2020.
-/// Only the supplied final prediction heads are supervised; intermediate decoder losses are not
-/// fabricated. More targets than queries in an image are rejected rather than silently dropped.
+/// Three classification forms are supported (<see cref="DetrSetLossOptions.ClassificationLoss"/>):
+/// DETR's softmax cross-entropy with a down-weighted no-object class (Carion et al. 2020); the
+/// sigmoid focal loss of DINO (Zhang et al. 2022), normalized by the target count; and RT-DETR's
+/// IoU-aware varifocal loss (Zhao et al. 2023; Zhang et al. 2021), whose matched class target is the
+/// IoU of the matched predicted box. Sigmoid heads are matched with the focal classification cost
+/// of Deformable DETR's reference matcher.
+/// </para>
+/// <para>
+/// Only the supplied final prediction heads are supervised; intermediate decoder, query-selection
+/// and denoising losses are not fabricated. More targets than queries in an image are rejected
+/// rather than silently dropped.
 /// </para>
 /// </remarks>
 public class DETRSetLoss<T> : LossFunctionBase<T>
 {
-    private const double NoObjectWeight = 0.1;
     private readonly NMS<T> _nms = new();
-    private readonly double _classWeight;
-    private readonly double _boxL1Weight;
-    private readonly double _boxGIoUWeight;
+    private readonly DetrSetLossOptions _options;
     private readonly int _numClasses;
 
     /// <summary>Creates a DETR objective with the standard final-head loss weights.</summary>
@@ -37,16 +43,31 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     /// <param name="boxGIoUWeight">Nonnegative GIoU loss and matching cost weight.</param>
     public DETRSetLoss(int numClasses = 91, double classWeight = 1.0,
         double boxL1Weight = 5.0, double boxGIoUWeight = 2.0)
+        : this(numClasses, SoftmaxOptions(classWeight, boxL1Weight, boxGIoUWeight))
     {
-        if (numClasses < 2) throw new ArgumentOutOfRangeException(nameof(numClasses));
-        ValidateWeight(classWeight, nameof(classWeight));
-        ValidateWeight(boxL1Weight, nameof(boxL1Weight));
-        ValidateWeight(boxGIoUWeight, nameof(boxGIoUWeight));
-        _numClasses = numClasses;
-        _classWeight = classWeight;
-        _boxL1Weight = boxL1Weight;
-        _boxGIoUWeight = boxGIoUWeight;
     }
+
+    /// <summary>Creates a DETR-family objective with explicit classification form and weights.</summary>
+    /// <param name="numClasses">
+    /// Width of the class head: foreground classes plus the final no-object class for softmax
+    /// cross-entropy, or foreground classes only for the sigmoid focal and varifocal forms.
+    /// </param>
+    /// <param name="options">Classification form, matching costs and loss weights; copied on construction.</param>
+    public DETRSetLoss(int numClasses, DetrSetLossOptions options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _options = options.Snapshot();
+        int minimumClasses = UsesNoObjectClass ? 2 : 1;
+        if (numClasses < minimumClasses) throw new ArgumentOutOfRangeException(nameof(numClasses));
+        _numClasses = numClasses;
+    }
+
+    /// <summary>The classification form this objective trains.</summary>
+    public SetPredictionClassificationLoss ClassificationLoss => _options.ClassificationLoss;
+
+    private bool UsesNoObjectClass => _options.ClassificationLoss == SetPredictionClassificationLoss.SoftmaxCrossEntropy;
+
+    private int ForegroundClasses => UsesNoObjectClass ? _numClasses - 1 : _numClasses;
 
     /// <summary>Calculates the documented element-wise MAE compatibility objective.</summary>
     /// <remarks>This vector overload does not describe detection targets or perform matching.</remarks>
@@ -107,16 +128,16 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         throw new InvalidOperationException("Structured layout validation did not reject an incompatible shape.");
     }
 
-    /// <summary>Builds differentiable final-head CE, L1 and GIoU losses after discrete assignment.</summary>
-    /// <param name="classLogits">Raw class logits [batch, queries, classes including no-object].</param>
+    /// <summary>Builds differentiable final-head classification, L1 and GIoU losses after discrete assignment.</summary>
+    /// <param name="classLogits">Raw class logits [batch, queries, class-head width].</param>
     /// <param name="boxes">Sigmoid box predictions [batch, queries, 4] in normalized cxcywh.</param>
     /// <param name="targets">Immutable, unpadded foreground targets; empty images are valid.</param>
     /// <returns>A scalar connected to both prediction heads on the active gradient tape.</returns>
     /// <remarks>
-    /// Assignment alone uses detached host values and the exact shared Hungarian solver. Loss and
-    /// gradient calculations use engine operations and retain the active CPU/GPU backend. Input
-    /// tensors are borrowed, never mutated or disposed. The returned scalar belongs to the active
-    /// tensor/tape lifetime and must be consumed before that lifetime ends.
+    /// Assignment, and the varifocal IoU targets and weights, use detached host values and the exact
+    /// shared Hungarian solver. Loss and gradient calculations use engine operations and retain the
+    /// active CPU/GPU backend. Input tensors are borrowed, never mutated or disposed. The returned
+    /// scalar belongs to the active tensor/tape lifetime and must be consumed before that lifetime ends.
     /// </remarks>
     public Tensor<T> ComputeTapeLoss(Tensor<T> classLogits, Tensor<T> boxes, DetectionTrainingBatch<T> targets)
     {
@@ -130,45 +151,29 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         var boxData = boxes.ToArray();
         ValidateFinitePredictions(logitsData, boxData);
         var assignments = Match(logitsData, boxData, targets, queries);
-        var weightedTargets = new Tensor<T>(classLogits.Shape.ToArray());
-        var matchedRows = new int[targets.TargetCount];
-        var targetBoxes = new T[checked(targets.TargetCount * 4)];
-        double classificationDenominator = 0;
-        int matched = 0;
 
-        for (int image = 0; image < batch; image++)
+        var classification = UsesNoObjectClass
+            ? SoftmaxClassification(classLogits, assignments, targets)
+            : SigmoidClassification(classLogits, logitsData, boxData, assignments, targets);
+
+        if (targets.TargetCount == 0)
         {
-            var assignedClasses = new int[queries];
-            for (int query = 0; query < queries; query++) assignedClasses[query] = _numClasses - 1;
-            for (int targetIndex = 0; targetIndex < targets[image].Count; targetIndex++)
-            {
-                int query = assignments[image][targetIndex];
-                var target = targets[image][targetIndex];
-                assignedClasses[query] = target.ClassId;
-                matchedRows[matched] = image * queries + query;
-                WriteBox(targetBoxes, matched * 4, target);
-                matched++;
-            }
-            for (int query = 0; query < queries; query++)
-            {
-                int label = assignedClasses[query];
-                double weight = label == _numClasses - 1 ? NoObjectWeight : 1;
-                weightedTargets[image, query, label] = NumOps.FromDouble(weight);
-                classificationDenominator += weight;
-            }
-        }
-
-        var logProbabilities = Engine.TensorLogSoftmax(classLogits, axis: 2);
-        var negativeLogLikelihood = Engine.TensorNegate(
-            Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, weightedTargets), null));
-        var classification = Engine.TensorMultiplyScalar(negativeLogLikelihood,
-            NumOps.FromDouble(_classWeight / classificationDenominator));
-
-        if (matched == 0)
-        {
-            // Background CE is still nonzero. Connect the box head with an exact zero derivative.
+            // Background classification is still nonzero. Connect the box head with an exact zero derivative.
             var zeroBoxes = Engine.TensorMultiplyScalar(Engine.ReduceSum(boxes, null), NumOps.Zero);
             return Engine.TensorAdd(classification, zeroBoxes);
+        }
+
+        var matchedRows = new int[targets.TargetCount];
+        var targetBoxes = new T[checked(targets.TargetCount * 4)];
+        int matched = 0;
+        for (int image = 0; image < batch; image++)
+        {
+            for (int targetIndex = 0; targetIndex < targets[image].Count; targetIndex++)
+            {
+                matchedRows[matched] = image * queries + assignments[image][targetIndex];
+                WriteBox(targetBoxes, matched * 4, targets[image][targetIndex]);
+                matched++;
+            }
         }
 
         var flatBoxes = Engine.Reshape(boxes, new[] { checked(batch * queries), 4 });
@@ -177,9 +182,117 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         var l1Sum = Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(matchedBoxes, actualBoxes)), null);
         var giouSum = Engine.ReduceSum(
             Engine.TensorGIoULoss(ToCorners(matchedBoxes), ToCorners(actualBoxes)), null);
-        var weightedL1 = Engine.TensorMultiplyScalar(l1Sum, NumOps.FromDouble(_boxL1Weight / targets.TargetCount));
-        var weightedGIoU = Engine.TensorMultiplyScalar(giouSum, NumOps.FromDouble(_boxGIoUWeight / targets.TargetCount));
+        var weightedL1 = Engine.TensorMultiplyScalar(l1Sum, NumOps.FromDouble(_options.L1LossWeight / targets.TargetCount));
+        var weightedGIoU = Engine.TensorMultiplyScalar(giouSum, NumOps.FromDouble(_options.GIoULossWeight / targets.TargetCount));
         return Engine.TensorAdd(classification, Engine.TensorAdd(weightedL1, weightedGIoU));
+    }
+
+    private Tensor<T> SoftmaxClassification(Tensor<T> classLogits, int[][] assignments, DetectionTrainingBatch<T> targets)
+    {
+        int batch = classLogits.Shape[0];
+        int queries = classLogits.Shape[1];
+        var selectedEntries = new int[checked(batch * queries)];
+        var weights = new T[selectedEntries.Length];
+        double denominator = 0;
+        for (int image = 0; image < batch; image++)
+        {
+            var assignedClasses = new int[queries];
+            for (int query = 0; query < queries; query++) assignedClasses[query] = _numClasses - 1;
+            for (int targetIndex = 0; targetIndex < targets[image].Count; targetIndex++)
+                assignedClasses[assignments[image][targetIndex]] = targets[image][targetIndex].ClassId;
+            for (int query = 0; query < queries; query++)
+            {
+                int label = assignedClasses[query];
+                double weight = label == _numClasses - 1 ? _options.NoObjectWeight : 1;
+                int row = image * queries + query;
+                selectedEntries[row] = row * _numClasses + label;
+                weights[row] = NumOps.FromDouble(weight);
+                denominator += weight;
+            }
+        }
+
+        // Gather only each query's assigned log-probability. A dense one-hot product would multiply
+        // the -infinity log-probability of an extreme finite unselected logit by zero and yield NaN.
+        var logProbabilities = Engine.TensorLogSoftmax(classLogits, axis: 2);
+        var flatLogProbabilities = Engine.Reshape(logProbabilities, new[] { checked(batch * queries * _numClasses) });
+        var selected = CvTensorOps<T>.Select(flatLogProbabilities, selectedEntries, 0);
+        var negativeLogLikelihood = Engine.TensorNegate(Engine.ReduceSum(
+            Engine.TensorMultiply(selected, new Tensor<T>(weights, new[] { weights.Length })), null));
+        // An all-background batch with no-object weight zero has nothing to classify.
+        double scale = denominator > 0 ? _options.ClassLossWeight / denominator : 0;
+        return Engine.TensorMultiplyScalar(negativeLogLikelihood, NumOps.FromDouble(scale));
+    }
+
+    private Tensor<T> SigmoidClassification(Tensor<T> classLogits, T[] logitsData, T[] boxData,
+        int[][] assignments, DetectionTrainingBatch<T> targets)
+    {
+        int batch = classLogits.Shape[0];
+        int queries = classLogits.Shape[1];
+        int length = checked(batch * queries * _numClasses);
+        var positive = new bool[length];
+        var soft = new double[length];
+        for (int image = 0; image < batch; image++)
+        {
+            for (int targetIndex = 0; targetIndex < targets[image].Count; targetIndex++)
+            {
+                var target = targets[image][targetIndex];
+                int query = assignments[image][targetIndex];
+                int index = (image * queries + query) * _numClasses + target.ClassId;
+                positive[index] = true;
+                soft[index] = _options.ClassificationLoss == SetPredictionClassificationLoss.VariFocal
+                    ? _nms.ComputeIoU(PredictedBox(boxData, image, queries, query), TargetBox(target))
+                    : 1.0;
+            }
+        }
+
+        // Deformable DETR, DINO and RT-DETR sum the per-element loss over queries and classes and
+        // divide by the number of target boxes (at least one).
+        double scale = _options.ClassLossWeight / Math.Max(1, targets.TargetCount);
+        var shape = classLogits.Shape.ToArray();
+        var targetTensor = new Tensor<T>(soft.Select(value => NumOps.FromDouble(value)).ToArray(), shape);
+        var complement = new Tensor<T>(soft.Select(value => NumOps.FromDouble(1 - value)).ToArray(), shape);
+
+        // log(p) = -softplus(-x) and log(1 - p) = -softplus(x) avoid evaluating log(sigmoid(x)).
+        var logProbability = Engine.TensorNegate(Engine.Softplus(Engine.TensorNegate(classLogits)));
+        var logComplement = Engine.TensorNegate(Engine.Softplus(classLogits));
+        var crossEntropy = Engine.TensorNegate(Engine.TensorAdd(
+            Engine.TensorMultiply(targetTensor, logProbability),
+            Engine.TensorMultiply(complement, logComplement)));
+
+        Tensor<T> perElement;
+        if (_options.ClassificationLoss == SetPredictionClassificationLoss.SigmoidFocal)
+        {
+            // FL = -alpha_t (1 - p_t)^gamma log(p_t) with binary targets (Lin et al. 2017); the
+            // modulating factor stays on the tape, as in the reference sigmoid_focal_loss.
+            double alpha = _options.FocalAlpha;
+            var alphaT = new Tensor<T>(positive.Select(isPositive => NumOps.FromDouble(isPositive ? alpha : 1 - alpha)).ToArray(), shape);
+            perElement = Engine.TensorMultiply(alphaT, crossEntropy);
+            if (_options.FocalGamma > 0)
+            {
+                // 1 - p_t = p + t - 2 p t for a binary target t.
+                var signs = new Tensor<T>(positive.Select(isPositive => NumOps.FromDouble(isPositive ? -1 : 1)).ToArray(), shape);
+                var oneMinusPt = Engine.TensorAdd(Engine.TensorMultiply(Engine.Sigmoid(classLogits), signs), targetTensor);
+                perElement = Engine.TensorMultiply(perElement,
+                    Engine.TensorPower(oneMinusPt, NumOps.FromDouble(_options.FocalGamma)));
+            }
+        }
+        else
+        {
+            // VFL(p, q) = -q (q log p + (1 - q) log(1 - p)) for the matched class and
+            // -alpha p^gamma log(1 - p) otherwise (Zhang et al. 2021). The weights use the detached
+            // score, as the RT-DETR and VarifocalNet reference implementations do.
+            var weights = new T[length];
+            for (int index = 0; index < length; index++)
+            {
+                double probability = Logistic(NumOps.ToDouble(logitsData[index]));
+                weights[index] = NumOps.FromDouble(positive[index]
+                    ? soft[index]
+                    : _options.FocalAlpha * Math.Pow(probability, _options.FocalGamma));
+            }
+            perElement = Engine.TensorMultiply(new Tensor<T>(weights, shape), crossEntropy);
+        }
+
+        return Engine.TensorMultiplyScalar(Engine.ReduceSum(perElement, null), NumOps.FromDouble(scale));
     }
 
     private Tensor<T> ComputeStructuredLoss(Tensor<T> predicted, Tensor<T> targets)
@@ -188,7 +301,7 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         int queries = predicted.Shape[1];
         var typedTargets = DetectionTrainingBatch<T>.FromPaddedDetr(targets);
         // Validate before allocating loss intermediates, including before slicing the predictions.
-        typedTargets.ValidateForModel(batch, _numClasses - 1, queries);
+        typedTargets.ValidateForModel(batch, ForegroundClasses, queries);
         var logits = Engine.TensorSlice(predicted, new[] { 0, 0, 0 }, new[] { batch, queries, _numClasses });
         var boxes = Engine.TensorSlice(predicted, new[] { 0, 0, _numClasses }, new[] { batch, queries, 4 });
         return ComputeTapeLoss(logits, boxes, typedTargets);
@@ -207,19 +320,17 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
                 continue;
             }
 
-            var probabilities = ClassProbabilities(logits, image, queries);
+            var classCosts = UsesNoObjectClass
+                ? SoftmaxClassCosts(logits, image, queries)
+                : FocalClassCosts(logits, image, queries);
             var predictedBoxes = new BoundingBox<T>[queries];
             for (int query = 0; query < queries; query++)
-            {
-                int offset = (image * queries + query) * 4;
-                predictedBoxes[query] = new BoundingBox<T>(boxes[offset], boxes[offset + 1],
-                    boxes[offset + 2], boxes[offset + 3], BoundingBoxFormat.CXCYWH);
-            }
+                predictedBoxes[query] = PredictedBox(boxes, image, queries, query);
             var costs = new Matrix<double>(imageTargets.Count, queries);
             for (int targetIndex = 0; targetIndex < imageTargets.Count; targetIndex++)
             {
                 var target = imageTargets[targetIndex];
-                var actual = new BoundingBox<T>(target.CenterX, target.CenterY, target.Width, target.Height, BoundingBoxFormat.CXCYWH);
+                var actual = TargetBox(target);
                 for (int query = 0; query < queries; query++)
                 {
                     int offset = (image * queries + query) * 4;
@@ -227,8 +338,8 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
                         + Math.Abs(NumOps.ToDouble(boxes[offset + 1]) - NumOps.ToDouble(target.CenterY))
                         + Math.Abs(NumOps.ToDouble(boxes[offset + 2]) - NumOps.ToDouble(target.Width))
                         + Math.Abs(NumOps.ToDouble(boxes[offset + 3]) - NumOps.ToDouble(target.Height));
-                    costs[targetIndex, query] = -_classWeight * probabilities[query * _numClasses + target.ClassId]
-                        + _boxL1Weight * l1 - _boxGIoUWeight * _nms.ComputeGIoU(predictedBoxes[query], actual);
+                    costs[targetIndex, query] = _options.ClassCostWeight * classCosts[query * _numClasses + target.ClassId]
+                        + _options.L1CostWeight * l1 - _options.GIoUCostWeight * _nms.ComputeGIoU(predictedBoxes[query], actual);
                 }
             }
             var assignment = solver.Solve(costs);
@@ -245,9 +356,10 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         return result;
     }
 
-    private double[] ClassProbabilities(T[] logits, int image, int queries)
+    /// <summary>DETR's class cost: the negative softmax probability of the target class.</summary>
+    private double[] SoftmaxClassCosts(T[] logits, int image, int queries)
     {
-        var probabilities = new double[checked(queries * _numClasses)];
+        var costs = new double[checked(queries * _numClasses)];
         for (int query = 0; query < queries; query++)
         {
             int offset = (image * queries + query) * _numClasses;
@@ -258,14 +370,46 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
             for (int label = 0; label < _numClasses; label++)
             {
                 double value = Math.Exp(NumOps.ToDouble(logits[offset + label]) - maximum);
-                probabilities[query * _numClasses + label] = value;
+                costs[query * _numClasses + label] = value;
                 sum += value;
             }
             for (int label = 0; label < _numClasses; label++)
-                probabilities[query * _numClasses + label] /= sum;
+                costs[query * _numClasses + label] = -costs[query * _numClasses + label] / sum;
         }
-        return probabilities;
+        return costs;
     }
+
+    /// <summary>
+    /// Deformable DETR's focal class cost: alpha (1 - p)^gamma (-log p) - (1 - alpha) p^gamma (-log(1 - p)).
+    /// </summary>
+    private double[] FocalClassCosts(T[] logits, int image, int queries)
+    {
+        double alpha = _options.MatchingFocalAlpha;
+        double gamma = _options.MatchingFocalGamma;
+        var costs = new double[checked(queries * _numClasses)];
+        for (int index = 0; index < costs.Length; index++)
+        {
+            double logit = NumOps.ToDouble(logits[image * queries * _numClasses + index]);
+            double probability = Logistic(logit);
+            double positive = alpha * Math.Pow(1 - probability, gamma) * Softplus(-logit);
+            double negative = (1 - alpha) * Math.Pow(probability, gamma) * Softplus(logit);
+            costs[index] = positive - negative;
+        }
+        return costs;
+    }
+
+    private static double Logistic(double x) => x >= 0 ? 1 / (1 + Math.Exp(-x)) : Math.Exp(x) / (1 + Math.Exp(x));
+
+    private static double Softplus(double x) => x > 0 ? x + Math.Log(1 + Math.Exp(-x)) : Math.Log(1 + Math.Exp(x));
+
+    private static BoundingBox<T> PredictedBox(T[] boxes, int image, int queries, int query)
+    {
+        int offset = (image * queries + query) * 4;
+        return new BoundingBox<T>(boxes[offset], boxes[offset + 1], boxes[offset + 2], boxes[offset + 3], BoundingBoxFormat.CXCYWH);
+    }
+
+    private static BoundingBox<T> TargetBox(DetectionTrainingTarget<T> target) =>
+        new(target.CenterX, target.CenterY, target.Width, target.Height, BoundingBoxFormat.CXCYWH);
 
     private Tensor<T> ToCorners(Tensor<T> boxes)
     {
@@ -286,7 +430,7 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
             throw new ArgumentException("Class logits must be [positive batch, positive queries, configured classes].", nameof(logits));
         if (boxes.Rank != 3 || boxes.Shape[0] != logits.Shape[0] || boxes.Shape[1] != logits.Shape[1] || boxes.Shape[2] != 4)
             throw new ArgumentException("Boxes must match the logit batch and query dimensions, with four cxcywh coordinates.", nameof(boxes));
-        targets.ValidateForModel(logits.Shape[0], _numClasses - 1, logits.Shape[1]);
+        targets.ValidateForModel(logits.Shape[0], ForegroundClasses, logits.Shape[1]);
     }
 
     private void ValidateFinitePredictions(T[] logits, T[] boxes)
@@ -332,6 +476,23 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         destination[offset + 1] = target.CenterY;
         destination[offset + 2] = target.Width;
         destination[offset + 3] = target.Height;
+    }
+
+    private static DetrSetLossOptions SoftmaxOptions(double classWeight, double boxL1Weight, double boxGIoUWeight)
+    {
+        ValidateWeight(classWeight, nameof(classWeight));
+        ValidateWeight(boxL1Weight, nameof(boxL1Weight));
+        ValidateWeight(boxGIoUWeight, nameof(boxGIoUWeight));
+        return new DetrSetLossOptions
+        {
+            ClassificationLoss = SetPredictionClassificationLoss.SoftmaxCrossEntropy,
+            ClassLossWeight = classWeight,
+            ClassCostWeight = classWeight,
+            L1LossWeight = boxL1Weight,
+            L1CostWeight = boxL1Weight,
+            GIoULossWeight = boxGIoUWeight,
+            GIoUCostWeight = boxGIoUWeight
+        };
     }
 
     private static void ValidateWeight(double weight, string parameterName)

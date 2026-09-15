@@ -642,9 +642,16 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// <remarks>The derived model validates its task targets before calling this method.</remarks>
     protected void TrainWithTargets<TTarget>(Tensor<T> input, TTarget targets,
         Func<List<Tensor<T>>, TTarget, Tensor<T>> loss) where TTarget : class
+        => TrainWithTargets(input, targets, Forward, loss);
+
+    /// <summary>Trains heads produced by a training-specific forward, such as auxiliary heads inference drops.</summary>
+    /// <remarks>The derived model validates its task targets before calling this method.</remarks>
+    protected void TrainWithTargets<TTarget>(Tensor<T> input, TTarget targets,
+        Func<Tensor<T>, List<Tensor<T>>> forward, Func<List<Tensor<T>>, TTarget, Tensor<T>> loss) where TTarget : class
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (forward is null) throw new ArgumentNullException(nameof(forward));
         if (loss is null) throw new ArgumentNullException(nameof(loss));
         NoteResolvedInput(input);
         bool wasTraining = IsTrainingMode;
@@ -652,7 +659,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         try
         {
             RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
-                this, input, targets, NumOps.FromDouble(TrainingLearningRate), Forward, loss));
+                this, input, targets, NumOps.FromDouble(TrainingLearningRate), forward, loss));
         }
         finally
         {

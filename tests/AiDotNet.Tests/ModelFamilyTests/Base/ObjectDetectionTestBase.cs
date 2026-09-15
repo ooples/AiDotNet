@@ -37,10 +37,235 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
     /// <summary>Used only by generated models that implement the real typed training capability.</summary>
     protected void VerifySemanticDetectionTraining()
     {
-        using var foreground = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
-        VerifyDetrSemanticStep(foreground, emptyTargets: false);
-        using var background = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
-        VerifyDetrSemanticStep(background, emptyTargets: true);
+        foreach (bool emptyTargets in new[] { false, true })
+        {
+            using var detector = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
+            switch (detector)
+            {
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DETR<T>:
+                    VerifyDetrSemanticStep(detector, emptyTargets);
+                    break;
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>:
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>:
+                    VerifySigmoidSetSemanticStep(detector, emptyTargets);
+                    break;
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv8<T>:
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9<T>:
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T>:
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv11<T>:
+                    VerifyTaskAlignedSemanticStep(detector, emptyTargets);
+                    break;
+                default:
+                    Assert.Fail($"{detector.GetType().Name} implements semantic detection training without an independent objective oracle.");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks one DINO (focal) or RT-DETR (varifocal) step on the live, randomly initialized heads: the
+    /// recorded loss must equal an independent evaluation of the published objective on the exact
+    /// pre-step predictions, and both heads must move.
+    /// </summary>
+    internal static void VerifySigmoidSetSemanticStep(ObjectDetectorBase<T> detector, bool emptyTargets,
+        Action<Tensor<T>, AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>>? trainingStep = null)
+    {
+        bool varifocal = detector is AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>;
+        Assert.True(varifocal || detector is AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>);
+        var training = Assert.IsAssignableFrom<AiDotNet.Interfaces.IDetectionTrainingModel<T>>(detector);
+        var ops = MathHelper.GetNumericOperations<T>();
+        const int classes = 2; // ObjectDetectionPositiveFixture.CreateOptions
+        using var input = new Tensor<T>(new[] { 1, 3, 64, 64 });
+        for (int index = 0; index < input.Length; index++)
+            input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
+
+        using var before = detector.Predict(input);
+        Assert.Equal(0, before.Length % (classes + 4));
+        int queries = before.Length / (classes + 4);
+        var logits = new double[queries * classes];
+        var boxes = new double[queries * 4];
+        for (int index = 0; index < logits.Length; index++) logits[index] = ops.ToDouble(before[index]);
+        for (int index = 0; index < boxes.Length; index++)
+            boxes[index] = 1 / (1 + Math.Exp(-ops.ToDouble(before[logits.Length + index])));
+
+        var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
+        const int goldClass = 1;
+        var target = new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(goldClass,
+            ops.FromDouble(gold[0]), ops.FromDouble(gold[1]), ops.FromDouble(gold[2]), ops.FromDouble(gold[3]));
+        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+        {
+            emptyTargets ? Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>() : new[] { target }
+        });
+        double expected = IndependentSigmoidSetObjective(logits, boxes, queries, classes,
+            emptyTargets ? -1 : goldClass, gold, varifocal);
+
+        if (trainingStep is null) training.TrainDetections(input, batch);
+        else trainingStep(input, batch);
+
+        double actual = ops.ToDouble(detector.GetLastLoss());
+        double tolerance = typeof(T) == typeof(float) ? 2e-4 * Math.Max(1, Math.Abs(expected)) : 1e-8;
+        Assert.True(Math.Abs(expected - actual) <= tolerance, $"Expected loss {expected:R}; recorded {actual:R}.");
+
+        using var after = detector.Predict(input);
+        Assert.Contains(Enumerable.Range(0, logits.Length), index => !Equals(before[index], after[index]));
+        if (!emptyTargets)
+            Assert.Contains(Enumerable.Range(logits.Length, boxes.Length), index => !Equals(before[index], after[index]));
+    }
+
+    /// <summary>
+    /// Checks one task-aligned YOLO step on the live heads: the recorded loss must equal the independent
+    /// oracle on the exact pre-step head outputs (both YOLOv10 heads: top-1 and top-10), and the model moves.
+    /// </summary>
+    internal static void VerifyTaskAlignedSemanticStep(ObjectDetectorBase<T> detector, bool emptyTargets,
+        Action<Tensor<T>, AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>>? trainingStep = null)
+    {
+        var training = Assert.IsAssignableFrom<AiDotNet.Interfaces.IDetectionTrainingModel<T>>(detector);
+        var ops = MathHelper.GetNumericOperations<T>();
+        const int classes = 2; // ObjectDetectionPositiveFixture.CreateOptions
+        const int regMax = 16;
+        const int imageSize = 64;
+        int[] strides = { 8, 16, 32 };
+        using var input = new Tensor<T>(new[] { 1, 3, imageSize, imageSize });
+        for (int index = 0; index < input.Length; index++)
+            input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
+
+        using var before = detector.Predict(input);
+        var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
+        var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
+        if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
+        {
+            var outputs = yolo10.ForwardTrainingHeads(input)
+                .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
+            Assert.Equal(4 * strides.Length, outputs.Count);
+            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1));
+            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10));
+        }
+        else
+        {
+            var outputs = new List<double[]>();
+            int offset = 0;
+            foreach (int width in new[] { classes, 4 * regMax })
+                foreach (int stride in strides)
+                {
+                    int length = width * (imageSize / stride) * (imageSize / stride);
+                    outputs.Add(beforeValues.Skip(offset).Take(length).ToArray());
+                    offset += length;
+                }
+            Assert.Equal(beforeValues.Length, offset);
+            heads.Add((OracleLevels(outputs), 10));
+        }
+
+        var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
+        var oracleGold = emptyTargets
+            ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
+            : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
+        double expected = heads.Sum(head => TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
+            TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
+
+        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+        {
+            oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
+                ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
+        });
+        if (trainingStep is null) training.TrainDetections(input, batch);
+        else trainingStep(input, batch);
+
+        double actual = ops.ToDouble(detector.GetLastLoss());
+        double tolerance = typeof(T) == typeof(float) ? 2e-4 * Math.Max(1, Math.Abs(expected)) : 1e-7 * Math.Max(1, Math.Abs(expected));
+        Assert.True(Math.Abs(expected - actual) <= tolerance, $"Expected loss {expected:R}; recorded {actual:R}.");
+
+        using var after = detector.Predict(input);
+        int classValues = strides.Sum(stride => classes * (imageSize / stride) * (imageSize / stride));
+        Assert.Contains(Enumerable.Range(0, classValues), index => beforeValues[index] != ops.ToDouble(after[index]));
+        if (!emptyTargets)
+            Assert.Contains(Enumerable.Range(classValues, beforeValues.Length - classValues), index => beforeValues[index] != ops.ToDouble(after[index]));
+
+        TaskAlignedDetectionOracle.Level[] OracleLevels(IReadOnlyList<double[]> outputs) => strides
+            .Select((stride, level) => new TaskAlignedDetectionOracle.Level(outputs[level], outputs[strides.Length + level],
+                imageSize / stride, imageSize / stride, stride)).ToArray();
+    }
+
+    /// <summary>
+    /// DINO: sigmoid focal loss (alpha 0.25, gamma 2), matching costs 2/5/2, weights 1/5/2.
+    /// RT-DETR: varifocal loss (alpha 0.75, gamma 2) toward the matched box IoU, same costs and weights.
+    /// Both match with Deformable DETR's focal class cost (alpha 0.25, gamma 2).
+    /// </summary>
+    private static double IndependentSigmoidSetObjective(double[] logits, double[] boxes, int queries, int classes,
+        int goldClass, double[] gold, bool varifocal)
+    {
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        static double Softplus(double x) => x > 0 ? x + Math.Log(1 + Math.Exp(-x)) : Math.Log(1 + Math.Exp(x));
+        double[] Box(int query) => boxes.Skip(query * 4).Take(4).ToArray();
+
+        int matched = -1;
+        if (goldClass >= 0)
+        {
+            double best = double.PositiveInfinity;
+            for (int query = 0; query < queries; query++)
+            {
+                double logit = logits[query * classes + goldClass];
+                double p = Sigmoid(logit);
+                double classCost = 0.25 * Math.Pow(1 - p, 2) * Softplus(-logit) - 0.75 * Math.Pow(p, 2) * Softplus(logit);
+                var box = Box(query);
+                double l1 = box.Zip(gold, (left, right) => Math.Abs(left - right)).Sum();
+                double cost = 2 * classCost + 5 * l1 - 2 * PlainGIoU(box, gold);
+                if (cost < best) { best = cost; matched = query; }
+            }
+        }
+
+        double quality = matched >= 0 ? PlainIoU(Box(matched), gold) : 0;
+        double classification = 0;
+        for (int index = 0; index < logits.Length; index++)
+        {
+            double x = logits[index];
+            double p = Sigmoid(x);
+            bool positive = matched >= 0 && index == matched * classes + goldClass;
+            if (varifocal)
+            {
+                double q = positive ? quality : 0;
+                double weight = positive ? q : 0.75 * p * p;
+                classification += weight * (Softplus(x) - q * x);
+            }
+            else
+            {
+                classification += positive
+                    ? 0.25 * Math.Pow(1 - p, 2) * Softplus(-x)
+                    : 0.75 * p * p * Softplus(x);
+            }
+        }
+
+        if (matched < 0) return classification;
+        var predicted = Box(matched);
+        double boxL1 = predicted.Zip(gold, (left, right) => Math.Abs(left - right)).Sum();
+        const double stabilizer = 1e-7; // Engine GIoU loss contract, as in IndependentDetrBoxObjective.
+        var (intersection, union, enclosure) = Overlap(predicted, gold);
+        double giouLoss = 1 - intersection / (union + stabilizer) + (enclosure - union) / (enclosure + stabilizer);
+        return classification + 5 * boxL1 + 2 * giouLoss;
+    }
+
+    private static (double Intersection, double Union, double Enclosure) Overlap(double[] predicted, double[] target)
+    {
+        var p = new[] { predicted[0] - predicted[2] / 2, predicted[1] - predicted[3] / 2,
+            predicted[0] + predicted[2] / 2, predicted[1] + predicted[3] / 2 };
+        var t = new[] { target[0] - target[2] / 2, target[1] - target[3] / 2,
+            target[0] + target[2] / 2, target[1] + target[3] / 2 };
+        double intersection = Math.Max(0, Math.Min(p[2], t[2]) - Math.Max(p[0], t[0]))
+            * Math.Max(0, Math.Min(p[3], t[3]) - Math.Max(p[1], t[1]));
+        double union = predicted[2] * predicted[3] + target[2] * target[3] - intersection;
+        double enclosure = (Math.Max(p[2], t[2]) - Math.Min(p[0], t[0])) * (Math.Max(p[3], t[3]) - Math.Min(p[1], t[1]));
+        return (intersection, union, enclosure);
+    }
+
+    private static double PlainIoU(double[] predicted, double[] target)
+    {
+        var (intersection, union, _) = Overlap(predicted, target);
+        return union <= 0 ? 0 : intersection / union;
+    }
+
+    private static double PlainGIoU(double[] predicted, double[] target)
+    {
+        var (intersection, union, enclosure) = Overlap(predicted, target);
+        return (union <= 0 ? 0 : intersection / union) - (enclosure <= 0 ? 0 : (enclosure - union) / enclosure);
     }
 
     /// <summary>Checks an exact one-step task objective on actual live DETR heads; no forward is replaced.</summary>

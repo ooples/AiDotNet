@@ -38,10 +38,14 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://arxiv.org/abs/2405.14458",
     Year = 2024,
     Authors = "Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
-public partial class YOLOv10<T> : ObjectDetectorBase<T>
+public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
-    private readonly YOLOv8Head<T> _head;
-    private readonly YOLOv8Head<T>? _auxHead; // Auxiliary head for training
+    private readonly YOLOv8Head<T> _head; // One-to-one head: the only head used at inference.
+    private readonly YOLOv8Head<T> _auxHead; // One-to-many head: trained jointly, dropped at inference.
+    private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
+
+    [AiDotNet.Attributes.Scratch]
+    private bool _auxHeadShapesResolved;
     private readonly int[] _strides;
     private readonly bool _useNmsFree;
     private readonly NMS<T> _nms;
@@ -69,13 +73,14 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
         var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
-        // Auxiliary head for training (one-to-many assignment)
-        if (IsTrainingMode)
-        {
-            _auxHead = new YOLOv8Head<T>(neckChannels, options.NumClasses);
-        }
+        // One-to-many head (Wang et al. 2024, dual label assignments): it supplies the rich supervision
+        // during training and is discarded at inference. It must exist whenever the model can be trained;
+        // it used to be built only when training mode was already on at construction, which it never is.
+        _auxHead = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
+        _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
+            _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
 
@@ -88,6 +93,45 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (1.33, 1.25),
         _ => (0.67, 0.75)
     };
+
+    /// <summary>Trains both heads with YOLOv10's consistent dual assignments.</summary>
+    /// <remarks>
+    /// <para>
+    /// The one-to-many head uses task-aligned top-k assignment and the one-to-one head uses top-1 selection,
+    /// both with the same metric exponents (alpha 0.5, beta 6), so the one-to-one head is supervised
+    /// consistently with the one-to-many head (Wang et al. 2024, Sec. 3.1). Each head is assigned from its own
+    /// predictions and trained with BCE, CIoU and distribution focal loss (gains 7.5/0.5/1.5, Table 14); the
+    /// two losses are summed. Override the settings with <see cref="ObjectDetectionOptions{T}.TaskAlignedLoss"/>.
+    /// </para>
+    /// <para>Inputs are model-ready NCHW tensors, as for Predict, and targets are normalized against that input size.</para>
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        YoloDetectionTraining.Validate(input, targets, Options.NumClasses, "YOLOv10");
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int levels = _strides.Length;
+        TrainWithTargets(input, targets, ForwardTrainingHeads, (heads, batch) => Engine.TensorAdd(
+            YoloDetectionTraining.HeadLoss(_detectionLoss, heads, 0, levels, _strides, height, width, batch, _detectionLoss.OneToOneTopK),
+            YoloDetectionTraining.HeadLoss(_detectionLoss, heads, 2 * levels, levels, _strides, height, width, batch, _detectionLoss.TopK)));
+    }
+
+    /// <summary>
+    /// Runs the shared backbone and neck once and returns the one-to-one head's class and distribution levels,
+    /// followed by the one-to-many head's.
+    /// </summary>
+    internal List<Tensor<T>> ForwardTrainingHeads(Tensor<T> input)
+    {
+        var neckFeatures = EnsureNeck.Forward(EnsureBackbone.ExtractFeatures(input));
+        var (oneToOneClasses, oneToOneDistributions) = _head.Forward(neckFeatures);
+        var (oneToManyClasses, oneToManyDistributions) = _auxHead.Forward(neckFeatures);
+        var outputs = new List<Tensor<T>>();
+        outputs.AddRange(oneToOneClasses);
+        outputs.AddRange(oneToOneDistributions);
+        outputs.AddRange(oneToManyClasses);
+        outputs.AddRange(oneToManyDistributions);
+        return outputs;
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -121,6 +165,15 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
 
         // Main detection head
         var (clsOutputs, regOutputs) = _head.Forward(neckFeatures);
+
+        if (!_auxHeadShapesResolved)
+        {
+            // The one-to-many head runs only in training, but its lazily sized convolutions must exist
+            // whenever the parameters are enumerated, saved or cloned. Size them on the first forward, as
+            // the one-to-one head is sized; inference does not use these outputs.
+            _ = _auxHead.Forward(neckFeatures);
+            _auxHeadShapesResolved = true;
+        }
 
         var outputs = new List<Tensor<T>>();
         outputs.AddRange(clsOutputs);
@@ -229,12 +282,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()
     {
-        long count = _head.GetParameterCount();
-        if (_auxHead is not null)
-        {
-            count += _auxHead.GetParameterCount();
-        }
-        return count;
+        return _head.GetParameterCount() + _auxHead.GetParameterCount();
     }
 
     /// <inheritdoc/>
@@ -276,7 +324,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
 
         // Read auxiliary head parameters if present
         bool hasAuxHead = reader.ReadBoolean();
-        if (hasAuxHead && _auxHead is not null)
+        if (hasAuxHead)
         {
             _auxHead.ReadParameters(reader);
         }
@@ -307,11 +355,8 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>
         _head.WriteParameters(writer);
 
         // Write auxiliary head parameters if present
-        writer.Write(_auxHead is not null);
-        if (_auxHead is not null)
-        {
-            _auxHead.WriteParameters(writer);
-        }
+        writer.Write(true);
+        _auxHead.WriteParameters(writer);
     }
 
     /// <inheritdoc />
