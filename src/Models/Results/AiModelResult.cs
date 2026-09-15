@@ -3327,13 +3327,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return;
             }
 
+            // Disposal must not throw, but a failure is still reported. OutOfMemoryException is left to propagate:
+            // nothing here can recover from it and swallowing it would hide the process state.
             try
             {
                 _sequenceOptimizer?.ClearCache();
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Best-effort cleanup; disposal must not throw.
+                System.Diagnostics.Trace.TraceWarning($"Inference sequence: clearing the optimizer cache during dispose failed: {ex}");
             }
 
             lock (_sequenceLock)
@@ -3342,10 +3344,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     ReleaseSequenceModel();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // Disposal must not throw (see above); the copy is unreachable either way.
-                    Console.WriteLine($"Warning: releasing the inference sequence's model copy failed: {ex.Message}");
+                    // The copy is unreachable either way.
+                    System.Diagnostics.Trace.TraceWarning($"Inference sequence: releasing its model copy failed: {ex}");
                 }
             }
 
@@ -3476,9 +3478,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    Console.WriteLine($"Warning: inference session optimizations failed: {ex.Message}");
+                    // Optimizations are optional: the sequence falls back to the unoptimized model, and the failure is
+                    // reported rather than swallowed.
+                    System.Diagnostics.Trace.TraceWarning($"Inference sequence: session optimizations failed; using the unoptimized model: {ex}");
                     _sequenceOptimizer = null;
                     _sequenceOptimizedNeuralModel = null;
                     _ownsSequenceModel = false;
@@ -3487,7 +3491,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     if (multiLoRACopy is not null && !ReferenceEquals(multiLoRACopy, model))
                     {
                         try { AiDotNet.Helpers.DisposeOnceGuard.TryDispose(multiLoRACopy); }
-                        catch (Exception disposeEx) { Console.WriteLine($"Warning: releasing the Multi-LoRA copy failed: {disposeEx.Message}"); }
+                        catch (Exception disposeEx) when (disposeEx is not OutOfMemoryException)
+                        {
+                            System.Diagnostics.Trace.TraceWarning($"Inference sequence: releasing the Multi-LoRA copy failed: {disposeEx}");
+                        }
                     }
                 }
                 finally
@@ -7638,9 +7645,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             if (_deepEnsembleModels is not null)
             {
-                foreach (var member in _deepEnsembleModels)
+                foreach (var member in _deepEnsembleModels.Where(member => !ReferenceEquals(member, Model)))
                 {
-                    if (!ReferenceEquals(member, Model)) owned.Add(member);
+                    owned.Add(member);
                 }
             }
 

@@ -111,9 +111,8 @@ internal static class DisposeOnceGuard
         if (owned is null) return;
 
         List<Exception>? failures = null;
-        foreach (var item in owned)
+        foreach (var disposable in owned.OfType<IDisposable>())
         {
-            if (item is not IDisposable disposable) continue;
             try
             {
                 TryDispose(disposable);
