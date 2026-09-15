@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
-public class LayerCloneShapeStateTests
+public partial class LayerCloneShapeStateTests
 {
     [Theory]
     [InlineData(false, false)]
@@ -47,7 +47,7 @@ public class LayerCloneShapeStateTests
         Assert.Equal(new[] { 2, 3 }, source.GetOutputShape());
     }
 
-    public sealed class ConsumerShapeLayer : InputLayer<double>
+    public sealed partial class ConsumerShapeLayer : InputLayer<double>
     {
         public ConsumerShapeLayer(int[] inputShape) : base(inputShape) { }
     }
