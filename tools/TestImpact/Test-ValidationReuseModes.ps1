@@ -44,5 +44,24 @@ finally {
     if (Test-Path -LiteralPath $bindingOutput) { Remove-Item -LiteralPath $bindingOutput }
 }
 Write-Host 'Missing-map script invocation: 4 cases passed.'
+# Allowing empty optional inputs must not weaken the mandatory offline planning contract.
+foreach ($inputs in @(
+    @{ MapFile = ''; ShardManifestFile = 'manifest.json' },
+    @{ MapFile = 'map.json'; ShardManifestFile = '' },
+    @{ MapFile = ' '; ShardManifestFile = 'manifest.json' }
+)) {
+    $rejected = $false
+    try {
+        & $resolver -PlanDelta -TestedBaseSha ('a' * 40) -TestedHeadSha ('b' * 40) `
+            -TestedTree ('c' * 40) -PullRequestShardsJson '[]' -OutFile $bindingOutput @inputs
+    }
+    catch {
+        if ($_.Exception.Message -cne 'PlanDelta requires a nonempty MapFile and ShardManifestFile.') { throw }
+        $rejected = $true
+    }
+    if (-not $rejected) { throw 'Offline delta planning accepted a missing required input' }
+    if (Test-Path -LiteralPath $bindingOutput) { throw 'Rejected delta planning emitted an output file' }
+}
+Write-Host 'Offline delta planning rejects missing inputs: 3 cases passed.'
 Write-Host 'Validation reuse mode proof passed (typed partial/complete scopes, fail-closed artifacts/tree checks, delta decisions and shard imports).'
 exit 0
