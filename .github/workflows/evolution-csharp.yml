@@ -96,10 +96,11 @@ jobs:
         run: |
           dotnet build benchmarks/EvolutionNoise/EvolutionNoise.csproj -c Release -p:UseLocalEvolution=true -m:2
           if ($LASTEXITCODE -ne 0) { throw 'Consumer noise study build failed.' }
-          dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll > TestResults/compiler-net10.0/noise-study.json
+          dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll --output TestResults/compiler-net10.0/noise-study.json
           if ($LASTEXITCODE -ne 0) { throw 'Consumer noise study failed; retain all observations.' }
           ./benchmarks/EvolutionNoise/Verify-Study.ps1 -Report TestResults/compiler-net10.0/noise-study.json
           ./benchmarks/EvolutionNoise/Verify-Study.Tests.ps1 -Report TestResults/compiler-net10.0/noise-study.json
+          ./benchmarks/EvolutionNoise/Verify-Output.Tests.ps1 -Report TestResults/compiler-net10.0/noise-study.json -Assembly benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll
       - name: Verify CLI module and runtime pilot coverage
         if: matrix.framework == 'net10.0'
         shell: pwsh
