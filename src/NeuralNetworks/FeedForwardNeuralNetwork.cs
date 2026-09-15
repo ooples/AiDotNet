@@ -380,21 +380,24 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
 
         var cachedWeights = _compiledMlpWeightRefs;
         var cachedBiases = _compiledMlpBiasRefs;
-        bool rebuild = _compiledMlpPlan is null
-            || batch > _compiledMlpMaxBatch
-            || cachedWeights is null
-            || cachedWeights.Length != layerCount
-            || cachedBiases is null
-            || cachedBiases.Length != layerCount;
-        if (!rebuild && cachedWeights is not null && cachedBiases is not null)
+        bool rebuild = _compiledMlpPlan is null || batch > _compiledMlpMaxBatch;
+        if (!rebuild)
         {
-            for (int i = 0; i < layerCount; i++)
+            if (cachedWeights is null || cachedBiases is null
+                || cachedWeights.Length != layerCount || cachedBiases.Length != layerCount)
             {
-                if (!ReferenceEquals(cachedWeights[i], wRefs[i])
-                    || !ReferenceEquals(cachedBiases[i], bRefs[i]))
+                rebuild = true;
+            }
+            else
+            {
+                for (int i = 0; i < layerCount; i++)
                 {
-                    rebuild = true;
-                    break;
+                    if (!ReferenceEquals(cachedWeights[i], wRefs[i])
+                        || !ReferenceEquals(cachedBiases[i], bRefs[i]))
+                    {
+                        rebuild = true;
+                        break;
+                    }
                 }
             }
         }
