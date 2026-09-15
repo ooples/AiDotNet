@@ -198,7 +198,7 @@ shard:
     framework: net10.0
     filter: >-
       Category!=GPU&Category!=Stress&
-      FullyQualifiedName~AiDotNet.Tests.UnitTests&
+      (FullyQualifiedName~AiDotNet.Tests.UnitTests|FullyQualifiedName~AiDotNetTests.UnitTests)&
       FullyQualifiedName!~UnitTests.ActivationFunctions&
       FullyQualifiedName!~UnitTests.Attention&
       FullyQualifiedName!~UnitTests.Autodiff&

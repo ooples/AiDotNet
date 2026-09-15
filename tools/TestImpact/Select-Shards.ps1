@@ -1754,6 +1754,21 @@ if ($SelfTest) {
     function New-Candidate([string] $Fqn, [bool] $PrefixOnly = $false, $Categories = @(), [bool] $AnySuffix = $false) {
         [pscustomobject]@{ Fqn = $Fqn; PrefixOnly = $PrefixOnly; AnySuffix = $AnySuffix; Categories = $Categories }
     }
+    # Exercise the shipping catch-all filter, not a hand-copied approximation. Both
+    # namespace spellings exist in this project; a full run cannot repair an omitted route.
+    $manifestText = Get-Content (Join-Path $PSScriptRoot '../../.github/test-shards.yml') -Raw
+    $remaining = [regex]::Match($manifestText,
+        '(?m)^  - name: Unit - 13 Remaining[^\r\n]*\r?\n(?:    [^\r\n]*\r?\n)*?    filter: >-\r?\n(?<filter>(?:      [^\r\n]*\r?\n)+)')
+    Assert-True $remaining.Success 'Shipping remaining-unit filter was not found.'
+    $remainingFilter = ConvertTo-TestFilter $remaining.Groups['filter'].Value
+    foreach ($root in @('AiDotNet.Tests', 'AiDotNetTests')) {
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.DistributedTraining.DistributedTrainingValidationTests.ShardingConfiguration_Constructor_ThrowsOnNullBackend")) -eq $script:FilterTrue) `
+            "Remaining-unit filter omits the distributed tests under $root."
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.Diffusion.Models.DDPMModelTests.Test")) -eq $script:FilterFalse) `
+            "Remaining-unit filter duplicates partitioned diffusion tests under $root."
+    }
+    Assert-True ((Test-TestFilter $remainingFilter (New-Candidate 'AiDotNet.Tests.IntegrationTests.DistributedTraining.Test')) -eq $script:FilterFalse) `
+        'Remaining-unit filter captured integration tests.'
     $f = ConvertTo-TestFilter "Category!=GPU&Category!=Stress& `n (FullyQualifiedName~UnitTests.Alpha|`n FullyQualifiedName~UnitTests.Beta)"
     Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Beta.C.M')) -eq $script:FilterTrue) `
         'a folded multi-line filter did not match its second alternative'
