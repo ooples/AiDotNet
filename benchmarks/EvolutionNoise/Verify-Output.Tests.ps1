@@ -11,3 +11,5 @@ if ($LASTEXITCODE -eq 0 -or (Get-FileHash -LiteralPath $Report).Hash -ne $before
 & dotnet $Assembly --unknown 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) { throw 'Invalid arguments must be refused.' }
 Write-Output 'PASS: existing report preserved and invalid arguments refused.'
+# GitHub's pwsh wrapper propagates LASTEXITCODE; expected native failures must not leak out.
+exit 0
