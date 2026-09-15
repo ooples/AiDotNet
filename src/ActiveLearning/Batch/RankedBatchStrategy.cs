@@ -72,6 +72,11 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
     /// <param name="diversityTradeoff">Trade-off between informativeness and diversity (0-1).</param>
     public RankedBatchStrategy(double minDiversityThreshold, double diversityTradeoff = 0.5)
     {
+        if (double.IsNaN(minDiversityThreshold))
+        {
+            throw new System.ArgumentOutOfRangeException(nameof(minDiversityThreshold));
+        }
+
         _minDiversityThreshold = NumOps.FromDouble(MathHelper.Clamp(minDiversityThreshold, 0.0, 1.0));
         _diversityTradeoff = NumOps.FromDouble(MathHelper.Clamp(diversityTradeoff, 0.0, 1.0));
     }

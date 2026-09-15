@@ -19,6 +19,14 @@ namespace AiDotNetTests.IntegrationTests.ActiveLearning;
 /// </summary>
 public class ActiveLearningIntegrationTests
 {
+    [Fact]
+    public void RankedBatchStrategy_NaNDiversityThreshold_Throws()
+    {
+        var error = Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            new AiDotNet.ActiveLearning.Batch.RankedBatchStrategy<double, Tensor<double>, Tensor<double>>(double.NaN));
+        Assert.Equal("minDiversityThreshold", error.ParamName);
+    }
+
     private const double Tolerance = 1e-6;
     private static readonly INumericOperations<double> NumOps = MathHelper.GetNumericOperations<double>();
 
