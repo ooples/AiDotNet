@@ -30,11 +30,13 @@ public class MssCloneVsSerializeLocalization
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
-            inputSize: 64, outputSize: 64);
+            // A six-level Demucs stack at stride 4 consumes stride^depth samples, so anything shorter
+            // than 4096 runs the time axis dry partway down and the model rejects it outright.
+            inputSize: 4096, outputSize: 4096);
         using var model = new MusicSourceSeparator<double>(arch);
 
         var rng = new Random(7);
-        var input = new Tensor<double>([1, 64]);
+        var input = new Tensor<double>([1, 4096]);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 2 - 1;
 
         var baseline = model.Predict(input);
@@ -56,6 +58,9 @@ public class MssCloneVsSerializeLocalization
 
         // A fresh instance handed the original's parameter vector directly — no serialization at all.
         using var viaParams = new MusicSourceSeparator<double>(arch);
+        // One forward pass first: the Demucs stack sizes itself lazily, so a fresh instance has no
+        // layout to receive a hundred million parameters into until a forward has resolved it.
+        _ = viaParams.Predict(input);
         viaParams.UpdateParameters(model.GetParameters());
         _out.WriteLine($"SETPARAMS ONLY   worstDelta={Worst(baseline, viaParams.Predict(input)):E3}");
 
