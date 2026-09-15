@@ -87,7 +87,7 @@ internal static class Program
             InspirationCount = 3,
             MigrationInterval = 0,
             EnableEvaluationCache = false,
-            EvaluationTimeoutGracePeriod = null
+            EvaluationGracePeriod = null
         };
         try
         {
