@@ -47,8 +47,40 @@ $runnable = Complete-CiWorkloadSelection -All $all -Selected @($normal, $sweep) 
 Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 2) 'A valid mixed selection widened.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -RequiresValidation $true -Escalated $false
 Assert-True ($runnable.Escalated -and $runnable.Shards.Count -eq 3) 'Auxiliary-only selection would publish an empty ordinary ledger.'
+$runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -ImportedNames @('Ordinary') -RequiresValidation $true -Escalated $false
+Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 1 -and $runnable.Shards[0].name -ceq 'Shape' -and
+    $runnable.LedgerShards.Count -eq 1 -and $runnable.LedgerShards[0].name -ceq 'Ordinary') 'Imported ordinary evidence did not preserve an auxiliary-only rerun.'
+$runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -ImportedNames @('Count') -RequiresValidation $true -Escalated $false
+Assert-True $runnable.Escalated 'Auxiliary imports falsely satisfied the ordinary ledger requirement.'
+foreach ($imports in @(@('Unknown'), @('Ordinary', 'Ordinary'), @('Shape'))) {
+    $rejected = $false
+    try { $null = Complete-CiWorkloadSelection -All $all -Selected @($shape) -ImportedNames $imports -RequiresValidation $true -Escalated $false }
+    catch { $rejected = $true }
+    Assert-True $rejected 'An unknown, duplicate, or rerun-overlapping import was accepted.'
+}
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @() -RequiresValidation $false -Escalated $false
 Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 0) 'Non-runtime selection was widened.'
+$completion = [regex]::Match($workflow,
+    '(?ms)^          \. ''\./tools/TestImpact/CiWorkloadKinds\.ps1''\r?\n.*?(?=^          # Slug exactly)')
+Assert-True $completion.Success 'Shipping workload completion block was not found.'
+$completeCode = [scriptblock]::Create([regex]::Replace($completion.Value, '(?m)^          ', ''))
+Push-Location (Join-Path $PSScriptRoot '../..')
+try {
+    foreach ($partial in @($true, $false)) {
+        $deltaPartial = $partial
+        $escalate = $false
+        $requiresValidation = $true
+        $matrixShards = @($shape)
+        $importShards = @('Ordinary')
+        . $completeCode
+        Assert-True ($escalate -eq (-not $partial)) 'Shipping completion ignored valid imports or trusted imports outside a partial plan.'
+        Assert-True ($ledgerShards.Count -eq 1 -and $ledgerShards[0].name -ceq 'Ordinary') 'Shipping completion lost ordinary evidence.'
+        Assert-True ($matrixShards.Count -eq $(if ($partial) { 1 } else { 3 })) 'Shipping completion widened a valid partial plan.'
+    }
+}
+finally { Pop-Location }
+Assert-True ($workflow -match '(?m)^          EXPECTED_SHARD_MATRIX: \$\{\{ needs\.select-shards\.outputs\.ledger_matrix \}\}\r?$') `
+    'Regression inventory does not require imported ordinary shards.'
 $outputPath = Join-Path ([IO.Path]::GetTempPath()) "ci-workloads-$([Guid]::NewGuid().ToString('N')).txt"
 $previousOutput = $env:GITHUB_OUTPUT
 try {
@@ -62,12 +94,20 @@ try {
     )) {
         if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath }
         $matrixShards = @($case.Shards)
+        $ledgerShards = @((Split-CiWorkloads $matrixShards).Tests)
+        if ($case.Shapes -eq 1 -and $case.Tests -eq 0) { $ledgerShards = @($normal) }
         & $code
         $values = @{}
         foreach ($line in Get-Content -LiteralPath $outputPath) {
             $parts = $line.Split('=', 2)
             Assert-True (-not $values.ContainsKey($parts[0])) 'Duplicate workflow output.'
             $values[$parts[0]] = $parts[1]
+        }
+        $actualLedger = @($values['ledger_matrix'] | ConvertFrom-Json)
+        Assert-True (($actualLedger | ConvertTo-Json -Compress) -ceq ($ledgerShards | ConvertTo-Json -Compress)) 'Shipping emitter lost the imported ordinary ledger inventory.'
+        if ($case.Shapes -eq 1 -and $case.Tests -eq 0) {
+            $expected = @(& "$PSScriptRoot/../../.github/scripts/get-selected-shard-names.ps1" -MatrixJson $values['ledger_matrix'])
+            Assert-True ($expected.Count -eq 1 -and $expected[0] -ceq 'Ordinary') 'Production ledger reader cannot accept an auxiliary-only rerun with imported evidence.'
         }
         foreach ($partition in @(
             @{ Matrix = 'matrix'; Flag = 'requires_tests'; Count = $case.Tests },

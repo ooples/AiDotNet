@@ -2,7 +2,8 @@
 param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$root = Join-Path ([IO.Path]::GetTempPath()) "auxiliary-evidence-$([Guid]::NewGuid().ToString('N'))"
+. "$PSScriptRoot/ReviewFixtureCleanup.ps1"
+$root = Join-Path ([IO.Path]::GetTempPath()) "aidotnet-auxiliary-evidence-$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $root | Out-Null
 $previousOutput = $env:GITHUB_OUTPUT
 $env:GITHUB_OUTPUT = Join-Path $root 'outputs.txt'
@@ -39,6 +40,10 @@ try {
         if ($actual -ne $case.Digest) { throw "$($case.Name) authorized an incorrect coverage disposition." }
     }
 }
-finally { $env:GITHUB_OUTPUT = $previousOutput }
+finally {
+    $env:GITHUB_OUTPUT = $previousOutput
+    Remove-ReviewFixtureDirectory -LiteralPath $root -ExpectedLeafPrefix 'aidotnet-auxiliary-evidence-' -ThrowOnUnsafePath
+}
+if (Test-Path -LiteralPath $root) { throw 'Auxiliary evidence fixture was not cleaned up.' }
 Write-Host 'Auxiliary evidence passed: complete coverage plus six incomplete/failed controls.'
 exit 0

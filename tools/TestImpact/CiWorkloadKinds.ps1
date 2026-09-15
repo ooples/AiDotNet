@@ -37,19 +37,25 @@ function Complete-CiWorkloadSelection {
         [Parameter(Mandatory)] [object[]] $All,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Selected,
         [Parameter(Mandatory)] [bool] $RequiresValidation,
-        [Parameter(Mandatory)] [bool] $Escalated
+        [Parameter(Mandatory)] [bool] $Escalated,
+        [string[]] $ImportedNames = @()
     )
     $allPartitions = Split-CiWorkloads $All
     if ($allPartitions.Tests.Count -eq 0) { throw 'The validation catalog has no ordinary ledger-producing workloads.' }
     $partitions = Split-CiWorkloads $Selected
-    if (-not $RequiresValidation -and $Selected.Count -gt 0) { throw 'Non-runtime selection contains workloads.' }
-    # Current maps retain mandatory ordinary shards. If a future map removes all of
-    # them, an auxiliary-only run cannot mint the ordinary ledger required by reuse.
-    # Fail closed rather than emit an empty ledger or silently redefine reporter findings.
-    if ($RequiresValidation -and ($Escalated -or $partitions.Tests.Count -eq 0)) {
-        return [pscustomobject]@{ Shards = $All; Escalated = $true }
+    $imported = @($All | Where-Object { $_.name -cin $ImportedNames })
+    if ($imported.Count -ne $ImportedNames.Count -or
+        @($ImportedNames | Where-Object { $_ -cin @($Selected | ForEach-Object name) }).Count -gt 0) {
+        throw 'Imported workloads must be unique catalog entries disjoint from reruns.'
     }
-    return [pscustomobject]@{ Shards = $Selected; Escalated = $false }
+    if (-not $RequiresValidation -and ($Selected.Count + $imported.Count) -gt 0) { throw 'Non-runtime selection contains workloads.' }
+    $ledgerShards = @($partitions.Tests) + @((Split-CiWorkloads $imported).Tests)
+    # Imported ordinary results satisfy the ledger requirement without being rerun.
+    # They must also be expected downstream, so missing imports cannot produce green evidence.
+    if ($RequiresValidation -and ($Escalated -or $ledgerShards.Count -eq 0)) {
+        return [pscustomobject]@{ Shards = $All; LedgerShards = $allPartitions.Tests; Escalated = $true }
+    }
+    return [pscustomobject]@{ Shards = $Selected; LedgerShards = $ledgerShards; Escalated = $false }
 }
 
 function Complete-CiMapWorkloads {

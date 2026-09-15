@@ -594,6 +594,7 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
+      ledger_matrix: ${{ steps.select.outputs.ledger_matrix }}
       parameter_matrix: ${{ steps.select.outputs.parameter_matrix }}
       shape_matrix: ${{ steps.select.outputs.shape_matrix }}
       requires_tests: ${{ steps.select.outputs.requires_tests }}
@@ -962,12 +963,14 @@ jobs:
           }
 
           . './tools/TestImpact/CiWorkloadKinds.ps1'
+          $ledgerImports = @(if ($deltaPartial -and -not $escalate) { $importShards })
           $runnable = Complete-CiWorkloadSelection -All $all -Selected @($matrixShards) `
-            -RequiresValidation $requiresValidation -Escalated $escalate
+            -RequiresValidation $requiresValidation -Escalated $escalate -ImportedNames $ledgerImports
           if ($runnable.Escalated -and -not $escalate) {
             Write-Host '::warning::no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
           }
           $matrixShards = @($runnable.Shards)
+          $ledgerShards = @($runnable.LedgerShards)
           $escalate = $runnable.Escalated
 
           # Slug exactly as the test job does, because that string is the regression analyzer's
@@ -991,6 +994,8 @@ jobs:
           $workloads = Split-CiWorkloads -Shards @($matrixShards)
           $json = ConvertTo-Json -InputObject @($workloads.Tests) -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "ledger_matrix=$(ConvertTo-Json -InputObject @($ledgerShards) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "parameter_matrix=$(ConvertTo-Json -InputObject @($workloads.ParameterSweep) -Depth 5 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "shape_matrix=$(ConvertTo-Json -InputObject @($workloads.ModelShape) -Depth 5 -Compress)" |
@@ -2519,7 +2524,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
-          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.matrix }}
+          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2555,7 +2560,8 @@ jobs:
           } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
           Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
 
-          # The shards this run actually dispatched. Inventory mode (a master push, which has no
+          # Ordinary shards dispatched or imported by this run. Imports must remain expected
+          # even when only auxiliary workloads rerun. Inventory mode (a master push, which has no
           # baseline to diff against) previously had no expected set, so a shard whose runner died
           # before uploading was simply absent: the counts were taken over whatever arrived and the
           # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
@@ -2566,7 +2572,7 @@ jobs:
             & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
           )
           "inventory_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-          Write-Host "expected shards from the dispatched matrix: $($expectedShardNames.Count)"
+          Write-Host "expected ordinary shards from reruns and imports: $($expectedShardNames.Count)"
 
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
