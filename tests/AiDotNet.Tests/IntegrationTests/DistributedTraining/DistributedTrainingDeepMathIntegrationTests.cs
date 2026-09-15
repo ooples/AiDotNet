@@ -62,6 +62,73 @@ public class DistributedTrainingDeepMathIntegrationTests
         finally { backend.Shutdown(); }
     }
 
+    [Theory]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.DDP)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO1)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO2)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.ZeRO3)]
+    [InlineData(AiDotNet.Enums.DistributedStrategy.FSDP)]
+    public void ParameterResize_ImmediatelyBeforeTrain_IsNotOverwrittenByTheStaleShard(AiDotNet.Enums.DistributedStrategy strategy)
+    {
+        // Train restores LocalShard into the wrapped model before computing gradients. Unless the layout is
+        // refreshed first, a resize made directly on the wrapped model is undone by that write and the layout
+        // check after the backward pass sees the old count.
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString("N"));
+        try
+        {
+            var model = new ResizableDistributedModel();
+            var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+            ShardedModelBase<double, Vector<double>, Vector<double>> sharded = strategy switch
+            {
+                AiDotNet.Enums.DistributedStrategy.DDP => new DDPModel<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO1 => new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO2 => new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.ZeRO3 => new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config),
+                AiDotNet.Enums.DistributedStrategy.FSDP => new FSDPModel<double, Vector<double>, Vector<double>>(model, config),
+                _ => throw new ArgumentOutOfRangeException(nameof(strategy))
+            };
+            var input = new Vector<double>(new double[4]);
+            sharded.Train(input, input);
+            Assert.Equal(7, model.GetParameters().Length);
+
+            model.SetParameters(new Vector<double>(new double[11]));
+            sharded.Train(input, input);
+
+            Assert.Equal(11, model.GetParameters().Length);
+            Assert.Equal(11, sharded.GetParameters().Length);
+        }
+        finally { backend.Shutdown(); }
+    }
+
+    [Fact]
+    public void HybridShardedModel_KeepsItsOwnConfiguredTopology_AcrossInstancesAndResizes()
+    {
+        var backend = new InMemoryCommunicationBackend<double>(0, 2, Guid.NewGuid().ToString("N"));
+        try
+        {
+            var config = new ShardingConfiguration<double>(backend);
+            var model = new ResizableDistributedModel();
+            var pipelineSplit = new HybridShardedModel<double, Vector<double>, Vector<double>>(
+                model, config, pipelineParallelSize: 2, tensorParallelSize: 1, dataParallelSize: 1);
+            // Built before the first instance initializes lazily, so a constructor-to-initializer handoff shared
+            // across instances would hand this topology to the first one.
+            var tensorSplit = new HybridShardedModel<double, Vector<double>, Vector<double>>(
+                new ResizableDistributedModel(), config, pipelineParallelSize: 1, tensorParallelSize: 2, dataParallelSize: 1);
+
+            // Rank 0 of a two-stage pipeline owns the first half of four parameters.
+            Assert.Equal(2, pipelineSplit.LocalParameterShard.Length);
+
+            // Resizing reinitializes the layout; it must still be two pipeline stages (11 = 6 + 5), not the
+            // single-stage fallback that would give rank 0 all eleven.
+            model.SetParameters(new Vector<double>(new double[11]));
+            Assert.Equal(6, pipelineSplit.LocalParameterShard.Length);
+
+            // The second instance initializes with its own tensor split: half of four.
+            Assert.Equal(2, tensorSplit.LocalParameterShard.Length);
+        }
+        finally { backend.Shutdown(); }
+    }
+
     private sealed class ResizableDistributedModel : DistributedTrainingIntegrationTests.MockDistributedModel,
         IParameterizable<double, Vector<double>, Vector<double>>,
         IGradientComputable<double, Vector<double>, Vector<double>>
