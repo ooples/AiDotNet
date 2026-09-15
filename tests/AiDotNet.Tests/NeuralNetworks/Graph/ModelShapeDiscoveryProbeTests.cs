@@ -125,20 +125,17 @@ public class ModelShapeDiscoveryProbeTests
     /// Construction profiles. Two per input type, differing ONLY in extent, so any output constant that
     /// moves between them is a constructor-parameterised value rather than a fixed one.
     /// </summary>
-    private static IReadOnlyList<(string Family, string Name, Func<NeuralNetworkArchitecture<double>> Build)> Profiles =>
+    /// <remarks>
+    /// Each profile is a <see cref="NeuralNetworkArchitecture{T}"/> of the given input type, with
+    /// <c>inputSize</c> (1D) or <c>inputHeight = inputWidth</c> (3D, depth 3) set to <c>Size</c>, and
+    /// <c>outputSize: 4</c>. The worker process builds it (ShapeObservationWorker.Construct).
+    /// </remarks>
+    private static readonly (string Family, string Name, string InputType, int Size, int Depth)[] Profiles =
     [
-        ("1D", "1D-8", () => new NeuralNetworkArchitecture<double>(
-            InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: BaseAxisExtent, outputSize: 4)),
-        ("1D", "1D-12", () => new NeuralNetworkArchitecture<double>(
-            InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: AltAxisExtent, outputSize: 4)),
-        ("3D", "3D-3x8x8", () => new NeuralNetworkArchitecture<double>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-            inputDepth: 3, inputHeight: BaseAxisExtent, inputWidth: BaseAxisExtent, outputSize: 4)),
-        ("3D", "3D-3x12x12", () => new NeuralNetworkArchitecture<double>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-            inputDepth: 3, inputHeight: AltAxisExtent, inputWidth: AltAxisExtent, outputSize: 4)),
+        ("1D", "1D-8", nameof(InputType.OneDimensional), BaseAxisExtent, 0),
+        ("1D", "1D-12", nameof(InputType.OneDimensional), AltAxisExtent, 0),
+        ("3D", "3D-3x8x8", nameof(InputType.ThreeDimensional), BaseAxisExtent, 3),
+        ("3D", "3D-3x12x12", nameof(InputType.ThreeDimensional), AltAxisExtent, 3),
     ];
 
     [Trait("Category", "Sweep")]
@@ -191,56 +188,81 @@ public class ModelShapeDiscoveryProbeTests
         var skipped = new List<string>();
         var selfInconsistent = new List<string>();
 
-        foreach (var open in candidates)
-        {
-            if (probed >= budget) break;
+        // Bounded isolation, as in the shape-law sweep: every candidate is built and probed in its own
+        // worker process (1 GB managed heap, per-model deadline), a bounded batch at a time, and the
+        // results are consumed in candidate order so the probed set is exactly the one the sequential
+        // loop selected. A batch may observe a few candidates past the budget; those are discarded.
+        int workers = EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1);
+        var modelTimeout = TimeSpan.FromSeconds(EnvInt("ADNSHAPE_MODEL_TIMEOUT_SECONDS", 180, 1));
+        var sweepClock = System.Diagnostics.Stopwatch.StartNew();
+        int observedCandidates = 0;
+        long slowestMs = 0;
+        string slowest = "";
 
+        async Task<(Type Open, ModelShapeConformanceProcess.Observation? Observation)> ObserveCandidateAsync(Type open)
+        {
             Type closed;
             try { closed = open.MakeGenericType(typeof(double)); }
-            catch { continue; }
+            catch { return (open, null); }
+
+            var attempts = ConstructionAttemptsFor(closed).ToList();
+            if (attempts.Count == 0)
+                return (open, new ModelShapeConformanceProcess.Observation("observed", null, Array.Empty<ModelShapeConformanceProcess.ProfileObservation>()));
+
+            return (open, await ModelShapeConformanceProcess.ObserveAsync(closed, attempts, modelTimeout));
+        }
+
+        for (int next = 0; next < candidates.Count && probed < budget; next += workers)
+        {
+          var batchResults = await Task.WhenAll(candidates.Skip(next).Take(workers).Select(ObserveCandidateAsync));
+          foreach (var (open, observation) in batchResults)
+          {
+            if (probed >= budget) break;
+            if (observation is null) continue;   // not closable over double
+            observedCandidates++;
 
             // Fit ONCE PER CONSTRUCTION PROFILE. Pooling profiles would hide the very thing the
             // profiles exist to expose - a constant that moves with a constructor argument.
             var fits = new List<(string Family, string Profile, Relation Relation, List<(int[] In, int[] Out)> Obs)>();
-            string? skipReason = null;
+            string? skipReason = observation.Status == "observed"
+                ? null
+                : $"{observation.Status}{(observation.Error is null ? "" : $" ({observation.Error})")}";
             bool usedArchitectureCtor = false;
 
-            foreach (var (family, profileName, buildArch) in ConstructionAttemptsFor(closed))
+            var attempts = ConstructionAttemptsFor(open.MakeGenericType(typeof(double))).ToList();
+            for (int p = 0; p < observation.Profiles.Length && p < attempts.Count; p++)
             {
-                object? model;
-                try { model = Construct(closed, buildArch); }
-                catch (Exception ex)
+                var profile = observation.Profiles[p];
+                string family = ProfileFamily(attempts[p]);
+                if (profile.ElapsedMilliseconds > slowestMs) { slowestMs = profile.ElapsedMilliseconds; slowest = $"{open.Name} [{attempts[p].Name}]"; }
+
+                if (profile.Failure is not null)
                 {
-                    skipReason ??= $"{Unwrap(ex).GetType().Name} constructing";
+                    if (profile.Failure != "no usable constructor")
+                        skipReason ??= profile.Failure == "no concrete declared input shape"
+                            ? "no concrete declared input shape to probe from"
+                            : profile.Failure;
                     continue;
                 }
-                if (model is null) continue;
-                if (buildArch is not null) usedArchitectureCtor = true;
+                if (!attempts[p].UseDefaultConstructor) usedArchitectureCtor = true;
 
-                try
+                var observations = profile.Observations
+                    .Where(o => o.Output is not null)
+                    .Select(o => (o.Input, o.Output!))
+                    .ToList();
+                string? predictFailure = profile.Observations.FirstOrDefault(o => o.Output is null)?.Failure;
+                if (observations.Count < 2)
                 {
-                    int[]? perSampleInput = TryArchitectureInputShape(model);
-                    if (perSampleInput is null || perSampleInput.Length == 0 || perSampleInput.Any(d => d <= 0))
-                    {
-                        skipReason ??= "no concrete declared input shape to probe from";
-                        continue;
-                    }
-
-                    var (observations, predictFailure) = ProbeModel(model, perSampleInput);
-                    if (observations.Count < 2)
-                    {
-                        // Name the actual Predict failure. "fewer than 2 successful probes" says
-                        // nothing about WHY, and a skip reason that cannot be acted on is a
-                        // limitation being recorded rather than closed.
-                        skipReason ??= predictFailure is null
-                            ? "fewer than 2 successful probes (Predict returned null)"
-                            : $"Predict failed: {predictFailure}";
-                        continue;
-                    }
-
-                    fits.Add((family, profileName, FitRelation(observations), observations));
+                    // Name the actual Predict failure. "fewer than 2 successful probes" says
+                    // nothing about WHY, and a skip reason that cannot be acted on is a
+                    // limitation being recorded rather than closed.
+                    skipReason ??= predictFailure is null
+                        ? "fewer than 2 successful probes (Predict returned null)"
+                        : $"Predict failed: {predictFailure}";
+                    continue;
                 }
-                finally { (model as IDisposable)?.Dispose(); }
+
+                fits.Add((family, attempts[p].Name, FitRelation(observations), observations));
             }
 
             if (fits.Count == 0)
@@ -283,9 +305,13 @@ public class ModelShapeDiscoveryProbeTests
                 if (mismatch is null) { reproduced++; }
                 else { failures.Add($"{open.Name} [{profileName}]: {mismatch}"); }
             }
+          }
         }
 
         _out.WriteLine("");
+        _out.WriteLine($"observed {observedCandidates} candidates in {sweepClock.Elapsed.TotalSeconds:F0} s "
+            + $"(workers={workers}, per-model timeout={modelTimeout.TotalSeconds:F0} s, "
+            + $"slowest profile={slowest} {slowestMs / 1000.0:F1} s)");
         _out.WriteLine($"probed={probed}  confirmed={confirmed}  parameterised={parameterised}  "
             + $"ambiguous={ambiguous}  unconfirmed (single profile)={unconfirmed}");
         _out.WriteLine($"reached only via the architecture ctor={reachedByArchitectureCtor}  "
@@ -316,25 +342,56 @@ public class ModelShapeDiscoveryProbeTests
 
     /// <summary>
     /// The construction attempts for a model: its parameterless ctor if it has one, otherwise the
-    /// architecture ctor once per profile.
+    /// architecture ctor once per profile. Each attempt carries its probe plan: batch sizes 1/2/3 at
+    /// the declared shape (every axis capped at <see cref="BaseAxisExtent"/>), then each per-sample
+    /// axis moved on its own to <see cref="AltAxisExtent"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A parameterless model builds its own architecture, so profiles cannot move it - its axis
     /// variation has to come from the input side alone, and its fit is reported UNCONFIRMED.
+    /// </para>
+    /// <para>
+    /// Moving an axis a weight is sized against makes Predict throw, and that probe is simply dropped -
+    /// so "try it and keep what worked" needs no guess about which axes are free. Dropping a probe
+    /// loses information; it never invents any. The worker (ShapeObservationWorker) builds the model,
+    /// resolving any options parameter through its <c>TinyForTests</c> profile, and runs the probes.
+    /// </para>
     /// </remarks>
-    private static IEnumerable<(string Family, string Name, Func<NeuralNetworkArchitecture<double>>? Build)>
-        ConstructionAttemptsFor(Type closed)
+    private static IEnumerable<ModelShapeConformanceProcess.ObservationProfile> ConstructionAttemptsFor(Type closed)
     {
         if (closed.GetConstructor(Type.EmptyTypes) is not null)
         {
-            yield return ("default", "default-ctor", null);
+            yield return Attempt("default-ctor", "OneDimensional", 0, 0, useDefaultConstructor: true);
             yield break;
         }
 
         if (FindArchitectureCtor(closed) is null) yield break;
 
-        foreach (var (family, name, build) in Profiles) yield return (family, name, build);
+        foreach (var (_, name, inputType, size, depth) in Profiles)
+            yield return Attempt(name, inputType, size, depth, useDefaultConstructor: false);
     }
+
+    private static ModelShapeConformanceProcess.ObservationProfile Attempt(
+        string name, string inputType, int size, int depth, bool useDefaultConstructor) =>
+        new(Name: name,
+            InputType: inputType,
+            InputSize: size,
+            InputDepth: depth,
+            Classes: 4,
+            Batches: new[] { 1, 2, 3 },
+            AxisCap: BaseAxisExtent,
+            AltExtent: AltAxisExtent,
+            UseDefaultConstructor: useDefaultConstructor,
+            FallBackToDefaultConstructor: false,
+            OverrideClassCountParameters: false,
+            StopAtFirstFailure: false);
+
+    /// <summary>The input-type family a construction attempt belongs to (see <see cref="Profiles"/>).</summary>
+    private static string ProfileFamily(ModelShapeConformanceProcess.ObservationProfile attempt) =>
+        attempt.UseDefaultConstructor
+            ? "default"
+            : Profiles.First(p => p.Name == attempt.Name).Family;
 
     private static ConstructorInfo? FindArchitectureCtor(Type closed) =>
         closed.GetConstructors().FirstOrDefault(c =>
@@ -344,88 +401,6 @@ public class ModelShapeDiscoveryProbeTests
                 && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
                 && ps.Skip(1).All(p => p.HasDefaultValue);
         });
-
-    private static object? Construct(Type closed, Func<NeuralNetworkArchitecture<double>>? buildArch)
-    {
-        if (buildArch is null) return Activator.CreateInstance(closed);
-
-        var ctor = FindArchitectureCtor(closed);
-        if (ctor is null) return null;
-
-        var ps = ctor.GetParameters();
-        var args = new object?[ps.Length];
-        args[0] = buildArch();
-        for (int i = 1; i < ps.Length; i++) args[i] = ResolveProbeArgument(ps[i]);
-        return ctor.Invoke(args);
-    }
-
-    /// <summary>
-    /// Gives models with production-scale defaults an explicit, faithful small profile for bounded
-    /// conformance probes. This is a convention rather than a model-name switch, so any future options
-    /// type can opt in without changing the harness.
-    /// </summary>
-    private static object? ResolveProbeArgument(ParameterInfo parameter)
-    {
-        var factory = parameter.ParameterType
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .FirstOrDefault(method =>
-                method.Name == "TinyForTests"
-                && parameter.ParameterType.IsAssignableFrom(method.ReturnType)
-                && method.GetParameters().All(p => p.HasDefaultValue));
-
-        if (factory is null) return parameter.DefaultValue;
-
-        object?[] arguments = factory.GetParameters().Select(p => p.DefaultValue).ToArray();
-        return factory.Invoke(null, arguments);
-    }
-
-    /// <summary>
-    /// Probes a constructed model: batch sizes 1/2/3 at its declared shape, then each per-sample axis
-    /// moved on its own. Also returns the first Predict failure, so a skip can name its cause.
-    /// </summary>
-    /// <remarks>
-    /// Moving an axis a weight is sized against makes Predict throw, and that probe is simply dropped -
-    /// so "try it and keep what worked" needs no guess about which axes are free. Dropping a probe
-    /// loses information; it never invents any.
-    /// </remarks>
-    private static (List<(int[] In, int[] Out)> Observations, string? FirstFailure) ProbeModel(
-        object model, int[] perSampleInput)
-    {
-        var observations = new List<(int[] In, int[] Out)>();
-        string? firstFailure = null;
-
-        int[] BaseShape(int batch)
-        {
-            var shape = new int[perSampleInput.Length + 1];
-            shape[0] = batch;
-            for (int i = 0; i < perSampleInput.Length; i++)
-            {
-                shape[i + 1] = Math.Min(perSampleInput[i], BaseAxisExtent);
-            }
-            return shape;
-        }
-
-        void Probe(int[] shape)
-        {
-            var (outShape, failure) = TryPredict(model, shape);
-            if (outShape is not null) observations.Add((shape, outShape));
-            else firstFailure ??= failure;
-        }
-
-        foreach (int batch in new[] { 1, 2, 3 }) Probe(BaseShape(batch));
-
-        // Move ONE per-sample axis at a time. This is what makes a Fixed output axis falsifiable:
-        // without it every interior axis is constant simply because nothing varied.
-        for (int axis = 0; axis < perSampleInput.Length; axis++)
-        {
-            var shape = BaseShape(1);
-            if (shape[axis + 1] >= AltAxisExtent) continue;
-            shape[axis + 1] = AltAxisExtent;
-            Probe(shape);
-        }
-
-        return (observations, firstFailure);
-    }
 
     /// <summary>Fits the simplest relation over the observed (input, output) shape pairs.</summary>
     private static Relation FitRelation(List<(int[] In, int[] Out)> obs)
@@ -538,49 +513,6 @@ public class ModelShapeDiscoveryProbeTests
         }
 
         return null;
-    }
-
-    private static Exception Unwrap(Exception ex) =>
-        ex is TargetInvocationException { InnerException: not null } tie ? tie.InnerException : ex;
-
-    private static int[]? TryArchitectureInputShape(object model)
-    {
-        try
-        {
-            dynamic arch = ((dynamic)model).GetArchitecture();
-            int[] shape = arch.GetInputShape();
-            return shape;
-        }
-        catch { return null; }
-    }
-
-    private static (int[]? Shape, string? Failure) TryPredict(object model, int[] shape)
-    {
-        try
-        {
-            var probe = new Tensor<double>(shape);
-
-            // WHOLE NUMBERS, not fractions. A fractional fill made every token-driven model reject
-            // the probe outright - "EmbeddingLayer is in Indices mode but element 1 is 0.538..., which
-            // is not a token index in [0, 256)" - which was the single largest skip cluster. Small
-            // integers are valid token indices for every vocabulary in the inventory (the smallest
-            // measured is 128) and are equally valid as continuous features, so one fill serves both
-            // and the models stop being unreachable. Shape discovery does not depend on the values.
-            for (int i = 0; i < probe.Length; i++) probe[i] = (i * 7) % 13;
-            var result = ((dynamic)model).Predict(probe);
-            return result is null ? (null, "Predict returned null") : ((int[])result._shape, null);
-        }
-        catch (Exception ex)
-        {
-            var root = Unwrap(ex);
-            return (null, $"{root.GetType().Name}: {Summarise(root.Message)}");
-        }
-    }
-
-    private static string Summarise(string message)
-    {
-        var firstLine = message.Split('\n')[0].Trim();
-        return firstLine.Length <= 140 ? firstLine : firstLine.Substring(0, 140) + "...";
     }
 
     private static bool DerivesFromNeuralNetworkBase(Type openGeneric)

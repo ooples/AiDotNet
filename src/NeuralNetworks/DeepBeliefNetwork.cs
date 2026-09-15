@@ -234,20 +234,31 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         // amplifies the (vanishingly small) backprop signal coming out of the
         // deep sigmoid stack into noise, and long-run loss diverges above
         // short-run loss (the failure mode the MoreData_ShouldNotDegrade
-        // invariant catches). Use a fine-tuning learning rate of 0.01 (the
-        // rate set on the MomentumOptimizerOptions below): the lr~0.1 used for
-        // CD-1 up-down pre-training (see PreTrain) is too aggressive for plain
-        // backprop fine-tuning of the pre-trained stack — at lr=0.1 the β=0.9
-        // momentum term overshoots the post-pretrain minimum and the supervised
-        // loss climbs back ABOVE its post-pretrain baseline (initial 0.168 ->
-        // 0.182 over 30 steps, caught by Training_ShouldReduceLoss). 0.01 keeps
-        // the momentum-SGD update in the convergent regime the DBN authors
-        // validated while still being the paper-canonical (non-Adam) optimizer.
+        // invariant catches). The fine-tuning learning rate (0.001, set on the
+        // MomentumOptimizerOptions below) is bounded by the curvature of the
+        // supervised head, not by taste. Heavy-ball momentum is stable only while
+        // lr * lambda_max < 2 (1 + beta) = 3.8 at beta = 0.9, and for the linear
+        // head over the top RBM's sigmoid features h the squared-error Hessian's
+        // largest eigenvalue is 2 (|h|^2 + 1). With the default 2000-unit top RBM
+        // the measured |h|^2 after pre-training is 325-384 (mean activation ~0.41),
+        // so lambda_max ~ 650-770:
+        //   lr = 0.01  -> lr * lambda ~ 6.5-7.7, OUTSIDE the stable region. The loss
+        //                 reached ~1e-5 within a few steps and then bounced back by
+        //                 2-4 orders of magnitude (e.g. 5e-5 -> 0.15) in every one of
+        //                 6 unseeded initialisations; LossStrictlyDecreasesOnMemorizationTask
+        //                 passed or failed depending on where step 100 landed
+        //                 (CI: 0.4726 -> 0.4908).
+        //   lr = 0.001 -> lr * lambda ~ 0.65-0.77, and <= 4.0 even if all 2000
+        //                 sigmoids saturated at 1. All 6 initialisations descended to
+        //                 <= 1.1e-5 by step 100 with the minimum in the final 16 steps.
+        // (lr = 0.1, the CD-1 pre-training rate, is far outside the region: the
+        // supervised loss climbed above its post-pretrain baseline, caught by
+        // Training_ShouldReduceLoss.)
         _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 0.01,
+                InitialLearningRate = 0.001,
                 InitialMomentum = 0.9,
                 BatchSize = batchSize
             });
