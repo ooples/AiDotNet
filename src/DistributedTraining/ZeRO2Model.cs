@@ -70,9 +70,9 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     private Vector<T>? _computedGradients;
 
     /// <inheritdoc/>
-    protected override void InvalidateGradientState()
+    protected override void InvalidateLayoutState()
     {
-        base.InvalidateGradientState();
+        base.InvalidateLayoutState();
         _computedGradients = null;
         _gradientShard = null;
     }
@@ -196,6 +196,11 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
         //
         // Now that IFullModel extends IGradientComputable, we can compute true gradients
         // instead of parameter deltas, enabling proper ZeRO-2 semantics!
+
+        // Refresh the layout BEFORE restoring LocalShard. If the wrapped model was resized since the last
+        // step, writing the stale shard back would return it to the old count and hide the resize from the
+        // layout check that follows gradient computation.
+        EnsureShardingInitialized();
 
         // Set full parameters for gradient computation
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);

@@ -74,9 +74,9 @@ public partial class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, 
     private Vector<T>? _computedGradients;
 
     /// <inheritdoc/>
-    protected override void InvalidateGradientState()
+    protected override void InvalidateLayoutState()
     {
-        base.InvalidateGradientState();
+        base.InvalidateLayoutState();
         _computedGradients = null;
     }
 

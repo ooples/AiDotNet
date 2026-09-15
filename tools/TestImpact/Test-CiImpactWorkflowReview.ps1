@@ -168,6 +168,24 @@ foreach ($pair in @(
         Content = $workflow.Replace($import, $import.Replace($invocation, '          # ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1'))
     }
 }
+foreach ($binding in @(
+    @{ Job = 'parameter-enumeration-sweep'; Flag = 'requires_sweeps' },
+    @{ Job = 'model-shape-conformance-windows'; Flag = 'requires_shapes' }
+)) {
+    $job = [regex]::Match($workflow, '(?ms)^  ' + $binding.Job + ':\r?\n.*?(?=^  [a-z][a-z0-9-]*:|\z)').Value
+    $flag = "fromJSON(needs.select-shards.outputs.$($binding.Flag))"
+    foreach ($mutation in @(
+        @{ Name = 'gate-removed'; Content = $job.Replace(" && $flag", '') },
+        @{ Name = 'gate-comment-decoy'; Content = $job.Replace(" && $flag", '') + "`n    # $flag`n" },
+        @{ Name = 'worker-link-commented'; Content = $job.Replace('          ./tools/TestImpact/Connect-WorkerCoverage.ps1', '          # ./tools/TestImpact/Connect-WorkerCoverage.ps1') }
+    )) {
+        $cases += [pscustomobject]@{
+            Name = "$($binding.Job)-$($mutation.Name)"
+            Reason = 'selected workload partition|parent-only coverage'
+            Content = $workflow.Replace($job, $mutation.Content)
+        }
+    }
+}
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ('aidotnet-ci-contract-review-' + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
