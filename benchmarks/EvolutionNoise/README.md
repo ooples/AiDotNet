@@ -35,12 +35,15 @@ across all study rows is not claimed. The per-challenge family and each audit ha
 ```powershell
 dotnet build benchmarks/EvolutionNoise/EvolutionNoise.csproj -c Release -p:UseLocalEvolution=true -p:EvolutionProjectPath=C:/path/to/Evolution/src/AiDotNet.Evolution/AiDotNet.Evolution.csproj -m:2
 dotnet benchmarks/EvolutionNoise/bin/Release/net10.0/EvolutionNoise.dll > noise-study.json
+./benchmarks/EvolutionNoise/Verify-Study.ps1 -Report noise-study.json
 ```
 
 The JSON contains all raw fitness draws/timing observations, failed/incomplete reports, selected reject identities,
 policy hashes, sample contexts, ledger totals and hashes of actual consumer/core/tensor assemblies.
 Exit success means measurement/accounting contracts passed; inspect `PresetApproved` and confidence bounds for
 the actual preset decision. No benchmark speedup is required to keep a valid inconclusive result.
+The separate verifier gates the predefined conservative ridge preset and harmful negative controls, checks every
+fixed root is present, rejects duplicate within-workflow sample identities and reconciles physical calls against receipts.
 
 ## Consumer use and safety
 
