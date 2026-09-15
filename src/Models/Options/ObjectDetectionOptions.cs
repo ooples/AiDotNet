@@ -153,6 +153,17 @@ public class ObjectDetectionOptions<T> : ModelOptions
     /// distributions are corrected.</para>
     /// </remarks>
     public AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions? TaskAlignedLoss { get; set; }
+
+    /// <summary>
+    /// Proposal and region-of-interest sampling and loss weights used by <c>TrainDetections</c> on Faster R-CNN and
+    /// Cascade R-CNN, or null for the published defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Leave this empty to train with the settings from the Faster R-CNN, Fast R-CNN and
+    /// Cascade R-CNN papers. Set it to change which proposals count as objects or background during training, how
+    /// many are sampled, or how strongly boxes are corrected.</para>
+    /// </remarks>
+    public AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions? TwoStageLoss { get; set; }
 }
 
 /// <summary>

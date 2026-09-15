@@ -55,6 +55,10 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
                 case AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv11<T>:
                     VerifyTaskAlignedSemanticStep(detector, emptyTargets);
                     break;
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>:
+                case AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>:
+                    VerifyTwoStageSemanticStep(detector, emptyTargets);
+                    break;
                 default:
                     Assert.Fail($"{detector.GetType().Name} implements semantic detection training without an independent objective oracle.");
                     break;
@@ -110,6 +114,56 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         Assert.Contains(Enumerable.Range(0, logits.Length), index => !Equals(before[index], after[index]));
         if (!emptyTargets)
             Assert.Contains(Enumerable.Range(logits.Length, boxes.Length), index => !Equals(before[index], after[index]));
+    }
+
+    /// <summary>
+    /// Checks one Faster R-CNN or Cascade R-CNN step on the live model. Proposal sampling is random here, so the exact
+    /// objective values are checked against independent oracles in TwoStageDetectionLossTests; this invariant proves
+    /// the real training route: one image per step is enforced before any update, the recorded loss is finite and
+    /// positive, the proposal network moves, and with objects present the detection stages move as well.
+    /// </summary>
+    internal static void VerifyTwoStageSemanticStep(ObjectDetectorBase<T> detector, bool emptyTargets)
+    {
+        var training = Assert.IsAssignableFrom<AiDotNet.Interfaces.IDetectionTrainingModel<T>>(detector);
+        var ops = MathHelper.GetNumericOperations<T>();
+
+        using var twoImages = new Tensor<T>(new[] { 2, 3, 64, 64 });
+        var twoTargets = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+        {
+            Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>(),
+            Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>()
+        });
+        Assert.Throws<ArgumentException>(() => training.TrainDetections(twoImages, twoTargets));
+        Assert.Equal(0, ops.ToDouble(detector.GetLastLoss()));
+
+        using var input = new Tensor<T>(new[] { 1, 3, 64, 64 });
+        for (int index = 0; index < input.Length; index++)
+            input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
+        var target = new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(1,
+            ops.FromDouble(0.5), ops.FromDouble(0.5), ops.FromDouble(0.4), ops.FromDouble(0.45));
+        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+        {
+            emptyTargets ? Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>() : new[] { target }
+        });
+
+        using (detector.Predict(input)) { }
+        var before = detector.GetParameterStateChunks()
+            .Where(chunk => chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+            .Select(chunk => (chunk.StableId, Values: chunk.Tensor.ToArray())).ToList();
+        training.TrainDetections(input, batch);
+
+        double loss = ops.ToDouble(detector.GetLastLoss());
+        Assert.True(loss > 0 && !double.IsNaN(loss) && !double.IsInfinity(loss), $"Recorded loss {loss:R}.");
+        var after = detector.GetParameterStateChunks().ToDictionary(chunk => chunk.StableId, chunk => chunk.Tensor.ToArray());
+        var moved = before.Where(chunk => !chunk.Values.SequenceEqual(after[chunk.StableId])).Select(chunk => chunk.StableId).ToList();
+        Assert.Contains(moved, id => id.Contains("::_rpn"));
+        if (!emptyTargets)
+        {
+            string stageField = detector is AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>
+                ? "::_stages"
+                : "::_fcClassifier";
+            Assert.Contains(moved, id => id.Contains(stageField));
+        }
     }
 
     /// <summary>
