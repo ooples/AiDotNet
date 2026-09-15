@@ -589,12 +589,22 @@ public static class LayerCloning
             && !LayerFactoryRegistry<T>.TryCreate(
                 type, definition, bag, source.ScalarActivation, source.VectorActivation, out rebuilt))
         {
-            throw new NotSupportedException(
-                $"{type.Name} cannot be rebuilt: no generated factory, no registered factory, and its "
-                + "constructor could not be satisfied from the saved state. If this layer lives "
-                + "outside AiDotNet, register a factory with "
-                + $"LayerFactoryRegistry<{typeof(T).Name}>.Register, or make sure each constructor "
-                + "argument is stored in a field of the same name so it is written at save time.");
+            // Constructors can forward shapes directly to LayerBase without retaining their own
+            // fields. Retry only after existing factories decline, preserving explicitly saved keys.
+            var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
+            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = source.GetInputShape();
+            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = source.GetOutputShape();
+            if (!LayerFactoryRegistry<T>.TryCreate(
+                    type, definition, new LayerStateBag(withShapes, type.Name),
+                    source.ScalarActivation, source.VectorActivation, out rebuilt))
+            {
+                throw new NotSupportedException(
+                    $"{type.Name} cannot be rebuilt: no generated factory, no registered factory, and its "
+                    + "constructor could not be satisfied from the saved state. If this layer lives "
+                    + "outside AiDotNet, register a factory with "
+                    + $"LayerFactoryRegistry<{typeof(T).Name}>.Register, or make sure each constructor "
+                    + "argument is stored in a field of the same name so it is written at save time.");
+            }
         }
 
         if (rebuilt is not LayerBase<T> layer)

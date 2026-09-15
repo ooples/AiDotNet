@@ -127,6 +127,9 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     /// </summary>
     private bool _isShardingInitialized;
 
+    [AiDotNet.Attributes.Scratch]
+    private long _initializedWrappedParameterCount = -1;
+
     /// <inheritdoc/>
     public IFullModel<T, TInput, TOutput> WrappedModel => _wrappedModel;
 
@@ -232,10 +235,16 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     /// </remarks>
     protected void EnsureShardingInitialized()
     {
-        if (!_isShardingInitialized)
+        // Inspect the wrapped model directly: the tensor-parallel authoritative source calls this
+        // initializer, so querying this wrapper's ParameterCount would recurse.
+        var parameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+        if (!_isShardingInitialized || _initializedWrappedParameterCount != parameterCount)
         {
+            _isShardingInitialized = false;
+            CachedFullParameters = null;
             OnBeforeInitializeSharding();
             InitializeSharding();
+            _initializedWrappedParameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
             _isShardingInitialized = true;
         }
     }
