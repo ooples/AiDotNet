@@ -91,15 +91,18 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
     private Vector<T>? _computedGradients;
 
     /// <inheritdoc/>
-    protected override void InvalidateGradientState()
+    protected override void InvalidateLayoutState()
     {
-        base.InvalidateGradientState();
+        base.InvalidateLayoutState();
         _computedGradients = null;
     }
 
-    // Static ThreadLocal to pass constructor parameters before base constructor call.
-    // This is necessary because C# doesn't allow derived class code to run before base constructor.
-    private static readonly ThreadLocal<(int pp, int tp, int dp)?> PendingConfig = new();
+    // The topology the caller asked for. Sharding initializes lazily - after the constructor, and again
+    // whenever the wrapped model's parameter count changes - so every initialization reads these instead of
+    // state handed over from the constructor call.
+    private readonly int _requestedPipelineParallelSize;
+    private readonly int _requestedTensorParallelSize;
+    private readonly int _requestedDataParallelSize;
 
     // Computed values (set in OnBeforeInitializeSharding)
     private int _pipelineParallelSize;
@@ -124,7 +127,7 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
         int pipelineParallelSize = 1,
         int tensorParallelSize = 1,
         int dataParallelSize = -1)
-        : base(StoreConfigAndPassThrough(wrappedModel, pipelineParallelSize, tensorParallelSize, dataParallelSize), config)
+        : base(wrappedModel, config)
     {
         // Validate parameters early
         if (pipelineParallelSize < 1)
@@ -151,23 +154,9 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
             }
         }
 
-        // PendingConfig is cleared in OnBeforeInitializeSharding after consumption
-        // (not here, because lazy init means OnBeforeInitializeSharding may not have run yet)
-    }
-
-    /// <summary>
-    /// Stores constructor parameters in ThreadLocal before base constructor call.
-    /// This workaround is necessary because C# doesn't allow derived class code to execute
-    /// before the base constructor, but we need these values in OnBeforeInitializeSharding.
-    /// </summary>
-    private static IFullModel<T, TInput, TOutput> StoreConfigAndPassThrough(
-        IFullModel<T, TInput, TOutput> model,
-        int pipelineParallelSize,
-        int tensorParallelSize,
-        int dataParallelSize)
-    {
-        PendingConfig.Value = (pipelineParallelSize, tensorParallelSize, dataParallelSize);
-        return model;
+        _requestedPipelineParallelSize = pipelineParallelSize;
+        _requestedTensorParallelSize = tensorParallelSize;
+        _requestedDataParallelSize = dataParallelSize;
     }
 
     /// <summary>
@@ -175,20 +164,15 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
     /// </summary>
     protected override void OnBeforeInitializeSharding()
     {
-        // Read configuration from ThreadLocal (stored before base constructor call)
-        var pending = PendingConfig.Value ?? (1, 1, -1);
-
-        // Clear the pending config now that we've consumed it
-        PendingConfig.Value = null;
-        int requestedPipelineParallelSize = pending.pp;
-        int requestedTensorParallelSize = pending.tp;
-        int requestedDataParallelSize = pending.dp;
-
-        _pipelineParallelSize = requestedPipelineParallelSize;
-        _tensorParallelSize = requestedTensorParallelSize;
+        // Runs on every (re)initialization, so the topology is always the constructor's, never a default.
+        // The former ThreadLocal handoff was consumed by the first initialization and fell back to (1, 1, -1)
+        // on the next, so a resized wrapped model silently lost its pipeline and tensor split; it could also
+        // be consumed by a different instance constructed on the same thread before this one initialized.
+        _pipelineParallelSize = _requestedPipelineParallelSize;
+        _tensorParallelSize = _requestedTensorParallelSize;
 
         // Calculate data parallel size if not specified
-        if (requestedDataParallelSize == -1)
+        if (_requestedDataParallelSize == -1)
         {
             int totalGpus = Config.CommunicationBackend.WorldSize;
             if (totalGpus % (_pipelineParallelSize * _tensorParallelSize) != 0)
@@ -201,7 +185,7 @@ public partial class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T
         }
         else
         {
-            _dataParallelSize = requestedDataParallelSize;
+            _dataParallelSize = _requestedDataParallelSize;
         }
 
         // Verify configuration

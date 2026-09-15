@@ -11,7 +11,9 @@
 
     Partial transfers retain their archive prefix. Each retry refreshes the archive URL and requests
     only the missing range; suffixes are appended only after validating the final Content-Range.
-    Servers ignoring or rejecting ranges cannot cause response bytes to be blindly concatenated.
+    Servers ignoring or rejecting ranges cannot cause response bytes to be blindly concatenated: a
+    resumed response that cannot continue the prefix, or a resumed archive that fails its digest, is
+    discarded and the transfer restarts from offset 0 within the remaining attempts.
 
     Transient responses use bounded exponential backoff with deterministic jitter. A permission or
     identity error fails immediately, and exhausting the retry budget remains a hard failure: callers
@@ -162,21 +164,27 @@ function Merge-ArtifactResponse {
     if ($HttpStatus -ne 206) { return $false }
 
     # Redirects have their own headers. Only the final response can describe the downloaded bytes.
+    # Every rejection below is an InvalidDataException: the response cannot continue the retained prefix,
+    # so the caller restarts from offset 0 rather than failing a transfer a fresh request could complete.
     $responses = [regex]::Matches($Headers, '(?m)^HTTP/\S+\s+\d{3}[^\r\n]*\r?\n')
-    if ($responses.Count -eq 0) { throw 'Partial artifact response has no HTTP headers' }
+    if ($responses.Count -eq 0) {
+        throw [IO.InvalidDataException]::new('Partial artifact response has no HTTP headers')
+    }
     $finalHeaders = $Headers.Substring($responses[$responses.Count - 1].Index)
-    $ranges = [regex]::Matches($finalHeaders, '(?im)^Content-Range:\s*bytes (\d+)-(\d+)/(\d+)\s*\r?$')
+    # RFC 9110 section 14.4: complete-length is '*' when the server does not know it.
+    $ranges = [regex]::Matches($finalHeaders, '(?im)^Content-Range:\s*bytes (\d+)-(\d+)/(\d+|\*)\s*\r?$')
     if ($ranges.Count -ne 1 -or [regex]::Matches($finalHeaders, '(?im)^Content-Range:').Count -ne 1) {
-        throw 'Partial artifact response requires exactly one valid Content-Range'
+        throw [IO.InvalidDataException]::new('Partial artifact response requires exactly one valid Content-Range')
     }
     $start = [long] $ranges[0].Groups[1].Value
     $end = [long] $ranges[0].Groups[2].Value
-    $total = [long] $ranges[0].Groups[3].Value
+    $totalKnown = $ranges[0].Groups[3].Value -ne '*'
+    $total = if ($totalKnown) { [long] $ranges[0].Groups[3].Value } else { -1L }
     $length = if (Test-Path -LiteralPath $Chunk) { (Get-Item -LiteralPath $Chunk).Length } else { 0L }
     $existing = if (Test-Path -LiteralPath $Archive) { (Get-Item -LiteralPath $Archive).Length } else { 0L }
-    if ($start -ne $Offset -or $existing -ne $Offset -or $end -lt $start -or $total -le $end -or
+    if ($start -ne $Offset -or $existing -ne $Offset -or $end -lt $start -or ($totalKnown -and $total -le $end) -or
         $length -gt ($end - $start + 1) -or ($CurlExitCode -eq 0 -and $length -ne ($end - $start + 1))) {
-        throw 'Partial artifact response does not match the requested byte range'
+        throw [IO.InvalidDataException]::new('Partial artifact response does not match the requested byte range')
     }
     if ($length -gt 0) {
         $inputStream = [IO.File]::OpenRead($Chunk)
@@ -187,7 +195,10 @@ function Merge-ArtifactResponse {
         }
         finally { $inputStream.Dispose() }
     }
-    return ($CurlExitCode -eq 0 -and ($existing + $length) -eq $total)
+    if ($totalKnown) { return ($CurlExitCode -eq 0 -and ($existing + $length) -eq $total) }
+    # Unknown complete-length: the open-ended request was answered through $end and the whole range
+    # arrived (validated above), so the transfer is complete. The digest stays the only acceptance test.
+    return ($CurlExitCode -eq 0)
 }
 
 function Receive-ArtifactArchive {
@@ -227,9 +238,20 @@ function Receive-ArtifactArchive {
             $retryAfter = Get-RetryAfterSeconds $headerText
             $disposition = Get-ArtifactRequestDisposition $curlExitCode $httpStatus $responseBody $retryAfter
             if ($httpStatus -in @(200, 206)) {
-                $complete = Merge-ArtifactResponse $Archive $chunk $headerText $offset $httpStatus $curlExitCode
-                $disposition = if ($complete) { [ArtifactRequestDisposition]::Success }
-                    else { [ArtifactRequestDisposition]::Retry }
+                try {
+                    $complete = Merge-ArtifactResponse $Archive $chunk $headerText $offset $httpStatus $curlExitCode
+                    $disposition = if ($complete) { [ArtifactRequestDisposition]::Success }
+                        else { [ArtifactRequestDisposition]::Retry }
+                }
+                catch [IO.InvalidDataException] {
+                    # A malformed, duplicated or misaligned range cannot extend the retained prefix, but a
+                    # fresh full request can still succeed. Exhausting the budget remains a hard failure.
+                    if ($attempt -eq $Attempts) { throw }
+                    Write-Host "Resumed artifact response rejected ($($_.Exception.Message)); restarting from offset 0."
+                    if (Test-Path -LiteralPath $Archive) { Remove-Item -LiteralPath $Archive -Force }
+                    $restart = $true
+                    $disposition = [ArtifactRequestDisposition]::Retry
+                }
             }
             elseif ($httpStatus -eq 416 -and $offset -gt 0) {
                 # The previous transfer can have delivered every byte before a transport error.
@@ -238,13 +260,20 @@ function Receive-ArtifactArchive {
                     $disposition = [ArtifactRequestDisposition]::Success
                 }
                 else {
+                    if (Test-Path -LiteralPath $Archive) { Remove-Item -LiteralPath $Archive -Force }
                     $restart = $true
                     $disposition = [ArtifactRequestDisposition]::Retry
                 }
             }
             if ($disposition -eq [ArtifactRequestDisposition]::Success) {
-                if (-not (Test-ArtifactDigest $Archive $Expected)) { throw 'Artifact failed SHA-256 validation' }
-                return
+                if (Test-ArtifactDigest $Archive $Expected) { return }
+                # A single full response with the wrong digest is an integrity failure. A resumed archive can
+                # instead join a prefix and a suffix from different representations, which a fresh request fixes.
+                if ($offset -eq 0 -or $attempt -eq $Attempts) { throw 'Artifact failed SHA-256 validation' }
+                Write-Host 'Resumed artifact failed SHA-256 validation; restarting from offset 0.'
+                Remove-Item -LiteralPath $Archive -Force
+                $restart = $true
+                $disposition = [ArtifactRequestDisposition]::Retry
             }
             if ($disposition -eq [ArtifactRequestDisposition]::Fail -or $attempt -eq $Attempts) {
                 throw "Required artifact download failed (curl=$curlExitCode, HTTP=$httpStatus)."

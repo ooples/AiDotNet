@@ -241,8 +241,7 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         if (!_isShardingInitialized || _initializedWrappedParameterCount != parameterCount)
         {
             _isShardingInitialized = false;
-            CachedFullParameters = null;
-            InvalidateGradientState();
+            InvalidateLayoutState();
             OnBeforeInitializeSharding();
             InitializeSharding();
             _initializedWrappedParameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
@@ -264,8 +263,19 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         // Default implementation does nothing
     }
 
-    /// <summary>Clears gradient caches belonging to a previous parameter layout.</summary>
-    protected virtual void InvalidateGradientState() { }
+    /// <summary>
+    /// Discards every cache computed against the previous parameter layout. Runs before each (re)initialization.
+    /// </summary>
+    /// <remarks>
+    /// The base owns the gathered full-parameter cache. A derived model that keeps gradients, gradient shards or
+    /// activations shaped by the layout overrides this, clears them, and calls the base. A model whose
+    /// layout-dependent state is rebuilt wholesale by <see cref="InitializeSharding"/> - tensor parallelism's
+    /// partitioned network - needs no override.
+    /// </remarks>
+    protected virtual void InvalidateLayoutState()
+    {
+        CachedFullParameters = null;
+    }
 
     /// <summary>Refreshes a lazily materialized layout before publishing its newly computed gradients.</summary>
     protected Vector<T> ComputeGradientsForCurrentLayout(TInput input, TOutput expectedOutput)

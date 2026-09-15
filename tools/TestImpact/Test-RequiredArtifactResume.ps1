@@ -16,7 +16,8 @@ using System.Threading.Tasks;
 public enum ArtifactResumeScenario
 {
     Interrupted, TimedOut, IgnoredRange, RejectedRange, WrongRange,
-    RateLimited, Corrupt, AlreadyComplete, Exhausted, PermissionDenied, DuplicateRange
+    RateLimited, Corrupt, AlreadyComplete, Exhausted, PermissionDenied, DuplicateRange,
+    WildcardTotal, ResumedCorrupt, ResumedCorruptExhausted
 }
 
 public sealed class ArtifactResumeFixture : IDisposable
@@ -103,6 +104,15 @@ public sealed class ArtifactResumeFixture : IDisposable
                         extra = $"Content-Range: bytes {offset + 1}-{Payload.Length - 1}/{Payload.Length}\r\n";
                     }
                     else if (scenario == ArtifactResumeScenario.DuplicateRange) { extra += extra; }
+                    else if (scenario == ArtifactResumeScenario.WildcardTotal)
+                    {
+                        extra = $"Content-Range: bytes {offset}-{Payload.Length - 1}/*\r\n";
+                    }
+                    else if ((scenario == ArtifactResumeScenario.ResumedCorrupt ||
+                        scenario == ArtifactResumeScenario.ResumedCorruptExhausted) && offset > 0)
+                    {
+                        bytes = (byte[])Payload.Clone(); bytes[start] = (byte)'z'; // A different representation's suffix.
+                    }
                     var response = Encoding.ASCII.GetBytes($"HTTP/1.1 {status} Fixture\r\nContent-Length: {declared}\r\n{extra}Connection: close\r\n\r\n");
                     stream.Write(response, 0, response.Length);
                     stream.Write(bytes, start, count);
@@ -136,26 +146,26 @@ try {
         if ($scenario -eq [ArtifactResumeScenario]::AlreadyComplete) {
             [IO.File]::WriteAllBytes($archive, $fixture.Payload)
         }
+        # Only TimedOut needs a request to outlive curl's --max-time; a one-second limit elsewhere would let a
+        # slow loopback response add an unplanned retry and break the offset assertions below.
+        $timeout = if ($scenario -eq [ArtifactResumeScenario]::TimedOut) { 1 } else { 30 }
+        $attempts = if ($scenario -eq [ArtifactResumeScenario]::ResumedCorruptExhausted) { 2 } else { 3 }
         $failure = $null
         try {
             Receive-ArtifactArchive -Url "http://127.0.0.1:$($fixture.Port)/$([int]$scenario)" `
-                -Archive $archive -Expected $expected -RequestHeaders @() -Attempts 3 `
-                -WorkflowRunId 100 -MatrixJobIndex 0 -RequestTimeoutSeconds 1 -Delay { param($seconds) }
+                -Archive $archive -Expected $expected -RequestHeaders @() -Attempts $attempts `
+                -WorkflowRunId 100 -MatrixJobIndex 0 -RequestTimeoutSeconds $timeout -Delay { param($seconds) }
         }
         catch { $failure = $_.Exception.Message }
         $expectedFailure = switch ($scenario) {
-            ([ArtifactResumeScenario]::WrongRange) { 'requested byte range' }
-            ([ArtifactResumeScenario]::DuplicateRange) { 'exactly one valid Content-Range' }
             ([ArtifactResumeScenario]::Corrupt) { 'SHA-256' }
+            ([ArtifactResumeScenario]::ResumedCorruptExhausted) { 'SHA-256' }
             ([ArtifactResumeScenario]::Exhausted) { 'download failed' }
             ([ArtifactResumeScenario]::PermissionDenied) { 'HTTP=403' }
             default { $null }
         }
         if ($null -ne $expectedFailure) {
             Assert-True ($null -ne $failure -and $failure.Contains($expectedFailure)) "$scenario did not fail closed: $failure"
-            if ($scenario -in @([ArtifactResumeScenario]::WrongRange, [ArtifactResumeScenario]::DuplicateRange)) {
-                Assert-True ((Get-Item -LiteralPath $archive).Length -eq 1024) "$scenario changed the accepted prefix"
-            }
         }
         else {
             Assert-True ($null -eq $failure) "$scenario failed: $failure"
@@ -166,6 +176,10 @@ try {
             ([ArtifactResumeScenario]::PermissionDenied) { @(0) }
             ([ArtifactResumeScenario]::Corrupt) { @(0) }
             ([ArtifactResumeScenario]::RejectedRange) { @(0, 1024, 0) }
+            # A range that cannot continue the prefix, or a resumed archive failing its digest, restarts at 0.
+            ([ArtifactResumeScenario]::WrongRange) { @(0, 1024, 0) }
+            ([ArtifactResumeScenario]::DuplicateRange) { @(0, 1024, 0) }
+            ([ArtifactResumeScenario]::ResumedCorrupt) { @(0, 1024, 0) }
             ([ArtifactResumeScenario]::RateLimited) { @(0, 1024, 1024) }
             ([ArtifactResumeScenario]::Exhausted) { @(0, 1024, 2048) }
             default { @(0, 1024) }
@@ -173,7 +187,7 @@ try {
         Assert-True (($fixture.Offsets($scenario) -join ',') -ceq ($expectedOffsets -join ',')) `
             "$scenario did not use the expected resume offsets"
     }
-    Write-Host 'Artifact resume transport: 11 real-curl loopback scenarios passed.'
+    Write-Host "Artifact resume transport: $([Enum]::GetValues([ArtifactResumeScenario]).Length) real-curl loopback scenarios passed."
 }
 finally {
     $fixture.Dispose()
