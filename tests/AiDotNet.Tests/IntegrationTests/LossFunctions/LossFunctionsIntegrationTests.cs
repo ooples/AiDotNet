@@ -12,6 +12,25 @@ namespace AiDotNet.Tests.IntegrationTests.LossFunctions;
 /// </summary>
 public class LossFunctionsIntegrationTests
 {
+    [Fact]
+    public void ExponentialLoss_ZeroLabel_Throws()
+    {
+        var loss = new ExponentialLoss<double>();
+        var error = Assert.Throws<System.ArgumentException>(() => loss.CalculateLoss(
+            new Vector<double>(new[] { 1.0 }), new Vector<double>(new[] { 0.0 })));
+        Assert.Equal("actual", error.ParamName);
+    }
+
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(1.0)]
+    public void ExponentialLoss_SignedLabelWithZeroPrediction_ReturnsOne(double label)
+    {
+        var loss = new ExponentialLoss<double>();
+        Assert.Equal(1.0, loss.CalculateLoss(new Vector<double>(new[] { 0.0 }),
+            new Vector<double>(new[] { label })));
+    }
+
     private const double Tolerance = 1e-6;
 
     #region Mean Squared Error Loss Tests

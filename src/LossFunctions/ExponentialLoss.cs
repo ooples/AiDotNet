@@ -52,6 +52,11 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
+            if (NumOps.Compare(actual[i], NumOps.Zero) == 0)
+            {
+                throw new System.ArgumentException("Exponential-loss labels must be nonzero.", nameof(actual));
+            }
+
             // exp(-y * f(x))
             T exponent = NumOps.Negate(NumOps.Multiply(actual[i], predicted[i]));
             loss = NumOps.Add(loss, NumOps.Exp(exponent));
