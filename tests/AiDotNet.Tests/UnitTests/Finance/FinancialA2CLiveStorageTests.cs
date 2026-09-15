@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Trading.Agents;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Parameters;
@@ -192,6 +193,8 @@ public sealed class FinancialA2CLiveStorageTests
         return new FinancialA2CAgent<double>(architecture, Arch(4, 1), options);
     }
 
+    // Returns its input unchanged, so the output has the input's shape at any rank.
+    [ElementWiseShape]
     private sealed class ScratchPrefix : LayerBase<double>
     {
         [Scratch]
@@ -207,8 +210,23 @@ public sealed class FinancialA2CLiveStorageTests
         public override void ResetState() { }
     }
 
-    private sealed class OpaqueComposite : LayerBase<double>
+    // A 4 -> 3 feature map, declared exactly like FullyConnectedLayer: batch passes through and the feature width
+    // is this layer's own output shape.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class OpaqueComposite : LayerBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputShape[0]));
+            return inputRank switch
+            {
+                1 => new[] { features },
+                2 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), features },
+                _ => null,
+            };
+        }
+
         private readonly FinancialA2CPolicyOwnershipTests.LegacyLayer _child;
         public OpaqueComposite(FinancialA2CPolicyOwnershipTests.LegacyLayer child)
             : base(new[] { 4 }, new[] { 3 })
@@ -221,6 +239,8 @@ public sealed class FinancialA2CLiveStorageTests
         public override void ResetState() => _child.ResetState();
     }
 
+    // Returns its input unchanged, so the output has the input's shape at any rank.
+    [ElementWiseShape]
     private sealed class ReorderingPrefix : LayerBase<double>
     {
         private readonly Tensor<double> _first = new(new[] { 1 });
@@ -244,6 +264,8 @@ public sealed class FinancialA2CLiveStorageTests
         public override void ResetState() { }
     }
 
+    // Multiplies by a scalar, which preserves the input's shape at any rank.
+    [ElementWiseShape]
     private sealed class HalfPrefix : LayerBase<double>
     {
         public Tensor<Half> Scale { get; } = new(new[] { 1 });

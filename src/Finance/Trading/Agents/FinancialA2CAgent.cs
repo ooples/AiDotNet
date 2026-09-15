@@ -310,7 +310,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         }
 
         var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
-        var advantages = new Tensor<T>([n], new Vector<T>(advantageData));
+        // Consumed only inside the synchronous custom-loss step below, so it is released when this update returns.
+        using var advantages = new Tensor<T>([n], new Vector<T>(advantageData));
 
         _critic.Train(states, targets);
         T valueLoss = _critic.GetLastLoss();
@@ -486,10 +487,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // are neither cheap mutation stamps nor evidence that an unchanged actor was replaced.
         var current = _policyRuntime.NextStorage;
         current.Clear();
-        foreach (var layer in actor.Layers)
-            if (layer is LayerBase<T> knownLayer)
-                foreach (var stamp in knownLayer.GetParameterStorageVersions())
-                    current[stamp.Storage] = stamp.Version;
+        foreach (var knownLayer in actor.Layers.OfType<LayerBase<T>>())
+            foreach (var stamp in knownLayer.GetParameterStorageVersions())
+                current[stamp.Storage] = stamp.Version;
         bool changed = current.Count != _policyRuntime.Storage.Count;
         foreach (var stamp in current)
             changed |= !_policyRuntime.Storage.TryGetValue(stamp.Key, out int previous) || previous != stamp.Value;

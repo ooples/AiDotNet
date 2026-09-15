@@ -65,7 +65,7 @@ public sealed class FinancialAgentReviewContractTests
         Assert.Equal(nameof(options.EpsilonStart), Assert.Throws<ArgumentException>(
             () => { using var unexpected = Create(kind, options, architecture); }).ParamName);
         Assert.Empty(architecture.Layers);
-        Assert.Null(architecture.RandomSeed);
+        Assert.False(architecture.HasExplicitRandomSeed);
     }
 
     [Theory]
@@ -81,7 +81,7 @@ public sealed class FinancialAgentReviewContractTests
         Assert.Throws<ValidationProbeException>(() => { using var unexpected = Create(kind, options, architecture); });
         Assert.Equal(1, options.Calls);
         Assert.Empty(architecture.Layers);
-        Assert.Null(architecture.RandomSeed);
+        Assert.False(architecture.HasExplicitRandomSeed);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class FinancialAgentReviewContractTests
         var error = Assert.Throws<ArgumentOutOfRangeException>(() => agent.Build(architecture, -1, 5));
         Assert.Equal("hiddenLayerCount", error.ParamName);
         Assert.Empty(architecture.Layers);
-        Assert.Null(architecture.RandomSeed);
+        Assert.False(architecture.HasExplicitRandomSeed);
     }
 
     [Theory]

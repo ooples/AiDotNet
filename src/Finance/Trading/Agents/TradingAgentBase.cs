@@ -316,7 +316,9 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
             throw new ArgumentNullException(nameof(architecture));
 
         int ordinal = _networkSeedOrdinal++;
-        if (architecture.RandomSeed is null && TradingOptions.Seed is int seed)
+        // An agent's own options seed is more specific than the process-wide fallback a test harness may set, so
+        // only a seed set on this architecture suppresses the derivation.
+        if (!architecture.HasExplicitRandomSeed && TradingOptions.Seed is int seed)
         {
             architecture.RandomSeed = unchecked((int)(((uint)seed * 2654435761u) ^ ((uint)(ordinal + 1) * 40503u)));
         }
