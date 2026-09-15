@@ -113,10 +113,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Epsilon = 1e-8
         });
         _epsilon = options.EpsilonStart;
-        _agentNetworks = new List<INeuralNetwork<T>>();
-        _targetAgentNetworks = new List<INeuralNetwork<T>>();
-        _mixingNetwork = CreateMixingNetwork();
-        _targetMixingNetwork = CreateMixingNetwork();
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _stepCount = 0;
 
@@ -124,6 +120,11 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         InitializeReplayBuffer();
     }
 
+    // The constructor used to build a first pair of mixing networks here and then call this method, which
+    // built a second pair and registered only that one; the first pair was dropped without ever being
+    // disposed. This method is now the only place the networks are created.
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_agentNetworks), nameof(_targetAgentNetworks), nameof(_mixingNetwork), nameof(_targetMixingNetwork))]
     private void InitializeNetworks()
     {
         _agentNetworks = new List<INeuralNetwork<T>>();

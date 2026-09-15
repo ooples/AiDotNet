@@ -113,6 +113,13 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _targetQ1Network = CreateQNetwork();
         _targetQ2Network = CreateQNetwork();
 
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_policyNetwork);
+        Networks.Add(_q1Network);
+        Networks.Add(_q2Network);
+        Networks.Add(_targetQ1Network);
+        Networks.Add(_targetQ2Network);
+
         CopyNetworkWeights(_q1Network, _targetQ1Network);
         CopyNetworkWeights(_q2Network, _targetQ2Network);
 

@@ -139,6 +139,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         _architecture = architecture;
         EnsureMarketMakingLayers(architecture, options.StateSize, options.ActionSize);
         _policyNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_policyNetwork);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
     }
 

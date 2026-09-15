@@ -105,6 +105,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_actor);
+        Networks.Add(_critic);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
     }
 

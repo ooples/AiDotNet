@@ -108,6 +108,8 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_qNetwork);
+        Networks.Add(_targetNetwork);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
     }

@@ -18215,12 +18215,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <remarks>
     /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// Calling it more than once is harmless: only the first call tears anything down. That
+    /// holds for derived classes too, whose <see cref="Dispose(bool)"/> overrides are not
+    /// re-entered by a repeated call.
     /// </remarks>
     public void Dispose()
     {
+        if (_disposed) return;
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Set by the first <see cref="Dispose(bool)"/>. A repeated dispose must be a no-op: the
+    /// teardown invalidates the THREAD-GLOBAL tape-training caches, so re-running it on a long-
+    /// disposed network would evict the cache of whichever live model the thread trained since.
+    /// </summary>
+    private bool _disposed;
 
     /// <summary>
     /// Protected Dispose pattern implementation.
@@ -18237,6 +18248,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
+        if (_disposed) return;
+        _disposed = true;
+
         if (disposing)
         {
             // Release inference plans plus training plans/caches before layer disposal.

@@ -110,6 +110,11 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         _critic2 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetCritic1 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetCritic2 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_actor);
+        Networks.Add(_critic1);
+        Networks.Add(_critic2);
+        Networks.Add(_targetCritic1);
+        Networks.Add(_targetCritic2);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         
         UpdateTargetNetworks(1.0); // Hard sync at start

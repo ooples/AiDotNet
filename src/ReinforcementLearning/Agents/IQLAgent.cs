@@ -122,6 +122,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _q2Network = CreateQNetwork();
         _targetValueNetwork = CreateValueNetwork();
 
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_policyNetwork);
+        Networks.Add(_valueNetwork);
+        Networks.Add(_q1Network);
+        Networks.Add(_q2Network);
+        Networks.Add(_targetValueNetwork);
+
         CopyNetworkWeights(_valueNetwork, _targetValueNetwork);
 
         // Initialize offline buffer
