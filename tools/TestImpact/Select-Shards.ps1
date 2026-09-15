@@ -90,6 +90,14 @@ $script:SelectionControlPaths = @(
 $script:BuildTimeDirectories = @('src/AiDotNet.Generators/')
 $script:FullValidationDirectories = @('.github/actions/', '.github/scripts/') + $script:BuildTimeDirectories
 $script:SelectionControlDirectories = @('tools/TestImpact/')
+# These helpers cannot choose shards or certify validation. They are exercised by the
+# mandatory tooling checks before selection, including real HTTP transfer regressions.
+# Keep this exact: unknown helpers and selection/certificate policy remain fail-closed.
+$script:IndependentToolPaths = @(
+    'tools/TestImpact/Receive-RequiredArtifact.ps1',
+    'tools/TestImpact/Test-RequiredArtifactResume.ps1',
+    'tools/TestImpact/Test-CiImpactWorkflow.ps1'
+)
 $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/azure-functions-deploy.yml',
     '.github/workflows/cancel-on-pr-close.yml',
@@ -144,6 +152,11 @@ function Get-ChangedPathImpact {
     param([Parameter(Mandatory)] [string] $Path)
 
     $normalized = $Path.Replace('\', '/')
+    foreach ($entry in $script:IndependentToolPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) {
+            return [ChangedPathImpact]::NonRuntime
+        }
+    }
     if (Test-SelectionControl -Path $normalized) {
         return [ChangedPathImpact]::SelectionControl
     }
@@ -1516,6 +1529,9 @@ if ($SelfTest) {
         @{ Path = '.github/scripts/analyze-test-results.ps1'; Why = 'CI analysis scripts must escalate' },
         @{ Path = '.github/actions/local/action.yml'; Why = 'local actions must escalate' },
         @{ Path = 'tools/TestImpact/Select-Shards.ps1'; Why = 'impact tooling must escalate' },
+        @{ Path = 'tools/TestImpact/New-CiValidationCertificate.ps1'; Why = 'certificate policy must escalate' },
+        @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
+        @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
         @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
@@ -1524,6 +1540,28 @@ if ($SelfTest) {
         $r = Select-ImpactedShards -Map $map -Changed @{ $change.Path = @(1, 2) }
         Assert-True $r.Escalate $change.Why
         Assert-True $r.RequiresValidation "$($change.Why) and require validation"
+    }
+
+    foreach ($transportPath in @($script:IndependentToolPaths) + @(
+        'TOOLS/TESTIMPACT/RECEIVE-REQUIREDARTIFACT.PS1',
+        'tools\TestImpact\Test-RequiredArtifactResume.ps1'
+    )) {
+        $r = Select-ImpactedShards -Map $map -Changed @{ $transportPath = @(1, 2) }
+        Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+            "independently tested tooling launched runtime shards: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'src/Covered.cs' = @(12, 14)
+        }
+        Assert-True (-not $r.Escalate -and $r.RequiresValidation -and
+            ($r.Shards -join ',') -ceq 'Alpha,HeavyNoCoverage') `
+            "transport change widened or suppressed mapped runtime coverage: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'tools/TestImpact/Select-Shards.ps1' = @(1, 2)
+        }
+        Assert-True ($r.Escalate -and $r.RequiresValidation) `
+            "independent tooling hid a genuine selection-policy change: $transportPath"
     }
 
     # The exact counterexample that exposed the original defect: two GitHub-hosted documentation
