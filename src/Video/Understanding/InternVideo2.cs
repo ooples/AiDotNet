@@ -35,6 +35,7 @@ namespace AiDotNet.Video.Understanding;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
 /// var model = new InternVideo2&lt;double&gt;(arch);
 /// model.Train(videoFrames, expectedEmbedding);
@@ -45,6 +46,7 @@ namespace AiDotNet.Video.Understanding;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
 /// var model = new InternVideo2&lt;double&gt;(arch, "internvideo2.onnx");
 /// var embedding = model.EncodeVideo(videoFrames);
@@ -189,6 +191,7 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
     /// var model = new InternVideo2&lt;double&gt;(arch);
     /// </code>
@@ -254,6 +257,7 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
     /// var model = new InternVideo2&lt;double&gt;(arch, "internvideo2.onnx");
     /// var embedding = model.EncodeVideo(videoFrames);

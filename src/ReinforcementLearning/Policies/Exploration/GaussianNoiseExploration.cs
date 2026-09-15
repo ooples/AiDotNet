@@ -12,6 +12,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var random = new Random(42);
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.1, -0.4, 0.7, 0.2 });
     /// // Create Gaussian noise exploration for continuous action spaces
     /// var exploration = new GaussianNoiseExploration&lt;double&gt;(initialStdDev: 0.1, noiseDecay: 0.995);
     ///

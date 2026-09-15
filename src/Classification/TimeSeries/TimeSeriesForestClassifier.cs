@@ -42,7 +42,6 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <code>
 /// // Create Time Series Forest with ensemble of interval-based decision trees
 /// var options = new TimeSeriesForestOptions&lt;double&gt;();
-/// var classifier = new TimeSeriesForestClassifier&lt;double&gt;(options);
 ///
 /// // Prepare time series data: rows are samples, columns are time steps
 /// var features = new Matrix&lt;double&gt;(4, 5);
@@ -53,12 +52,14 @@ namespace AiDotNet.Classification.TimeSeries;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train: classify using mean, std, and slope features from random intervals
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new TimeSeriesForestClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict class for new time series
 /// var newSample = new Matrix&lt;double&gt;(1, 5);
 /// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
-/// var predictions = classifier.Predict(newSample);
+/// var predictions = result.Predict(newSample);
 /// // predictions[0] contains the predicted class
 /// </code>
 /// </example>

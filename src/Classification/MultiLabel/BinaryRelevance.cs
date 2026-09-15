@@ -47,10 +47,12 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var labels = new Matrix&lt;double&gt;(new double[,] { { 1.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 1.0 }, { 0.0, 0.0 } });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use AiModelBuilder facade for binaryrelevance classification
-/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new BinaryRelevance&lt;double&gt;(
-///         new BinaryRelevanceOptions&lt;double&gt;()));
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+///     .ConfigureModel(new BinaryRelevance&lt;double&gt;(() => new GaussianNaiveBayes&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);
@@ -125,7 +127,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// var br = new BinaryRelevance&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Using SVM for each label
-    /// var br = new BinaryRelevance&lt;double&gt;(() => new SupportVectorClassifier&lt;double&gt;());
+    /// var br2 = new BinaryRelevance&lt;double&gt;(() => new SupportVectorClassifier&lt;double&gt;());
     /// </code>
     /// </para>
     /// </remarks>

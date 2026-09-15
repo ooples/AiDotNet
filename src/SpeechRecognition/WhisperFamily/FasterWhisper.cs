@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// // Create a Faster-Whisper model for CTranslate2-optimized ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new FasterWhisper&lt;double&gt;(architecture);
 ///

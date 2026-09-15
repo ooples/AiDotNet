@@ -90,13 +90,13 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <example>
     /// <code>
-    /// // Create for FLUX.1
+    /// // FLUX.1 pairs one CLIP encoder with a T5
+    /// var tokenizer = CharacterTokenizer.CreateAscii();
     /// var conditioner = new DualTextConditioner&lt;float&gt;(
-    ///     clipVariant: "ViT-L/14",
-    ///     t5Variant: "T5-XXL");
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
+    ///     new T5TextConditioner&lt;float&gt;(tokenizer, T5Variant.Base));
     ///
-    /// // Create for SDXL (two CLIP encoders, no T5)
-    /// // Note: For SDXL, use TripleTextConditioner instead
+    /// // SDXL uses two CLIP encoders alongside the T5 — see TripleTextConditioner
     /// </code>
     /// </example>
     public DualTextConditioner(

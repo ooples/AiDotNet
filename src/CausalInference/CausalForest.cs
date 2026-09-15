@@ -46,9 +46,19 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 /// <example>
 /// <code>
-/// var forest = new CausalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
-/// forest.Fit(features, treatment, outcome);
-/// Vector&lt;double&gt; cate = forest.EstimateTreatmentEffect(newFeatures);
+/// var covariates = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1, 0, 1 });   // who was treated
+/// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new CausalForest&lt;double&gt;(numTrees: 100, maxDepth: 10))
+///     .Build(covariates, treatment, outcome);
+///
+/// // One effect per person, over the covariates alone.
+/// Vector&lt;double&gt; cate = result.EstimateTreatmentEffect(covariates);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -176,6 +186,7 @@ public partial class CausalForest<T> : CausalModelBase<T>
         bool honest = true,
         double honestFraction = 0.5,
         int? seed = null)
+        : base(seed)
     {
         _numTrees = numTrees;
         _maxDepth = maxDepth;

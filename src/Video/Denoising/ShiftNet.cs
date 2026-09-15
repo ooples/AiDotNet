@@ -52,6 +52,7 @@ namespace AiDotNet.Video.Denoising;
 /// // Create a ShiftNet model for efficient temporal-shift video denoising
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new ShiftNetOptions();
 /// var shiftNet = new ShiftNet&lt;double&gt;(architecture, options);

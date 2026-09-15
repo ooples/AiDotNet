@@ -43,54 +43,24 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // Training namespace" which would silently mask a regression
         // unrelated to routing — this PR's review C7G8U).
         var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1);
-        AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
-        System.Exception? buildException = null;
+        // A downstream exception is not a successful configuration. Let it fail this
+        // test with its original stack instead of accepting a distributed frame.
         try
         {
-            result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
                 .ConfigureDataLoader(loader)
                 .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
                 .BuildAsync();
-        }
-        catch (System.Exception ex)
-        {
-            buildException = ex;
-        }
-
-        // Whether build succeeded or failed downstream, the wrap-switch
-        // runs synchronously BEFORE the optimizer. The strongest
-        // routing-observable is result.Model being an IShardedModel —
-        // a stored-but-not-consumed regression would leave it as the
-        // raw Transformer. If build failed, fall back to checking the
-        // exception originated FROM the distributed namespace by
-        // walking the stack-trace frames for a known DistributedTraining /
-        // ShardedModelBase frame (this PR's review: substring-match on the
-        // raw ex.ToString() is brittle to message renames and matches
-        // frame text from unrelated places).
-        if (result != null)
-        {
             Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
+            Assert.True(backend.AccessCount > 0);
+            using var prediction = result.Predict(features);
+            Assert.NotEmpty(prediction.ToArray());
+            Assert.All(prediction.ToArray(), value => Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
         }
-        else
+        finally
         {
-            Assert.NotNull(buildException);
-            // Tightened (this PR's review C7G8U): require BOTH a
-            // distributed-namespace origin AND evidence the backend was
-            // touched during construction. A permanent regression
-            // somewhere in AiDotNet.DistributedTraining unrelated to the
-            // routing wouldn't increment AccessCount; the routing fire
-            // must have read Rank/WorldSize at minimum.
-            Assert.True(
-                IsExceptionFromNamespace(buildException!, "AiDotNet.DistributedTraining"),
-                $"ConfigureDistributedTraining build failed, but the failure did not originate inside " +
-                $"the AiDotNet.DistributedTraining namespace. Stored-but-not-consumed regression likely. " +
-                $"Top-frame: {buildException!.GetType().FullName} | message: {buildException.Message}");
-            Assert.True(
-                backend.AccessCount > 0,
-                $"ConfigureDistributedTraining build failed in the DistributedTraining namespace, but " +
-                $"the configured backend was never touched (AccessCount=0). This points at a regression " +
-                $"BEFORE the wrap switch ran, not at the wrap itself — stored-but-not-consumed.");
+            backend.Shutdown();
         }
     }
 
@@ -105,7 +75,10 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
     {
         private int _accessCount;
         public int AccessCount => System.Threading.Interlocked.CompareExchange(ref _accessCount, 0, 0);
-        public RecordingCommBackend(int rank, int worldSize) : base(rank, worldSize) { }
+        // Each independent facade fixture owns a communication group. Reusing "default"
+        // collides with unrelated tests that initialized their own rank zero.
+        public RecordingCommBackend(int rank, int worldSize)
+            : base(rank, worldSize, Guid.NewGuid().ToString("N")) { }
         public override int Rank
         {
             get { System.Threading.Interlocked.Increment(ref _accessCount); return base.Rank; }
