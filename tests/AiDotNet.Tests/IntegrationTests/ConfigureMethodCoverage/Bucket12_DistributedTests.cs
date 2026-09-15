@@ -42,7 +42,7 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // it (vs. accepting "any exception in the AiDotNet.Distributed-
         // Training namespace" which would silently mask a regression
         // unrelated to routing — this PR's review C7G8U).
-        var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1);
+        var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1, IsolatedEnvironment());
         AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
         System.Exception? buildException = null;
         try
@@ -101,11 +101,17 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
     /// distinguish "wrap fired and downstream failed" (AccessCount &gt; 0)
     /// from "regression before the wrap fired" (AccessCount == 0).
     /// </summary>
+    /// <summary>
+    /// In-memory environments are process-global: a rank registered in the shared "default" environment by any
+    /// other test makes this one fail with "Rank 0 is already active". Each test gets its own environment.
+    /// </summary>
+    private static string IsolatedEnvironment() => "bucket12-" + System.Guid.NewGuid().ToString("N");
+
     private sealed class RecordingCommBackend<TNum> : InMemoryCommunicationBackend<TNum>
     {
         private int _accessCount;
         public int AccessCount => System.Threading.Interlocked.CompareExchange(ref _accessCount, 0, 0);
-        public RecordingCommBackend(int rank, int worldSize) : base(rank, worldSize) { }
+        public RecordingCommBackend(int rank, int worldSize, string environmentId) : base(rank, worldSize, environmentId) { }
         public override int Rank
         {
             get { System.Threading.Interlocked.Increment(ref _accessCount); return base.Rank; }
@@ -185,7 +191,7 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1, IsolatedEnvironment());
 
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         builder.ConfigureModel(model);
