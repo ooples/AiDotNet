@@ -55,6 +55,52 @@ public sealed class CSharpConfigurationTests
         Assert.Equal(3.654m, ledger.Snapshot().Spent["cost_units"]);
     }
 
+    [Fact]
+    public async Task Program_portfolio_reaches_facade_and_attributes_compilation_repairs_and_evaluation_once()
+    {
+        var program = Program();
+        program.SeedPrograms.Add(Source);
+        program.TestCases.Add(new ProgramInputOutputExample { Input = "", ExpectedOutput = "1" });
+        program.Engine.MaxProposals = 3;
+        program.Engine.MaxEvaluationAttempts = 3;
+        program.Engine.MaxGenerations = 2;
+        var limits = Ledger().Limits.Amounts.ToDictionary(pair => pair.Key, pair => pair.Value);
+        limits["reference_bytes"] *= 2; // Each compiler must reserve its metadata maximum before setup.
+        var ledger = new EvolutionResourceLedger(Guid.NewGuid().ToString("N"), new EvolutionResources(limits));
+        var goodOptions = Options(); goodOptions.Id = "good";
+        var badOptions = Options(); badOptions.Id = "repair-failure";
+        var resources = new ProgramEvolutionResourceOptions(ledger, 1, goodOptions.CostUnitVersionHash);
+        program.ResourceAccounting = resources;
+        var good = new ScriptedClient();
+        var bad = new ScriptedClient { Handler = (_, messages) => ScriptedClient.Response(Reply(messages, "INVALID")) };
+        var portfolio = new ProgramVariationPortfolio(new IProgramVariationOperator[]
+        {
+            CSharpProgramEvolutionExtensions.CreateCSharpProgramVariation(good, program, goodOptions, resources),
+            CSharpProgramEvolutionExtensions.CreateCSharpProgramVariation(bad, program, badOptions, resources)
+        }, new EvolutionOperatorRewardPolicy(EvolutionOperatorRewardKind.ParentImprovement,
+            EvolutionOperatorCostBasis.ProposalAndEvaluation, resources.CostUnitVersionHash));
+        program.CustomVariation = portfolio;
+        var credits = new List<EvolutionOperatorCredit>();
+        portfolio.CreditCommitted += credits.Add;
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>().ConfigureProgramExecutionEngine(new ScriptedExecution())
+            .ConfigureProgramEvolution(program).BuildAsync();
+        Assert.Equal(2, credits.Count);
+        Assert.Equal(2, credits.Select(c => c.Generation).Distinct().Count());
+        Assert.Equal(new[] { "resource-metered:good", "resource-metered:repair-failure" }, credits.Select(c => c.OperatorId));
+        Assert.All(credits, credit => Assert.NotNull(credit.ProposalCost));
+        Assert.Equal(3, portfolio.GetUsage().ChatCalls);
+        Assert.Equal(1, portfolio.GetUsage().Retries);
+        Assert.Equal(2, portfolio.GetUsage().Proposals);
+        Assert.Equal(0, credits[1].Reward);
+        var spent = ledger.Snapshot();
+        Assert.Equal(3, spent.Spent["model_calls"]);
+        Assert.Equal(spent.Receipts.Where(r => r.Stage == EvolutionResourceStage.Proposal).Sum(r => r.Charged["cost_units"]),
+            credits.Sum(c => c.ProposalCost!.Charged["cost_units"]));
+        Assert.All(portfolio.Statistics, statistic => Assert.Equal(1, statistic.Outcomes));
+        Assert.Throws<InvalidOperationException>(() => portfolio.GetProposalCost(1));
+        Assert.Empty(JsonDocument.Parse(portfolio.CaptureState()).RootElement.GetProperty("Pending").EnumerateObject());
+    }
+
     [Theory]
     [InlineData("MaxSourceChars", 255)]
     [InlineData("MaxSourceChars", 65537)]

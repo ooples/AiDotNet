@@ -59,7 +59,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Evolution
-          ref: e1a791c8d6549adc9ef0f5b40e1668ff7fb12dec
+          ref: 8d28a72d72bf48cb75ceadc6a70a77844e657ac7
           # Keep sibling repositories separate: nesting core under the consumer inherits its CPM file.
           path: evolution
           persist-credentials: false
