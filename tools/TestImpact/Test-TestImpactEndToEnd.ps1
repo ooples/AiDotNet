@@ -4,6 +4,7 @@
 #>
 [CmdletBinding()]
 param()
+. "$PSScriptRoot/CiWorkloadKinds.ps1"
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -82,7 +83,7 @@ try {
         $disabledHooks = Join-Path $fixture 'disabled-hooks'
         New-Item -ItemType Directory -Path $disabledHooks -Force | Out-Null
         Invoke-Git config core.hooksPath $disabledHooks
-        @('one', 'alpha before', 'three', 'beta unchanged', 'five') |
+        @('class Feature {', 'int Alpha() { return 1; }', '', 'int Beta() { return 1; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs
         Invoke-Git commit --quiet -m baseline
@@ -224,7 +225,7 @@ try {
             (Test-Path -LiteralPath unchanged-certified/certification.json)) `
             'the policy did not certify the clean identical-tree audit'
 
-        @('one', 'alpha after', 'three', 'beta unchanged', 'five') |
+        @('class Feature {', 'int Alpha() { return 2; }', '', 'int Beta() { return 1; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs
         Invoke-Git commit --quiet -m narrow-change
@@ -369,7 +370,7 @@ try {
         $masterSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
 
         Invoke-Git checkout --quiet --detach $baseSha
-        @('one', 'alpha behind', 'three', 'beta unchanged', 'five') |
+        @('class Feature {', 'int Alpha() { return 3; }', '', 'int Beta() { return 1; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         New-Item -ItemType Directory -Path tests/Proj/UnitTests/Alpha -Force | Out-Null
         @(
@@ -508,7 +509,7 @@ try {
         # (a) Master edits a line only Beta executes. Δ selects Beta + Always; the pull request ran
         #     Alpha + Always. Rerun Beta + Always (no assumed master evidence), import Alpha.
         Invoke-Git checkout --quiet --detach $masterSha
-        @('one', 'alpha before', 'three', 'beta changed on master', 'five') |
+        @('class Feature {', 'int Alpha() { return 1; }', '', 'int Beta() { return 2; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git commit --quiet -am master-runtime-change
         Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
@@ -520,6 +521,55 @@ try {
             "the partial re-run did not import the untouched pull-request shard: import=$(@($plan.import) -join ',')"
         Assert-True ($plan.tree -ceq $testedTree) 'the validated tree was not rebuilt exactly from its parents'
         Write-Host "Post-merge runtime delta: mode=$($plan.mode); rerun=$(@($plan.rerun) -join ','); import=$(@($plan.import) -join ',')"
+        $workloadManifest = @(Get-Content shard-manifest.json -Raw | ConvertFrom-Json)
+        $workloadManifest[0] | Add-Member -NotePropertyName workload -NotePropertyValue 'ParameterSweep'
+        $workloadManifest[1] | Add-Member -NotePropertyName workload -NotePropertyValue 'ModelShape'
+        $deltaWorkloads = Split-CiWorkloads @($workloadManifest | Where-Object { $_.name -cin $plan.rerun })
+        $importedWorkloads = Split-CiWorkloads @($workloadManifest | Where-Object { $_.name -cin $plan.import })
+        Assert-True ($deltaWorkloads.Tests.Count -eq 1 -and $deltaWorkloads.ModelShape.Count -eq 1 -and
+            $deltaWorkloads.ParameterSweep.Count -eq 0 -and $importedWorkloads.ParameterSweep.Count -eq 1) `
+            'post-merge delta widened an imported parameter sweep or omitted affected model conformance'
+        $workloadManifest | ConvertTo-Json -Depth 5 | Set-Content auxiliary-manifest.json
+        # Profile the fixture's current catalog, before the PR/master body-only changes.
+        # The line coordinates are unchanged; old master's unmapped helper already exists.
+        $auxiliaryMap = Get-Content certified/shard-map.json -Raw | ConvertFrom-Json
+        $auxiliaryMap.sha = $masterSha
+        $auxiliaryMap | ConvertTo-Json -Depth 8 | Set-Content auxiliary-map.json
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile auxiliary-manifest.json -SelectorPath $selector -OutFile auxiliary-delta.json 6>$null
+        $auxiliaryPlan = Get-Content auxiliary-delta.json -Raw | ConvertFrom-Json
+        Assert-True ($auxiliaryPlan.mode -ceq 'Partial' -and
+            ($auxiliaryPlan.rerun -join ',') -ceq 'Always,Beta' -and ($auxiliaryPlan.import -join ',') -ceq 'Alpha') `
+            "typed auxiliary delta did not preserve selective reuse: $($auxiliaryPlan.why)"
+        $legacyUpgradeManifest = @(Get-Content shard-manifest.json -Raw | ConvertFrom-Json) + @(
+            [pscustomobject]@{ name = 'Count'; workload = 'ParameterSweep'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~CountFixture' },
+            [pscustomobject]@{ name = 'Shape'; workload = 'ModelShape'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~ShapeFixture' }
+        )
+        $legacyUpgradeManifest | ConvertTo-Json -Depth 5 | Set-Content legacy-upgrade-manifest.json
+        & $selector -MapFile auxiliary-map.json -DeltaFromTree $testedTree `
+            -ShardManifestFile legacy-upgrade-manifest.json -ExpectedShards @($legacyUpgradeManifest.name) `
+            -OutFile legacy-upgrade-selection.json 6>$null
+        $upgradeSelection = Get-Content legacy-upgrade-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not $upgradeSelection.escalate -and
+            ($upgradeSelection.shards -join ',') -ceq 'Always,Beta,Count,Shape') `
+            'legacy rollout reran untouched ordinary Alpha or omitted mandatory unmapped auxiliary jobs'
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile legacy-upgrade-manifest.json -SelectorPath $selector -OutFile legacy-upgrade-plan.json 6>$null
+        $upgradePlan = Get-Content legacy-upgrade-plan.json -Raw | ConvertFrom-Json
+        Assert-True ($upgradePlan.mode -ceq 'Partial' -and ($upgradePlan.import -join ',') -ceq 'Alpha' -and
+            ($upgradePlan.rerun -join ',') -ceq 'Always,Beta,Count,Shape') `
+            'legacy workload rollout disabled selective post-merge reuse'
+        $landedSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        (Get-Content src/Feature.cs -Raw).Replace('class Feature', 'class RenamedFeature') | Set-Content src/Feature.cs
+        Invoke-Git commit --quiet -am changed-model-inventory
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile auxiliary-manifest.json -SelectorPath $selector -OutFile auxiliary-unsafe.json 6>$null
+        $unsafeAuxiliary = Get-Content auxiliary-unsafe.json -Raw | ConvertFrom-Json
+        Assert-True ($unsafeAuxiliary.mode -ceq 'None') 'changed ordinal inventory reused old auxiliary identities'
+        Invoke-Git checkout --quiet --detach $landedSha
 
         # Every fail-closed selector result has the same JSON shape. The delta resolver uses
         # StrictMode and must return an explicit full-matrix plan, not throw on missing routes.

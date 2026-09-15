@@ -2193,6 +2193,20 @@ if (-not (Test-Path -LiteralPath $MapFile)) {
 $map = $null
 try {
     $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+    if ($ShardManifestFile) {
+        $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+        if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+            # Keep certified ordinary routing usable during the 116 -> 161 workload rollout.
+            # New auxiliary jobs may only be ADDED as mandatory; no indexed coverage is invented.
+            Assert-ShardMap -Map $map -Expected @(@($map.knownShards) + @($map.alwaysRun))
+            . "$PSScriptRoot/CiWorkloadKinds.ps1"
+            $extension = Complete-CiMapWorkloads -Map $map -Manifest $manifest
+            $map = $extension.Map
+            if ($extension.Added.Count -gt 0) {
+                Write-Host "Retaining $($extension.Added.Count) unmapped auxiliary workloads; ordinary shard routing remains selective."
+            }
+        }
+    }
     Assert-ShardMap -Map $map -Expected $ExpectedShards
 }
 catch {
@@ -2273,6 +2287,28 @@ try {
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
         -AuditUnchangedMap:$AuditUnchangedMap
+
+    if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
+        @($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+        . "$PSScriptRoot/CiWorkloadKinds.ps1"
+        . "$PSScriptRoot/AuxiliaryInventory.ps1"
+        $auxiliary = @($manifest | Where-Object { (Get-CiWorkloadKind $_) -ne [CiWorkloadKind]::Tests })
+        $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
+        if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+            if ($DeltaFromTree) {
+                # Imported ordinal-window results refer to the old catalog. Refuse imports
+                # rather than overwrite newly rerun results under the same window names.
+                $selection.Escalate = $true
+                $selection.Reasons = @($selection.Reasons) + @('auxiliary inventory changed; delta imports are unsafe')
+            }
+            else {
+                $selection.Shards = @(@($selection.Shards) + @($auxiliary.name) | Sort-Object -Unique)
+                $selection.Routes = @($selection.Routes) + @($auxiliary | ForEach-Object {
+                    "$($_.name) <= reflection inventory changed or could not be established"
+                })
+            }
+        }
+    }
 
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'
