@@ -198,7 +198,7 @@ shard:
     framework: net10.0
     filter: >-
       Category!=GPU&Category!=Stress&
-      FullyQualifiedName~AiDotNet.Tests.UnitTests&
+      (FullyQualifiedName~AiDotNet.Tests.UnitTests|FullyQualifiedName~AiDotNetTests.UnitTests)&
       FullyQualifiedName!~UnitTests.ActivationFunctions&
       FullyQualifiedName!~UnitTests.Attention&
       FullyQualifiedName!~UnitTests.Autodiff&
@@ -865,3 +865,49 @@ shard:
     project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress'
+  # Auxiliary workloads participate in the same map, audit, ledger, and reuse contract.
+  - { name: 'Parameter sweep - Count 0/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '0', label: 'ParameterCountContractTests 0/8', artifact_suffix: 'parameter-count-0' }
+  - { name: 'Parameter sweep - Count 1/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '1', label: 'ParameterCountContractTests 1/8', artifact_suffix: 'parameter-count-1' }
+  - { name: 'Parameter sweep - Count 2/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '2', label: 'ParameterCountContractTests 2/8', artifact_suffix: 'parameter-count-2' }
+  - { name: 'Parameter sweep - Count 3/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '3', label: 'ParameterCountContractTests 3/8', artifact_suffix: 'parameter-count-3' }
+  - { name: 'Parameter sweep - Count 4/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '4', label: 'ParameterCountContractTests 4/8', artifact_suffix: 'parameter-count-4' }
+  - { name: 'Parameter sweep - Count 5/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '5', label: 'ParameterCountContractTests 5/8', artifact_suffix: 'parameter-count-5' }
+  - { name: 'Parameter sweep - Count 6/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '6', label: 'ParameterCountContractTests 6/8', artifact_suffix: 'parameter-count-6' }
+  - { name: 'Parameter sweep - Count 7/8', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterCountContractTests', sweep: ParameterCountContractTests, count_shard: '7', label: 'ParameterCountContractTests 7/8', artifact_suffix: 'parameter-count-7' }
+  - { name: 'Parameter sweep - ParameterChunkParityTests', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterChunkParityTests', sweep: ParameterChunkParityTests, count_shard: '', label: 'ParameterChunkParityTests', artifact_suffix: 'parameter-chunks' }
+  - { name: 'Parameter sweep - ParameterEnumerationParityTests', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ParameterSweep, filter: 'FullyQualifiedName~ParameterEnumerationParityTests', sweep: ParameterEnumerationParityTests, count_shard: '', label: 'ParameterEnumerationParityTests', artifact_suffix: 'parameter-enumeration' }
+  - { name: 'Model shape conformance - offset 0', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 0 }
+  - { name: 'Model shape conformance - offset 5', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 5 }
+  - { name: 'Model shape conformance - offset 10', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 10 }
+  - { name: 'Model shape conformance - offset 15', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 15 }
+  - { name: 'Model shape conformance - offset 20', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 20 }
+  - { name: 'Model shape conformance - offset 25', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 25 }
+  - { name: 'Model shape conformance - offset 30', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 30 }
+  - { name: 'Model shape conformance - offset 35', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 35 }
+  - { name: 'Model shape conformance - offset 40', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 40 }
+  - { name: 'Model shape conformance - offset 45', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 45 }
+  - { name: 'Model shape conformance - offset 50', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 50 }
+  - { name: 'Model shape conformance - offset 55', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 55 }
+  - { name: 'Model shape conformance - offset 60', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 60 }
+  - { name: 'Model shape conformance - offset 65', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 65 }
+  - { name: 'Model shape conformance - offset 70', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 70 }
+  - { name: 'Model shape conformance - offset 75', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 75 }
+  - { name: 'Model shape conformance - offset 80', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 80 }
+  - { name: 'Model shape conformance - offset 85', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 85 }
+  - { name: 'Model shape conformance - offset 90', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 90 }
+  - { name: 'Model shape conformance - offset 95', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 95 }
+  - { name: 'Model shape conformance - offset 100', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 100 }
+  - { name: 'Model shape conformance - offset 105', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 105 }
+  - { name: 'Model shape conformance - offset 110', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 110 }
+  - { name: 'Model shape conformance - offset 115', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 115 }
+  - { name: 'Model shape conformance - offset 120', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 120 }
+  - { name: 'Model shape conformance - offset 125', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 125 }
+  - { name: 'Model shape conformance - offset 130', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 130 }
+  - { name: 'Model shape conformance - offset 135', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 135 }
+  - { name: 'Model shape conformance - offset 140', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 140 }
+  - { name: 'Model shape conformance - offset 145', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 145 }
+  - { name: 'Model shape conformance - offset 150', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 150 }
+  - { name: 'Model shape conformance - offset 155', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 155 }
+  - { name: 'Model shape conformance - offset 160', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 160 }
+  - { name: 'Model shape conformance - offset 165', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 165 }
+  - { name: 'Model shape conformance - offset 170', project: tests/AiDotNet.Tests/AiDotNetTests.csproj, framework: net10.0, workload: ModelShape, filter: 'FullyQualifiedName~ModelContractConformanceTests', offset: 170 }

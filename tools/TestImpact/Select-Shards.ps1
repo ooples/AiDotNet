@@ -90,6 +90,14 @@ $script:SelectionControlPaths = @(
 $script:BuildTimeDirectories = @('src/AiDotNet.Generators/')
 $script:FullValidationDirectories = @('.github/actions/', '.github/scripts/') + $script:BuildTimeDirectories
 $script:SelectionControlDirectories = @('tools/TestImpact/')
+# These helpers cannot choose shards or certify validation. They are exercised by the
+# mandatory tooling checks before selection, including real HTTP transfer regressions.
+# Keep this exact: unknown helpers and selection/certificate policy remain fail-closed.
+$script:IndependentToolPaths = @(
+    'tools/TestImpact/Receive-RequiredArtifact.ps1',
+    'tools/TestImpact/Test-RequiredArtifactResume.ps1',
+    'tools/TestImpact/Test-CiImpactWorkflow.ps1'
+)
 $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/azure-functions-deploy.yml',
     '.github/workflows/cancel-on-pr-close.yml',
@@ -144,6 +152,11 @@ function Get-ChangedPathImpact {
     param([Parameter(Mandatory)] [string] $Path)
 
     $normalized = $Path.Replace('\', '/')
+    foreach ($entry in $script:IndependentToolPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) {
+            return [ChangedPathImpact]::NonRuntime
+        }
+    }
     if (Test-SelectionControl -Path $normalized) {
         return [ChangedPathImpact]::SelectionControl
     }
@@ -1516,6 +1529,9 @@ if ($SelfTest) {
         @{ Path = '.github/scripts/analyze-test-results.ps1'; Why = 'CI analysis scripts must escalate' },
         @{ Path = '.github/actions/local/action.yml'; Why = 'local actions must escalate' },
         @{ Path = 'tools/TestImpact/Select-Shards.ps1'; Why = 'impact tooling must escalate' },
+        @{ Path = 'tools/TestImpact/New-CiValidationCertificate.ps1'; Why = 'certificate policy must escalate' },
+        @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
+        @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
         @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
@@ -1524,6 +1540,28 @@ if ($SelfTest) {
         $r = Select-ImpactedShards -Map $map -Changed @{ $change.Path = @(1, 2) }
         Assert-True $r.Escalate $change.Why
         Assert-True $r.RequiresValidation "$($change.Why) and require validation"
+    }
+
+    foreach ($transportPath in @($script:IndependentToolPaths) + @(
+        'TOOLS/TESTIMPACT/RECEIVE-REQUIREDARTIFACT.PS1',
+        'tools\TestImpact\Test-RequiredArtifactResume.ps1'
+    )) {
+        $r = Select-ImpactedShards -Map $map -Changed @{ $transportPath = @(1, 2) }
+        Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+            "independently tested tooling launched runtime shards: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'src/Covered.cs' = @(12, 14)
+        }
+        Assert-True (-not $r.Escalate -and $r.RequiresValidation -and
+            ($r.Shards -join ',') -ceq 'Alpha,HeavyNoCoverage') `
+            "transport change widened or suppressed mapped runtime coverage: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'tools/TestImpact/Select-Shards.ps1' = @(1, 2)
+        }
+        Assert-True ($r.Escalate -and $r.RequiresValidation) `
+            "independent tooling hid a genuine selection-policy change: $transportPath"
     }
 
     # The exact counterexample that exposed the original defect: two GitHub-hosted documentation
@@ -1716,6 +1754,21 @@ if ($SelfTest) {
     function New-Candidate([string] $Fqn, [bool] $PrefixOnly = $false, $Categories = @(), [bool] $AnySuffix = $false) {
         [pscustomobject]@{ Fqn = $Fqn; PrefixOnly = $PrefixOnly; AnySuffix = $AnySuffix; Categories = $Categories }
     }
+    # Exercise the shipping catch-all filter, not a hand-copied approximation. Both
+    # namespace spellings exist in this project; a full run cannot repair an omitted route.
+    $manifestText = Get-Content (Join-Path $PSScriptRoot '../../.github/test-shards.yml') -Raw
+    $remaining = [regex]::Match($manifestText,
+        '(?m)^  - name: Unit - 13 Remaining[^\r\n]*\r?\n(?:    [^\r\n]*\r?\n)*?    filter: >-\r?\n(?<filter>(?:      [^\r\n]*\r?\n)+)')
+    Assert-True $remaining.Success 'Shipping remaining-unit filter was not found.'
+    $remainingFilter = ConvertTo-TestFilter $remaining.Groups['filter'].Value
+    foreach ($root in @('AiDotNet.Tests', 'AiDotNetTests')) {
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.DistributedTraining.DistributedTrainingValidationTests.ShardingConfiguration_Constructor_ThrowsOnNullBackend")) -eq $script:FilterTrue) `
+            "Remaining-unit filter omits the distributed tests under $root."
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.Diffusion.Models.DDPMModelTests.Test")) -eq $script:FilterFalse) `
+            "Remaining-unit filter duplicates partitioned diffusion tests under $root."
+    }
+    Assert-True ((Test-TestFilter $remainingFilter (New-Candidate 'AiDotNet.Tests.IntegrationTests.DistributedTraining.Test')) -eq $script:FilterFalse) `
+        'Remaining-unit filter captured integration tests.'
     $f = ConvertTo-TestFilter "Category!=GPU&Category!=Stress& `n (FullyQualifiedName~UnitTests.Alpha|`n FullyQualifiedName~UnitTests.Beta)"
     Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Beta.C.M')) -eq $script:FilterTrue) `
         'a folded multi-line filter did not match its second alternative'
@@ -2155,6 +2208,20 @@ if (-not (Test-Path -LiteralPath $MapFile)) {
 $map = $null
 try {
     $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+    if ($ShardManifestFile) {
+        $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+        if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+            # Keep certified ordinary routing usable during the 116 -> 161 workload rollout.
+            # New auxiliary jobs may only be ADDED as mandatory; no indexed coverage is invented.
+            Assert-ShardMap -Map $map -Expected @(@($map.knownShards) + @($map.alwaysRun))
+            . "$PSScriptRoot/CiWorkloadKinds.ps1"
+            $extension = Complete-CiMapWorkloads -Map $map -Manifest $manifest
+            $map = $extension.Map
+            if ($extension.Added.Count -gt 0) {
+                Write-Host "Retaining $($extension.Added.Count) unmapped auxiliary workloads; ordinary shard routing remains selective."
+            }
+        }
+    }
     Assert-ShardMap -Map $map -Expected $ExpectedShards
 }
 catch {
@@ -2235,6 +2302,28 @@ try {
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
         -AuditUnchangedMap:$AuditUnchangedMap
+
+    if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
+        @($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+        . "$PSScriptRoot/CiWorkloadKinds.ps1"
+        . "$PSScriptRoot/AuxiliaryInventory.ps1"
+        $auxiliary = @($manifest | Where-Object { (Get-CiWorkloadKind $_) -ne [CiWorkloadKind]::Tests })
+        $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
+        if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+            if ($DeltaFromTree) {
+                # Imported ordinal-window results refer to the old catalog. Refuse imports
+                # rather than overwrite newly rerun results under the same window names.
+                $selection.Escalate = $true
+                $selection.Reasons = @($selection.Reasons) + @('auxiliary inventory changed; delta imports are unsafe')
+            }
+            else {
+                $selection.Shards = @(@($selection.Shards) + @($auxiliary.name) | Sort-Object -Unique)
+                $selection.Routes = @($selection.Routes) + @($auxiliary | ForEach-Object {
+                    "$($_.name) <= reflection inventory changed or could not be established"
+                })
+            }
+        }
+    }
 
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'
