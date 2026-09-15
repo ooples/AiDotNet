@@ -71,7 +71,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public GumbelSoftmaxActivation(double temperature = 1.0, int? seed = null)
     {
-        if (temperature <= 0 || double.IsNaN(temperature) || double.IsInfinity(temperature))
+        if (temperature < 0 || double.IsNaN(temperature) || double.IsInfinity(temperature))
         {
             throw new System.ArgumentOutOfRangeException(nameof(temperature), "Temperature must be finite and positive.");
         }
