@@ -477,7 +477,7 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('enum ArtifactRequestDis
     'artifact retry state is represented by strings instead of a closed type'
 Assert-Contract ($requiredArtifactReceiverText.Contains('actions/artifacts/$ArtifactId/zip')) `
     'required artifact transport does not use the immutable-ID archive endpoint'
-Assert-Contract ($requiredArtifactReceiverText.Contains("--proto-redir '=https'")) `
+Assert-Contract ($requiredArtifactReceiverText.Contains("'--proto-redir', '=https'")) `
     'required artifact transport permits a redirect to downgrade from HTTPS'
 Assert-Contract (-not $requiredArtifactReceiverText.Contains('ArtifactService/ListArtifacts')) `
     'required artifact transport still performs the rate-limited artifact-list lookup'
@@ -485,7 +485,7 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('Test-ArtifactDigest')) 
     'direct artifact transport does not validate the upload digest before extraction'
 Assert-Contract ($requiredArtifactReceiverText.Contains('secondary rate limit')) `
     'artifact transport does not distinguish transient throttling from a permission denial'
-Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $delay')) `
+Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $seconds')) `
     'artifact transport retries immediately instead of applying its tested backoff policy'
 Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
     'native-command error handling can bypass the typed artifact retry policy'

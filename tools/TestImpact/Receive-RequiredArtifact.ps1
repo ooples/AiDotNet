@@ -9,6 +9,10 @@
     the supported REST archive endpoint directly, and validates the downloaded archive before it is
     extracted.
 
+    Partial transfers retain their archive prefix. Each retry refreshes the archive URL and requests
+    only the missing range; suffixes are appended only after validating the final Content-Range.
+    Servers ignoring or rejecting ranges cannot cause response bytes to be blindly concatenated.
+
     Transient responses use bounded exponential backoff with deterministic jitter. A permission or
     identity error fails immediately, and exhausting the retry budget remains a hard failure: callers
     must never report an untested shard as successful.
@@ -146,6 +150,117 @@ function Get-CurlApplicationPath {
     return [string] $command.Source
 }
 
+function Merge-ArtifactResponse {
+    param([string] $Archive, [string] $Chunk, [string] $Headers, [long] $Offset,
+        [int] $HttpStatus, [int] $CurlExitCode)
+
+    if ($HttpStatus -eq 200) {
+        # A server may ignore Range. This is a new complete representation, never a suffix.
+        if (Test-Path -LiteralPath $Chunk) { [IO.File]::Move($Chunk, $Archive, $true) }
+        return ($CurlExitCode -eq 0)
+    }
+    if ($HttpStatus -ne 206) { return $false }
+
+    # Redirects have their own headers. Only the final response can describe the downloaded bytes.
+    $responses = [regex]::Matches($Headers, '(?m)^HTTP/\S+\s+\d{3}[^\r\n]*\r?\n')
+    if ($responses.Count -eq 0) { throw 'Partial artifact response has no HTTP headers' }
+    $finalHeaders = $Headers.Substring($responses[$responses.Count - 1].Index)
+    $ranges = [regex]::Matches($finalHeaders, '(?im)^Content-Range:\s*bytes (\d+)-(\d+)/(\d+)\s*\r?$')
+    if ($ranges.Count -ne 1 -or [regex]::Matches($finalHeaders, '(?im)^Content-Range:').Count -ne 1) {
+        throw 'Partial artifact response requires exactly one valid Content-Range'
+    }
+    $start = [long] $ranges[0].Groups[1].Value
+    $end = [long] $ranges[0].Groups[2].Value
+    $total = [long] $ranges[0].Groups[3].Value
+    $length = if (Test-Path -LiteralPath $Chunk) { (Get-Item -LiteralPath $Chunk).Length } else { 0L }
+    $existing = if (Test-Path -LiteralPath $Archive) { (Get-Item -LiteralPath $Archive).Length } else { 0L }
+    if ($start -ne $Offset -or $existing -ne $Offset -or $end -lt $start -or $total -le $end -or
+        $length -gt ($end - $start + 1) -or ($CurlExitCode -eq 0 -and $length -ne ($end - $start + 1))) {
+        throw 'Partial artifact response does not match the requested byte range'
+    }
+    if ($length -gt 0) {
+        $inputStream = [IO.File]::OpenRead($Chunk)
+        try {
+            $outputStream = [IO.File]::Open($Archive, [IO.FileMode]::Append, [IO.FileAccess]::Write)
+            try { $inputStream.CopyTo($outputStream) }
+            finally { $outputStream.Dispose() }
+        }
+        finally { $inputStream.Dispose() }
+    }
+    return ($CurlExitCode -eq 0 -and ($existing + $length) -eq $total)
+}
+
+function Receive-ArtifactArchive {
+    param([string] $Url, [string] $Archive, [string] $Expected,
+        [string[]] $RequestHeaders, [int] $Attempts, [long] $WorkflowRunId, [int] $MatrixJobIndex,
+        [int] $RequestTimeoutSeconds = 300,
+        [scriptblock] $Delay = { param($seconds) Start-Sleep -Seconds $seconds })
+
+    $curlApplicationPath = Get-CurlApplicationPath
+    $chunk = "$Archive.response"
+    $headersPath = "$Archive.headers"
+    $restart = $false
+    try {
+        for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+            foreach ($path in @($chunk, $headersPath)) {
+                if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+            }
+            $offset = if (-not $restart -and (Test-Path -LiteralPath $Archive)) {
+                (Get-Item -LiteralPath $Archive).Length
+            } else { 0L }
+            $restart = $false
+            $arguments = @('--silent', '--show-error', '--location', '--proto-redir', '=https',
+                '--fail-with-body', '--connect-timeout', '30', '--max-time', "$RequestTimeoutSeconds",
+                '--output', $chunk, '--dump-header', $headersPath, '--write-out', '%{http_code}',
+                '--user-agent', 'AiDotNet-CI-artifact-transport')
+            foreach ($header in $RequestHeaders) { $arguments += @('--header', $header) }
+            if ($offset -gt 0) { $arguments += @('--range', "$offset-") }
+            Write-Host "Downloading required artifact (attempt $attempt/$Attempts, offset $offset)."
+            $statusText = @(& $curlApplicationPath @arguments $Url)
+            $curlExitCode = $LASTEXITCODE
+            $httpStatus = 0
+            [void] [int]::TryParse(($statusText -join '').Trim(), [ref] $httpStatus)
+            $responseBody = Get-SmallResponseBody $chunk
+            $headerText = if (Test-Path -LiteralPath $headersPath) {
+                [string] (Get-Content -LiteralPath $headersPath -Raw)
+            } else { '' }
+            $retryAfter = Get-RetryAfterSeconds $headerText
+            $disposition = Get-ArtifactRequestDisposition $curlExitCode $httpStatus $responseBody $retryAfter
+            if ($httpStatus -in @(200, 206)) {
+                $complete = Merge-ArtifactResponse $Archive $chunk $headerText $offset $httpStatus $curlExitCode
+                $disposition = if ($complete) { [ArtifactRequestDisposition]::Success }
+                    else { [ArtifactRequestDisposition]::Retry }
+            }
+            elseif ($httpStatus -eq 416 -and $offset -gt 0) {
+                # The previous transfer can have delivered every byte before a transport error.
+                # Trust only the required digest, never the server's 416 response alone.
+                if (Test-ArtifactDigest $Archive $Expected) {
+                    $disposition = [ArtifactRequestDisposition]::Success
+                }
+                else {
+                    $restart = $true
+                    $disposition = [ArtifactRequestDisposition]::Retry
+                }
+            }
+            if ($disposition -eq [ArtifactRequestDisposition]::Success) {
+                if (-not (Test-ArtifactDigest $Archive $Expected)) { throw 'Artifact failed SHA-256 validation' }
+                return
+            }
+            if ($disposition -eq [ArtifactRequestDisposition]::Fail -or $attempt -eq $Attempts) {
+                throw "Required artifact download failed (curl=$curlExitCode, HTTP=$httpStatus)."
+            }
+            $seconds = Get-RetryDelaySeconds $attempt $WorkflowRunId $MatrixJobIndex $retryAfter
+            Write-Host "Transient artifact response (curl=$curlExitCode, HTTP=$httpStatus); retrying after $seconds seconds."
+            & $Delay $seconds
+        }
+    }
+    finally {
+        foreach ($path in @($chunk, $headersPath)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+}
+
 if ($SelfTest) {
     $secondary = '{"message":"You have exceeded a secondary rate limit. Please wait."}'
     Assert-True ((Get-ArtifactRequestDisposition 22 403 $secondary) -eq
@@ -203,6 +318,7 @@ if ($SelfTest) {
         }
     }
 
+    & (Join-Path $PSScriptRoot 'Test-RequiredArtifactResume.ps1')
     Write-Host 'Required artifact transport self-test passed.'
     exit 0
 }
@@ -211,70 +327,26 @@ if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
     throw 'GITHUB_TOKEN is required to download a workflow artifact by ID'
 }
 
-$curlApplicationPath = Get-CurlApplicationPath
 $destinationPath = [IO.Path]::GetFullPath($Destination)
 [IO.Directory]::CreateDirectory($destinationPath) | Out-Null
 
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) `
     ("aidotnet-required-artifact-" + [guid]::NewGuid().ToString('N'))
 $archivePath = Join-Path $temporaryDirectory 'artifact.zip'
-$headersPath = Join-Path $temporaryDirectory 'headers.txt'
 [IO.Directory]::CreateDirectory($temporaryDirectory) | Out-Null
 
 try {
     $url = "https://api.github.com/repos/$Repository/actions/artifacts/$ArtifactId/zip"
 
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        foreach ($path in @($archivePath, $headersPath)) {
-            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
-        }
-
-        Write-Host "Downloading required artifact $ArtifactId directly (attempt $attempt/$MaxAttempts)."
-        $statusText = @(& $curlApplicationPath `
-            --silent --show-error --location --proto-redir '=https' --fail-with-body `
-            --connect-timeout 30 --max-time 300 `
-            --output $archivePath --dump-header $headersPath --write-out '%{http_code}' `
-            --header 'Accept: application/vnd.github+json' `
-            --header "Authorization: Bearer $env:GITHUB_TOKEN" `
-            --header 'X-GitHub-Api-Version: 2022-11-28' `
-            --user-agent 'AiDotNet-CI-artifact-transport' `
-            $url)
-        $curlExitCode = $LASTEXITCODE
-        $statusValue = ($statusText -join '').Trim()
-        $httpStatus = 0
-        [void] [int]::TryParse($statusValue, [ref] $httpStatus)
-        $responseBody = Get-SmallResponseBody $archivePath
-        $headerText = if (Test-Path -LiteralPath $headersPath) {
-            [string] (Get-Content -LiteralPath $headersPath -Raw)
-        }
-        else { '' }
-        $retryAfter = Get-RetryAfterSeconds $headerText
-        $disposition = Get-ArtifactRequestDisposition -CurlExitCode $curlExitCode `
-            -HttpStatus $httpStatus -ResponseBody $responseBody -RetryAfterSeconds $retryAfter
-
-        if ($disposition -eq [ArtifactRequestDisposition]::Success) {
-            if (-not (Test-ArtifactDigest -Path $archivePath -Expected $ExpectedDigest)) {
-                throw "artifact $ArtifactId failed SHA-256 validation"
-            }
-
-            [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destinationPath, $true)
-            Write-Host "Required artifact $ArtifactId passed digest validation and was extracted."
-            exit 0
-        }
-
-        if ($disposition -eq [ArtifactRequestDisposition]::Fail -or $attempt -eq $MaxAttempts) {
-            $detail = if ($responseBody) { $responseBody } else { 'no response body' }
-            throw "required artifact $ArtifactId download failed (curl=$curlExitCode, HTTP=$httpStatus): $detail"
-        }
-
-        $delay = Get-RetryDelaySeconds -FailedAttempt $attempt -WorkflowRunId $RunId `
-            -MatrixJobIndex $JobIndex -RetryAfterSeconds $retryAfter
-        Write-Host "Transient artifact response (curl=$curlExitCode, HTTP=$httpStatus); retrying after $delay seconds."
-        Start-Sleep -Seconds $delay
-    }
+    Receive-ArtifactArchive -Url $url -Archive $archivePath -Expected $ExpectedDigest `
+        -RequestHeaders @('Accept: application/vnd.github+json', "Authorization: Bearer $env:GITHUB_TOKEN",
+            'X-GitHub-Api-Version: 2022-11-28') -Attempts $MaxAttempts -WorkflowRunId $RunId -MatrixJobIndex $JobIndex
+    [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destinationPath, $true)
+    Write-Host "Required artifact $ArtifactId passed digest validation and was extracted."
+    exit 0
 }
 finally {
-    foreach ($path in @($archivePath, $headersPath)) {
+    foreach ($path in @($archivePath)) {
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
     }
     if (Test-Path -LiteralPath $temporaryDirectory) {
