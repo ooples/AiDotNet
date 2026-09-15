@@ -1368,8 +1368,29 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <summary>
     /// Computes scalar tanh(x) = (e^x - e^-x) / (e^x + e^-x) using NumOps primitives.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The saturating branches are load-bearing, not an optimisation. Past about 709 a double's <c>e^x</c>
+    /// overflows to infinity, and the quotient is then <c>(inf - 0) / (inf + 0)</c>, which evaluates to NaN
+    /// instead of saturating at 1 - so a large input silently produced NaN rather than the value tanh has.
+    /// ATAML fed this the bucket mean of SQUARED gradients, which is unbounded, so one large gradient made
+    /// every attention weight NaN, then every adapted parameter NaN, and meta-training threw on the first
+    /// step. The other callers - CompressVector here, HyperCLIP, GNNMeta and ConstellationNet - pass bucket
+    /// means and activations that are bounded in practice but not by construction, so the guard belongs in
+    /// the shared helper rather than at one call site.
+    /// </para>
+    /// <para>
+    /// tanh(20) differs from 1 by about 8e-18, which is below a double's epsilon, so clamping there is exact
+    /// at this precision while leaving the identity untouched over the range that carries any signal.
+    /// </para>
+    /// </remarks>
     protected T ScalarTanh(T x)
     {
+        double value = NumOps.ToDouble(x);
+        if (double.IsNaN(value)) return x;
+        if (value >= 20.0) return NumOps.One;
+        if (value <= -20.0) return NumOps.Negate(NumOps.One);
+
         T expX = NumOps.Exp(x);
         T expNegX = NumOps.Exp(NumOps.Negate(x));
         return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));

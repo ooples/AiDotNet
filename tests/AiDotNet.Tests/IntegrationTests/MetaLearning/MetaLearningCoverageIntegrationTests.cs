@@ -1011,7 +1011,8 @@ public class MetaLearningCoverageIntegrationTests
         var rarelyUsed = memory.FindRarelyUsedSlots(2.0);
 
         Assert.False(double.IsNaN(loss));
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score row per query example: [rows, classes], which a Vector output flattens to rows * classes.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
         Assert.True(parameters.Length > 0);
         Assert.True(penalty > 0);
         Assert.Equal(memory.Size, rarelyUsed.Count);
@@ -1088,7 +1089,9 @@ public class MetaLearningCoverageIntegrationTests
             "AddMemoryRegularization",
             1.0);
 
-        Assert.Equal(options.NumClasses, predictions.Shape[0]);
+        // One score row per query example, [rows, classes].
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(options.NumClasses, predictions.Shape[1]);
         Assert.True(parameters.Length > 0);
         Assert.True(controllerParams.Length > 0);
         Assert.True(readKeys.Count > 0);

@@ -73,7 +73,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
 
     #region Fields
 
-    private readonly SmartEditOptions _options;
+    private readonly SmartEditOptions _editOptions;
     private UNetNoisePredictor<T> _unet;
     private StandardVAE<T> _vae;
 
@@ -103,13 +103,13 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <summary>Width of the MLLM decoder whose tokens the interaction module consumes.</summary>
-    public int EmbeddingDimension => _options.DecoderDim;
+    public int EmbeddingDimension => _editOptions.DecoderDim;
 
     /// <summary>Edge length of the produced image.</summary>
-    public int OutputImageSize => _options.OutputImageSize;
+    public int OutputImageSize => _editOptions.OutputImageSize;
 
     /// <inheritdoc />
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
 
     /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
     int IVisualEncoder<T>.ImageChannels => 3;
@@ -145,7 +145,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        _options = options ?? new SmartEditOptions();
+        _editOptions = options ?? new SmartEditOptions();
         InitializeComponents(unet, vae, seed);
     }
 
@@ -172,13 +172,13 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
             latentScaleFactor: 0.18215,
             seed: seed);
 
-        for (int i = 0; i < _options.EditHeadLayers; i++)
+        for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
             _bim.Add(new TransformerEncoderBlock<T>(
                 hiddenSize: CROSS_ATTENTION_DIM,
-                numHeads: _options.NumHeads,
+                numHeads: _editOptions.NumHeads,
                 ffnDim: CROSS_ATTENTION_DIM * 4,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _editOptions.DropoutRate));
         }
     }
 
@@ -229,7 +229,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
 
         var sourceLatent = EncodeToLatent(image);
         _ = ApplyInteractionModule(sourceLatent);
-        var edited = Generate(sourceLatent.Shape.ToArray(), _options.NumDiffusionSteps);
+        var edited = Generate(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps);
         return DecodeFromLatent(edited);
     }
 
@@ -242,7 +242,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
     #region Metadata
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
+    public override ModelOptions GetOptions() => _editOptions;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -257,7 +257,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
         };
 
         metadata.SetProperty("architecture", "sd-8ch-input-mllm-bim");
-        metadata.SetProperty("interactionModuleLayers", _options.EditHeadLayers);
+        metadata.SetProperty("interactionModuleLayers", _editOptions.EditHeadLayers);
         metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("paper", "arXiv:2312.06739");
         return metadata;

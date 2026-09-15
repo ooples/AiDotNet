@@ -412,7 +412,9 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.MANN, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score row per query example: the adapted model returns [rows, classes], which a Vector output
+        // flattens to rows * classes. It used to answer for the first example only, whatever it was handed.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
     }
 
     [Fact(Timeout = 120000)]
@@ -441,7 +443,9 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.NTM, algorithm.AlgorithmType);
-        Assert.Equal(options.NumClasses, predictions.Shape[0]);
+        // One score row per query example, [rows, classes]; it used to return a single row for the batch.
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(options.NumClasses, predictions.Shape[1]);
     }
 
     [Fact(Timeout = 120000)]

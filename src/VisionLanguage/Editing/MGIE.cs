@@ -79,7 +79,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 
     #region Fields
 
-    private readonly MGIEOptions _options;
+    private readonly MGIEOptions _editOptions;
     private UNetNoisePredictor<T> _unet;
     private StandardVAE<T> _vae;
 
@@ -107,16 +107,16 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override double GuidanceScale => _options.GuidanceScale;
+    public override double GuidanceScale => _editOptions.GuidanceScale;
 
     /// <summary>Width of the MLLM decoder whose [IMG] tokens the edit head consumes.</summary>
-    public int EmbeddingDimension => _options.DecoderDim;
+    public int EmbeddingDimension => _editOptions.DecoderDim;
 
     /// <summary>Edge length of the produced image.</summary>
-    public int OutputImageSize => _options.OutputImageSize;
+    public int OutputImageSize => _editOptions.OutputImageSize;
 
     /// <inheritdoc />
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
 
     /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
     int IVisualEncoder<T>.ImageChannels => 3;
@@ -173,8 +173,8 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        _options = new MGIEOptions(options ?? new MGIEOptions());
-        ValidateEditingOptions(_options);
+        _editOptions = new MGIEOptions(options ?? new MGIEOptions());
+        ValidateEditingOptions(_editOptions);
         InitializeComponents(unet, vae, instructionEncoder, seed);
     }
 
@@ -188,12 +188,12 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
         if (vae is not null && (vae.InputChannels != 3 || vae.LatentChannels != LATENT_CHANNELS))
             throw new ArgumentException("MGIE requires an RGB/four-latent-channel VAE.", nameof(vae));
         int downsample = vae?.DownsampleFactor ?? 8;
-        if (downsample <= 0 || _options.OutputImageSize % downsample != 0)
+        if (downsample <= 0 || _editOptions.OutputImageSize % downsample != 0)
             throw new ArgumentOutOfRangeException(nameof(MGIEOptions.OutputImageSize), "Output size must be divisible by the VAE downsampling factor.");
         if (instructionEncoder is not null &&
-            (instructionEncoder.EmbeddingDimension != _options.DecoderDim ||
-             instructionEncoder.ImageSize != _options.ImageSize ||
-             instructionEncoder.MaxSequenceLength != _options.MaxSequenceLength))
+            (instructionEncoder.EmbeddingDimension != _editOptions.DecoderDim ||
+             instructionEncoder.ImageSize != _editOptions.ImageSize ||
+             instructionEncoder.MaxSequenceLength != _editOptions.MaxSequenceLength))
             throw new ArgumentException("The instruction encoder's width, image size and sequence limit must match MGIE options.",
                 nameof(instructionEncoder));
 
@@ -218,10 +218,10 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             seed: seed);
 
         _instructionEncoder = instructionEncoder ?? CreateInstructionEncoder(seed);
-        LayerInitializationSeedScope.ResetForModelConstruction(seed ?? _options.Seed ?? Architecture?.RandomSeed);
-        _editMapper = new MultimodalEditMapperLayer<T>(_options.DecoderDim, _options.EditHiddenDim,
-            CROSS_ATTENTION_DIM, _options.EditTokenCount, _options.EditQueryCount,
-            _options.EditNumHeads, _options.EditHeadLayers, _options.DropoutRate);
+        LayerInitializationSeedScope.ResetForModelConstruction(seed ?? _editOptions.Seed ?? Architecture?.RandomSeed);
+        _editMapper = new MultimodalEditMapperLayer<T>(_editOptions.DecoderDim, _editOptions.EditHiddenDim,
+            CROSS_ATTENTION_DIM, _editOptions.EditTokenCount, _editOptions.EditQueryCount,
+            _editOptions.EditNumHeads, _editOptions.EditHeadLayers, _editOptions.DropoutRate);
     }
 
     /// <inheritdoc />
@@ -244,7 +244,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     #region Metadata
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => new MGIEOptions(_options);
+    public override ModelOptions GetOptions() => new MGIEOptions(_editOptions);
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -259,10 +259,10 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
         };
 
         metadata.SetProperty("architecture", "sd15-8ch-input-mllm-guidance");
-        metadata.SetProperty("editHeadLayers", _options.EditHeadLayers);
+        metadata.SetProperty("editHeadLayers", _editOptions.EditHeadLayers);
         metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
-        metadata.SetProperty("editMapperHiddenDim", _options.EditHiddenDim);
-        metadata.SetProperty("editMapperQueryCount", _options.EditQueryCount);
+        metadata.SetProperty("editMapperHiddenDim", _editOptions.EditHiddenDim);
+        metadata.SetProperty("editMapperQueryCount", _editOptions.EditQueryCount);
         metadata.SetProperty("weights", "native-trainable; pretrained checkpoint import is not automatic");
         metadata.SetProperty("paper", "arXiv:2309.17102");
         return metadata;
