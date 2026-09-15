@@ -51,7 +51,8 @@ on:
 concurrency:
   # Coverage-map runs are deliberately isolated from ordinary master activity. The Monday CodeQL
   # schedule and a master push must not cancel the full matrix that feeds the next map.
-  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || github.ref }}
+  # Isolate push retries: concurrency cancellation happens before the resolver can recheck the tip.
+  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || (github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id)) || github.ref }}
   # A synchronize event captured while a PR was still a draft can be delivered after the
   # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
   # so it must never cancel the real ready run and replace it with an all-skipped check suite.
@@ -109,8 +110,7 @@ jobs:
   validation-source:
     name: Resolve certified PR validation
     runs-on: ubuntu-latest
-    # Was 5. This job may now WAIT for a merged PR validation run to finish before
-    # deciding, so the ceiling must exceed REUSE_WAIT_MINUTES with room to spare.
+    # Artifact inspection may take time; pending evidence itself now defers without polling.
     timeout-minutes: 50
     permissions:
       actions: read
@@ -214,7 +214,21 @@ jobs:
             -GitHubOutput $env:GITHUB_OUTPUT `
             -MapFile '${{ steps.delta-map.outputs.map_file }}' `
             -ShardManifestFile '${{ steps.delta-map.outputs.manifest_file }}' `
-            -WaitMinutes 40
+            -WaitMinutes 0
+
+      # A failed, recognizable step keeps the gate red and lets the completion reconciler
+      # rerun this job and its dependents on the ORIGINAL push SHA (not a new dispatch SHA).
+      - name: Defer until PR validation completes
+        if: steps.resolve.outputs.deferred == 'true'
+        run: |
+          echo '::error::Validation deferred, not passed: waiting for the merged PR run. No duplicate matrix was scheduled.'
+          exit 1
+
+      - name: Block superseded or unverifiable push
+        if: steps.resolve.outputs.blocked == 'true'
+        run: |
+          echo '::error::Push is superseded or its branch tip could not be verified. Dependent work is disabled; this is not passing validation.'
+          exit 1
 
       - name: Report resolver fallback
         if: steps.resolve.outcome == 'failure'

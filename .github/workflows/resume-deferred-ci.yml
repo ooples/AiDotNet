@@ -1,0 +1,43 @@
+name: Resume deferred CI
+
+on:
+  workflow_run:
+    workflows: ['Build & SonarCloud']
+    types: [completed]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Optional explicitly deferred push run to reconcile.'
+        required: false
+        default: '0'
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: resume-deferred-ci
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # workflow_run is privileged: never check out the triggering PR or consume its artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # Only an authorized manual dispatch may test proposed reconciler code.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile explicitly deferred validation
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_RUN_ID: ${{ inputs.run_id || '0' }}
+        run: |
+          ./tools/TestImpact/Resume-DeferredCi.ps1 -Repository $env:CI_REPOSITORY -RunId ([long] $env:CI_RUN_ID)

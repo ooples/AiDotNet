@@ -506,7 +506,7 @@ try {
         }
 
         # (a) Master edits a line only Beta executes. Δ selects Beta + Always; the pull request ran
-        #     Alpha + Always, so only Always is re-run and Alpha's results are imported.
+        #     Alpha + Always. Rerun Beta + Always (no assumed master evidence), import Alpha.
         Invoke-Git checkout --quiet --detach $masterSha
         @('one', 'alpha before', 'three', 'beta changed on master', 'five') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
@@ -514,8 +514,8 @@ try {
         Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
         $plan = Invoke-DeltaPlanFixture 'delta-partial'
         Assert-True ($plan.mode -ceq 'Partial') "an overlapping master delta did not plan a partial re-run: $($plan.mode) - $($plan.why)"
-        Assert-True ((@($plan.rerun) -join ',') -ceq 'Always') `
-            "the partial re-run was not exactly the overlap: rerun=$(@($plan.rerun) -join ','); routes=$(@($plan.routes) -join ' | ')"
+        Assert-True ((@($plan.rerun) -join ',') -ceq 'Always,Beta') `
+            "the partial re-run omitted delta effects: rerun=$(@($plan.rerun) -join ','); routes=$(@($plan.routes) -join ' | ')"
         Assert-True ((@($plan.import) -join ',') -ceq 'Alpha') `
             "the partial re-run did not import the untouched pull-request shard: import=$(@($plan.import) -join ',')"
         Assert-True ($plan.tree -ceq $testedTree) 'the validated tree was not rebuilt exactly from its parents'
@@ -628,5 +628,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Test-impact end-to-end proof passed: covered edit and behind-master PR selected 2/3; #2118 selected none; post-merge runtime delta reran Always and imported Alpha; documentation delta reused; control/invalid-map deltas required full validation; deleted-test delta retained its route and succeeded.'
+Write-Host 'Test-impact end-to-end proof passed: covered edit and behind-master PR selected 2/3; #2118 selected none; post-merge runtime delta reran Always + Beta and imported Alpha; documentation delta reused; control/invalid-map deltas required full validation; deleted-test delta retained its route and succeeded.'
 exit 0
