@@ -19,6 +19,26 @@ if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
 }
 $cases = @(
     [pscustomobject]@{
+        Name = 'superseded-push-green'
+        Reason = 'superseded push must explicitly block'
+        Content = $workflow.Replace("if: steps.resolve.outputs.blocked == 'true'", "if: steps.resolve.outputs.blocked == 'false'")
+    },
+    [pscustomobject]@{
+        Name = 'rerun-cancels-newer-push'
+        Reason = 'push retry concurrency must not cancel'
+        Content = $workflow.Replace("(github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id))", 'github.ref')
+    },
+    [pscustomobject]@{
+        Name = 'deferred-validation-green'
+        Reason = 'deferred validation must explicitly fail'
+        Content = $workflow.Replace("if: steps.resolve.outputs.deferred == 'true'", "if: steps.resolve.outputs.deferred == 'false'")
+    },
+    [pscustomobject]@{
+        Name = 'pending-validation-polls'
+        Reason = 'pending PR validation occupies a runner'
+        Content = $workflow.Replace('-WaitMinutes 0', '-WaitMinutes 40')
+    },
+    [pscustomobject]@{
         Name = 'map-head-removed'
         Reason = 'map-backed selector.*pull.request'
         Content = [regex]::Replace($workflow, $mapHeadLine, '')
@@ -87,7 +107,7 @@ $cases += @(
     [pscustomobject]@{
         Name = 'resolver-job-budget-shrunk'
         Reason = 'delta.map.*budget'
-        Content = [regex]::Replace($workflow, '(?ms)(^  validation-source:\r?\n.*?^    timeout-minutes:) [0-9]+', '${1} 45')
+        Content = [regex]::Replace($workflow, '(?ms)(^  validation-source:\r?\n.*?^    timeout-minutes:) [0-9]+', '${1} 5')
     }
 )
 

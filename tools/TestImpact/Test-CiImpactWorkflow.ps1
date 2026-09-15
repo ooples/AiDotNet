@@ -278,6 +278,18 @@ Assert-Contract ([bool] $resolverCheckoutStep -and [bool] $resolveStep -and
     'validation-source invokes the exact-tree resolver before checking out its script'
 Assert-Contract ($resolveStep.Contains('continue-on-error: true')) `
     'an unexpected resolver failure blocks dependents instead of retaining fail-closed defaults'
+$deferStep = Get-StepBlock -JobBlock $resolver -Step 'Defer until PR validation completes'
+Assert-Contract ($deferStep.Contains("if: steps.resolve.outputs.deferred == 'true'") -and
+    $deferStep.Contains('exit 1') -and -not $deferStep.Contains('continue-on-error: true')) `
+    'deferred validation must explicitly fail the resolver job instead of looking green'
+Assert-Contract ($resolveStep.Contains('-WaitMinutes 0')) `
+    'pending PR validation occupies a runner instead of deferring'
+$blockedStep = Get-StepBlock -JobBlock $resolver -Step 'Block superseded or unverifiable push'
+Assert-Contract ($blockedStep.Contains("if: steps.resolve.outputs.blocked == 'true'") -and
+    $blockedStep.Contains('exit 1') -and -not $blockedStep.Contains('continue-on-error: true')) `
+    'superseded push must explicitly block dependent validation without looking green'
+Assert-Contract ($validation.Contains("(github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id))")) `
+    'push retry concurrency must not cancel newer branch validation'
 Assert-Contract ($resolveStep.Contains('./tools/TestImpact/Resolve-CiValidationReuse.ps1')) `
     'the workflow bypasses the executable typed validation resolver'
 Assert-Contract ($validation.Contains("- 'ci-proof/**'")) `
