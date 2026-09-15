@@ -580,7 +580,9 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// <paramref name="expectedOutput"/>, and applies a stochastic-gradient update to every
     /// trainable tensor reachable from this model. A detector-specific loss (assignment plus
     /// box regression plus classification) is the right objective for a full training recipe and
-    /// belongs in an override; this base step is what makes the model trainable at all.
+    /// is not implied by a tensor's shape. This overload is raw-output regression, not semantic
+    /// detection training. Models implementing <see cref="IDetectionTrainingModel{T}"/> expose
+    /// a separate typed target API for their detection objective.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -635,6 +637,28 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// </summary>
     [AiDotNet.Attributes.Scratch]
     private int[]? _resolvedInputShape;
+
+    /// <summary>Trains structured heads with typed targets through the shared single-update path.</summary>
+    /// <remarks>The derived model validates its task targets before calling this method.</remarks>
+    protected void TrainWithTargets<TTarget>(Tensor<T> input, TTarget targets,
+        Func<List<Tensor<T>>, TTarget, Tensor<T>> loss) where TTarget : class
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (loss is null) throw new ArgumentNullException(nameof(loss));
+        NoteResolvedInput(input);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
+                this, input, targets, NumOps.FromDouble(TrainingLearningRate), Forward, loss));
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
 
     /// <summary>Records the input shape on the first forward pass.</summary>
     private void NoteResolvedInput(Tensor<T> input)

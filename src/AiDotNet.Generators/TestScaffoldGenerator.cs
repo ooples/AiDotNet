@@ -3509,6 +3509,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             HasVectorOnlyConstructor = hasVectorOnlyCtor,
             HasOptionsOnlyConstructor = hasOptionsOnlyCtor,
+            ImplementsDetectionTraining = domainAttrSymbol?.ContainingAssembly.GetTypeByMetadataName(
+                "AiDotNet.Interfaces.IDetectionTrainingModel`1") is INamedTypeSymbol detectionTrainingInterface
+                && modelClass.AllInterfaces.Any(iface => SymbolEqualityComparer.Default.Equals(
+                    iface.OriginalDefinition, detectionTrainingInterface)),
             OptionsOnlyParamTypeName = optionsOnlyParamTypeName,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
@@ -15386,6 +15390,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        AiDotNet.Models.Options.ObjectDetectionOptions<double> options)");
             sb.AppendLine($"        => new {typeName}<double>(options);");
         }
+        if (family == TestFamily.ObjectDetection && model.ImplementsDetectionTraining)
+        {
+            // Emit only for the actual typed capability. Unsupported detector families do not
+            // inherit a returning/no-op test that would falsely count semantic training as covered.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 180000)]");
+            sb.AppendLine("    public async System.Threading.Tasks.Task TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        VerifySemanticDetectionTraining();");
+            sb.AppendLine("    }");
+        }
         if (model.HasVectorOnlyConstructor)
         {
             string featureWidthConstructor = constructorExpr
@@ -17830,6 +17846,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// object is itself constructible with no arguments (#2137).
         /// </summary>
         public bool HasOptionsOnlyConstructor { get; set; }
+
+        /// <summary>Implements the framework's resolved semantic detection-training interface.</summary>
+        public bool ImplementsDetectionTraining { get; set; }
 
         /// <summary>
         /// The options type to instantiate for <see cref="HasOptionsOnlyConstructor"/>, already
