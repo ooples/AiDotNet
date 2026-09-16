@@ -23,7 +23,7 @@ public sealed class FinancialAgentDeterminismTests
     [InlineData(Sac)]
     [InlineData(MarketMaking)]
     [Trait("category", "unit")]
-    public void Same_seed_produces_bit_identical_training(string kind)
+    public void Same_seed_produces_bit_identical_training(FinancialAgentKind kind)
     {
         var first = Run(kind);
         var second = Run(kind);
@@ -43,17 +43,22 @@ public sealed class FinancialAgentDeterminismTests
         }
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(Ppo)]
+    [InlineData(Dqn)]
+    [InlineData(A2C)]
+    [InlineData(Sac)]
+    [InlineData(MarketMaking)]
     [Trait("category", "unit")]
-    public void Different_seeds_produce_different_exploration()
+    public void Different_seeds_produce_different_exploration(FinancialAgentKind kind)
     {
         // Guard against "deterministic" meaning "not random at all".
-        var a = Run(Dqn, seed: 1);
-        var b = Run(Dqn, seed: 2);
+        var a = Run(kind, seed: 1);
+        var b = Run(kind, seed: 2);
         Assert.NotEqual(string.Join("|", a.Actions), string.Join("|", b.Actions));
     }
 
-    private static (List<string> Actions, double[] Parameters) Run(string kind, int seed = Seed)
+    private static (List<string> Actions, double[] Parameters) Run(FinancialAgentKind kind, int seed = Seed)
     {
         var env = ZigZagEnvironment();
         var options = Options(kind, env.ObservationSpaceDimension, actionSize: 3, seed);

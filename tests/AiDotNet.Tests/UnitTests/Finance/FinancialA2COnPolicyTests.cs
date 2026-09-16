@@ -35,9 +35,13 @@ public sealed class FinancialA2COnPolicyTests
 
     private static void Store(FinancialA2CAgent<double> agent, int index, bool done = false)
     {
+        // The agent accepts only a behavior token it sampled itself, from the current policy, for these
+        // exact state values. Draw the intended action instead of fabricating a one-hot: what these
+        // fixtures assert is the rollout gate, not how the action was produced.
+        var state = State(StateSize, salt: index);
         agent.StoreExperience(
-            State(StateSize, salt: index),
-            OneHot(ActionSize, index % ActionSize),
+            state,
+            SampleActionForIndex(agent, state, index % ActionSize),
             0.1 * (index + 1),
             State(StateSize, salt: index + 1),
             done);
