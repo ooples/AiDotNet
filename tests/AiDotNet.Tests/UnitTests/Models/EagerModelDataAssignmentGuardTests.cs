@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.TrainingMonitoring;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Models;
@@ -95,7 +96,7 @@ public class EagerModelDataAssignmentGuardTests
                 }
 
                 offenders.Add(
-                    $"{Path.GetRelativePath(sourceRoot, file).Replace('\\', '/')}:{i + 1}  {trimmed}");
+                    $"{RelativeToSourceRoot(sourceRoot, file).Replace('\\', '/')}:{i + 1}  {trimmed}");
             }
         }
 
@@ -135,4 +136,17 @@ public class EagerModelDataAssignmentGuardTests
             $"Could not find AiDotNet.sln walking up from '{AppContext.BaseDirectory}', so the "
             + "source tree this guard reads is unavailable.");
     }
+
+    /// <summary>
+    /// Path.GetRelativePath does not exist on .NET Framework and this project also targets net471,
+    /// so route through the same polyfill the shipped code uses (DataVersionControlBase,
+    /// ExperimentTracker) instead of breaking the compat build.
+    /// </summary>
+    private static string RelativeToSourceRoot(string sourceRoot, string file) =>
+#if NET6_0_OR_GREATER
+        Path.GetRelativePath(sourceRoot, file);
+#else
+        FrameworkPolyfills.GetRelativePath(sourceRoot, file);
+#endif
+
 }
