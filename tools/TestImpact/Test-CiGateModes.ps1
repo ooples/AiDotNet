@@ -86,6 +86,11 @@ Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresV
 Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
     -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 
+Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
+    -ValidationGate skipped -ExpectedExit 1
+
 if ($failures.Count -gt 0) {
     Write-Host 'CI Gate mode proof FAILED:'
     foreach ($failure in $failures) { Write-Host "  - $failure" }

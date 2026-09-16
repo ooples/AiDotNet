@@ -796,7 +796,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
-        _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
+        Engine.TensorSubtractInPlace(_embeddingTensor, scaledGradient);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_embeddingTensor);
