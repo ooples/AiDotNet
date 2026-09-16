@@ -15,7 +15,33 @@ using AssemblyDefinition = Mono.Cecil.AssemblyDefinition;
 
 internal static class SourceSnapshotReader
 {
-    public static SourceSnapshot Read(string binary, string repository)
+    public static SourceBundleSnapshot ReadBundle(string testBinary, string repository, string[] dependencies)
+    {
+        string[] binaries = new[] { testBinary }.Concat(dependencies).Select(Path.GetFullPath).ToArray();
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var paths = binaries.ToHashSet(comparer);
+        if (paths.Count != binaries.Length || binaries.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != binaries.Length)
+            throw new InvalidDataException("Duplicate bundle assembly.");
+        var hashes = binaries.ToDictionary(path => path, FileHash, comparer);
+        var pdbHashes = binaries.ToDictionary(path => path, path => FileHash(Path.ChangeExtension(path, ".pdb")), comparer);
+        var identities = new HashSet<string>(StringComparer.Ordinal);
+        var methodIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string path in binaries)
+        {
+            using var definition = AssemblyDefinition.ReadAssembly(path);
+            if (!identities.Add(definition.Name.Name)) throw new InvalidDataException("Ambiguous assembly name in source bundle.");
+            foreach (MethodDefinition method in AllTypes(definition.MainModule.Types).SelectMany(type => type.Methods))
+                if (method.HasBody || method.IsPInvokeImpl) methodIds.Add(DependencyGraph.Stable(method));
+        }
+        SourceSnapshot[] snapshots = binaries.Select(path => Read(path, repository, paths, methodIds)).ToArray();
+        if (binaries.Any(path => FileHash(path) != hashes[path] || FileHash(Path.ChangeExtension(path, ".pdb")) != pdbHashes[path]) ||
+            snapshots.Any(snapshot => snapshot.SourceTree != snapshots[0].SourceTree))
+            throw new InvalidDataException("Source bundle changed during graph construction.");
+        return new(1, snapshots[0].SourceTree, Path.GetFileName(testBinary), snapshots);
+    }
+
+    public static SourceSnapshot Read(string binary, string repository, IReadOnlySet<string>? linkedPaths = null,
+        IReadOnlySet<string>? linkedMethodIds = null)
     {
         string root = Path.GetFullPath(repository);
         string source = Git(root, "rev-parse", "HEAD").Trim();
@@ -27,10 +53,12 @@ internal static class SourceSnapshotReader
         using var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(binary)));
         resolver.AddSearchDirectory(Path.GetDirectoryName(typeof(object).Assembly.Location));
+        if (linkedPaths is not null)
+            foreach (string path in linkedPaths) resolver.AddSearchDirectory(Path.GetDirectoryName(path));
         using var assembly = AssemblyDefinition.ReadAssembly(binary, new ReaderParameters { ReadSymbols = true, InMemory = true, AssemblyResolver = resolver });
         if (assembly.Name.HasPublicKey || assembly.Modules.Count != 1)
             throw new InvalidDataException("Signed or multi-module snapshots are not supported.");
-        MethodDependencyGraph raw = DependencyGraph.Read(assembly, hash);
+        MethodDependencyGraph raw = DependencyGraph.Read(assembly, hash, linkedPaths);
         string Stable(MethodDependencyNode node) => assembly.Name.Name + ":" + node.Name;
         var names = raw.Methods.ToDictionary(node => node.Key, Stable, StringComparer.Ordinal);
         var definitions = AllTypes(assembly.MainModule.Types).SelectMany(type => type.Methods)
@@ -71,8 +99,9 @@ internal static class SourceSnapshotReader
                     method.Body.Instructions.Any(instruction => instruction.Operand is GenericInstanceMethod ||
                         instruction.Operand is MemberReference member && member.DeclaringType is GenericInstanceType))))
                 boundary = DependencyBoundary.Unresolved;
-            methods.Add(new(new(Stable(node), node.LocalCalls.Select(key => names.TryGetValue(key, out string? id) ? id : "unresolved:" + key).ToArray(),
-                node.StaticFields.Select(field => assembly.Name.Name + ":" + field).ToArray(), boundary),
+            methods.Add(new(new(Stable(node), node.LocalCalls.Select(key => names.TryGetValue(key, out string? id) ? id :
+                    linkedMethodIds?.Contains(key) == true ? key : "unresolved:" + key).ToArray(),
+                node.StaticFields, boundary),
                 assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name,
                 bodyHash, spans.ToArray(), method.IsConstructor || method.IsVirtual));
         }

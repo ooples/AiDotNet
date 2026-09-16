@@ -7,6 +7,11 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 
+if (args.Length >= 4 && args[2] == nameof(InstrumentationMode.SourceBundle))
+{
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.ReadBundle(args[0], args[3], args[4..]));
+    return;
+}
 if (args.Length == 4 && args[2] == nameof(InstrumentationMode.SourceSnapshot))
 {
     AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.Read(args[0], args[3]));
@@ -16,7 +21,7 @@ if (args.Length is < 2 or > 3) throw new ArgumentException("Usage: instrumenter 
 InstrumentationMode mode = args.Length == 2 ? InstrumentationMode.Methods :
     Enum.TryParse(args[2], out InstrumentationMode parsed) && Enum.IsDefined(parsed)
         ? parsed : throw new ArgumentException("Unsupported instrumentation mode.");
-if (mode == InstrumentationMode.SourceSnapshot) throw new ArgumentException("SourceSnapshot requires a repository directory.");
+if (mode is InstrumentationMode.SourceSnapshot or InstrumentationMode.SourceBundle) throw new ArgumentException("Source snapshot requires a repository directory.");
 string input = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(args[1]);
 if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase) || File.Exists(output))
@@ -182,4 +187,4 @@ static void InsertBeforeIncludingTargets(MethodDefinition method, Instruction ta
     foreach (Instruction instruction in inserted) method.Body.GetILProcessor().InsertBefore(target, instruction);
 }
 
-enum InstrumentationMode { Methods, TaskBoundaries, RemoveTaskObserverForMutationTest, SourceSnapshot }
+enum InstrumentationMode { Methods, TaskBoundaries, RemoveTaskObserverForMutationTest, SourceSnapshot, SourceBundle }

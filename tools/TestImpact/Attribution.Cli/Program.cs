@@ -1,9 +1,18 @@
 using AiDotNet.TestImpact;
 
 if (args.Length == 0 || !Enum.TryParse(args[0], out Command command) || !Enum.IsDefined(command))
-    throw new ArgumentException("Expected Prepare, Verify, SelectChanges, PrepareReuse or CompleteReuse command.");
+    throw new ArgumentException("Expected Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse or ImportWorkflow command.");
 switch (command)
 {
+    case Command.ImportWorkflow:
+    {
+        if (args.Length != 4) throw new ArgumentException("ImportWorkflow request.json new-download-directory output.json");
+        VerifiedExecution imported = await GitHubEvidenceReader.Verify(Read<WorkflowImportRequest>(args[1]), args[2]);
+        RunnerBinding.WriteNew(args[3], new { imported.Scope, imported.PlanHash, imported.InventoryHash, imported.Context,
+            imported.Workload, imported.Origin, imported.Cases, imported.CanReplaceFullBaseline,
+            AuthenticatedWorkflowOrigin = true, ProductionSelectionEnabled = false });
+        break;
+    }
     case Command.PrepareReuse:
     {
         if (args.Length != 4) throw new ArgumentException("PrepareReuse request.json plan-output partition-output");
@@ -28,12 +37,12 @@ switch (command)
     case Command.SelectChanges:
     {
         if (args.Length != 10) throw new ArgumentException("SelectChanges repository before-snapshot after-snapshot before-inventory after-inventory before-bundle after-bundle plan-output selection-output");
-        SourceSnapshot before = Read<SourceSnapshot>(args[2]);
-        SourceSnapshot after = Read<SourceSnapshot>(args[3]);
+        SourceBundleSnapshot before = LocalEvidenceReader.ReadSource(args[2]);
+        SourceBundleSnapshot after = LocalEvidenceReader.ReadSource(args[3]);
         DiscoveryManifest oldInventory = Read<DiscoveryManifest>(args[4]);
         DiscoveryManifest currentInventory = Read<DiscoveryManifest>(args[5]);
-        LocalEvidenceReader.ValidateSnapshot(before, oldInventory, args[6]);
-        LocalEvidenceReader.ValidateSnapshot(after, currentInventory, args[7]);
+        LocalEvidenceReader.ValidateBundle(before, oldInventory, args[6]);
+        LocalEvidenceReader.ValidateBundle(after, currentInventory, args[7]);
         if (oldInventory.Workload != currentInventory.Workload) throw new InvalidDataException("Workload identity changed.");
         SourceDelta delta = GitSourceDelta.Read(args[1], before.SourceTree, after.SourceTree);
         if (oldInventory.Context.ProfileFingerprint != currentInventory.Context.ProfileFingerprint) delta = delta with { Unmapped = true };
@@ -72,4 +81,4 @@ switch (command)
 }
 
 static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocument<T>(File.ReadAllText(path));
-enum Command { Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse }
+enum Command { Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse, ImportWorkflow }

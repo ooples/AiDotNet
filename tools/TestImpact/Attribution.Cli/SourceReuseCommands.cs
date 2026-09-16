@@ -12,12 +12,12 @@ internal static class SourceReuseCommands
 
     private static ReusePartition Prepare(SourceReuseRequest request)
     {
-        SourceSnapshot before = Read<SourceSnapshot>(request.Before.Snapshot);
-        SourceSnapshot after = Read<SourceSnapshot>(request.After.Snapshot);
+        SourceBundleSnapshot before = LocalEvidenceReader.ReadSource(request.Before.Snapshot);
+        SourceBundleSnapshot after = LocalEvidenceReader.ReadSource(request.After.Snapshot);
         DiscoveryManifest oldInventory = Read<DiscoveryManifest>(request.Before.Inventory);
         DiscoveryManifest currentInventory = Read<DiscoveryManifest>(request.After.Inventory);
-        LocalEvidenceReader.ValidateSnapshot(before, oldInventory, request.Before.Bundle);
-        LocalEvidenceReader.ValidateSnapshot(after, currentInventory, request.After.Bundle);
+        LocalEvidenceReader.ValidateBundle(before, oldInventory, request.Before.Bundle);
+        LocalEvidenceReader.ValidateBundle(after, currentInventory, request.After.Bundle);
         VerifiedExecution baseline = LocalEvidenceReader.Verify(oldInventory, request.Baseline);
         return SourceImpact.PrepareReuse(baseline, before, after, currentInventory,
             GitSourceDelta.Read(request.Repository, before.SourceTree, after.SourceTree));
@@ -37,6 +37,16 @@ internal static class SourceReuseCommands
 
 internal static class LocalEvidenceReader
 {
+    public static SourceBundleSnapshot ReadSource(string path)
+    {
+        string json = File.ReadAllText(path);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        if (document.RootElement.TryGetProperty(nameof(SourceBundleSnapshot.Assemblies), out _))
+            return ExecutionEvidence.ReadDocument<SourceBundleSnapshot>(json);
+        SourceSnapshot single = ExecutionEvidence.ReadDocument<SourceSnapshot>(json);
+        return new(1, single.SourceTree, single.AssemblyFile, [single]);
+    }
+
     public static VerifiedExecution Verify(DiscoveryManifest manifest, LocalExecutionInput input)
     {
         string[] files = Directory.GetFileSystemEntries(input.Reports);
@@ -63,11 +73,23 @@ internal static class LocalEvidenceReader
     }
 
     public static void ValidateSnapshot(SourceSnapshot snapshot, DiscoveryManifest inventory, string bundle)
+        => ValidateBundle(new(1, snapshot.SourceTree, snapshot.AssemblyFile, [snapshot]), inventory, bundle);
+
+    public static void ValidateBundle(SourceBundleSnapshot source, DiscoveryManifest inventory, string bundle)
+    {
+        if (source.Schema != 1 || source.SourceTree != inventory.Context.SourceTree || source.Assemblies is null || source.Assemblies.Length == 0 ||
+            source.Assemblies.Count(snapshot => snapshot.AssemblyFile == source.TestAssembly) != 1 ||
+            source.Assemblies.Select(snapshot => snapshot.AssemblyFile).Distinct(StringComparer.OrdinalIgnoreCase).Count() != source.Assemblies.Length ||
+            RunnerBinding.HashBundle(bundle) != inventory.Context.BuildFingerprint)
+            throw new EvidenceException(EvidenceFailure.Context, "Source snapshot differs from the discovered binary bundle.");
+        foreach (SourceSnapshot snapshot in source.Assemblies) ValidateAssembly(snapshot, inventory, bundle);
+    }
+
+    private static void ValidateAssembly(SourceSnapshot snapshot, DiscoveryManifest inventory, string bundle)
     {
         if (inventory.Schema != 1 || snapshot.Status != SourceMapStatus.Verified || snapshot.SourceTree != inventory.Context.SourceTree ||
             string.IsNullOrWhiteSpace(snapshot.AssemblyFile) || Path.GetFileName(snapshot.AssemblyFile) != snapshot.AssemblyFile ||
             snapshot.AssemblyFile.Contains('/') || snapshot.AssemblyFile.Contains('\\') ||
-            RunnerBinding.HashBundle(bundle) != inventory.Context.BuildFingerprint ||
             Hash(Path.Combine(bundle, snapshot.AssemblyFile)) != snapshot.AssemblyHash ||
             Hash(Path.ChangeExtension(Path.Combine(bundle, snapshot.AssemblyFile), ".pdb")) != snapshot.PdbHash)
             throw new EvidenceException(EvidenceFailure.Context, "Source snapshot differs from the discovered binary bundle.");

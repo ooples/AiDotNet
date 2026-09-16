@@ -194,8 +194,15 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 12 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 18 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
+        "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Workflow import protocol tests failed.'
+    [xml] $workflowTrx = Get-Content -LiteralPath (Join-Path $root 'workflow-protocol/results.trx') -Raw
+    $workflowCases = @($workflowTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($workflowCases.Count -eq 15 -and @($workflowCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Workflow import checks did not execute the expected complete set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -385,8 +392,10 @@ try {
     Check (Test-Path (Join-Path $root 'planned/proof.json')) 'Planned-execution proof was not completed.'
     & (Join-Path $PSScriptRoot 'Test-SourceSelection.ps1') -EvidenceDirectory (Join-Path $root 'source-selection')
     Check (Test-Path (Join-Path $root 'source-selection/proof.json')) 'Actual source-selection proof was not completed.'
+    & (Join-Path $PSScriptRoot 'Test-SourceSelection.ps1') -CrossAssembly -EvidenceDirectory (Join-Path $root 'cross-assembly')
+    Check (Test-Path (Join-Path $root 'cross-assembly/proof.json')) 'Cross-assembly selection proof was not completed.'
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; sourceCases = $sourceCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; sourceCases = $sourceCases.Count; workflowCases = $workflowCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

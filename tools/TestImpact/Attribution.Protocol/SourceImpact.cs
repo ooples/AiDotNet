@@ -1,19 +1,32 @@
 namespace AiDotNet.TestImpact;
 
 public enum SourceMapStatus { Verified, Unverifiable }
+public enum SourceMethodScope { TestAssembly, DependencyAssembly }
 public sealed record SourceSpan(string Path, int FirstLine, int LastLine);
-public sealed record SourceMethod(DependencyNode Dependency, string Owner, string BodyHash, SourceSpan[] Spans, bool Lifecycle);
+public sealed record SourceMethod(DependencyNode Dependency, string Owner, string BodyHash, SourceSpan[] Spans, bool Lifecycle,
+    SourceMethodScope Scope = SourceMethodScope.TestAssembly);
 public sealed record SourceSnapshot(int Schema, string SourceTree, string AssemblyFile, string AssemblyHash, string PdbHash, string ConfigurationHash,
     SourceMapStatus Status, SourceMethod[] Methods);
 public sealed record ChangedLines(string Path, int Start, int Count);
 public sealed record SourceDelta(string BeforeTree, string AfterTree, ChangedLines[] Before, ChangedLines[] After, bool Unmapped);
 public sealed record SourceSelection(SelectedMethod[] Methods, bool FullFallback, string[] ChangedNodes);
+public sealed record SourceBundleSnapshot(int Schema, string SourceTree, string TestAssembly, SourceSnapshot[] Assemblies);
 
 // Source snapshots must be produced from checksum-verified PDBs. Unknown source
 // or metadata edits broaden execution; observed hits alone never authorize skips.
 public static class SourceImpact
 {
+    private sealed record Graph(string SourceTree, string ConfigurationHash, SourceMapStatus Status, SourceMethod[] Methods);
+
     public static ReusePartition PrepareReuse(VerifiedExecution baseline, SourceSnapshot before, SourceSnapshot after,
+        DiscoveryManifest currentInventory, SourceDelta delta)
+        => PrepareReuse(baseline, ToGraph(before), ToGraph(after), currentInventory, delta);
+
+    public static ReusePartition PrepareReuse(VerifiedExecution baseline, SourceBundleSnapshot before, SourceBundleSnapshot after,
+        DiscoveryManifest currentInventory, SourceDelta delta)
+        => PrepareReuse(baseline, ToGraph(before), ToGraph(after), currentInventory, delta);
+
+    private static ReusePartition PrepareReuse(VerifiedExecution baseline, Graph before, Graph after,
         DiscoveryManifest currentInventory, SourceDelta delta)
     {
         if (currentInventory.Schema != 1 || before.SourceTree != baseline.Context.SourceTree ||
@@ -29,10 +42,16 @@ public static class SourceImpact
 
     public static SourceSelection Select(SourceSnapshot before, SourceSnapshot after,
         TestCaseIdentity[] oldInventory, TestCaseIdentity[] currentInventory, SourceDelta delta)
+        => Select(ToGraph(before), ToGraph(after), oldInventory, currentInventory, delta);
+
+    public static SourceSelection Select(SourceBundleSnapshot before, SourceBundleSnapshot after,
+        TestCaseIdentity[] oldInventory, TestCaseIdentity[] currentInventory, SourceDelta delta)
+        => Select(ToGraph(before), ToGraph(after), oldInventory, currentInventory, delta);
+
+    private static SourceSelection Select(Graph before, Graph after,
+        TestCaseIdentity[] oldInventory, TestCaseIdentity[] currentInventory, SourceDelta delta)
     {
-        Validate(before);
-        Validate(after);
-        if (before.Schema != 1 || after.Schema != 1 || before.SourceTree != delta.BeforeTree || after.SourceTree != delta.AfterTree)
+        if (before.SourceTree != delta.BeforeTree || after.SourceTree != delta.AfterTree)
             throw new EvidenceException(EvidenceFailure.Context, "Source snapshots do not match the diff revisions.");
         var changed = new HashSet<string>(StringComparer.Ordinal);
         bool fallback = delta.Unmapped || before.Status != SourceMapStatus.Verified || after.Status != SourceMapStatus.Verified ||
@@ -62,20 +81,52 @@ public static class SourceImpact
     {
         static bool Hash(string value, int length) => value is not null && value.Length == length &&
             value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
-        if (snapshot is null || !Hash(snapshot.SourceTree, 40) || !Hash(snapshot.AssemblyHash, 64) ||
+        if (snapshot is null || snapshot.Schema != 1 || !Hash(snapshot.SourceTree, 40) || !Hash(snapshot.AssemblyHash, 64) ||
             !Hash(snapshot.PdbHash, 64) || !Hash(snapshot.ConfigurationHash, 64) || !Enum.IsDefined(snapshot.Status) || snapshot.Methods is null ||
             snapshot.Methods.Any(method => method is null || method.Dependency is null || method.Spans is null ||
-                string.IsNullOrWhiteSpace(method.Owner) || !Hash(method.BodyHash, 64)))
+                string.IsNullOrWhiteSpace(method.Owner) || !Hash(method.BodyHash, 64) || !Enum.IsDefined(method.Scope)))
             throw new EvidenceException(EvidenceFailure.Format, "Incomplete source snapshot.");
     }
 
-    private static DependencySnapshot Bind(SourceSnapshot snapshot, TestCaseIdentity[] inventory, ref bool fallback)
+    private static Graph ToGraph(SourceSnapshot snapshot)
+    {
+        Validate(snapshot);
+        return new(snapshot.SourceTree, snapshot.ConfigurationHash, snapshot.Status,
+            snapshot.Methods.Select(method => method with { Scope = SourceMethodScope.TestAssembly }).ToArray());
+    }
+
+    private static Graph ToGraph(SourceBundleSnapshot bundle)
+    {
+        if (bundle is null || bundle.Schema != 1 || bundle.Assemblies is null || bundle.Assemblies.Length == 0 ||
+            string.IsNullOrWhiteSpace(bundle.TestAssembly))
+            throw new EvidenceException(EvidenceFailure.Format, "Incomplete source bundle.");
+        foreach (SourceSnapshot snapshot in bundle.Assemblies) Validate(snapshot);
+        if (bundle.Assemblies.Any(snapshot => snapshot.SourceTree != bundle.SourceTree) ||
+            bundle.Assemblies.Select(snapshot => snapshot.AssemblyFile).Distinct(StringComparer.OrdinalIgnoreCase).Count() != bundle.Assemblies.Length ||
+            bundle.Assemblies.Count(snapshot => snapshot.AssemblyFile == bundle.TestAssembly) != 1)
+            throw new EvidenceException(EvidenceFailure.Context, "Source bundle revisions or assembly identities disagree.");
+        // Derive scope from the bundle's test assembly, not a caller-provided per-method flag.
+        SourceMethod[] methods = bundle.Assemblies.SelectMany(snapshot => snapshot.Methods.Select(method => method with
+        {
+            Scope = snapshot.AssemblyFile == bundle.TestAssembly ? SourceMethodScope.TestAssembly : SourceMethodScope.DependencyAssembly
+        })).ToArray();
+        if (methods.Select(method => method.Dependency.Id).Distinct(StringComparer.Ordinal).Count() != methods.Length)
+            throw new EvidenceException(EvidenceFailure.Format, "Duplicate cross-assembly method identity.");
+        string configuration = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { bundle.TestAssembly,
+                Assemblies = bundle.Assemblies.OrderBy(snapshot => snapshot.AssemblyFile, StringComparer.Ordinal)
+                    .Select(snapshot => new { snapshot.AssemblyFile, snapshot.ConfigurationHash }).ToArray() })));
+        return new(bundle.SourceTree, configuration,
+            bundle.Assemblies.All(snapshot => snapshot.Status == SourceMapStatus.Verified) ? SourceMapStatus.Verified : SourceMapStatus.Unverifiable, methods);
+    }
+
+    private static DependencySnapshot Bind(Graph snapshot, TestCaseIdentity[] inventory, ref bool fallback)
     {
         if (snapshot.Methods is null || inventory is null || inventory.Length == 0 ||
             inventory.Any(test => test is null || string.IsNullOrWhiteSpace(test.CaseId) || string.IsNullOrWhiteSpace(test.MethodId)) ||
             inventory.Select(test => test.CaseId).Distinct(StringComparer.Ordinal).Count() != inventory.Length)
             throw new EvidenceException(EvidenceFailure.Inventory, "Missing or duplicate source selection inventory.");
-        var owners = snapshot.Methods.GroupBy(method => method.Owner, StringComparer.Ordinal)
+        var owners = snapshot.Methods.Where(method => method.Scope == SourceMethodScope.TestAssembly).GroupBy(method => method.Owner, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(method => method.Dependency.Id).ToArray(), StringComparer.Ordinal);
         var roots = new List<TestDependencyRoots>();
         var testOwners = inventory.Select(test => test.MethodId).ToHashSet(StringComparer.Ordinal);
@@ -86,12 +137,13 @@ public static class SourceImpact
         }
         // Test assembly helpers can run during discovery or shared fixtures even
         // when they have no dynamically observed test owner. Keep them group-wide.
-        string[] groups = snapshot.Methods.Where(method => method.Lifecycle || !testOwners.Contains(method.Owner))
+        string[] groups = snapshot.Methods.Where(method => method.Scope == SourceMethodScope.TestAssembly &&
+                (method.Lifecycle || !testOwners.Contains(method.Owner)))
             .Select(method => method.Dependency.Id).ToArray();
         return new(snapshot.Methods.Select(method => method.Dependency).ToArray(), roots.ToArray(), groups);
     }
 
-    private static bool Map(SourceSnapshot snapshot, ChangedLines[] edits, HashSet<string> changed)
+    private static bool Map(Graph snapshot, ChangedLines[] edits, HashSet<string> changed)
     {
         bool complete = true;
         foreach (ChangedLines edit in edits)

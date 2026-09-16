@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string] $EvidenceDirectory)
+param([Parameter(Mandatory)][string] $EvidenceDirectory, [switch] $CrossAssembly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($EvidenceDirectory)
@@ -22,9 +22,23 @@ $project = @"
   </ItemGroup>
 </Project>
 "@
+if ($CrossAssembly) {
+    $libraryDirectory = Join-Path $checkout 'Library'
+    [void](New-Item -ItemType Directory -Path $libraryDirectory)
+    [IO.File]::WriteAllText((Join-Path $libraryDirectory 'SourceLibrary.csproj'), @'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion></PropertyGroup>
+</Project>
+'@)
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/Library.cs') -Destination $libraryDirectory
+    $project = $project.Replace('</Project>', '<ItemGroup><Compile Remove="Library/**/*.cs" /><ProjectReference Include="Library/SourceLibrary.csproj" /></ItemGroup></Project>')
+}
 [IO.File]::WriteAllText((Join-Path $checkout 'SourceCases.csproj'), $project)
 [IO.File]::WriteAllText((Join-Path $checkout '.gitignore'), "obj/`nbin/`n")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/Cases.cs') -Destination $checkout
+if ($CrossAssembly) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/CrossAssemblyCases.cs') -Destination (Join-Path $checkout 'Cases.cs')
+}
 function Check([bool] $Condition, [string] $Message) { if (-not $Condition) { throw $Message } }
 function Invoke-Git([string[]] $Arguments) {
     $result = & git -C $checkout @Arguments
@@ -47,7 +61,11 @@ function Build([string] $Name, [string] $Define = '') {
 }
 function Snapshot([string] $Name, [string] $Bundle) {
     $path = Join-Path $root "$Name-snapshot.json"
-    dotnet $mapper (Join-Path $Bundle 'SourceCases.dll') $path SourceSnapshot $checkout | Out-Host
+    if ($CrossAssembly) {
+        dotnet $mapper (Join-Path $Bundle 'SourceCases.dll') $path SourceBundle $checkout (Join-Path $Bundle 'SourceLibrary.dll') | Out-Host
+    } else {
+        dotnet $mapper (Join-Path $Bundle 'SourceCases.dll') $path SourceSnapshot $checkout | Out-Host
+    }
     Check ($LASTEXITCODE -eq 0) "$Name source snapshot failed."
     return $path
 }
@@ -98,15 +116,19 @@ try {
     $partialBaselineRun = Run baseline-partial $oldBundle
     $partialBaselineInput = [ordered]@{ Plan="$root/partial-baseline-plan.json"; Reports="$root/baseline-partial/reports";
         Trx="$root/baseline-partial/results.trx"; CollectionRun=$partialBaselineRun; Origin=@{Repository='local/source-proof';RunId=1;Attempt=1} }
-    $sourcePath = Join-Path $checkout 'Cases.cs'
+    $sourcePath = Join-Path $checkout $(if ($CrossAssembly) { 'Library/Library.cs' } else { 'Cases.cs' })
     $source = [IO.File]::ReadAllText($sourcePath)
-    Check ($source.Contains('Equal(2, 1 + 1);')) 'Missing expected source edit anchor.'
-    [IO.File]::WriteAllText($sourcePath, $source.Replace('Equal(2, 1 + 1);', 'Equal(3, 1 + 2);'))
+    $oldBody = if ($CrossAssembly) { 'return input + 1;' } else { 'Equal(2, 1 + 1);' }
+    $newBody = if ($CrossAssembly) { 'return 1 + input;' } else { 'Equal(3, 1 + 2);' }
+    Check ($source.Contains($oldBody)) 'Missing expected source edit anchor.'
+    [IO.File]::WriteAllText($sourcePath, $source.Replace($oldBody, $newBody))
     $after = Commit 'test: change one executable test body'
 
     # Actual stale PDB/binary control: checkout changed but old assembly did not.
     $staleSnapshot = Snapshot stale $oldBundle
-    Check ((Get-Content $staleSnapshot -Raw | ConvertFrom-Json).Status -eq 'Unverifiable') 'Stale PDB source was trusted.'
+    $staleSource = Get-Content $staleSnapshot -Raw | ConvertFrom-Json
+    $staleAssemblies = if ($CrossAssembly) { @($staleSource.Assemblies) } else { @($staleSource) }
+    Check (@($staleAssemblies | Where-Object Status -eq 'Unverifiable').Count -gt 0) 'Stale PDB source was trusted.'
     $staleInventory = Discover stale $oldBundle $after
     dotnet $cli SelectChanges $checkout $oldSnapshot $staleSnapshot $oldInventory $staleInventory $oldBundle $oldBundle `
         "$root/forbidden-stale-plan.json" "$root/forbidden-stale-selection.json" 2>&1 | Tee-Object -FilePath "$root/stale-rejection.log" | Out-Host
@@ -130,6 +152,16 @@ try {
     [xml]$trx = Get-Content "$root/selected/results.trx" -Raw
     $rows = @($trx.SelectNodes('//*[local-name()="UnitTestResult"]'))
     Check ($rows.Count -eq 1 -and $rows[0].testName -eq 'SourceCases.Cases.Left' -and $rows[0].outcome -eq 'Passed') 'Wrong tests ran after source selection.'
+
+    if ($CrossAssembly) {
+        dotnet $mapper (Join-Path $newBundle 'SourceCases.dll') "$root/missing-library-snapshot.json" SourceBundle $checkout | Out-Host
+        Check ($LASTEXITCODE -eq 0) 'Could not construct the missing-dependency control.'
+        dotnet $cli SelectChanges $checkout $oldSnapshot "$root/missing-library-snapshot.json" $oldInventory $newInventory $oldBundle $newBundle `
+            "$root/missing-library-plan.json" "$root/missing-library-selection.json" | Out-Host
+        Check ($LASTEXITCODE -eq 0) 'Missing dependency did not fall back safely.'
+        $missingLibrary = Get-Content "$root/missing-library-plan.json" -Raw | ConvertFrom-Json
+        Check ($missingLibrary.Scope -eq 'FullWorkload' -and $missingLibrary.RequiredCases.Count -eq 3) 'Missing dependency allowed partial execution.'
+    }
 
     $beforeInput = [ordered]@{ Snapshot=$oldSnapshot; Inventory=$oldInventory; Bundle=$oldBundle }
     $afterInput = [ordered]@{ Snapshot=$newSnapshot; Inventory=$newInventory; Bundle=$newBundle }
@@ -211,7 +243,7 @@ try {
     dotnet $cli Verify $configInventory "$root/config-plan.json" "$root/config-full/reports" "$root/config-full/results.trx" `
         $configRun local/source-proof 1 1 "$root/config-verified.json" | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Full fallback execution did not verify.'
-    [ordered]@{ before=$before; after=$after; config=$configRevision; discovered=3; baselinePassed=3; sourceSelected=1;
+    [ordered]@{ before=$before; after=$after; config=$configRevision; crossAssembly=[bool]$CrossAssembly; discovered=3; baselinePassed=3; sourceSelected=1;
         configurationFallback=3; identicalSourceBinarySelected=1; identicalSourceMetadataFallback=3;
         changedSourceReused=2; changedSourceExecuted=1; mixedCannotReplaceBaseline=$true;
         partialBaselineRejected=$true; missingFreshExecutionRejected=$true; reuseOnlyCases=3;

@@ -199,6 +199,32 @@ the baseline. This is **not live changed-base CI reuse proof**; automatic graph
 construction across production assemblies, trusted artifact import, and production
 dispatch remain unwired.
 
+### Cross-assembly selection and workflow import
+
+The mapper now supports an explicit source assembly bundle. Calls and shared
+static fields crossing between its assemblies retain stable qualified identities;
+only test-assembly helpers are execution-group roots. External, virtual and
+unsupported generic paths remain conservative. A separate compiled library fixture
+now proves a library-only source edit selects one dependent test and reuses two,
+while a missing dependency assembly forces full execution. Eighteen source-impact
+tests cover the single- and cross-assembly paths. This does not yet establish
+useful narrowing for the full AiDotNet dependency graph.
+
+`ImportWorkflow` queries GitHub directly, pins repository/workflow/head/run/attempt,
+requires the named successful job, downloads by immutable artifact ID, verifies
+GitHub's archive digest, and independently verifies the report and TRX. It rejects
+unsafe archive paths, links, duplicates, stale attempts, and partial results
+presented as a full baseline. It uses completed workflow state, not a remote PID.
+Fifteen workflow/archive tests pass; the combined protocol suite has 85 tests.
+
+The importer was exercised against the completed Linux run 35121549219: its full
+11-case/12-row planned execution imported successfully. Wrong-head, wrong-workflow
+and partial-as-full imports were rejected. Its tested merge used a later base than
+the run's PR metadata: the importer checked both recorded-base-to-tested-base and
+tested-base-to-current-target ancestry before accepting that source. This is real
+authenticated artifact import, not production dispatch or post-merge reuse proof.
+Caller policy must come from trusted CI configuration, not from the artifact.
+
 ### Automatic source-to-runner selection
 
 `Test-SourceSelection.ps1` builds a small real xUnit assembly from clean Git

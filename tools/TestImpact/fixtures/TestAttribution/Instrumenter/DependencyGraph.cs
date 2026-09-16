@@ -12,7 +12,7 @@ internal sealed record MethodDependencyGraph(int Schema, string InputHash, Metho
 // Unresolved/virtual/external paths stay explicit rather than silently disappearing.
 internal static class DependencyGraph
 {
-    public static MethodDependencyGraph Read(AssemblyDefinition assembly, string inputHash)
+    public static MethodDependencyGraph Read(AssemblyDefinition assembly, string inputHash, IReadOnlySet<string>? linkedAssemblyPaths = null)
     {
         var nodes = new List<MethodDependencyNode>();
         foreach (TypeDefinition type in Types(assembly.MainModule.Types))
@@ -33,7 +33,15 @@ internal static class DependencyGraph
                 if (instruction.Operand is FieldReference field)
                 {
                     if (field.DeclaringType.Scope != assembly.MainModule)
-                        open.Add(new(OpenDependencyKind.ExternalField, field.FullName));
+                    {
+                        FieldDefinition? linked = ResolveLinked(field, linkedAssemblyPaths);
+                        if (linked is null) open.Add(new(OpenDependencyKind.ExternalField, field.FullName));
+                        else if (linked.IsStatic && !linked.IsLiteral)
+                        {
+                            fields.Add(linked.Module.Assembly.Name.Name + ":" + linked.FullName);
+                            AddLinkedInitializer(linked.DeclaringType, local);
+                        }
+                    }
                     else
                     {
                         FieldDefinition? definition = field.Resolve();
@@ -41,7 +49,7 @@ internal static class DependencyGraph
                         else if (definition.IsStatic && !definition.IsLiteral)
                         {
                             // readonly references may refer to mutable shared state.
-                            fields.Add(definition.FullName);
+                            fields.Add(assembly.Name.Name + ":" + definition.FullName);
                             AddTypeInitializer(definition.DeclaringType, local, inputHash);
                         }
                     }
@@ -49,7 +57,15 @@ internal static class DependencyGraph
                 if (instruction.Operand is not MethodReference call) continue;
                 if (call.DeclaringType.Scope != assembly.MainModule)
                 {
-                    open.Add(new(OpenDependencyKind.ExternalCall, call.FullName));
+                    MethodDefinition? linked = ResolveLinked(call, linkedAssemblyPaths);
+                    if (linked is null) open.Add(new(OpenDependencyKind.ExternalCall, call.FullName));
+                    else
+                    {
+                        local.Add(Stable(linked));
+                        AddLinkedInitializer(linked.DeclaringType, local);
+                        if (linked.IsVirtual && !linked.IsFinal && !linked.DeclaringType.IsSealed)
+                            open.Add(new(OpenDependencyKind.VirtualDispatch, linked.FullName));
+                    }
                     continue;
                 }
                 MethodDefinition? target = call.Resolve();
@@ -79,6 +95,36 @@ internal static class DependencyGraph
     }
 
     private static string Key(MethodDefinition method, string inputHash) => $"{inputHash}:{method.MetadataToken.ToInt32():X8}";
+
+    internal static string Stable(MethodDefinition method) => method.Module.Assembly.Name.Name + ":" + method.FullName;
+
+    private static MethodDefinition? ResolveLinked(MethodReference reference, IReadOnlySet<string>? paths)
+    {
+        if (paths is null) return null;
+        try
+        {
+            MethodDefinition? target = reference.Resolve();
+            return target is not null && paths.Contains(Path.GetFullPath(target.Module.FileName)) ? target : null;
+        }
+        catch (AssemblyResolutionException) { return null; }
+    }
+
+    private static FieldDefinition? ResolveLinked(FieldReference reference, IReadOnlySet<string>? paths)
+    {
+        if (paths is null) return null;
+        try
+        {
+            FieldDefinition? target = reference.Resolve();
+            return target is not null && paths.Contains(Path.GetFullPath(target.Module.FileName)) ? target : null;
+        }
+        catch (AssemblyResolutionException) { return null; }
+    }
+
+    private static void AddLinkedInitializer(TypeDefinition type, HashSet<string> calls)
+    {
+        foreach (MethodDefinition initializer in type.Methods.Where(method => method.IsConstructor && method.IsStatic && method.HasBody))
+            calls.Add(Stable(initializer));
+    }
 
     private static void AddTypeInitializer(TypeDefinition type, HashSet<string> calls, string hash)
     {

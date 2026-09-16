@@ -59,3 +59,7 @@ jobs:
             ${{ runner.temp }}/attribution-proof/source-selection/*.log
             ${{ runner.temp }}/attribution-proof/source-selection/*/results.trx
             ${{ runner.temp }}/attribution-proof/source-selection/*/reports/*
+            ${{ runner.temp }}/attribution-proof/cross-assembly/*.json
+            ${{ runner.temp }}/attribution-proof/cross-assembly/*.log
+            ${{ runner.temp }}/attribution-proof/cross-assembly/*/results.trx
+            ${{ runner.temp }}/attribution-proof/cross-assembly/*/reports/*
