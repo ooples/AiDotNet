@@ -383,7 +383,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
             // Wire layer references for custom layers too
             ExtractLayerReferences();
         }

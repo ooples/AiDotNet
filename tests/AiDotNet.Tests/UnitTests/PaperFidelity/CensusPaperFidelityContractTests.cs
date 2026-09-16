@@ -261,7 +261,7 @@ public sealed class CensusPaperFidelityContractTests
 
         var parameters = source.GetParameters();
         var payload = source.Serialize();
-        using var restored = new MedCLIP<double>(architecture, new MedCLIPOptions
+        using var restored = new MedCLIP<double>(architecture.CloneForModelConstruction(), new MedCLIPOptions
         {
             ImageSize = 4,
             ProjectionDim = 4,

@@ -919,16 +919,16 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Update using Engine operations: w = w - lr * gradient
         var scaledW1Grad = Engine.TensorMultiplyScalar(_localizationWeights1Gradient, learningRate);
-        _localizationWeights1 = Engine.TensorSubtract(_localizationWeights1, scaledW1Grad);
+        Engine.TensorSubtractInPlace(_localizationWeights1, scaledW1Grad);
 
         var scaledB1Grad = Engine.TensorMultiplyScalar(_localizationBias1Gradient, learningRate);
-        _localizationBias1 = Engine.TensorSubtract(_localizationBias1, scaledB1Grad);
+        Engine.TensorSubtractInPlace(_localizationBias1, scaledB1Grad);
 
         var scaledW2Grad = Engine.TensorMultiplyScalar(_localizationWeights2Gradient, learningRate);
-        _localizationWeights2 = Engine.TensorSubtract(_localizationWeights2, scaledW2Grad);
+        Engine.TensorSubtractInPlace(_localizationWeights2, scaledW2Grad);
 
         var scaledB2Grad = Engine.TensorMultiplyScalar(_localizationBias2Gradient, learningRate);
-        _localizationBias2 = Engine.TensorSubtract(_localizationBias2, scaledB2Grad);
+        Engine.TensorSubtractInPlace(_localizationBias2, scaledB2Grad);
     }
 
     /// <summary>

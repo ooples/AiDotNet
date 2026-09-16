@@ -51,7 +51,8 @@ on:
 concurrency:
   # Coverage-map runs are deliberately isolated from ordinary master activity. The Monday CodeQL
   # schedule and a master push must not cancel the full matrix that feeds the next map.
-  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || github.ref }}
+  # Isolate push retries: concurrency cancellation happens before the resolver can recheck the tip.
+  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || (github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id)) || github.ref }}
   # A synchronize event captured while a PR was still a draft can be delivered after the
   # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
   # so it must never cancel the real ready run and replace it with an all-skipped check suite.
@@ -109,8 +110,7 @@ jobs:
   validation-source:
     name: Resolve certified PR validation
     runs-on: ubuntu-latest
-    # Was 5. This job may now WAIT for a merged PR validation run to finish before
-    # deciding, so the ceiling must exceed REUSE_WAIT_MINUTES with room to spare.
+    # Artifact inspection may take time; pending evidence itself now defers without polling.
     timeout-minutes: 50
     permissions:
       actions: read
@@ -139,6 +139,18 @@ jobs:
       import_shards: ${{ steps.resolve.outputs.import_shards || steps.defaults.outputs.import_shards }}
 
     steps:
+      - name: Report validation trigger
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Report only scheduling inputs, never the full event or GitHub context.
+          printf 'event=%s action=%s draft=%s head=%s\n' "$EVENT_NAME" "$EVENT_ACTION" "$PR_DRAFT" "$HEAD_REF"
+          printf 'Validation trigger: event=%s, action=%s, draft=%s, head=%s\n' "$EVENT_NAME" "$EVENT_ACTION" "$PR_DRAFT" "$HEAD_REF" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Initialize fail-closed validation decision
         id: defaults
         shell: bash
@@ -194,7 +206,7 @@ jobs:
               -CertificateFile delta-map/certification.json -CertificationRunId ([long] $resolution.runId)
           if ($LASTEXITCODE -ne 0) { throw "certified map provenance is invalid (exit $LASTEXITCODE)" }
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
-          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+          ConvertTo-Json -InputObject @($all) -Depth 5 |
             Set-Content -LiteralPath delta-shard-manifest.json -Encoding utf8
           'map_file=delta-map/shard-map.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           'manifest_file=delta-shard-manifest.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -214,7 +226,21 @@ jobs:
             -GitHubOutput $env:GITHUB_OUTPUT `
             -MapFile '${{ steps.delta-map.outputs.map_file }}' `
             -ShardManifestFile '${{ steps.delta-map.outputs.manifest_file }}' `
-            -WaitMinutes 40
+            -WaitMinutes 0
+
+      # A failed, recognizable step keeps the gate red and lets the completion reconciler
+      # rerun this job and its dependents on the ORIGINAL push SHA (not a new dispatch SHA).
+      - name: Defer until PR validation completes
+        if: steps.resolve.outputs.deferred == 'true'
+        run: |
+          echo '::error::Validation deferred, not passed: waiting for the merged PR run. No duplicate matrix was scheduled.'
+          exit 1
+
+      - name: Block superseded or unverifiable push
+        if: steps.resolve.outputs.blocked == 'true'
+        run: |
+          echo '::error::Push is superseded or its branch tip could not be verified. Dependent work is disabled; this is not passing validation.'
+          exit 1
 
       - name: Report resolver fallback
         if: steps.resolve.outcome == 'failure'
@@ -280,7 +306,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -292,7 +318,7 @@ jobs:
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -568,6 +594,12 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
+      ledger_matrix: ${{ steps.select.outputs.ledger_matrix }}
+      parameter_matrix: ${{ steps.select.outputs.parameter_matrix }}
+      shape_matrix: ${{ steps.select.outputs.shape_matrix }}
+      requires_tests: ${{ steps.select.outputs.requires_tests }}
+      requires_sweeps: ${{ steps.select.outputs.requires_sweeps }}
+      requires_shapes: ${{ steps.select.outputs.requires_shapes }}
       escalated: ${{ steps.select.outputs.escalated }}
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
@@ -660,6 +692,11 @@ jobs:
       # These are deterministic contract tests for checked-in CI code. Runtime uncertainty (missing
       # map, expired artifact, unmapped line) falls back to all shards, but a broken selector or
       # workflow contract must block the change rather than merge green with the feature disabled.
+      - name: Setup .NET for worker coverage proof
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Verify the impact tooling
         id: selftest
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
@@ -696,6 +733,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
+          ./tools/TestImpact/Test-CiWorkloads.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Workload partition proof failed' }
+          ./tools/TestImpact/Test-CiPolicyImpact.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI execution-impact proof failed' }
+          ./tools/TestImpact/Test-AuxiliaryEvidence.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence proof failed' }
+          ./tools/TestImpact/Test-AuxiliaryInventory.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary inventory proof failed' }
+          ./tools/TestImpact/Test-WorkerCoverage.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated worker coverage proof failed' }
           ./tools/TestImpact/Test-ValidationReuseModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
 
@@ -722,7 +769,7 @@ jobs:
           }
           # Test sources are never instrumented, so the coverage map cannot route them; the selector
           # routes them through these same filters instead.
-          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+          ConvertTo-Json -InputObject @($all) -Depth 5 |
             Set-Content -LiteralPath shard-manifest.json -Encoding utf8
 
           function Read-RequiredJsonBoolean {
@@ -744,6 +791,16 @@ jobs:
           $dupes = @($all.name | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
           if ($dupes.Count -gt 0) {
             Write-Host "::error::duplicate shard name(s) in .github/test-shards.yml: $($dupes -join ', ')"
+            exit 1
+          }
+          $slugDupes = @(
+            $all |
+              Group-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' } |
+              Where-Object Count -gt 1 |
+              ForEach-Object Name
+          )
+          if ($slugDupes.Count -gt 0) {
+            Write-Host "::error::shard name(s) collide after artifact-key normalization: $($slugDupes -join ', ')"
             exit 1
           }
           Write-Host "shard list: $($all.Count) shard(s)"
@@ -911,6 +968,17 @@ jobs:
             $escalate = $true
           }
 
+          . './tools/TestImpact/CiWorkloadKinds.ps1'
+          $ledgerImports = @(if ($deltaPartial -and -not $escalate) { $importShards })
+          $runnable = Complete-CiWorkloadSelection -All $all -Selected @($matrixShards) `
+            -RequiresValidation $requiresValidation -Escalated $escalate -ImportedNames $ledgerImports
+          if ($runnable.Escalated -and -not $escalate) {
+            Write-Host '::warning::no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
+          }
+          $matrixShards = @($runnable.Shards)
+          $ledgerShards = @($runnable.LedgerShards)
+          $escalate = $runnable.Escalated
+
           # Slug exactly as the test job does, because that string is the regression analyzer's
           # shard key - it reads it back from shard-metadata.json.
           $running = [System.Collections.Generic.HashSet[string]]::new(
@@ -926,8 +994,24 @@ jobs:
               ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' }
           )
 
-          $json = ConvertTo-Json -InputObject @($matrixShards) -Depth 5 -Compress
+          . ./tools/TestImpact/CiWorkloadKinds.ps1
+          # Validate the complete catalog, including entries omitted from this selection.
+          $null = Split-CiWorkloads -Shards $all
+          $workloads = Split-CiWorkloads -Shards @($matrixShards)
+          $json = ConvertTo-Json -InputObject @($workloads.Tests) -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "ledger_matrix=$(ConvertTo-Json -InputObject @($ledgerShards) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "parameter_matrix=$(ConvertTo-Json -InputObject @($workloads.ParameterSweep) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "shape_matrix=$(ConvertTo-Json -InputObject @($workloads.ModelShape) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_tests=$(($workloads.Tests.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_sweeps=$(($workloads.ParameterSweep.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_shapes=$(($workloads.ModelShape.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "skipped=$(ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1088,7 +1172,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -2034,6 +2118,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
+          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2069,12 +2154,27 @@ jobs:
           } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
           Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
 
+          # Ordinary shards dispatched or imported by this run. Imports must remain expected
+          # even when only auxiliary workloads rerun. Inventory mode (a master push, which has no
+          # baseline to diff against) previously had no expected set, so a shard whose runner died
+          # before uploading was simply absent: the counts were taken over whatever arrived and the
+          # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
+          # that selection deliberately skipped are not in this matrix, so anything expected and
+          # absent here died rather than being skipped. #2086.
+          $matrixJson = $env:EXPECTED_SHARD_MATRIX
+          $expectedShardNames = @(
+            & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
+          )
+          "inventory_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Write-Host "expected ordinary shards from reruns and imports: $($expectedShardNames.Count)"
+
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
             OutputDirectory = 'test-regression-analysis'
             CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
             ApprovedShardChangesPath = 'merged-shard-changes.json'
+            ExpectedShardNames = $expectedShardNames
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
@@ -2121,7 +2221,9 @@ jobs:
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
       - name: Upload final TRX ledger and comparison report
-        if: always()
+        # Missing/invalid selection output cannot prove which shards were dispatched. Do not
+        # publish a partial ledger that a later run could mistake for a complete baseline.
+        if: always() && steps.analyze.outputs.inventory_valid == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: test-outcome-ledger-${{ github.sha }}
@@ -2170,7 +2272,7 @@ jobs:
 
       - name: Set up JDK 17
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
-        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v4
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
         with:
           java-version: 17
           distribution: 'zulu'
@@ -2309,12 +2411,50 @@ jobs:
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
       - name: Build (Release)
-        # Windows-only MSBuild flags dropped — file-locking workarounds not needed on Linux.
-        # Match the memory-safe project concurrency used by the artifact build. Sonar's
-        # compiler instrumentation only increases the need to avoid four large csc
-        # processes competing inside the 16-GB runner.
+        # ONE FRAMEWORK, EVERY PROJECT. `dotnet build` of the whole solution compiled every
+        # project for every target framework under Sonar's analyzers - the main library and the
+        # test project three times each (net10.0, net8.0, net471). It never finished: no master
+        # commit since 09-01 completed an analysis; every attempt died or timed out inside this
+        # step (55 minutes under the old limit, 95 under this one; 88364e91's runner died at 66).
+        # The artifact build compiles the same core for net10.0 in about 7 minutes.
+        #
+        # Every shipped and test project targets net10.0, so each is built once for it and every
+        # project is still analysed. The net8.0/net471 builds remain the build-compat job's
+        # responsibility; Sonar no longer reports issues that exist only in their conditional code.
+        # The generator targets netstandard2.0 by necessity (it loads into the compiler) and was
+        # already built above. A project that stops targeting net10.0 fails this step on purpose,
+        # so it cannot silently drop out of analysis.
+        #
+        # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
+        # instrumentation only increases the need to avoid large csc processes competing inside
+        # the 16-GB runner.
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
-        run: dotnet build -c Release --no-restore -m:2
+        shell: pwsh
+        run: |
+          $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
+            ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
+          if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
+          foreach ($project in $projects) {
+            $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
+            $properties = ($evaluated | ConvertFrom-Json).Properties
+            $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
+              Where-Object { $_ })
+            if ($frameworks -contains 'net10.0') {
+              Write-Host "::group::$project (net10.0 of $($frameworks -join ', '))"
+              dotnet build $project -c Release --no-restore -m:2 -f net10.0
+            }
+            elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
+              Write-Host "::group::$project (analyzer, $($frameworks -join ', '))"
+              dotnet build $project -c Release --no-restore -m:2
+            }
+            else {
+              throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
+            }
+            $exit = $LASTEXITCODE
+            Write-Host '::endgroup::'
+            if ($exit -ne 0) { throw "Sonar-instrumented build of $project failed with exit code $exit" }
+          }
 
       - name: End SonarCloud analysis
         if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
@@ -2575,6 +2715,9 @@ jobs:
             -ReuseScope None `
             -SourceResult '${{ needs.validation-source.result }}' `
             -RequiresValidation '${{ needs.select-shards.outputs.requires_validation || 'true' }}' `
+            -RequiresTests '${{ needs.select-shards.outputs.requires_tests || 'true' }}' `
+            -RequiresSweeps '${{ needs.select-shards.outputs.requires_sweeps || 'true' }}' `
+            -RequiresShapes '${{ needs.select-shards.outputs.requires_shapes || 'true' }}' `
             -SelectResult '${{ needs.select-shards.result }}' `
             -BuildResult '${{ needs.build.result }}' `
             -BuildCompatResult '${{ needs.build-compat.result }}' `

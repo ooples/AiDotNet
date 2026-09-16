@@ -75,13 +75,14 @@ foreach ($invalid in [Enum]::GetValues([InvalidArtifactCase])) {
     Expectation = [DeltaEmissionExpectation]::PartialWithoutImports
     Delta = @('Integration D', 'Integration E-G', 'Unit - 10 RL') })
 [void] $cases.Add([pscustomobject]@{ Name = 'full-reuse-preserved'; Artifacts = @()
-    Expectation = [DeltaEmissionExpectation]::WholeResultReuse; Delta = @('Unrelated') })
+    Expectation = [DeltaEmissionExpectation]::WholeResultReuse; Delta = @() })
 
 $setup = @'
 param([string] $CasePath, [string] $GitHubOutput, [string] $MapFile, [string] $ShardManifestFile, [string] $FixtureSha)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $env:GITHUB_STEP_SUMMARY = ''
+$EventName = ''
 '@
 $fixturePlan = @'
 $case = Get-Content -LiteralPath $CasePath -Raw | ConvertFrom-Json
@@ -91,7 +92,7 @@ $candidateEvidence = [pscustomobject]@{
     RequiresValidation = $true; ArtifactNames = @(Get-UnexpiredArtifactNames -Artifacts @($case.Artifacts))
 }
 $deltaCandidates = @($candidateEvidence)
-$fixtureDecision = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation $true `
+$fixtureDecision = Get-DeltaReuseDecision -SelectionEscalated $false -SelectionRequiresValidation ([bool] $case.RequiresValidation) `
     -DeltaShards @($case.Delta) -PullRequestShards @('Integration D', 'Integration E-G', 'Unit - 10 RL')
 $fixturePlan = [pscustomobject]@{
     Decision = $fixtureDecision; Tree = 'fixture-tree'
@@ -113,6 +114,7 @@ try {
     '{}' | Set-Content -LiteralPath $mapPath -Encoding utf8
     '[]' | Set-Content -LiteralPath $manifestPath -Encoding utf8
     foreach ($case in $cases) {
+        $case | Add-Member -NotePropertyName RequiresValidation -NotePropertyValue ($case.Expectation -ne [DeltaEmissionExpectation]::WholeResultReuse)
         $casePath = Join-Path $fixture ($case.Name + '.json')
         $outputPath = Join-Path $fixture ($case.Name + '.outputs')
         $case | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $casePath -Encoding utf8
