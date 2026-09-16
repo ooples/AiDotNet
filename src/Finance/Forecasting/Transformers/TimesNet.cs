@@ -349,7 +349,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else if (_useNativeMode)
         {

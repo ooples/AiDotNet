@@ -651,8 +651,8 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
     public override void UpdateParameters(T learningRate)
     {
         if (_kernelGradients is null || _biasGradients is null) return;
-        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar<T>(_kernelGradients, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar<T>(_biasGradients, learningRate));
+        Engine.TensorSubtractInPlace(_kernels, Engine.TensorMultiplyScalar<T>(_kernelGradients, learningRate));
+        Engine.TensorSubtractInPlace(_biases, Engine.TensorMultiplyScalar<T>(_biasGradients, learningRate));
         _kernelGradients = null;
         _biasGradients = null;
     }

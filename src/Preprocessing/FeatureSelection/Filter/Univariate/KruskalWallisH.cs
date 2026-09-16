@@ -132,7 +132,7 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     h += groupCounts[g] * Math.Pow(meanRank - (n + 1) / 2.0, 2);
                 }
             }
-            h *= 12.0 / (n * (n + 1));
+            h *= 12.0 / ((double)n * (n + 1));
 
             _hStatistics[j] = h;
 

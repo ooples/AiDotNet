@@ -128,13 +128,18 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
         for (int i = 0; i < inferenceSteps; i++)
         {
             int timestep = (int)Math.Round((Config.TrainTimesteps - 1) - i * stepSize);
+            // Keep the schedule strictly decreasing: when inferenceSteps == TrainTimesteps the step
+            // size drops below 1 and rounding would repeat a timestep (a zero-length Euler step).
+            if (timestepList.Count > 0)
+                timestep = Math.Min(timestep, timestepList[timestepList.Count - 1] - 1);
             timestep = Math.Max(0, Math.Min(timestep, Config.TrainTimesteps - 1));
             timestepList.Add(timestep);
         }
 
-        // Use reflection to set the private _timesteps field via the base class
-        // Instead, we call the base which sets it, then we'll compute sigmas
-        base.SetTimesteps(inferenceSteps);
+        // Install this linearly spaced schedule. The base SetTimesteps uses an integer stride
+        // (TrainTimesteps / inferenceSteps), which for non-divisor step counts stops well short of
+        // t = 0 (e.g. 600 of 1000 steps covered only timesteps 999..400) and would discard this list.
+        SetTimestepArray(timestepList.ToArray());
 
         // Compute sigmas for optional stochastic sampling
         _sigmas = ComputeSigmas(inferenceSteps);
