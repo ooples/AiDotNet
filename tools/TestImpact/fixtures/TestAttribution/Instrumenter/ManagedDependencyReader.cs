@@ -140,7 +140,7 @@ internal sealed class ManagedDependencyReader : IDisposable
             result.Add(new(new(DependencyGraph.Stable(method), node.LocalCalls.Select(Normalize).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
                     node.StaticFields, node.OpenDependencies.Length == 0 ? DependencyBoundary.Closed : DependencyBoundary.Unresolved),
                 method.Module.Assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name,
-                method.HasBody ? SourceSnapshotReader.BodyHash(input.Pe, method) : input.Hash, [], false, SourceMethodScope.DependencyAssembly));
+                SourceSnapshotReader.BodyHash(input.Pe, method), [], false, SourceMethodScope.DependencyAssembly));
         }
         foreach (ModuleInput module in modules.Values)
             if (Hash(module.Module.FileName) != module.Hash) throw new InvalidDataException("Managed dependency changed during mapping.");

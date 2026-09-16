@@ -8,6 +8,35 @@ namespace PrototypeTests;
 [Trait("Scenario", "SourceImpact")]
 public sealed class GraphExtractionTests
 {
+    [Fact]
+    public void ExternHashTracksItsDeclarationNotOtherMethodBodies()
+    {
+        using var assembly = Assembly();
+        TypeDefinition type = assembly.MainModule.Types[0];
+        var nativeModule = new ModuleReference("native-library");
+        assembly.MainModule.ModuleReferences.Add(nativeModule);
+        var external = new MethodDefinition("Native", MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.PInvokeImpl,
+            assembly.MainModule.TypeSystem.Void)
+        {
+            PInvokeInfo = new PInvokeInfo(PInvokeAttributes.CallConvCdecl, "native_entry", nativeModule)
+        };
+        type.Methods.Add(external);
+        MethodDefinition ordinary = Method(type, "Managed");
+        string DeclarationHash()
+        {
+            using var stream = new MemoryStream();
+            assembly.Write(stream);
+            stream.Position = 0;
+            using var pe = new System.Reflection.PortableExecutable.PEReader(stream);
+            return SourceSnapshotReader.BodyHash(pe, external);
+        }
+        string original = DeclarationHash();
+        ordinary.Body.Instructions.Insert(0, Instruction.Create(OpCodes.Nop));
+        Assert.Equal(original, DeclarationHash());
+        external.PInvokeInfo.EntryPoint = "different_native_entry";
+        Assert.NotEqual(original, DeclarationHash());
+    }
+
     [Fact, BeforeAfterProbe]
     public void BeforeAfterRootsExcludeUnrelatedAttributeHelpers()
     {

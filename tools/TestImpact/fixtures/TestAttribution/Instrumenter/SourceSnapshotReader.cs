@@ -92,7 +92,7 @@ internal static class SourceSnapshotReader
                 }
                 spans.Add(new(path, point.StartLine, point.EndLine));
             }
-            string bodyHash = method.HasBody ? BodyHash(pe, method) : hash;
+            string bodyHash = BodyHash(pe, method);
             DependencyBoundary boundary = node.OpenDependencies.Length == 0 ? DependencyBoundary.Closed : DependencyBoundary.Unresolved;
             // The CLR's empty Object constructor has no callbacks or shared state.
             // Other external calls remain open; do not guess purity from a name.
@@ -146,6 +146,19 @@ internal static class SourceSnapshotReader
 
     internal static string BodyHash(PEReader pe, MethodDefinition method)
     {
+        if (!method.HasBody)
+        {
+            // A body edit elsewhere in this DLL must not look like a change to
+            // every extern declaration. The complete normalized metadata is
+            // separately bound by ConfigurationHash; retain a stable declaration
+            // identity here, including the native target and invocation flags.
+            return Convert.ToHexStringLower(SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                Id = DependencyGraph.Stable(method), method.Attributes, method.ImplAttributes,
+                Native = method.HasPInvokeInfo ? new { method.PInvokeInfo.EntryPoint,
+                    Module = method.PInvokeInfo.Module.Name, method.PInvokeInfo.Attributes } : null
+            })));
+        }
         // Raw tokens alone miss changes to the metadata they reference, especially
         // local-variable signatures removed from the normalized envelope.
         string TypeName(TypeReference type) => type.FullName + "@" + type.Scope;
