@@ -9,8 +9,6 @@ param(
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
     [string] $RequiresTests = 'true',
-    [string] $RequiresSweeps = 'true',
-    [string] $RequiresShapes = 'true',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
@@ -90,8 +88,6 @@ $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
-$requiresSweepsNow = ConvertTo-RequiredBoolean $RequiresSweeps 'RequiresSweeps'
-$requiresShapesNow = ConvertTo-RequiredBoolean $RequiresShapes 'RequiresShapes'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 
 $source = ConvertTo-CiJobConclusion $SourceResult 'SourceResult'

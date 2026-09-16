@@ -2731,8 +2731,6 @@ jobs:
             -SourceResult '${{ needs.validation-source.result }}' `
             -RequiresValidation '${{ needs.select-shards.outputs.requires_validation || 'true' }}' `
             -RequiresTests '${{ needs.select-shards.outputs.requires_tests || 'true' }}' `
-            -RequiresSweeps '${{ needs.select-shards.outputs.requires_sweeps || 'true' }}' `
-            -RequiresShapes '${{ needs.select-shards.outputs.requires_shapes || 'true' }}' `
             -SelectResult '${{ needs.select-shards.result }}' `
             -BuildResult '${{ needs.build.result }}' `
             -BuildCompatResult '${{ needs.build-compat.result }}' `
