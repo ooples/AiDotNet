@@ -94,7 +94,10 @@ public class VideoMAEPretrainingTests
     {
         const int frames = 4;
         const int size = 32;
-        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: 8);
+        // Raw-pixel target, so the exact per-pixel correspondence is checkable by hand. The default
+        // (per-patch normalised) target is pinned in VideoMAEPretrainingFidelityTests.
+        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: 8,
+            options: new AiDotNet.Video.Options.VideoMAEOptions { NormalizeTarget = false });
         var clip = RandomClip(frames, size, seed: 13);
 
         int numTubelets = frames / TubeletSize;

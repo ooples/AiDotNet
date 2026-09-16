@@ -40,12 +40,13 @@ namespace AiDotNet.Video;
 /// </para>
 /// </remarks>
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input,
+    Direction = TensorLayoutDirection.Input, BatchOptional = true,
     Note = "A frame PAIR stacked on the channel axis, so this axis is 2*channels. PredictCore "
-         + "rejects an odd channel count for exactly that reason.")]
+         + "rejects an odd channel count for exactly that reason. An unbatched pair [2*C, H, W] is "
+         + "promoted to a batch of one.")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output,
-    Note = "A flow field: two channels, dx and dy, at the input resolution.")]
+    Direction = TensorLayoutDirection.Output, BatchOptional = true,
+    Note = "A flow field: two channels, dx and dy, at the input resolution. Unbatched in, unbatched out.")]
 public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
@@ -53,10 +54,11 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Read from <see cref="PredictCore"/> rather than probed. It requires rank 4
+    /// Read from <see cref="PredictCore"/> rather than probed. It takes rank 4
     /// <c>[batch, 2*channels, height, width]</c> - two frames stacked on the channel axis, which is
     /// why it rejects an odd channel count - and returns one flow field per sample at the input
-    /// resolution.
+    /// resolution. A rank-3 <c>[2*channels, height, width]</c> pair is the same contract without the
+    /// batch axis, and returns <c>[2, height, width]</c>.
     /// </para>
     /// <para>
     /// The channel axis is <c>Fixed(2)</c> and NOT derived from the input's, which is the whole point
@@ -71,6 +73,16 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
     /// </remarks>
     public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
+        if (inputRank == 3)
+        {
+            return
+            [
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            ];
+        }
+
         if (inputRank != 4) return null;
         return
         [
@@ -324,11 +336,50 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Accepts a stacked frame pair either batched, <c>[batch, 2*channels, height, width]</c>, or as a
+    /// single unbatched sample, <c>[2*channels, height, width]</c>. The unbatched form is what most of the
+    /// family's architectures declare (<c>InputType.ThreeDimensional</c> with <c>InputDepth</c> equal to
+    /// the stacked pair's channel count, so <c>GetInputShape()</c> is <c>[2*channels, H, W]</c>). It is
+    /// promoted to a batch of one with the shared <see cref="NeuralNetworkBase{T}.PromoteToBatchedTensor"/>
+    /// helper and the unit batch axis is removed from the result - unbatched in, unbatched out, the same
+    /// rule the base <c>PredictCore</c> applies to every model that inherits it.
+    /// </para>
+    /// <para>
+    /// This used to reject every rank-3 input with "Input must be rank 4", so every pair-declaring model
+    /// that relies on this method failed <c>Predict</c> on a tensor of its own declared input shape.
+    /// </para>
+    /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (input.Rank == 3)
+        {
+            var flow = PredictBatchedPair(PromoteToBatchedTensor(input));
+            if (flow.Rank != 4 || flow.Shape[0] != 1)
+                return flow;
+
+            // Engine.Reshape (not a raw copy) so the squeeze stays on the tape: PredictCore is
+            // deliberately differentiable with respect to the frames (see the narrow below).
+            return Engine.Reshape(flow, [flow.Shape[1], flow.Shape[2], flow.Shape[3]]);
+        }
+
+        return PredictBatchedPair(input);
+    }
+
+    /// <summary>
+    /// Estimates flow for a batched stacked pair <c>[batch, 2*channels, height, width]</c>.
+    /// </summary>
+    private Tensor<T> PredictBatchedPair(Tensor<T> input)
+    {
         // For optical flow, input should contain two frames stacked [batch, 2*channels, height, width]
-        if (input.Rank < 4)
-            throw new ArgumentException($"Input must be rank 4 [batch, 2*channels, height, width], got rank {input.Rank}.", nameof(input));
+        if (input.Rank != 4)
+            throw new ArgumentException(
+                "Input must be rank 3 [2*channels, height, width] or rank 4 [batch, 2*channels, height, width], "
+                + $"got rank {input.Rank}.", nameof(input));
         if (input.Shape[1] % 2 != 0)
             throw new ArgumentException($"Input channel dimension must be even (two frames stacked), got {input.Shape[1]}.", nameof(input));
         int batch = input.Shape[0];
