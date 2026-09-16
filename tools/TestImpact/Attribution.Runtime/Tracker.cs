@@ -13,7 +13,7 @@ public enum ObservedOutcome { Passed, Failed, Skipped }
 public sealed record DiscoveredCase(string Id, string Owner, string DisplayName, DiscoveredCaseKind Kind);
 public sealed record ObservedCaseResult(string DisplayName, ObservedOutcome Outcome);
 public sealed record CaseExecutionReport(DiscoveredCase Case, bool Finished, ObservedCaseResult[] Results);
-public sealed record WorkerTicket(string Run, string Token, string Owner, bool Completed);
+public sealed record WorkerTicket(string Run, string Token, string Owner, bool Started, bool Completed);
 public sealed record MethodHits(string Owner, string[] Methods);
 public sealed record AttributionReport(int Schema, string Run, string Token,
     AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes, HitCollectionMode CollectionMode,
@@ -206,9 +206,11 @@ public static class Tracker
             start.Environment.TryGetValue("ATTRIBUTION_TOKEN", out string? token);
             start.Environment.TryGetValue("ATTRIBUTION_RUN", out string? run);
             start.Environment.TryGetValue("ATTRIBUTION_OWNER", out string? owner);
+            int index = Workers.FindIndex(worker => worker.Token == token && worker.Run == run && worker.Owner == owner);
             if (scope is null || scope.Closed || run != Run || owner != scope.Owner ||
-                !Workers.Any(worker => worker.Token == token && worker.Owner == owner && !worker.Completed))
+                index < 0 || Workers[index].Started || Workers[index].Completed)
                 Faults.Add(AttributionFault.UntrackedProcess);
+            else Workers[index] = Workers[index] with { Started = true };
         }
     }
 
@@ -270,7 +272,7 @@ public static class Tracker
             RevokePublishedReport();
             Scope scope = Current.Value ?? throw new InvalidOperationException("Worker has no test owner.");
             if (scope.Closed) throw new InvalidOperationException("Worker owner already closed.");
-            var ticket = new WorkerTicket(Run, Guid.NewGuid().ToString("N"), scope.Owner, false);
+            var ticket = new WorkerTicket(Run, Guid.NewGuid().ToString("N"), scope.Owner, false, false);
             Workers.Add(ticket);
             start.Environment["ATTRIBUTION_OUTPUT"] = DirectoryPath;
             start.Environment["ATTRIBUTION_RUN"] = ticket.Run;
@@ -286,13 +288,14 @@ public static class Tracker
         {
             RevokePublishedReport();
             Scope? scope = Current.Value;
-            int index = Workers.FindIndex(worker => worker == ticket);
-            if (scope is null || scope.Closed || scope.Owner != ticket.Owner || index < 0 || exitCode != 0)
+            int index = Workers.FindIndex(worker => worker.Run == ticket.Run && worker.Token == ticket.Token && worker.Owner == ticket.Owner);
+            if (scope is null || scope.Closed || scope.Owner != ticket.Owner || index < 0 ||
+                !Workers[index].Started || Workers[index].Completed || exitCode != 0)
             {
                 Faults.Add(AttributionFault.IncompleteWorker);
                 throw new InvalidOperationException("Worker did not complete within its owning test.");
             }
-            Workers[index] = ticket with { Completed = true };
+            Workers[index] = Workers[index] with { Completed = true };
         }
     }
 

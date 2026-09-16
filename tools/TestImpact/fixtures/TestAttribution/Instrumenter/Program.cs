@@ -84,6 +84,16 @@ foreach (MethodDefinition method in type.Methods)
             boundarySites++;
         }
         string returnName = call.ReturnType is GenericInstanceType generic ? generic.ElementType.FullName : call.ReturnType.FullName;
+        string declaringName = call.DeclaringType.GetElementType().FullName;
+        if (returnName is "System.Threading.Tasks.ValueTask" or "System.Threading.Tasks.ValueTask`1" ||
+            (call.Name == ".ctor" && declaringName is "System.Threading.Tasks.ValueTask" or "System.Threading.Tasks.ValueTask`1"))
+        {
+            // Do not consume/convert a ValueTask, which may wrap a single-use
+            // source. Executing this unsupported boundary invalidates evidence.
+            InsertBeforeIncludingTargets(method, instruction, il.Create(OpCodes.Call, untrackedConcurrency));
+            boundarySites++;
+            continue;
+        }
         if (returnName is not ("System.Threading.Tasks.Task" or "System.Threading.Tasks.Task`1")) continue;
         if (instruction.Previous?.OpCode.Code == Code.Tail) throw new InvalidOperationException("Tail-call task instrumentation is unsupported.");
         // Preserve the original return value; the observer does not wrap or replace the task.

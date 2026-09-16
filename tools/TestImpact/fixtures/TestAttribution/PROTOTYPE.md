@@ -42,7 +42,9 @@ rejections passed. It is not a production CI validation certificate.
   group. They are never guessed to belong to a neighboring active test.
 - Explicit worker registration passes a unique token/run/owner through that
   child's environment. Parent completion and a matching completed child report
-  are both required. Nested workers are unsupported by the prototype validator.
+  are both required. A ticket is atomically consumed on its first checked start;
+  replay or completion without a start invalidates evidence. Nested workers are
+  unsupported by the prototype validator.
 - Task-returning call sites register the original task without wrapping it.
   An unfinished observed task at test closure poisons the report even if it has
   never executed covered code. Instrumented direct timer/thread/process escapes
@@ -69,7 +71,7 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **26 negative/mutation checks passed**: late work, detached task, unregistered process,
+- **31 negative/mutation checks passed**: late work, detached task, unregistered process,
   never-fired timer, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
@@ -77,6 +79,9 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   custom-case skipping, and covered execution after report publication.
   Additional controls remove, duplicate, leave unfinished, or skip ledger cases,
   and remove all TRX results while leaving its success summary untouched.
+  The review batch adds ticket replay with a reportless second process, completion
+  without a start, and non-generic/generic/directly constructed `ValueTask` cases
+  backed by an unfinished `IValueTaskSource`, not by an observable `Task`.
   Artifact cases mutate copies of real output. The guard-removal control rewrites
   a private collector DLL and proves the ordinary detached-task regression
   assertion fails when the observer is removed.
@@ -145,7 +150,10 @@ for execution contexts that cannot safely identify an individual owner.
 - This is not a VSTest-packaged collector or automatic test inventory adapter;
   the fixture assembly opts in once and workers explicitly join.
   Direct process starts, timer construction and thread/queue starts in instrumented
-  code now poison evidence unless supported/registered. Escapes inside uninstrumented
+  code now poison evidence unless supported/registered. Executed unsupported
+  `ValueTask` calls/constructors also poison evidence without consuming/converting
+  their return values; merely having an unused boundary does not prevent rewriting.
+  Escapes inside uninstrumented
   dependencies are not generally detected. Both pre-publication and process-exit
   post-publication hits are tested; arbitrary unobserved execution is not proven.
   These limitations block production enablement.

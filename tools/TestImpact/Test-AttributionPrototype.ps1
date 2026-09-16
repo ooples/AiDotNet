@@ -94,7 +94,7 @@ function Assert-Evidence {
     }
     foreach ($ticket in $tickets) {
         $matching = @($workers | Where-Object { $_.Token -ceq $ticket.Token })
-        if ($ticket.Completed -isnot [bool] -or -not $ticket.Completed -or
+        if ($ticket.Started -isnot [bool] -or -not $ticket.Started -or $ticket.Completed -isnot [bool] -or -not $ticket.Completed -or
             $ticket.Run -cne $Run -or $ticket.Owner -cnotin $expectedOwners -or $matching.Count -ne 1 -or
             $matching[0].WorkerOwner -cne $ticket.Owner -or @($matching[0].CompletedOwners).Count -ne 1 -or
             $matching[0].CompletedOwners[0] -cne $ticket.Owner -or @($matching[0].Workers).Count -ne 0 -or @($matching[0].Cases).Count -ne 0) {
@@ -251,6 +251,11 @@ try {
         @('untracked-timer', 'UntrackedTimer', 'PrototypeTests.UntrackedBoundaryTests.TimerNeverFires', [PrototypeRejection]::Faulted, 0),
         @('untracked-process', 'UntrackedProcess', 'PrototypeTests.UntrackedBoundaryTests.ProcessNeverProducesCoverage', [PrototypeRejection]::Faulted, 0),
         @('killed-worker', 'KilledWorker', 'PrototypeTests.WorkerTests.KilledWorker', [PrototypeRejection]::Faulted, 0),
+        @('worker-replay', 'WorkerReplay', 'PrototypeTests.WorkerTests.ReplayStart', [PrototypeRejection]::Faulted, 0),
+        @('worker-never-started', 'WorkerNeverStarted', 'PrototypeTests.WorkerTests.CompleteWithoutStarting', [PrototypeRejection]::Faulted, 0),
+        @('value-task', 'ValueTask', 'PrototypeTests.ValueTaskTests.Unfinished', [PrototypeRejection]::Faulted, 0),
+        @('generic-value-task', 'GenericValueTask', 'PrototypeTests.ValueTaskTests.UnfinishedGeneric', [PrototypeRejection]::Faulted, 0),
+        @('value-task-constructor', 'ValueTaskConstructor', 'PrototypeTests.ValueTaskTests.DirectConstructor', [PrototypeRejection]::Faulted, 0),
         @('custom-skip', 'CustomSkip', 'PrototypeTests.CustomCaseTests.CustomRunnerStillSkips', [PrototypeRejection]::Results, 0),
         @('after-publication', 'AfterPublication', 'PrototypeTests.UntrackedBoundaryTests.ExitCallbackHitsAfterReport', [PrototypeRejection]::ReportInventory, 0),
         @('test-failure', 'Failure', 'PrototypeTests.FailingTests.FailsAfterCoverage', [PrototypeRejection]::Results, 1))) {
