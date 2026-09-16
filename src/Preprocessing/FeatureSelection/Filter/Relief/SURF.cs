@@ -120,7 +120,7 @@ public class SURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 for (int j = 0; j < p; j++)
                 {
                     double diff = Diff(data, i, hitIdx, j, featureRanges[j]);
-                    _featureWeights[j] -= diff / (n * Math.Max(1, nearHits.Count));
+                    _featureWeights[j] -= diff / ((double)n * Math.Max(1, nearHits.Count));
                 }
             }
 
@@ -129,7 +129,7 @@ public class SURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 for (int j = 0; j < p; j++)
                 {
                     double diff = Diff(data, i, missIdx, j, featureRanges[j]);
-                    _featureWeights[j] += diff / (n * Math.Max(1, nearMisses.Count));
+                    _featureWeights[j] += diff / ((double)n * Math.Max(1, nearMisses.Count));
                 }
             }
         }

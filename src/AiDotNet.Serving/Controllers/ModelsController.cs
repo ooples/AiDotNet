@@ -93,7 +93,7 @@ public class ModelsController : ControllerBase
             }
 
             _logger.LogInformation("Attempting to load model '{ModelName}' from path '{Path}'",
-                request.Name, request.Path);
+                LogSanitizer.Sanitize(request.Name), LogSanitizer.Sanitize(request.Path));
 
             // Validate request
             if (string.IsNullOrWhiteSpace(request.Name))
@@ -117,7 +117,7 @@ public class ModelsController : ControllerBase
             // Check if model already exists
             if (_modelRepository.ModelExists(request.Name))
             {
-                _logger.LogWarning("Model '{ModelName}' already exists", request.Name);
+                _logger.LogWarning("Model '{ModelName}' already exists", LogSanitizer.Sanitize(request.Name));
                 return Conflict(new LoadModelResponse
                 {
                     Success = false,
@@ -141,7 +141,7 @@ public class ModelsController : ControllerBase
             if (!IsWithinRoot(candidatePath, modelsRoot))
             {
                 _logger.LogWarning("Attempted path traversal: requested path '{Path}' resolves outside model directory",
-                    request.Path);
+                    LogSanitizer.Sanitize(request.Path));
                 return BadRequest(new LoadModelResponse
                 {
                     Success = false,
@@ -152,7 +152,7 @@ public class ModelsController : ControllerBase
             // Check if file exists
             if (!System.IO.File.Exists(candidatePath))
             {
-                _logger.LogWarning("Model file not found at canonical path: {Path}", candidatePath);
+                _logger.LogWarning("Model file not found at canonical path: {Path}", LogSanitizer.Sanitize(candidatePath));
                 return BadRequest(new LoadModelResponse
                 {
                     Success = false,
@@ -174,7 +174,7 @@ public class ModelsController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to load model '{ModelName}' from '{Path}'",
-                    request.Name, candidatePath);
+                    LogSanitizer.Sanitize(request.Name), LogSanitizer.Sanitize(candidatePath));
                 return BadRequest(new LoadModelResponse
                 {
                     Success = false,
@@ -183,7 +183,7 @@ public class ModelsController : ControllerBase
             }
 
             _logger.LogInformation("Successfully loaded model '{ModelName}' from '{Path}'",
-                request.Name, candidatePath);
+                LogSanitizer.Sanitize(request.Name), LogSanitizer.Sanitize(candidatePath));
 
             // Optionally associate a tokenizer so the model can be served via the OpenAI-compatible API.
             // A tokenizer failure does not fail the load — the model is still usable via the native
@@ -204,20 +204,20 @@ public class ModelsController : ControllerBase
                     {
                         _logger.LogWarning(
                             "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
-                            request.TokenizerPath);
+                            LogSanitizer.Sanitize(request.TokenizerPath));
                     }
                     else
                     {
                         _tokenizers.LoadAndRegister(request.Name, tokenizerPath);
                         _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
-                            request.Name, tokenizerPath);
+                            LogSanitizer.Sanitize(request.Name), LogSanitizer.Sanitize(tokenizerPath));
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
                         "the model is loaded but the OpenAI API will be unavailable for it.",
-                        request.Name, request.TokenizerPath);
+                        LogSanitizer.Sanitize(request.Name), LogSanitizer.Sanitize(request.TokenizerPath));
                 }
             }
 
@@ -229,7 +229,7 @@ public class ModelsController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogError(ex, "Access denied when loading model '{ModelName}'", request.Name);
+            _logger.LogError(ex, "Access denied when loading model '{ModelName}'", LogSanitizer.Sanitize(request.Name));
             return StatusCode(403, new LoadModelResponse
             {
                 Success = false,
@@ -238,7 +238,7 @@ public class ModelsController : ControllerBase
         }
         catch (FileNotFoundException ex)
         {
-            _logger.LogError(ex, "Model file not found for '{ModelName}'", request.Name);
+            _logger.LogError(ex, "Model file not found for '{ModelName}'", LogSanitizer.Sanitize(request.Name));
             return BadRequest(new LoadModelResponse
             {
                 Success = false,
@@ -247,7 +247,7 @@ public class ModelsController : ControllerBase
         }
         catch (IOException ex)
         {
-            _logger.LogError(ex, "I/O error loading model '{ModelName}'", request.Name);
+            _logger.LogError(ex, "I/O error loading model '{ModelName}'", LogSanitizer.Sanitize(request.Name));
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
@@ -256,7 +256,7 @@ public class ModelsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Invalid operation when loading model '{ModelName}'", request.Name);
+            _logger.LogError(ex, "Invalid operation when loading model '{ModelName}'", LogSanitizer.Sanitize(request.Name));
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
@@ -265,7 +265,7 @@ public class ModelsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error loading model '{ModelName}'", request.Name);
+            _logger.LogError(ex, "Unexpected error loading model '{ModelName}'", LogSanitizer.Sanitize(request.Name));
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
@@ -301,12 +301,12 @@ public class ModelsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult<ModelInfo> GetModel(string modelName)
     {
-        _logger.LogDebug("Retrieving information for model '{ModelName}'", modelName);
+        _logger.LogDebug("Retrieving information for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
         var modelInfo = _modelRepository.GetModelInfo(modelName);
         if (modelInfo == null)
         {
-            _logger.LogWarning("Model '{ModelName}' not found", modelName);
+            _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
             return NotFound(new { error = $"Model '{modelName}' not found" });
         }
 
@@ -325,19 +325,19 @@ public class ModelsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult UnloadModel(string modelName)
     {
-        _logger.LogInformation("Attempting to unload model '{ModelName}'", modelName);
+        _logger.LogInformation("Attempting to unload model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
         var success = _modelRepository.UnloadModel(modelName);
         if (!success)
         {
-            _logger.LogWarning("Model '{ModelName}' not found for unloading", modelName);
+            _logger.LogWarning("Model '{ModelName}' not found for unloading", LogSanitizer.Sanitize(modelName));
             return NotFound(new { error = $"Model '{modelName}' not found" });
         }
 
         _artifactService.RemoveProtectedArtifact(modelName);
         _tokenizers.Remove(modelName);
 
-        _logger.LogInformation("Model '{ModelName}' unloaded successfully", modelName);
+        _logger.LogInformation("Model '{ModelName}' unloaded successfully", LogSanitizer.Sanitize(modelName));
         return Ok(new { message = $"Model '{modelName}' unloaded successfully" });
     }
 
@@ -383,7 +383,7 @@ public class ModelsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to download model artifact for '{ModelName}'", modelName);
+            _logger.LogError(ex, "Failed to download model artifact for '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to download model artifact." });
         }
     }
@@ -431,7 +431,7 @@ public class ModelsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to release model artifact key for '{ModelName}'", modelName);
+            _logger.LogError(ex, "Failed to release model artifact key for '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to release model artifact key." });
         }
     }
@@ -531,7 +531,7 @@ public class ModelsController : ControllerBase
         }
 
         _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
-            name, inputDim, outputDim);
+            LogSanitizer.Sanitize(name), inputDim, outputDim);
 
         return new ModelInfo
         {

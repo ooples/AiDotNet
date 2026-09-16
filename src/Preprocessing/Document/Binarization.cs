@@ -102,7 +102,7 @@ public class Binarization<T> : IDisposable
         int total = gray.Length;
         double sum = 0;
         for (int i = 0; i < 256; i++)
-            sum += i * histogram[i];
+            sum += (double)i * histogram[i];
 
         double sumB = 0;
         int wB = 0;
@@ -117,12 +117,12 @@ public class Binarization<T> : IDisposable
             int wF = total - wB;
             if (wF == 0) break;
 
-            sumB += t * histogram[t];
+            sumB += (double)t * histogram[t];
 
             double mB = sumB / wB;
             double mF = (sum - sumB) / wF;
 
-            double variance = wB * wF * (mB - mF) * (mB - mF);
+            double variance = (double)wB * wF * (mB - mF) * (mB - mF);
 
             if (variance > maxVariance)
             {

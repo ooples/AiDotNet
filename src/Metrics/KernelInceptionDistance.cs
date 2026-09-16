@@ -252,7 +252,7 @@ public class KernelInceptionDistance<T>
                 k11 += 2.0 * k;
             }
         }
-        k11 /= (n1 * (n1 - 1));
+        k11 /= ((double)n1 * (n1 - 1));
 
         // E[k(y, y')] for y, y' from features2
         double k22 = 0.0;
@@ -265,7 +265,7 @@ public class KernelInceptionDistance<T>
                 k22 += 2.0 * k;
             }
         }
-        k22 /= (n2 * (n2 - 1));
+        k22 /= ((double)n2 * (n2 - 1));
 
         // E[k(x, y)] for x from features1, y from features2
         double k12 = 0.0;
@@ -278,7 +278,7 @@ public class KernelInceptionDistance<T>
                 k12 += k;
             }
         }
-        k12 /= (n1 * n2);
+        k12 /= ((double)n1 * n2);
 
         // MMD^2 = E[k(x,x')] + E[k(y,y')] - 2*E[k(x,y)]
         double mmdSquared = k11 + k22 - 2.0 * k12;
