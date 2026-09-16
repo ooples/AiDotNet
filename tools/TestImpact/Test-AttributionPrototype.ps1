@@ -41,7 +41,7 @@ function Assert-Evidence {
     $reports = @(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.json' -File | ForEach-Object {
         try { $value = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
         catch { Reject ReportInventory 'Malformed attribution report.' }
-        if ($value.Schema -ne 2 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
+        if ($value.Schema -ne 3 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
             Reject ReportInventory 'Unsupported report or filename.'
         }
         $value
@@ -111,7 +111,8 @@ $root = if ($EvidenceDirectory) { [IO.Path]::GetFullPath($EvidenceDirectory) }
 Check (-not (Test-Path -LiteralPath $root)) 'Evidence directory must be new; existing evidence cannot be overwritten.'
 [void] (New-Item -ItemType Directory -Path $root)
 $prior = @{}
-foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER', 'ATTRIBUTION_TOKEN', 'ATTRIBUTION_WORKER_DLL', 'ATTRIBUTION_HIT_MODE')) {
+foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER', 'ATTRIBUTION_TOKEN', 'ATTRIBUTION_WORKER_DLL', 'ATTRIBUTION_HIT_MODE',
+    'ATTRIBUTION_MODE', 'ATTRIBUTION_PLAN', 'ATTRIBUTION_INVENTORY', 'ATTRIBUTION_SOURCE_TREE', 'ATTRIBUTION_PROFILE_HASH', 'ATTRIBUTION_WORKLOAD')) {
     $prior[$name] = [Environment]::GetEnvironmentVariable($name)
     [Environment]::SetEnvironmentVariable($name, $null)
 }
@@ -174,6 +175,13 @@ try {
     $selectionCases = @($selectionTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
     Check ($selectionCases.Count -eq 17 -and @($selectionCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Dependency selection checks did not execute the complete expected case set.'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=RunnerProtocol' `
+        "/ResultsDirectory:$(Join-Path $root 'runner-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
+    [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
+    $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($runnerCases.Count -eq 6 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Runner binding checks did not execute the expected complete set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -359,8 +367,10 @@ try {
         $benchmarks += [pscustomobject]@{ mode = $mode; callsPerSample = $measurement.Count; checksum = $measurement.Checksum;
             nanosecondsPerCall = $measurement.NanosecondsPerCall; medianNanoseconds = $samples[3] }
     }
+    & (Join-Path $PSScriptRoot 'Test-PlannedAttribution.ps1') -Binaries $hostCopy -EvidenceDirectory (Join-Path $root 'planned')
+    Check (Test-Path (Join-Path $root 'planned/proof.json')) 'Planned-execution proof was not completed.'
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

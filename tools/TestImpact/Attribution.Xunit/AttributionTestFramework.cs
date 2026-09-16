@@ -10,9 +10,14 @@ namespace AiDotNet.TestImpact.Xunit;
 // method-runner boundary is decorated; ordinary execution uses the base executor.
 public class AttributionTestFramework(IMessageSink diagnosticSink) : XunitTestFramework(diagnosticSink)
 {
-    protected override ITestFrameworkExecutor CreateExecutor(AssemblyName assemblyName) => Tracker.IsEnabled
-        ? new AttributionExecutor(assemblyName, SourceInformationProvider, DiagnosticMessageSink)
-        : base.CreateExecutor(assemblyName);
+    protected override ITestFrameworkExecutor CreateExecutor(AssemblyName assemblyName)
+    {
+        if (!Tracker.IsEnabled && (RunnerInvocation.Mode != AttributionRunMode.Collect ||
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ATTRIBUTION_PLAN"))))
+            throw new InvalidOperationException("Discovery/planned execution requires explicit attribution opt-in.");
+        return Tracker.IsEnabled ? new AttributionExecutor(assemblyName, SourceInformationProvider, DiagnosticMessageSink)
+            : base.CreateExecutor(assemblyName);
+    }
 
     internal static string Owner(IXunitTestCase testCase)
     {
@@ -31,12 +36,15 @@ internal sealed class AttributionExecutor(AssemblyName assemblyName, ISourceInfo
         IMessageSink executionSink, ITestFrameworkExecutionOptions options)
     {
         IXunitTestCase[] inventory = testCases.ToArray();
-        Tracker.RegisterCases(inventory.Select(test => new DiscoveredCase(test.UniqueID,
+        IXunitTestCase[] required = RunnerInvocation.Resolve(inventory, options);
+        if (RunnerInvocation.Mode != AttributionRunMode.Discover)
+            Tracker.RegisterCases(required.Select(test => new DiscoveredCase(test.UniqueID,
             AttributionTestFramework.Owner(test), test.DisplayName, test.GetType() == typeof(XunitTestCase)
                 ? DiscoveredCaseKind.Enumerated : DiscoveredCaseKind.DeferredOrCustom)));
-        using var runner = new AttributionAssemblyRunner(TestAssembly, inventory, DiagnosticMessageSink,
+        using var runner = new AttributionAssemblyRunner(TestAssembly, required, DiagnosticMessageSink,
             new AttributionExecutionSink(executionSink), options);
         await runner.RunAsync();
+        RunnerInvocation.CheckBundleAfterExecution();
     }
 }
 

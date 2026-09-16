@@ -69,15 +69,7 @@ public static class ExecutionEvidence
         if (receipt.Context != plan.Context) Fail(EvidenceFailure.Context, "Source, binaries or execution profile differ.");
         if (receipt.Workload != plan.Workload || receipt.PlanHash != plan.PlanHash || receipt.InventoryHash != plan.InventoryHash)
             Fail(EvidenceFailure.Plan, "Receipt does not belong to this plan.");
-        TestCaseIdentity[] ordered = ValidateInventory(inventory);
-        if (Hash(ordered) != plan.InventoryHash) Fail(EvidenceFailure.Inventory, "Test inventory changed.");
-        // Reconstruct the plan so mutating a deserialized RequiredCases array cannot
-        // drop a theory row while retaining the original plan hash.
-        string[] selectedMethods = plan.Scope == ValidationScope.FullWorkload ? [] :
-            plan.RequiredCases.Select(test => test.MethodId).Distinct(StringComparer.Ordinal).ToArray();
-        ExecutionPlan expected = CreatePlan(plan.Workload, ordered, selectedMethods, plan.Scope, plan.Context);
-        if (expected.PlanHash != plan.PlanHash || !expected.RequiredCases.SequenceEqual(plan.RequiredCases))
-            Fail(EvidenceFailure.Plan, "Plan was modified or has incomplete method rows.");
+        ExecutionPlan expected = ValidatePlan(plan, inventory, plan.Workload, plan.Context);
         if (receipt.Results is null || receipt.Results.Length != expected.RequiredCases.Length)
             Fail(EvidenceFailure.CaseSet, "Missing or extra execution results.");
         var cases = new HashSet<string>(StringComparer.Ordinal);
@@ -92,12 +84,36 @@ public static class ExecutionEvidence
             plan.Workload, independentlyResolvedRun, expected.RequiredCases.ToArray());
     }
 
+    public static ExecutionPlan ValidatePlan(ExecutionPlan plan, TestCaseIdentity[] inventory,
+        string expectedWorkload, ExecutionContextIdentity actualContext)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ValidateContext(actualContext);
+        if (plan.Context != actualContext) Fail(EvidenceFailure.Context, "Plan does not match the current source/build/profile.");
+        if (plan.Workload != expectedWorkload) Fail(EvidenceFailure.Plan, "Plan is for a different workload.");
+        TestCaseIdentity[] ordered = ValidateInventory(inventory);
+        if (Hash(ordered) != plan.InventoryHash) Fail(EvidenceFailure.Inventory, "Test inventory changed.");
+        if (plan.RequiredCases is null || plan.RequiredCases.Any(test => test is null))
+            Fail(EvidenceFailure.Plan, "Missing required cases.");
+        // Reconstruct the plan so mutating a deserialized RequiredCases array cannot
+        // drop a theory row while retaining the original plan hash.
+        string[] selectedMethods = plan.Scope == ValidationScope.FullWorkload ? [] :
+            plan.RequiredCases.Select(test => test.MethodId).Distinct(StringComparer.Ordinal).ToArray();
+        ExecutionPlan expected = CreatePlan(plan.Workload, ordered, selectedMethods, plan.Scope, plan.Context);
+        if (expected.PlanHash != plan.PlanHash || !expected.RequiredCases.SequenceEqual(plan.RequiredCases))
+            Fail(EvidenceFailure.Plan, "Plan was modified or has incomplete method rows.");
+        return expected;
+    }
+
     public static bool CanReuseIdenticalExecution(VerifiedExecution execution, ExecutionPlan requiredPlan) =>
         execution.Context == requiredPlan.Context && execution.PlanHash == requiredPlan.PlanHash &&
         execution.InventoryHash == requiredPlan.InventoryHash && execution.Workload == requiredPlan.Workload &&
         execution.Scope == requiredPlan.Scope && execution.Cases.SequenceEqual(requiredPlan.RequiredCases);
 
-    public static ExecutionReceipt ReadReceipt(string json)
+    public static ExecutionReceipt ReadReceipt(string json) => ReadDocument<ExecutionReceipt>(json);
+    public static ExecutionPlan ReadPlan(string json) => ReadDocument<ExecutionPlan>(json);
+
+    public static T ReadDocument<T>(string json) where T : class
     {
         if (string.IsNullOrWhiteSpace(json) || json.Length > 32 * 1024 * 1024)
             Fail(EvidenceFailure.Format, "Missing or oversized receipt.");
@@ -108,7 +124,7 @@ public static class ExecutionEvidence
             var options = new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
                 RespectRequiredConstructorParameters = true };
             options.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
-            return document.RootElement.Deserialize<ExecutionReceipt>(options)
+            return document.RootElement.Deserialize<T>(options)
                 ?? throw new JsonException("Null receipt.");
         }
         catch (JsonException exception) { throw new EvidenceException(EvidenceFailure.Format, exception.Message); }

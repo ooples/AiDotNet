@@ -2,10 +2,11 @@ using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AiDotNet.TestImpact;
 
 namespace AttributionRuntime;
 
-public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask, UntrackedProcess, UntrackedConcurrency, InvalidInventory, IncompleteCase, CaseResultsMismatch, UnsuccessfulCase }
+public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask, UntrackedProcess, UntrackedConcurrency, InvalidInventory, IncompleteCase, CaseResultsMismatch, UnsuccessfulCase, ExecutionContextChanged }
 public enum AttributionProcessKind { TestHost, Worker }
 public enum HitCollectionMode { Serialized, Cached }
 public enum DiscoveredCaseKind { Enumerated, DeferredOrCustom }
@@ -17,7 +18,8 @@ public sealed record WorkerTicket(string Run, string Token, string Owner, bool S
 public sealed record MethodHits(string Owner, string[] Methods);
 public sealed record AttributionReport(int Schema, string Run, string Token,
     AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes, HitCollectionMode CollectionMode,
-    MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers, CaseExecutionReport[] Cases);
+    MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers, CaseExecutionReport[] Cases,
+    ExecutionPlan? Plan);
 
 // Prototype only: unknown-context hits apply to the entire test-host execution group.
 // AsyncLocal identifies ownership; a shared scope object detects hits after its owner closes.
@@ -53,6 +55,7 @@ public static class Tracker
     }
     private static readonly Dictionary<string, CaseExecution> Cases = new(StringComparer.Ordinal);
     private static bool inventoryRegistered;
+    private static ExecutionPlan? executionPlan;
     private static readonly string? DirectoryPath = OptionalEnvironment("ATTRIBUTION_OUTPUT");
     private static readonly string Run = OptionalEnvironment("ATTRIBUTION_RUN") ?? "";
     private static readonly string? WorkerOwner = OptionalEnvironment("ATTRIBUTION_OWNER");
@@ -84,6 +87,26 @@ public static class Tracker
             if (!Guid.TryParseExact(Run, "N", out _) || !Guid.TryParseExact(Token, "N", out _))
                 throw new InvalidOperationException("Invalid prototype run or process token.");
             AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+        }
+    }
+
+    public static void ConfigurePlan(ExecutionPlan plan)
+    {
+        if (DirectoryPath is null) throw new InvalidOperationException("Planned execution requires attribution.");
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            if (executionPlan is not null || inventoryRegistered) throw new InvalidOperationException("Execution plan is already fixed.");
+            executionPlan = plan with { RequiredCases = plan.RequiredCases.ToArray() };
+        }
+    }
+
+    public static void InvalidateExecutionContext()
+    {
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            Faults.Add(AttributionFault.ExecutionContextChanged);
         }
     }
 
@@ -327,13 +350,13 @@ public static class Tracker
             if (Kind == AttributionProcessKind.TestHost && (!inventoryRegistered || Cases.Count == 0))
                 Faults.Add(AttributionFault.InvalidInventory);
             if (Cases.Values.Any(execution => !execution.Finished)) Faults.Add(AttributionFault.IncompleteCase);
-            var report = new AttributionReport(2, Run, Token, Kind, Environment.ProcessId,
+            var report = new AttributionReport(3, Run, Token, Kind, Environment.ProcessId,
                 WorkerOwner, peakScopes, CollectionMode,
                 Hits.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => new MethodHits(pair.Key, pair.Value.Select(method => method.Serialize()).Order(StringComparer.Ordinal).ToArray())).ToArray(),
                 Completed.Order(StringComparer.Ordinal).ToArray(), Faults.Order().ToArray(), Workers.ToArray(),
                 Cases.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new CaseExecutionReport(
-                    pair.Value.Descriptor, pair.Value.Finished, pair.Value.Results.ToArray())).ToArray());
+                    pair.Value.Descriptor, pair.Value.Finished, pair.Value.Results.ToArray())).ToArray(), executionPlan);
             Directory.CreateDirectory(DirectoryPath);
             string destination = Path.Combine(DirectoryPath, $"{Token}.json");
             string pending = destination + ".pending";

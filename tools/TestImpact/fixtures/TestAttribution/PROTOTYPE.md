@@ -33,7 +33,7 @@ rejections passed. It is not a production CI validation certificate.
   test type, including inherited tests. It preserves custom case runners and wraps
   per-test construction and asynchronous cleanup. Theory rows share a method
   identity, but the harness independently checks that both rows executed.
-- Schema-2 reports record discovered xUnit case IDs before execution and observe
+- Schema-3 reports record discovered xUnit case IDs before execution and observe
   actual passed/failed/skipped messages plus case completion. A deferred theory
   retains one discovery identity with all its runtime rows. The independent TRX
   must match; missing, duplicate, unfinished, or unsuccessful ledger entries are
@@ -147,8 +147,41 @@ for execution contexts that cannot safely identify an individual owner.
 
 ## Limitations / remaining production gates
 
-- This is not a VSTest-packaged collector or automatic test inventory adapter;
-  the fixture assembly opts in once and workers explicitly join.
+### Bound runner selection (local proof)
+
+The opt-in xUnit adapter now discovers the actual workload inventory without
+executing it, then accepts a strict execution plan bound to that inventory,
+workload, source identity, binary-directory contents, and effective execution
+profile. It runs only the required discovery cases, preserving all rows of a
+selected theory. The binary bundle is checked again after execution. Schema-3
+reports record the plan; the independent CLI verifier checks both the case ledger
+and TRX. This single-bundle path rejects worker-backed evidence.
+
+`Test-PlannedAttribution.ps1` demonstrated **4 selected runtime rows versus 12
+full-workload rows** (3 versus 11 discovery cases). It rejected partial results
+presented as a full baseline, a stale binary identity, a removed theory case,
+an unknown method, changed invocation profile/workload/source, and a revoked
+report. Five additional receipt mutations cover missing/duplicate discovery
+cases, skipped results, a foreign run identity, and a missing TRX row. Rejected
+runner invocations must fail with the expected reason and execute zero tests.
+The full fixture harness also passed its 6 runner-binding tests, 15
+execution-protocol tests, 17 dependency-selection tests, and existing 31 rejection
+controls. These are actual runner checks, not merely assertions on a filter string.
+
+The selected methods in this proof are explicitly supplied. This does **not**
+prove automatic source-change selection, authenticated GitHub provenance,
+changed-base reuse, or production CI enablement. Those remain separate gates.
+
+The real AiDotNet opt-in net10.0 build also passed (zero errors). With the same
+five-test `CpuOffloadShardingConfigTests.ShardingConfiguration_` VSTest filter
+for discovery and execution, the adapter discovered five cases and the plan
+executed exactly `ShardingConfiguration_DefaultsAllOffloadFlagsToFalse`: one
+passing result, independently verified against its recorded plan and TRX.
+This checks real-project runner integration, not impact-map completeness; that
+run did not instrument production methods or claim a performance improvement.
+
+- This is not a VSTest-packaged collector; the xUnit assembly opts in once,
+  its adapter supplies the discovery inventory, and workers explicitly join.
   Direct process starts, timer construction and thread/queue starts in instrumented
   code now poison evidence unless supported/registered. Executed unsupported
   `ValueTask` calls/constructors also poison evidence without consuming/converting
@@ -178,6 +211,12 @@ remain in [README.md](README.md). Both proof scripts now record their effective
 SDK rather than assuming the roll-forward version in the root global.json.
 
 ## Live collector verification
+
+[Linux run 35105583876](https://github.com/ooples/AiDotNet/actions/runs/35105583876)
+passed at commit `13e6c578ac`. Its artifact was downloaded and the raw TRXs
+checked: 13 plain and 13 instrumented positive rows, 15 execution-protocol tests,
+17 dependency-selection tests, and 31 rejection controls. This run predates the
+bound runner-selection changes above and does not verify them.
 
 [Linux run 35096965934](https://github.com/ooples/AiDotNet/actions/runs/35096965934)
 passed at commit `d835f76e58`. Its uploaded artifact was downloaded and checked:
