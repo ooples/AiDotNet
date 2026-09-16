@@ -36,6 +36,7 @@ internal static class RunnerInvocation
         string bundle = Path.GetDirectoryName(type.Type.Assembly.Location) ?? throw new InvalidDataException("Missing binary bundle.");
         RunnerBinding.RequireOutsideBundle(Required("ATTRIBUTION_OUTPUT"), bundle);
         var effectiveProfile = new { DeclaredProfile = Required("ATTRIBUTION_PROFILE_HASH"),
+            DiscoveryPolicy = AttributionDiscoveryPolicy.DeferredTheories,
             Runtime = RuntimeInformation.FrameworkDescription, RuntimeVersion = Environment.Version.ToString(),
             OS = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture,
             Culture = CultureInfo.CurrentCulture.Name, UICulture = CultureInfo.CurrentUICulture.Name,

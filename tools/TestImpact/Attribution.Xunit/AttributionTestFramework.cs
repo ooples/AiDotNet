@@ -11,6 +11,11 @@ namespace AiDotNet.TestImpact.Xunit;
 // method-runner boundary is decorated; ordinary execution uses the base executor.
 public class AttributionTestFramework(IMessageSink diagnosticSink) : XunitTestFramework(diagnosticSink)
 {
+    // This framework is itself an opt-in build dependency. Never let adapter
+    // defaults execute unrelated data providers before the execution filter.
+    protected sealed override ITestFrameworkDiscoverer CreateDiscoverer(IAssemblyInfo assemblyInfo) =>
+        new AttributionDiscoverer(assemblyInfo, SourceInformationProvider, DiagnosticMessageSink);
+
     protected override ITestFrameworkExecutor CreateExecutor(AssemblyName assemblyName)
     {
         if (!Tracker.IsEnabled && (RunnerInvocation.Mode != AttributionRunMode.Collect ||
@@ -27,6 +32,24 @@ public class AttributionTestFramework(IMessageSink diagnosticSink) : XunitTestFr
         string assembly = type.Type.Assembly.GetName().Name ?? throw new InvalidOperationException("Missing test assembly identity.");
         string concreteType = type.Type.FullName ?? throw new InvalidOperationException("Missing concrete test type.");
         return $"{assembly}:{concreteType}.{testCase.TestMethod.Method.Name}";
+    }
+}
+
+internal enum AttributionDiscoveryPolicy { DeferredTheories = 1 }
+
+internal sealed class AttributionDiscoverer(IAssemblyInfo assembly, ISourceInformationProvider source,
+    IMessageSink diagnostics) : XunitTestFrameworkDiscoverer(assembly, source, diagnostics)
+{
+    protected override bool FindTestsForType(ITestClass testClass, bool includeSourceInformation,
+        IMessageBus messageBus, ITestFrameworkDiscoveryOptions discoveryOptions)
+    {
+        // xUnit's public options protocol uses this well-known key. Enforce it
+        // at the framework boundary, including when the adapter requests eager
+        // enumeration; a caller-supplied configuration label is not evidence.
+        discoveryOptions.SetValue<bool?>("xunit.discovery.PreEnumerateTheories", false);
+        if (discoveryOptions.PreEnumerateTheoriesOrDefault())
+            throw new InvalidOperationException("Attribution requires deferred theory discovery.");
+        return base.FindTestsForType(testClass, includeSourceInformation, messageBus, discoveryOptions);
     }
 }
 

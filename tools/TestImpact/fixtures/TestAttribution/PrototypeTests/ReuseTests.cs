@@ -133,7 +133,8 @@ public sealed class ReuseTests
         Assert.Empty(Partition(["b"], before: prior).ReusedCases);
         DependencySnapshot open = Graph with { Nodes = [Graph.Nodes[0], Graph.Nodes[1] with { Boundary = DependencyBoundary.Native }] };
         ReusePartition partition = Partition([], after: open);
-        Assert.Equal("B", Assert.Single(Assert.IsType<ExecutionPlan>(partition.Execution).RequiredCases).MethodId);
+        Assert.Equal(ValidationScope.FullWorkload, Assert.IsType<ExecutionPlan>(partition.Execution).Scope);
+        Assert.Empty(partition.ReusedCases);
     }
 
     [Fact]

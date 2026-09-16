@@ -11,6 +11,6 @@
     <ProjectReference Include="../../../Attribution.Cli/Attribution.Cli.csproj" />
     <ProjectReference Include="../Subject/AttributionSubject.csproj" />
     <ProjectReference Include="../Worker/AttributionWorker.csproj" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="../Instrumenter/AttributionInstrumenter.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../Instrumenter/AttributionInstrumenter.csproj" />
   </ItemGroup>
 </Project>

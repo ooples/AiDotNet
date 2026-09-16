@@ -58,14 +58,21 @@ internal static class SourceSnapshotReader
         using var assembly = AssemblyDefinition.ReadAssembly(binary, new ReaderParameters { ReadSymbols = true, InMemory = true, AssemblyResolver = resolver });
         if (assembly.Name.HasPublicKey || assembly.Modules.Count != 1)
             throw new InvalidDataException("Signed or multi-module snapshots are not supported.");
-        MethodDependencyGraph raw = DependencyGraph.Read(assembly, hash, linkedPaths);
-        string Stable(MethodDependencyNode node) => assembly.Name.Name + ":" + node.Name;
-        var names = raw.Methods.ToDictionary(node => node.Key, Stable, StringComparer.Ordinal);
+        IReadOnlySet<string> sourcePaths = linkedPaths ?? new HashSet<string>([Path.GetFullPath(binary)],
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        using var managed = new ManagedDependencyReader(binary, sourcePaths, resolver);
+        MethodDependencyGraph raw = DependencyGraph.Read(assembly, hash, linkedPaths, managed);
         var definitions = AllTypes(assembly.MainModule.Types).SelectMany(type => type.Methods)
             .ToDictionary(method => $"{hash}:{method.MetadataToken.ToInt32():X8}", StringComparer.Ordinal);
+        string Stable(MethodDependencyNode node) => DependencyGraph.Stable(definitions[node.Key]);
+        var names = raw.Methods.ToDictionary(node => node.Key, Stable, StringComparer.Ordinal);
         bool verified = true;
         var documents = new Dictionary<string, string?>(StringComparer.Ordinal);
         var methods = new List<SourceMethod>();
+        XunitLifecycleResult lifecycle = XunitLifecycleReader.Read(assembly);
+        managed.ObserveRoots(lifecycle.Map.GroupRoots.Concat(lifecycle.Map.Tests.SelectMany(test => test.Roots))
+            .Concat(lifecycle.SyntheticMethods.SelectMany(method => method.Dependency.Calls)));
+        SourceManagedDependencies dependencies = managed.Read();
         using var stream = File.OpenRead(binary);
         using var pe = new PEReader(stream);
         foreach (MethodDependencyNode node in raw.Methods)
@@ -94,13 +101,11 @@ internal static class SourceSnapshotReader
                 .Where(instruction => instruction.Operand is MethodReference reference && reference.FullName == "System.Void System.Object::.ctor()")
                 .All(instruction => IsRuntimeObjectConstructor((MethodReference)instruction.Operand)))
                 boundary = DependencyBoundary.Closed;
-            if (method.HasGenericParameters || method.DeclaringType.HasGenericParameters ||
-                (method.HasBody && (method.Body.Variables.Any(variable => variable.VariableType is GenericInstanceType) ||
-                    method.Body.Instructions.Any(instruction => instruction.Operand is GenericInstanceMethod ||
-                        instruction.Operand is MemberReference member && member.DeclaringType is GenericInstanceType))))
-                boundary = DependencyBoundary.Unresolved;
+            // Generic definitions still have concrete IL dependencies. Indirect,
+            // constrained/virtual and unresolved targets remain open in the
+            // extracted graph; generic syntax alone is not an unknown call.
             methods.Add(new(new(Stable(node), node.LocalCalls.Select(key => names.TryGetValue(key, out string? id) ? id :
-                    linkedMethodIds?.Contains(key) == true ? key : "unresolved:" + key).ToArray(),
+                    linkedMethodIds?.Contains(key) == true || managed.Contains(key) ? key : "unresolved:" + key).ToArray(),
                 node.StaticFields, boundary),
                 assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name,
                 bodyHash, spans.ToArray(), method.IsConstructor || method.IsVirtual));
@@ -119,12 +124,18 @@ internal static class SourceSnapshotReader
         }
         using var normalized = new MemoryStream();
         assembly.Write(normalized, new WriterParameters { WriteSymbols = false, Timestamp = 0 });
-        string configuration = Convert.ToHexStringLower(SHA256.HashData(normalized.ToArray()));
+        string configuration = Convert.ToHexStringLower(SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Metadata = Convert.ToHexStringLower(SHA256.HashData(normalized.ToArray())),
+            dependencies.Files
+        })));
         verified &= documents.Count > 0 && methods.Any(method => method.Spans.Length > 0);
         if (FileHash(binary) != hash || FileHash(pdb) != pdbHash || Git(root, "rev-parse", "HEAD").Trim() != source ||
             Git(root, "status", "--porcelain", "--untracked-files=all").Length != 0)
             throw new InvalidDataException("Inputs changed while constructing the source snapshot.");
-        return new(1, source, Path.GetFileName(binary), hash, pdbHash, configuration, verified ? SourceMapStatus.Verified : SourceMapStatus.Unverifiable, methods.ToArray());
+        methods.AddRange(lifecycle.SyntheticMethods);
+        return new(1, source, Path.GetFileName(binary), hash, pdbHash, configuration, verified ? SourceMapStatus.Verified : SourceMapStatus.Unverifiable,
+            methods.ToArray(), lifecycle.Map, dependencies);
     }
 
     private static string FileHash(string path)
@@ -133,7 +144,7 @@ internal static class SourceSnapshotReader
         return Convert.ToHexStringLower(SHA256.HashData(stream));
     }
 
-    private static string BodyHash(PEReader pe, MethodDefinition method)
+    internal static string BodyHash(PEReader pe, MethodDefinition method)
     {
         // Raw tokens alone miss changes to the metadata they reference, especially
         // local-variable signatures removed from the normalized envelope.

@@ -13,6 +13,7 @@ on:
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
       - 'tools/TestImpact/Test-PlannedAttribution.ps1'
       - 'tools/TestImpact/Test-SourceSelection.ps1'
+      - 'Directory.Build.targets'
       - '.github/workflows/test-attribution-canary.yml'
 
 permissions:
@@ -46,6 +47,7 @@ jobs:
           retention-days: 7
           path: |
             ${{ runner.temp }}/attribution-proof/proof.json
+            ${{ runner.temp }}/attribution-proof/discovery-*.jsonl
             ${{ runner.temp }}/attribution-proof/*.map.json
             ${{ runner.temp }}/attribution-proof/*/results.trx
             ${{ runner.temp }}/attribution-proof/*/attribution/*.json

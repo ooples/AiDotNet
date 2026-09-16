@@ -28,14 +28,19 @@ if ($CrossAssembly) {
     [IO.File]::WriteAllText((Join-Path $libraryDirectory 'SourceLibrary.csproj'), @'
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion></PropertyGroup>
+  <!-- The same-source compiler variants target SourceLibrary only. Preserve
+       the external dependency binary so the one-body control remains isolated. -->
+  <ItemGroup><ProjectReference Include="../ManagedLibrary/ManagedLibrary.csproj" GlobalPropertiesToRemove="DefineConstants" /></ItemGroup>
 </Project>
 '@)
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/Library.cs') -Destination $libraryDirectory
-    $project = $project.Replace('</Project>', '<ItemGroup><Compile Remove="Library/**/*.cs" /><ProjectReference Include="Library/SourceLibrary.csproj" /></ItemGroup></Project>')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/ManagedLibrary') -Destination $checkout -Recurse
+    $project = $project.Replace('</Project>', '<ItemGroup><Compile Remove="Library/**/*.cs;ManagedLibrary/**/*.cs" /><ProjectReference Include="Library/SourceLibrary.csproj" /></ItemGroup></Project>')
 }
 [IO.File]::WriteAllText((Join-Path $checkout 'SourceCases.csproj'), $project)
 [IO.File]::WriteAllText((Join-Path $checkout '.gitignore'), "obj/`nbin/`n")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/Cases.cs') -Destination $checkout
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/UnrelatedCases.cs') -Destination $checkout
 if ($CrossAssembly) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/TestAttribution/SourceCases/CrossAssemblyCases.cs') -Destination (Join-Path $checkout 'Cases.cs')
 }

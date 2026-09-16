@@ -29,7 +29,7 @@ function Invoke-Import([string] $Name, [string] $ExpectedRejection = '') {
 Invoke-Import baseline
 $baseline = Get-Content "$root/baseline-result.json" -Raw | ConvertFrom-Json
 if (-not $baseline.AuthenticatedWorkflowOrigin -or -not $baseline.CanReplaceFullBaseline -or
-    $baseline.Origin.RunId -ne $RunId -or $baseline.Origin.Attempt -ne $Attempt -or $baseline.Cases.Count -ne 11) {
+    $baseline.Origin.RunId -ne $RunId -or $baseline.Origin.Attempt -ne $Attempt -or $baseline.Cases.Count -ne 10) {
     throw 'Live baseline import lost its actual execution or workflow binding.'
 }
 $policy.HeadSha = '0' * 40

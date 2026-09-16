@@ -53,6 +53,8 @@ public sealed class DependencySelectionTests
     {
         var graph = Snapshot([Node("left", boundary: boundary), Node("right")]);
         Assert.Equal(new[] { "Left", "Right" }, Selected(graph, graph, "right"));
+        Assert.Equal(new[] { "Left", "Right" }, Selected(graph, graph, "left"));
+        Assert.Equal(new[] { "Left", "Right" }, Selected(graph, graph));
     }
 
     [Fact]

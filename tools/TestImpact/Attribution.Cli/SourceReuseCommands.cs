@@ -108,6 +108,13 @@ internal static class LocalEvidenceReader
             RunnerBinding.HashBundle(bundle) != inventory.Context.BuildFingerprint)
             throw new EvidenceException(EvidenceFailure.Context, "Source snapshot differs from the discovered binary bundle.");
         foreach (SourceSnapshot snapshot in source.Assemblies) ValidateAssembly(snapshot, inventory, bundle);
+        foreach (SourceDependencyBinary binary in source.Assemblies.SelectMany(snapshot => snapshot.ManagedDependencies?.Files ?? []))
+        {
+            string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location) ?? throw new IOException("Missing runtime directory.");
+            if (binary is null || !Enum.IsDefined(binary.Origin) ||
+                Hash(ArtifactArchive.ResolveContained(binary.Origin == ManagedBinaryOrigin.Runtime ? runtime : bundle, binary.File)) != binary.Hash)
+                throw new EvidenceException(EvidenceFailure.Context, "Managed dependency differs from the mapped runtime or bundle.");
+        }
     }
 
     private static void ValidateAssembly(SourceSnapshot snapshot, DiscoveryManifest inventory, string bundle)

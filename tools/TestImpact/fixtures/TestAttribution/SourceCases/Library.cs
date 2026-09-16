@@ -11,6 +11,6 @@ public static class Subject
 #endif
     }
 
-    public static int Right(int input) => input + 2;
+    public static int Right(int input) => ManagedLibrary.Scalar.Identity(ManagedLibrary.Scalar.Identity<int, byte>(input)) + 2;
     public static int Third(int input) => input + 3;
 }

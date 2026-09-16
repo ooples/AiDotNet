@@ -61,7 +61,7 @@ try {
     $discovery = Run discovery Discover
     Check (Test-Path $inventory) 'Discovery did not publish an inventory.'
     $manifest = Get-Content $inventory -Raw | ConvertFrom-Json
-    Check ($manifest.Cases.Count -eq 11) 'Discovery lost or added cases.'
+    Check ($manifest.Cases.Count -eq 10) 'Deferred discovery lost or added cases.'
     if (Test-Path (Join-Path $discovery.directory 'results.trx')) {
         [xml]$trx = Get-Content (Join-Path $discovery.directory 'results.trx') -Raw
         Check (@($trx.SelectNodes('//*[local-name()="UnitTestResult"]')).Count -eq 0) 'Discovery executed tests.'
@@ -73,7 +73,7 @@ try {
     $partialReceipt = Join-Path $root 'partial-verification.json'
     Verify $selected $partial $inventory $partialReceipt
     $verification = Get-Content $partialReceipt -Raw | ConvertFrom-Json
-    Check ($verification.Cases.Count -eq 3 -and -not $verification.CanReplaceFullBaseline) 'Partial execution was promoted or lost a theory discovery case.'
+    Check ($verification.Cases.Count -eq 2 -and -not $verification.CanReplaceFullBaseline) 'Partial execution was promoted or lost a deferred theory discovery case.'
     [xml]$trx = Get-Content (Join-Path $selected.directory 'results.trx') -Raw
     $rows = @($trx.SelectNodes('//*[local-name()="UnitTestResult"]'))
     $expected = @('PrototypeTests.MethodTests.First(value: 1)','PrototypeTests.MethodTests.First(value: 2)',
@@ -116,7 +116,7 @@ try {
     $fullReceipt = Join-Path $root 'full-verification.json'
     Verify $all $full $inventory $fullReceipt
     $complete = Get-Content $fullReceipt -Raw | ConvertFrom-Json
-    Check ($complete.Cases.Count -eq 11 -and $complete.CanReplaceFullBaseline) 'Full workload did not verify.'
+    Check ($complete.Cases.Count -eq 10 -and $complete.CanReplaceFullBaseline) 'Full workload did not verify.'
     [xml]$fullTrx = Get-Content (Join-Path $all.directory 'results.trx') -Raw
     Check (@($fullTrx.SelectNodes('//*[local-name()="UnitTestResult"]')).Count -eq 12) 'Full run lost a runtime theory row.'
 
@@ -153,7 +153,7 @@ try {
     Verify $selected $partial $inventory (Join-Path $root 'forbidden-revoked.json') $true
     dotnet $cli Prepare $inventory (Join-Path $root 'unknown-plan.json') SelectedMethods Unknown | Out-Host
     Check ($LASTEXITCODE -ne 0 -and -not (Test-Path (Join-Path $root 'unknown-plan.json'))) 'Unknown method was accepted.'
-    [ordered]@{ schema=1; discoveredCases=11; fullRows=12; selectedCases=3; selectedRows=4;
+    [ordered]@{ schema=1; discoveredCases=10; fullRows=12; selectedCases=2; selectedRows=4;
         partialCannotReplaceBaseline=$true; rejected=@('partial-as-full','stale-binary','missing-row','unknown-method',
             'wrong-profile','wrong-workload','wrong-source','revoked-report');
         receiptMutations=@([Enum]::GetNames[ReceiptMutation]());

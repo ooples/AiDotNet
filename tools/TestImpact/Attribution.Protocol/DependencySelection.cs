@@ -43,9 +43,12 @@ public static class DependencySelection
             next.Nodes.UnionWith(previous.Nodes);
             next.State.UnionWith(previous.State);
             next = next with { Open = next.Open || previous.Open };
+            // An opaque path may write state read by another test without an IL
+            // field edge (reflection/native callbacks are examples). Executing
+            // only its owner cannot certify the remaining shared-process tests.
+            if (next.Open) return All(current, SelectionReason.OpenDependency);
             closures.Add(id, next);
             if (prior is null) selected.Add(id, SelectionReason.NewTest);
-            else if (next.Open) selected.Add(id, SelectionReason.OpenDependency);
             else if (next.Nodes.Overlaps(changed)) selected.Add(id, SelectionReason.ChangedDependency);
         }
 

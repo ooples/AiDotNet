@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="PrototypeTests" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../../../Attribution.Runtime/AttributionRuntime.csproj" />
   </ItemGroup>

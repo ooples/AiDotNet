@@ -112,7 +112,8 @@ Check (-not (Test-Path -LiteralPath $root)) 'Evidence directory must be new; exi
 [void] (New-Item -ItemType Directory -Path $root)
 $prior = @{}
 foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER', 'ATTRIBUTION_TOKEN', 'ATTRIBUTION_WORKER_DLL', 'ATTRIBUTION_HIT_MODE',
-    'ATTRIBUTION_MODE', 'ATTRIBUTION_PLAN', 'ATTRIBUTION_INVENTORY', 'ATTRIBUTION_SOURCE_TREE', 'ATTRIBUTION_PROFILE_HASH', 'ATTRIBUTION_WORKLOAD')) {
+    'ATTRIBUTION_MODE', 'ATTRIBUTION_PLAN', 'ATTRIBUTION_INVENTORY', 'ATTRIBUTION_SOURCE_TREE', 'ATTRIBUTION_PROFILE_HASH', 'ATTRIBUTION_WORKLOAD',
+    'ATTRIBUTION_DISCOVERY_PROBE')) {
     $prior[$name] = [Environment]::GetEnvironmentVariable($name)
     [Environment]::SetEnvironmentVariable($name, $null)
 }
@@ -162,6 +163,22 @@ try {
     $original = Join-Path $fixture 'PrototypeTests/bin/Release/net10.0'
     $workerOriginal = Join-Path $fixture 'Worker/bin/Release/net10.0'
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
+    # Attempt to re-enable eager discovery through adapter configuration. The
+    # sealed opt-in framework must still prevent an unrelated data provider
+    # from running in the selected test's process, with and without collection.
+    $discoveryBundle = Join-Path $root 'discovery-probe-bundle'
+    Copy-Item -LiteralPath $original -Destination $discoveryBundle -Recurse
+    [IO.File]::WriteAllText((Join-Path $discoveryBundle 'xunit.runner.json'), '{"preEnumerateTheories":true}')
+    foreach ($collect in @($false, $true)) {
+        $probeName = if ($collect) { 'discovery-collected' } else { 'discovery-uncollected' }
+        $env:ATTRIBUTION_DISCOVERY_PROBE = Join-Path $root "$probeName.jsonl"
+        $null = Invoke-PrototypeRun $probeName 'DiscoveryProbe' $discoveryBundle $collect
+        $observations = @(Get-Content -LiteralPath $env:ATTRIBUTION_DISCOVERY_PROBE | ForEach-Object { $_ | ConvertFrom-Json })
+        Check ($observations.Count -eq 1 -and $observations[0].Stage -ceq 'Execution' -and $observations[0].Discoveries -eq 0) `
+            'Unselected theory provider executed despite enforced deferred discovery.'
+    }
+    $env:ATTRIBUTION_DISCOVERY_PROBE = $null
+    $env:ATTRIBUTION_OUTPUT = $null
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=Protocol' `
         "/ResultsDirectory:$(Join-Path $root 'protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Execution evidence protocol tests failed.'
@@ -195,7 +212,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 19 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 34 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host

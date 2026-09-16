@@ -353,6 +353,30 @@ The aggregate-coverage counterexample and original feasibility measurements
 remain in [README.md](README.md). Both proof scripts now record their effective
 SDK rather than assuming the roll-forward version in the root global.json.
 
+## Lifecycle and managed-dependency redesign (not production-enabled)
+
+The mapper now distinguishes test constructors, inherited implementations,
+class/collection fixtures, and actual assembly hooks from unrelated helpers.
+Managed calls are followed into the bound output/runtime with explicit budgets;
+missing, native, indirect, and unresolved virtual boundaries remain conservative.
+Dependency files are hashed and rechecked, and generic method identities include
+arity (Cecil's displayed names alone collide for real CoreLib overloads).
+
+The opt-in attribution framework seals its discovery factory and enforces
+deferred theories. A provider outside the selected filter was experimentally
+observed mutating state in the same process as the selected test under eager
+discovery. The harness now attempts to re-enable eager enumeration and verifies
+that provider does not run, with and without hit collection. Deferred logical
+cases are not row counts: planned proof requires 10 logical cases/12 full rows,
+and 2 selected logical cases/4 selected rows. The discovery policy is part of the
+execution profile; ordinary builds retain their existing xUnit framework.
+
+Opaque calls can mutate another test's state without a visible field edge, so
+an open selected-workload closure requires the full workload, not only its owner.
+This is intentionally fail-closed. Passing fixture checks must not be described
+as proof of useful selection on real AiDotNet changes: that acceptance check and
+production integration remain outstanding.
+
 ## Live collector verification
 
 [Linux run 35105583876](https://github.com/ooples/AiDotNet/actions/runs/35105583876)
