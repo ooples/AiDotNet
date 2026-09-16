@@ -8,6 +8,24 @@ namespace PrototypeTests;
 [Trait("Scenario", "SourceImpact")]
 public sealed class GraphExtractionTests
 {
+    public enum ConstraintCase { Missing, TaskWins, Cycle }
+
+    [Theory]
+    [InlineData(ConstraintCase.Missing)]
+    [InlineData(ConstraintCase.TaskWins)]
+    [InlineData(ConstraintCase.Cycle)]
+    public void UnknownGenericConstraintsRemainUnresolved(ConstraintCase kind)
+    {
+        using var assembly = Assembly();
+        MethodDefinition method = Method(assembly.MainModule.Types[0], "Generic");
+        var parameter = new GenericParameter("T", method);
+        method.GenericParameters.Add(parameter);
+        var missing = new TypeReference("Missing", "Base", assembly.MainModule, new AssemblyNameReference("Missing", new Version(1, 0)));
+        parameter.Constraints.Add(new(kind == ConstraintCase.Cycle ? parameter : missing));
+        if (kind == ConstraintCase.TaskWins)
+            parameter.Constraints.Add(new(new TypeReference("System.Threading.Tasks", "Task", assembly.MainModule, assembly.MainModule.TypeSystem.CoreLibrary)));
+        Assert.Equal(kind == ConstraintCase.TaskWins ? TaskReturnKind.Task : TaskReturnKind.Unresolved, new TaskTypeInspector().Classify(parameter));
+    }
     [Fact]
     public void ExternHashTracksItsDeclarationNotOtherMethodBodies()
     {

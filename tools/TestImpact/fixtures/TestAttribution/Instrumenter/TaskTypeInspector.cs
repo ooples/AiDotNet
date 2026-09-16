@@ -6,11 +6,21 @@ internal sealed class TaskTypeInspector
 {
     private readonly Dictionary<string, TaskReturnKind> cache = new(StringComparer.Ordinal);
 
-    public TaskReturnKind Classify(TypeReference type)
+    public TaskReturnKind Classify(TypeReference type) => Classify(type, []);
+
+    private TaskReturnKind Classify(TypeReference type, HashSet<GenericParameter> active)
     {
         if (type is GenericParameter parameter)
-            return parameter.Constraints.Any(constraint => Classify(constraint.ConstraintType) == TaskReturnKind.Task)
-                ? TaskReturnKind.Task : TaskReturnKind.Other;
+        {
+            if (!active.Add(parameter)) return TaskReturnKind.Unresolved;
+            try
+            {
+                TaskReturnKind[] constraints = parameter.Constraints.Select(constraint => Classify(constraint.ConstraintType, active)).ToArray();
+                if (constraints.Contains(TaskReturnKind.Task)) return TaskReturnKind.Task;
+                return constraints.Contains(TaskReturnKind.Unresolved) ? TaskReturnKind.Unresolved : TaskReturnKind.Other;
+            }
+            finally { active.Remove(parameter); }
+        }
         if (type.IsByReference || type.IsPointer || type.IsArray || type.IsPrimitive || type.IsValueType || type.FullName == "System.Void")
             return TaskReturnKind.Other;
         string key = type.FullName + "@" + type.Scope;

@@ -6,6 +6,38 @@ namespace PrototypeTests;
 [Trait("Scenario", "SourceImpact")]
 public sealed class SourceImpactTests
 {
+    public enum MalformedMember { NullCalls, NullState, NullCallEntry, NullStateEntry, DuplicateCalls, DuplicateState, Boundary, NullSpan }
+
+    [Theory]
+    [InlineData(MalformedMember.NullCalls)]
+    [InlineData(MalformedMember.NullState)]
+    [InlineData(MalformedMember.NullCallEntry)]
+    [InlineData(MalformedMember.NullStateEntry)]
+    [InlineData(MalformedMember.DuplicateCalls)]
+    [InlineData(MalformedMember.DuplicateState)]
+    [InlineData(MalformedMember.Boundary)]
+    [InlineData(MalformedMember.NullSpan)]
+    public void MalformedNestedMembersHaveTypedFormatFailures(MalformedMember mutation)
+    {
+        var json = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Snapshot('a')))
+            ?? throw new InvalidDataException();
+        var method = json[nameof(SourceSnapshot.Methods)]?[0] ?? throw new InvalidDataException();
+        var dependency = method[nameof(SourceMethod.Dependency)] ?? throw new InvalidDataException();
+        switch (mutation)
+        {
+            case MalformedMember.NullCalls: dependency[nameof(DependencyNode.Calls)] = null; break;
+            case MalformedMember.NullState: dependency[nameof(DependencyNode.SharedState)] = null; break;
+            case MalformedMember.NullCallEntry: dependency[nameof(DependencyNode.Calls)] = System.Text.Json.Nodes.JsonNode.Parse("[null]"); break;
+            case MalformedMember.NullStateEntry: dependency[nameof(DependencyNode.SharedState)] = System.Text.Json.Nodes.JsonNode.Parse("[null]"); break;
+            case MalformedMember.DuplicateCalls: dependency[nameof(DependencyNode.Calls)] = System.Text.Json.Nodes.JsonNode.Parse("[\"a\",\"a\"]"); break;
+            case MalformedMember.DuplicateState: dependency[nameof(DependencyNode.SharedState)] = System.Text.Json.Nodes.JsonNode.Parse("[\"a\",\"a\"]"); break;
+            case MalformedMember.Boundary: dependency[nameof(DependencyNode.Boundary)] = 999; break;
+            case MalformedMember.NullSpan: method[nameof(SourceMethod.Spans)] = System.Text.Json.Nodes.JsonNode.Parse("[null]"); break;
+            default: throw new ArgumentOutOfRangeException(nameof(mutation));
+        }
+        SourceSnapshot malformed = System.Text.Json.JsonSerializer.Deserialize<SourceSnapshot>(json.ToJsonString()) ?? throw new InvalidDataException();
+        Assert.Equal(EvidenceFailure.Format, Assert.Throws<EvidenceException>(() => Select(before: malformed)).Reason);
+    }
     private static TestCaseIdentity[] Cases => [new("a1", "A"), new("a2", "A"), new("b", "B")];
     private static SourceSnapshot Snapshot(char revision) => new(1, new(revision, 40), "tests.dll", new('c', 64), new('c', 64), new('d', 64), SourceMapStatus.Verified,
         [new(new("a", [], [], DependencyBoundary.Closed), "A", new('e', 64), [new("Tests.cs", 10, 14)], false),

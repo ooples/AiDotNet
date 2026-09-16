@@ -91,7 +91,12 @@ public static class SourceImpact
             !Hash(snapshot.PdbHash, 64) || !Hash(snapshot.ConfigurationHash, 64) || !Enum.IsDefined(snapshot.Status) || snapshot.Methods is null ||
             snapshot.Methods.Any(method => method is null || method.Dependency is null || method.Spans is null ||
                 string.IsNullOrWhiteSpace(method.Owner) || string.IsNullOrWhiteSpace(method.Dependency.Id) ||
-                !Hash(method.BodyHash, 64) || !Enum.IsDefined(method.Scope)) ||
+                !Hash(method.BodyHash, 64) || !Enum.IsDefined(method.Scope) || !Enum.IsDefined(method.Dependency.Boundary) ||
+                method.Dependency.Calls is null || method.Dependency.SharedState is null ||
+                method.Dependency.Calls.Any(string.IsNullOrWhiteSpace) || method.Dependency.SharedState.Any(string.IsNullOrWhiteSpace) ||
+                method.Dependency.Calls.Distinct(StringComparer.Ordinal).Count() != method.Dependency.Calls.Length ||
+                method.Dependency.SharedState.Distinct(StringComparer.Ordinal).Count() != method.Dependency.SharedState.Length ||
+                method.Spans.Any(span => span is null)) ||
             snapshot.Methods.Select(method => method.Dependency.Id).Distinct(StringComparer.Ordinal).Count() != snapshot.Methods.Length)
             throw new EvidenceException(EvidenceFailure.Format, "Incomplete source snapshot.");
         if (snapshot.LifecycleMap is SourceLifecycleMap lifecycle &&

@@ -212,8 +212,15 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 36 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 47 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=RuntimeEffects' `
+        "/ResultsDirectory:$(Join-Path $root 'runtime-effects')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Runtime-effects experimental controls failed.'
+    [xml] $effectsTrx = Get-Content -LiteralPath (Join-Path $root 'runtime-effects/results.trx') -Raw
+    $effectsCases = @($effectsTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($effectsCases.Count -eq 16 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Runtime-effects controls did not execute the complete expected set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Workflow import protocol tests failed.'
@@ -417,7 +424,7 @@ try {
     & (Join-Path $PSScriptRoot 'Test-SourceSelection.ps1') -CrossAssembly -EvidenceDirectory (Join-Path $root 'cross-assembly')
     Check (Test-Path (Join-Path $root 'cross-assembly/proof.json')) 'Cross-assembly selection proof was not completed.'
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; sourceCases = $sourceCases.Count; workflowCases = $workflowCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; sourceCases = $sourceCases.Count; runtimeEffectsCases = $effectsCases.Count; workflowCases = $workflowCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

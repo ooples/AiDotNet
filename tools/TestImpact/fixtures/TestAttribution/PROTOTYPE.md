@@ -6,6 +6,26 @@ selection/reuse acceptance criteria. PR #2213 is untouched.
 
 ## Latest evidence and remaining acceptance gap
 
+- Bounded runtime-effects experiment on the real five CPU sharding-configuration
+  tests: baseline **5/5 passed**; candidates **2/5**; selected baseline **2/2
+  passed**. Changing `CreateForZeROOffload`'s optimizer flag from true to false
+  produced the same single assertion failure in the selected and full runs;
+  the three omitted cases remained green. The failing receipt was rejected.
+  `Test-RuntimeEffectsSlice.ps1` reproduces the comparison from immutable before/
+  after bundles, inventories and full-run TRXs. No AiDotNet production source or
+  test assertion was changed by this prototype.
+- The ownership interpreter rejects escaping constructors, side-effecting
+  setters, finalizers, mixed owned/unowned returns, extra allocations and opaque
+  calls after a changed write. The experiment rejects other changed method
+  bodies, metadata and bundle files. Independent-control checks reject missing,
+  duplicate, skipped, cancelled and missed-failure results.
+- **This is empirical candidate selection, not safe reuse authorization.**
+  Unknown runtime dispatch, CPU initialization and file-backed hooks remain
+  unresolved. The normal selector is unchanged and still falls back
+  conservatively. `CanAuthorizeReuse` and `ProductionSelectionEnabled` are false.
+  A full control is required for this experiment; it is not a proposed production
+  optimization that secretly reruns the entire suite.
+
 - [Live Linux run 35132755921](https://github.com/ooples/AiDotNet/actions/runs/35132755921)
   passed at `ca0c86bd6a`: 95 protocol cases, 33 collector rejection controls,
   exact selected/full TRX reconciliation, and the cross-assembly source edit

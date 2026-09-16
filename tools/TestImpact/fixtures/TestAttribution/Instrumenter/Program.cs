@@ -7,6 +7,35 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 
+if (args.Length == 3 && args[2] == nameof(InstrumentationMode.RuntimeEffectsControl))
+{
+    var control = AiDotNet.TestImpact.ExecutionEvidence.ReadDocumentFile<AiDotNet.TestImpact.RuntimeEffectControlInput>(args[0]);
+    AiDotNet.TestImpact.RuntimeEffectControl.Compare(control.Inventory, control.Selected, control.BeforeFull, control.AfterFull, control.AfterSelected);
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], new { ComparedFullControl = true, FullCases = control.Inventory.Length,
+        SelectedCases = control.Selected.Length, CanAuthorizeReuse = false, ProductionSelectionEnabled = false });
+    return;
+}
+if (args.Length == 7 && args[2] == nameof(InstrumentationMode.RuntimeEffectsExperiment))
+{
+    var inventory = AiDotNet.TestImpact.ExecutionEvidence.ReadDocumentFile<AiDotNet.TestImpact.DiscoveryManifest>(args[4]);
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], RuntimeEffectsExperiment.Read(args[0], args[3], inventory, args[5], args[6]));
+    return;
+}
+if (args.Length == 5 && args[2] == nameof(InstrumentationMode.OwnedResultExperiment))
+{
+    using var effectsResolver = new DefaultAssemblyResolver();
+    effectsResolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(args[0])));
+    effectsResolver.AddSearchDirectory(Path.GetDirectoryName(typeof(object).Assembly.Location));
+    using var effectsAssembly = AssemblyDefinition.ReadAssembly(args[0], new ReaderParameters { AssemblyResolver = effectsResolver });
+    MethodDefinition target = AllTypes(effectsAssembly.MainModule.Types).Single(type => type.FullName == args[3]).Methods.Single(method => method.Name == args[4]);
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], new
+    {
+        AssemblyHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(args[0]))),
+        Method = DependencyGraph.Stable(target), Effect = new OwnedResultEffects().Read(target),
+        RequiresFullControl = true, ProductionSelectionEnabled = false
+    });
+    return;
+}
 if (args.Length >= 4 && args[2] == nameof(InstrumentationMode.SourceBundle))
 {
     AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.ReadBundle(args[0], args[3], args[4..]), indented: false);
@@ -21,7 +50,8 @@ if (args.Length is < 2 or > 3) throw new ArgumentException("Usage: instrumenter 
 InstrumentationMode mode = args.Length == 2 ? InstrumentationMode.Methods :
     Enum.TryParse(args[2], out InstrumentationMode parsed) && Enum.IsDefined(parsed)
         ? parsed : throw new ArgumentException("Unsupported instrumentation mode.");
-if (mode is InstrumentationMode.SourceSnapshot or InstrumentationMode.SourceBundle) throw new ArgumentException("Source snapshot requires a repository directory.");
+if (mode is not (InstrumentationMode.Methods or InstrumentationMode.TaskBoundaries or InstrumentationMode.RemoveTaskObserverForMutationTest))
+    throw new ArgumentException("Analysis mode requires its complete argument set; it cannot instrument an assembly.");
 string input = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(args[1]);
 if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase) || File.Exists(output))
@@ -195,4 +225,4 @@ static void InsertBeforeIncludingTargets(MethodDefinition method, Instruction ta
     foreach (Instruction instruction in inserted) method.Body.GetILProcessor().InsertBefore(target, instruction);
 }
 
-enum InstrumentationMode { Methods, TaskBoundaries, RemoveTaskObserverForMutationTest, SourceSnapshot, SourceBundle }
+enum InstrumentationMode { Methods, TaskBoundaries, RemoveTaskObserverForMutationTest, SourceSnapshot, SourceBundle, OwnedResultExperiment, RuntimeEffectsExperiment, RuntimeEffectsControl }
