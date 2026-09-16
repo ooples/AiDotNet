@@ -63,13 +63,15 @@ public static class RunnerBinding
         return JsonSerializer.Serialize(value, options);
     }
 
-    public static void WriteNew<T>(string path, T value)
+    public static void WriteNew<T>(string path, T value, bool indented = true)
     {
         string full = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(full) ?? throw new InvalidDataException("Missing output directory."));
         string pending = full + ".pending";
+        var options = new JsonSerializerOptions { WriteIndented = indented };
+        options.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
         using (var stream = new FileStream(pending, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        using (var writer = new StreamWriter(stream, new UTF8Encoding(false))) writer.Write(Serialize(value));
+            JsonSerializer.Serialize(stream, value, options);
         File.Move(pending, full, overwrite: false);
     }
 

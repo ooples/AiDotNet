@@ -74,7 +74,8 @@ public sealed class WorkerTests
         try { await process.WaitForExitAsync(deadline.Token); }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) when (process.HasExited) { }
             await process.WaitForExitAsync();
             throw;
         }
@@ -88,7 +89,8 @@ public sealed class WorkerTests
             try { await second.WaitForExitAsync(deadline.Token); }
             catch (OperationCanceledException)
             {
-                second.Kill(entireProcessTree: true);
+                try { second.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) when (second.HasExited) { }
                 await second.WaitForExitAsync();
                 throw;
             }

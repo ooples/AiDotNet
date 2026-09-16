@@ -9,12 +9,12 @@ using Mono.Cecil.Rocks;
 
 if (args.Length >= 4 && args[2] == nameof(InstrumentationMode.SourceBundle))
 {
-    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.ReadBundle(args[0], args[3], args[4..]));
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.ReadBundle(args[0], args[3], args[4..]), indented: false);
     return;
 }
 if (args.Length == 4 && args[2] == nameof(InstrumentationMode.SourceSnapshot))
 {
-    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.Read(args[0], args[3]));
+    AiDotNet.TestImpact.RunnerBinding.WriteNew(args[1], SourceSnapshotReader.Read(args[0], args[3]), indented: false);
     return;
 }
 if (args.Length is < 2 or > 3) throw new ArgumentException("Usage: instrumenter input.dll output.dll [Methods|TaskBoundaries], or input.dll snapshot.json SourceSnapshot repository");
@@ -67,6 +67,7 @@ var methods = new List<object>();
 var dependencyGraph = DependencyGraph.Read(assembly, inputHash);
 int taskSites = 0;
 int boundarySites = 0;
+var taskTypes = new TaskTypeInspector();
 foreach (TypeDefinition type in AllTypes(assembly.MainModule.Types))
 foreach (MethodDefinition method in type.Methods)
 {
@@ -105,7 +106,14 @@ foreach (MethodDefinition method in type.Methods)
             boundarySites++;
             continue;
         }
-        if (returnName is not ("System.Threading.Tasks.Task" or "System.Threading.Tasks.Task`1")) continue;
+        TaskReturnKind taskKind = taskTypes.Classify(instruction.OpCode.Code == Code.Newobj ? call.DeclaringType : call.ReturnType);
+        if (taskKind == TaskReturnKind.Unresolved)
+        {
+            InsertBeforeIncludingTargets(method, instruction, il.Create(OpCodes.Call, untrackedConcurrency));
+            boundarySites++;
+            continue;
+        }
+        if (taskKind != TaskReturnKind.Task) continue;
         if (instruction.Previous?.OpCode.Code == Code.Tail) throw new InvalidOperationException("Tail-call task instrumentation is unsupported.");
         // Preserve the original return value; the observer does not wrap or replace the task.
         Instruction duplicate = il.Create(OpCodes.Dup);

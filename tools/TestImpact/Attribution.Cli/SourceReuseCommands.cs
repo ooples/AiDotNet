@@ -32,19 +32,22 @@ internal static class SourceReuseCommands
         return ExecutionReuse.Complete(partition, current);
     }
 
-    internal static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocument<T>(File.ReadAllText(path));
+    internal static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocumentFile<T>(path);
 }
 
 internal static class LocalEvidenceReader
 {
     public static SourceBundleSnapshot ReadSource(string path)
     {
-        string json = File.ReadAllText(path);
-        using var document = System.Text.Json.JsonDocument.Parse(json);
-        if (document.RootElement.TryGetProperty(nameof(SourceBundleSnapshot.Assemblies), out _))
-            return ExecutionEvidence.ReadDocument<SourceBundleSnapshot>(json);
-        SourceSnapshot single = ExecutionEvidence.ReadDocument<SourceSnapshot>(json);
-        return new(1, single.SourceTree, single.AssemblyFile, [single]);
+        const long sourceMapLimit = 1024L * 1024 * 1024;
+        try { return ExecutionEvidence.ReadDocumentFile<SourceBundleSnapshot>(path, sourceMapLimit); }
+        catch (EvidenceException exception) when (exception.Reason == EvidenceFailure.Format)
+        {
+            // Legacy single-assembly snapshots reject early at their first
+            // non-bundle property. Neither format allows unknown/duplicate keys.
+            SourceSnapshot single = ExecutionEvidence.ReadDocumentFile<SourceSnapshot>(path, sourceMapLimit);
+            return new(1, single.SourceTree, single.AssemblyFile, [single]);
+        }
     }
 
     public static VerifiedExecution Verify(DiscoveryManifest manifest, LocalExecutionInput input)

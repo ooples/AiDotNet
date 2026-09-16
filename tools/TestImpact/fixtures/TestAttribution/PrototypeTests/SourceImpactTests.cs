@@ -49,6 +49,16 @@ public sealed class SourceImpactTests
     }
 
     [Fact]
+    public void DuplicateAndEmptyMethodIdsHaveTypedFormatFailures()
+    {
+        SourceSnapshot before = Snapshot('a');
+        before.Methods[1] = before.Methods[1] with { Dependency = before.Methods[1].Dependency with { Id = "a" } };
+        Assert.Equal(EvidenceFailure.Format, Assert.Throws<EvidenceException>(() => Select(before: before)).Reason);
+        before.Methods[1] = before.Methods[1] with { Dependency = before.Methods[1].Dependency with { Id = "" } };
+        Assert.Equal(EvidenceFailure.Format, Assert.Throws<EvidenceException>(() => Select(before: before)).Reason);
+    }
+
+    [Fact]
     public void UnverifiableMapCannotNarrowExecution()
     {
         Assert.True(Select(before: Snapshot('a') with { Status = SourceMapStatus.Unverifiable }).FullFallback);

@@ -73,7 +73,8 @@ internal sealed class AttributionExecutionSink(IMessageSink next) : LongLivedMar
                 return true;
             case ITestPassed passed:
                 Tracker.RecordCaseResult(passed.Test.TestCase.UniqueID, passed.Test.DisplayName, ObservedOutcome.Passed);
-                break;
+                return next.OnMessage(new TestPassed(passed.Test, passed.ExecutionTime,
+                    Tracker.BindCaseOutput(passed.Test.TestCase.UniqueID, passed.Output)));
             case ITestFailed failed:
                 Tracker.RecordCaseResult(failed.Test.TestCase.UniqueID, failed.Test.DisplayName, ObservedOutcome.Failed);
                 break;

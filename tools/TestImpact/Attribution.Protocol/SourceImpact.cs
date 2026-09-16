@@ -84,7 +84,9 @@ public static class SourceImpact
         if (snapshot is null || snapshot.Schema != 1 || !Hash(snapshot.SourceTree, 40) || !Hash(snapshot.AssemblyHash, 64) ||
             !Hash(snapshot.PdbHash, 64) || !Hash(snapshot.ConfigurationHash, 64) || !Enum.IsDefined(snapshot.Status) || snapshot.Methods is null ||
             snapshot.Methods.Any(method => method is null || method.Dependency is null || method.Spans is null ||
-                string.IsNullOrWhiteSpace(method.Owner) || !Hash(method.BodyHash, 64) || !Enum.IsDefined(method.Scope)))
+                string.IsNullOrWhiteSpace(method.Owner) || string.IsNullOrWhiteSpace(method.Dependency.Id) ||
+                !Hash(method.BodyHash, 64) || !Enum.IsDefined(method.Scope)) ||
+            snapshot.Methods.Select(method => method.Dependency.Id).Distinct(StringComparer.Ordinal).Count() != snapshot.Methods.Length)
             throw new EvidenceException(EvidenceFailure.Format, "Incomplete source snapshot.");
     }
 

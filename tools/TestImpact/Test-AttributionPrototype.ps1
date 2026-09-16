@@ -41,7 +41,7 @@ function Assert-Evidence {
     $reports = @(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.json' -File | ForEach-Object {
         try { $value = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
         catch { Reject ReportInventory 'Malformed attribution report.' }
-        if ($value.Schema -ne 3 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
+        if ($value.Schema -ne 4 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
             Reject ReportInventory 'Unsupported report or filename.'
         }
         $value
@@ -180,7 +180,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
     [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
     $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($runnerCases.Count -eq 8 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($runnerCases.Count -eq 11 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runner binding checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=ReuseProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'reuse-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
@@ -194,7 +194,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 18 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 19 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
@@ -272,6 +272,8 @@ try {
     }
     $workerMethods = @(Methods-For 'PrototypeTests:PrototypeTests.WorkerTests.Complete')
     Check (@($workerMethods | Where-Object { $_ -match '::WorkerOnly\(' }).Count -eq 1) 'Child-only method was not attributed.'
+    $completedDerived = Invoke-PrototypeRun 'derived-complete' 'DerivedTaskComplete' $hostCopy $true 0
+    $null = Assert-Evidence $completedDerived.directory $completedDerived.run @('PrototypeTests.DerivedTaskTests.CompletedTasksKeepTheirOriginalReturnTypes') $instrumented $map
     foreach ($case in @(@('late', 'Late', 'PrototypeTests.LateTests.LateBackground', [PrototypeRejection]::Faulted, 0),
         @('missing-worker', 'MissingWorker', 'PrototypeTests.WorkerTests.Missing', [PrototypeRejection]::MissingWorker, 0),
         @('unclosed-worker', 'UnclosedWorker', 'PrototypeTests.WorkerTests.Unclosed', [PrototypeRejection]::Faulted, 0),
@@ -283,6 +285,8 @@ try {
         @('worker-replay', 'WorkerReplay', 'PrototypeTests.WorkerTests.ReplayStart', [PrototypeRejection]::Faulted, 0),
         @('worker-never-started', 'WorkerNeverStarted', 'PrototypeTests.WorkerTests.CompleteWithoutStarting', [PrototypeRejection]::Faulted, 0),
         @('value-task', 'ValueTask', 'PrototypeTests.ValueTaskTests.Unfinished', [PrototypeRejection]::Faulted, 0),
+        @('derived-task', 'DerivedTask', 'PrototypeTests.DerivedTaskTests.UnfinishedDerivedReturn', [PrototypeRejection]::Faulted, 0),
+        @('derived-generic-task', 'DerivedGenericTask', 'PrototypeTests.DerivedTaskTests.UnfinishedDerivedGenericReturn', [PrototypeRejection]::Faulted, 0),
         @('generic-value-task', 'GenericValueTask', 'PrototypeTests.ValueTaskTests.UnfinishedGeneric', [PrototypeRejection]::Faulted, 0),
         @('value-task-constructor', 'ValueTaskConstructor', 'PrototypeTests.ValueTaskTests.DirectConstructor', [PrototypeRejection]::Faulted, 0),
         @('custom-skip', 'CustomSkip', 'PrototypeTests.CustomCaseTests.CustomRunnerStillSkips', [PrototypeRejection]::Results, 0),

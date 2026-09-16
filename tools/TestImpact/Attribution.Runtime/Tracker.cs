@@ -30,6 +30,8 @@ public static class Tracker
         public string Serialize() => Token == 0 ? Module : $"{Module}:{Token:X8}";
     }
     public static bool IsEnabled => DirectoryPath is not null;
+    public static string BindCaseOutput(string caseId, string output) =>
+        output + Environment.NewLine + CaseOutputIdentity.Format(Run, Token, caseId) + Environment.NewLine;
     public const string SharedOwner = "<execution-group>";
     private sealed class Scope(string owner)
     {
@@ -357,7 +359,7 @@ public static class Tracker
             if (Kind == AttributionProcessKind.TestHost && (!inventoryRegistered || Cases.Count == 0))
                 Faults.Add(AttributionFault.InvalidInventory);
             if (Cases.Values.Any(execution => !execution.Finished)) Faults.Add(AttributionFault.IncompleteCase);
-            var report = new AttributionReport(3, Run, Token, Kind, Environment.ProcessId,
+            var report = new AttributionReport(4, Run, Token, Kind, Environment.ProcessId,
                 WorkerOwner, peakScopes, CollectionMode,
                 Hits.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => new MethodHits(pair.Key, pair.Value.Select(method => method.Serialize()).Order(StringComparer.Ordinal).ToArray())).ToArray(),

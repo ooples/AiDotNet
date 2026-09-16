@@ -22,6 +22,8 @@
        libraries do not acquire the attribution runtime or change execution. -->
   <PropertyGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
     <DefineConstants>$(DefineConstants);AIDOTNET_TEST_ATTRIBUTION</DefineConstants>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)attribution-generated/$(Configuration)/$(TargetFramework)</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
   <ItemGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="../../tools/TestImpact/Attribution.Xunit/Attribution.Xunit.csproj" />

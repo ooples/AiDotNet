@@ -29,6 +29,18 @@ public sealed record ExecutionReceipt(int Schema, string Workload, ValidationSco
 // It cannot turn coverage, a PR-provided "success" flag, or a partial run into a baseline.
 public static class ExecutionEvidence
 {
+    public static T ReadDocumentFile<T>(string path, long maximumBytes = 32L * 1024 * 1024) where T : class
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (stream.Length <= 0 || stream.Length > maximumBytes)
+            throw new EvidenceException(EvidenceFailure.Format, "Missing or oversized evidence file.");
+        var options = new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+            RespectRequiredConstructorParameters = true, AllowDuplicateProperties = false, MaxDepth = 32 };
+        options.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
+        try { return JsonSerializer.Deserialize<T>(stream, options) ?? throw new JsonException("Null evidence."); }
+        catch (JsonException exception) { throw new EvidenceException(EvidenceFailure.Format, exception.Message); }
+    }
+
     public static ExecutionPlan CreatePlan(string workload, TestCaseIdentity[] inventory,
         string[] methods, ValidationScope scope, ExecutionContextIdentity context)
     {

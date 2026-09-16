@@ -259,6 +259,12 @@
 	</PropertyGroup>
 
 	<!-- Exclude emitted generated files from compilation (they're already in-memory from the generator) -->
+	<PropertyGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+	  <!-- PDB checksums must be verifiable for generated methods as well as handwritten code. -->
+	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	  <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)attribution-generated/$(Configuration)/$(TargetFramework)</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
 	<ItemGroup>
 	  <Compile Remove="Generated\**\*.cs" />
 	</ItemGroup>

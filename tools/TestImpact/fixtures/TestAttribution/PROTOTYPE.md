@@ -33,7 +33,7 @@ rejections passed. It is not a production CI validation certificate.
   test type, including inherited tests. It preserves custom case runners and wraps
   per-test construction and asynchronous cleanup. Theory rows share a method
   identity, but the harness independently checks that both rows executed.
-- Schema-3 reports record discovered xUnit case IDs before execution and observe
+- Schema-4 reports record discovered xUnit case IDs before execution and observe
   actual passed/failed/skipped messages plus case completion. A deferred theory
   retains one discovery identity with all its runtime rows. The independent TRX
   must match; missing, duplicate, unfinished, or unsuccessful ledger entries are
@@ -71,7 +71,7 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **31 negative/mutation checks passed**: late work, detached task, unregistered process,
+- **33 negative/mutation checks passed**: late work, detached and derived tasks, unregistered process,
   never-fired timer, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
@@ -153,7 +153,7 @@ The opt-in xUnit adapter now discovers the actual workload inventory without
 executing it, then accepts a strict execution plan bound to that inventory,
 workload, source identity, binary-directory contents, and effective execution
 profile. It runs only the required discovery cases, preserving all rows of a
-selected theory. The binary bundle is checked again after execution. Schema-3
+selected theory. The binary bundle is checked again after execution. Schema-4
 reports record the plan; the independent CLI verifier checks both the case ledger
 and TRX. This single-bundle path rejects worker-backed evidence.
 
@@ -161,11 +161,11 @@ and TRX. This single-bundle path rejects worker-backed evidence.
 full-workload rows** (3 versus 11 discovery cases). It rejected partial results
 presented as a full baseline, a stale binary identity, a removed theory case,
 an unknown method, changed invocation profile/workload/source, and a revoked
-report. Six additional receipt mutations cover missing/duplicate discovery
+report. Seven additional receipt mutations cover missing/duplicate discovery
 cases, skipped results, a foreign run identity, a missing TRX row, and a still-running
-test host. Rejected
+test host, and another successful execution's TRX for the same test names. Rejected
 runner invocations must fail with the expected reason and execute zero tests.
-The full fixture harness also passed its 8 runner-binding tests, 15
+The full fixture harness also passed its 11 runner-binding tests, 15
 execution-protocol tests, 17 dependency-selection tests, and existing 31 rejection
 controls. These are actual runner checks, not merely assertions on a filter string.
 
@@ -196,8 +196,9 @@ Twelve protocol tests cover these boundaries, mutable returned plans, old edges,
 open native dependencies, shared state, and missing/stale/wrong-scope execution.
 The caller still must establish graph/change-set completeness and authenticate
 the baseline. This is **not live changed-base CI reuse proof**; automatic graph
-construction across production assemblies, trusted artifact import, and production
-dispatch remain unwired.
+construction across the full production dependency graph and production dispatch
+remain unwired; the cross-assembly and authenticated-import checks below close
+the smaller integration boundaries without claiming that rollout is complete.
 
 ### Cross-assembly selection and workflow import
 
@@ -206,7 +207,7 @@ static fields crossing between its assemblies retain stable qualified identities
 only test-assembly helpers are execution-group roots. External, virtual and
 unsupported generic paths remain conservative. A separate compiled library fixture
 now proves a library-only source edit selects one dependent test and reuses two,
-while a missing dependency assembly forces full execution. Eighteen source-impact
+while a missing dependency assembly forces full execution. Nineteen source-impact
 tests cover the single- and cross-assembly paths. This does not yet establish
 useful narrowing for the full AiDotNet dependency graph.
 
@@ -215,7 +216,7 @@ requires the named successful job, downloads by immutable artifact ID, verifies
 GitHub's archive digest, and independently verifies the report and TRX. It rejects
 unsafe archive paths, links, duplicates, stale attempts, and partial results
 presented as a full baseline. It uses completed workflow state, not a remote PID.
-Fifteen workflow/archive tests pass; the combined protocol suite has 85 tests.
+Fifteen workflow/archive tests pass; the combined protocol suite has 89 tests.
 
 The importer was exercised against the completed Linux run 35121549219: its full
 11-case/12-row planned execution imported successfully. Wrong-head, wrong-workflow
@@ -224,6 +225,22 @@ the run's PR metadata: the importer checked both recorded-base-to-tested-base an
 tested-base-to-current-target ancestry before accepting that source. This is real
 authenticated artifact import, not production dispatch or post-merge reuse proof.
 Caller policy must come from trusted CI configuration, not from the artifact.
+
+Schema 4 additionally writes a run/process/case marker into each passed test's
+TRX output and requires an exact match with the report. Schema-3 evidence must be
+recollected; the historical import above predates this stronger binding. The
+foreign-TRX control runs the same selected plan twice and rejects swapping their
+otherwise passing, identically named results. Derived `Task`/`Task<T>` returns
+and constructors are now observed without replacing their return objects;
+unresolved return ancestry invalidates attribution conservatively.
+
+The real AiDotNet/AiDotNetTests source map measured 554,578,853 bytes in the prior
+formatted representation, exceeding the old generic 32 MiB reader limit. Source
+maps now use compact streaming output and bounded, duplicate-rejecting streaming
+input. The initial real map also identified 3,214 missing generated library source
+documents and 1,323 missing generated test documents. Attribution-enabled builds
+now emit those files under `obj`; normal builds remain unchanged. A fresh real
+build/map check is required before claiming these production source maps verified.
 
 ### Automatic source-to-runner selection
 

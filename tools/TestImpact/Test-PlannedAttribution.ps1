@@ -12,7 +12,7 @@ $testDll = Join-Path $Binaries 'PrototypeTests.dll'
 $filter = 'Scenario=Positive&FullyQualifiedName!~PrototypeTests.WorkerTests'
 $saved = @{}
 enum PlannedRunMode { Discover; ExecutePlan }
-enum ReceiptMutation { MissingCase; SkippedRow; DuplicateCase; WrongRun; MissingTrxRow; HostStillRunning }
+enum ReceiptMutation { MissingCase; SkippedRow; DuplicateCase; WrongRun; MissingTrxRow; HostStillRunning; ForeignTrx }
 $names = @('ATTRIBUTION_MODE','ATTRIBUTION_PLAN','ATTRIBUTION_INVENTORY','ATTRIBUTION_OUTPUT','ATTRIBUTION_RUN',
     'ATTRIBUTION_OWNER','ATTRIBUTION_TOKEN','ATTRIBUTION_SOURCE_TREE','ATTRIBUTION_PROFILE_HASH','ATTRIBUTION_WORKLOAD')
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $null) }
@@ -80,6 +80,8 @@ try {
         'PrototypeTests.DeferredTests.AllRows(value: 1)','PrototypeTests.DeferredTests.AllRows(value: 2)')
     Check ((($rows.testName | Sort-Object) -join '|') -ceq (($expected | Sort-Object) -join '|')) 'Runner did not execute exactly the selected methods and every theory row.'
 
+    $repeat = Run selected-repeat ExecutePlan $partial
+    Verify $repeat $partial $inventory (Join-Path $root 'repeat-verification.json')
     foreach ($mutation in [Enum]::GetValues[ReceiptMutation]()) {
         $name = "receipt-$mutation"
         $directory = Join-Path $root $name
@@ -94,6 +96,7 @@ try {
             ([ReceiptMutation]::DuplicateCase) { $changed.Cases += $changed.Cases[0] }
             ([ReceiptMutation]::WrongRun) { $changed.Run = [guid]::NewGuid().ToString('N') }
             ([ReceiptMutation]::HostStillRunning) { $changed.ProcessId = $PID }
+            ([ReceiptMutation]::ForeignTrx) { [xml]$changedTrx = Get-Content (Join-Path $repeat.directory 'results.trx') -Raw }
             ([ReceiptMutation]::MissingTrxRow) {
                 $row = $changedTrx.SelectSingleNode('//*[local-name()="UnitTestResult"]')
                 [void]$row.ParentNode.RemoveChild($row)

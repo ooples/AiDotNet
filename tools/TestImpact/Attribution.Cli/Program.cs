@@ -80,5 +80,5 @@ switch (command)
     }
 }
 
-static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocument<T>(File.ReadAllText(path));
+static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocumentFile<T>(path);
 enum Command { Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse, ImportWorkflow }
