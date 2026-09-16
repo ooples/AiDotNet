@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -44,6 +45,13 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MERT: Acoustic Music Understanding Model with Large-Scale Self-supervised Training", "https://doi.org/10.48550/arXiv.2306.00107", Year = 2024, Authors = "Yizhi Li, Ruibin Yuan, Ge Zhang, Yinghao Ma, Xingran Chen, Hanzhi Yin, Chenghua Lin, Anton Ragni, Emmanouil Benetos, Norbert Gyenge, Roger Sherr, Jie Fu")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4,
+                Source = "Li et al. 2023, Sec. 4: the base model uses a learning rate of 5e-4 and the "
+                        + "large model 1.5e-3. No reference batch size is declared because the paper "
+                        + "gives the effective batch as 1.5 and 5.5 hours of audio rather than as a "
+                        + "count of examples. The learning rate sweep over 1e-4 to 1e-2 elsewhere in the "
+                        + "paper belongs to its downstream probing setup, not to this model's "
+                        + "pre-training.")]
 public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
@@ -97,7 +105,9 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
     {
         _options = options ?? new MERTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

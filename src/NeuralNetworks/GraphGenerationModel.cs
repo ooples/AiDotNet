@@ -1,4 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -73,6 +74,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
+                Source = "Kipf and Welling 2016, Sec. 4: trained for 200 iterations using Adam with a "
+                        + "learning rate of 0.01.")]
 public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphGenerationModelOptions _options;
@@ -260,7 +264,8 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             UseAMSGrad = useAMSGrad,
         };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts));
         _random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize variational layer weights

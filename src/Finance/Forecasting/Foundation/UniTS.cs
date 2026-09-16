@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -82,6 +83,20 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniTS: A Unified Multi-Task Time Series Model", "https://arxiv.org/abs/2403.00131", Year = 2024, Authors = "Shanghua Gao, Teddy Koker, Owen Queen, Thomas Hartvigsen, Theodoros Tsiligkaridis, Marinka Zitnik")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 6.4e-3, ReferenceBatchSize = 4096,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Gao et al. 2024, Sec. 4: self-supervised pre-training runs 10 epochs at an "
+                        + "effective batch size of 4096 with an initial learning rate of 6.4e-3 under a "
+                        + "cosine decay schedule.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3.2e-2, ReferenceBatchSize = 1024,
+                Schedule = LearningRateSchedulerType.MultiStep,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Gao et al. 2024, Sec. 4: supervised training runs 5 epochs using gradient "
+                        + "accumulation for an effective batch size of 1024, starting at a learning rate "
+                        + "of 3.2e-2 with a multi-step decayed schedule. The decay milestones are not "
+                        + "stated, so none are declared.")]
 public partial class UniTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -317,7 +332,9 @@ public partial class UniTS<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -363,7 +380,9 @@ public partial class UniTS<T> : ForecastingModelBase<T>
 
         _useNativeMode = true;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;

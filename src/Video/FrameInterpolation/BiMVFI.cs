@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2412.11365",
     Year = 2024,
     Authors = "Wonyong Seo, Jihyong Oh, Munchurl Kim")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 32,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Park et al. 2024, Sec. 4: the AdamW optimizer with a cosine annealing "
+                        + "scheduler, a batch size of 32 and an initial learning rate of 1e-4 over 400 "
+                        + "epochs.")]
 public partial class BiMVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -91,7 +98,9 @@ public partial class BiMVFI<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new BiMVFIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

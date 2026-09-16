@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -92,6 +93,12 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Decoder-Only Foundation Model for Time-Series Forecasting", "https://arxiv.org/abs/2310.10688", Year = 2024, Authors = "Abhimanyu Das, Weihao Kong, Rajat Sen, Yichen Zhou")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-4, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Das et al. 2024, Sec. 4: training uses layer norm and a cosine decay learning "
+                        + "rate schedule with a peak learning rate of 5e-4. The optimizer is left "
+                        + "unspecified because the paper never names one -- the only Adam in its text is "
+                        + "an author surname.")]
 public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
@@ -313,7 +320,9 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -365,7 +374,9 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;

@@ -13259,7 +13259,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // rising to step 2 = 0.646797, the same first-update hump Vocos records at the
                     // same 2e-4 rate. Fifteen steps clear it (measured ~2.5 s for the pair, so the
                     // added steps are free). The DEFAULT 1 % decrease threshold is untouched.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // AudioPaLM now uses its declared Adafactor rate (1e-4), not the old
+                    // AdamW default (1e-3). One update no longer spans the required 1% decrease.
+                    // Keep the real optimizer and unchanged threshold; measure the same bounded
+                    // 15-step trajectory as the other conservative TTS recipes in this branch.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "AudioPaLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling

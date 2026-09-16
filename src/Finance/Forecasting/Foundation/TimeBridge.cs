@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -62,6 +63,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TimeBridge: Non-Stationarity Matters for Long-term Forecasting", "https://arxiv.org/abs/2410.04442")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.Adam, SearchedValues = [1e-3, 1e-4, 5e-4],
+                Provenance = RecipeProvenance.Searched,
+                Source = "Liu et al. 2024, Sec. 4: the Adam optimizer with a learning rate selected "
+                        + "from {1e-3, 1e-4, 5e-4}. No single rate is declared because the paper states "
+                        + "a search space rather than a value; the candidates are recorded instead.")]
 public partial class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -189,14 +195,15 @@ public partial class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
         TimeBridgeOptions<T> options)
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = options.LearningRate,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0
+                }));
     }
 
     #endregion
