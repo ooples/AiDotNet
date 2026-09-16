@@ -1,6 +1,8 @@
 namespace AiDotNet.TestImpact;
 
 public enum RuntimeEffectScope { FreshReturnedObject }
+public enum OwnedReturnUseStatus { DiscardedLocally, Escapes, NeedsBoundaryProof }
+public sealed record OwnedReturnUse(OwnedReturnUseStatus Status, int Instruction, string[] UnresolvedCalls);
 public sealed record OwnedBooleanWrite(string Field, int Instruction, bool Value);
 
 // Describes a bounded change footprint, NOT purity of the whole method. Its

@@ -46,39 +46,57 @@ internal static class RuntimeEffectsExperiment
         using var tests = AssemblyDefinition.ReadAssembly(Path.Combine(after, testFiles[0]), new ReaderParameters { AssemblyResolver = newResolver });
         var linked = new HashSet<string>([Path.Combine(after, binaries[0]), Path.Combine(after, testFiles[0])], StringComparer.OrdinalIgnoreCase);
         var calls = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var sourceMethods = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
         foreach (AssemblyDefinition assembly in new[] { tests, newAssembly })
         {
             string hash = newFiles[Path.GetFileName(assembly.MainModule.FileName)];
             var ids = Types(assembly.MainModule.Types).SelectMany(type => type.Methods).ToDictionary(
                 method => $"{hash}:{method.MetadataToken.ToInt32():X8}", DependencyGraph.Stable, StringComparer.Ordinal);
+            foreach (MethodDefinition method in Types(assembly.MainModule.Types).SelectMany(type => type.Methods))
+                sourceMethods.Add(DependencyGraph.Stable(method), method);
             foreach (MethodDependencyNode node in DependencyGraph.Read(assembly, hash, linked).Methods)
                 calls.Add(ids[node.Key], node.LocalCalls.Select(call => ids.TryGetValue(call, out string? id) ? id : call).ToArray());
         }
         SourceLifecycleMap lifecycle = XunitLifecycleReader.Read(tests).Map;
-        bool Reaches(IEnumerable<string> roots)
+        HashSet<string> Reachable(IEnumerable<string> roots)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var pending = new Stack<string>(roots);
             while (pending.TryPop(out string? current))
             {
-                if (current == changedMethod) return true;
                 if (!seen.Add(current)) continue;
                 if (calls.TryGetValue(current, out string[]? children)) foreach (string child in children) pending.Push(child);
             }
-            return false;
+            return seen;
         }
         string[] candidates = owners.Where(owner =>
         {
             SourceTestLifecycle? test = lifecycle.Tests.SingleOrDefault(test => test.Owner == owner);
-            return test is null || !test.Complete || Reaches(test.Roots.Concat(lifecycle.GroupRoots));
+            return test is null || !test.Complete || Reachable(test.Roots.Concat(lifecycle.GroupRoots)).Contains(changedMethod);
         }).Order(StringComparer.Ordinal).ToArray();
+        var consumerUses = candidates.Select(owner =>
+        {
+            SourceTestLifecycle? test = lifecycle.Tests.SingleOrDefault(test => test.Owner == owner);
+            HashSet<string> reachable = Reachable((test?.Roots ?? []).Concat(lifecycle.GroupRoots));
+            var uses = new List<object>();
+            foreach (MethodDefinition caller in reachable.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id]).Where(method => method.HasBody))
+            for (int index = 0; index < caller.Body.Instructions.Count; index++)
+            {
+                Instruction instruction = caller.Body.Instructions[index];
+                if (instruction.OpCode.Code is not (Code.Call or Code.Callvirt) || instruction.Operand is not MethodReference target ||
+                    target.Name != newMethod.Name || target.DeclaringType.GetElementType().FullName != newMethod.DeclaringType.FullName)
+                    continue;
+                uses.Add(new { Caller = DependencyGraph.Stable(caller), Use = OwnedReturnUseReader.Read(caller, index) });
+            }
+            return new { Owner = owner, Calls = uses.ToArray(), MissingCallsiteProof = uses.Count == 0 };
+        }).ToArray();
         // Recheck immutable inputs after reading; this is an experiment, not a
         // provenance or reuse certificate, even if every control later passes.
         if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
             !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
             throw new InvalidDataException("Experiment inputs changed during analysis.");
         return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect,
-            Candidates = candidates, DiscoveredMethods = owners.Length, RequiresFullControl = true,
+            Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }
 
