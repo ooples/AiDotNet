@@ -364,6 +364,8 @@ jobs:
           $auditTools = Join-Path $env:RUNNER_TEMP 'test-impact-audit-tools'
           New-Item -ItemType Directory -Path $auditTools -Force | Out-Null
           Copy-Item tools/TestImpact/Select-Shards.ps1 (Join-Path $auditTools 'Select-Shards.ps1')
+          Copy-Item tools/TestImpact/CiWorkloadKinds.ps1 (Join-Path $auditTools 'CiWorkloadKinds.ps1')
+          Copy-Item tools/TestImpact/AuxiliaryInventory.ps1 (Join-Path $auditTools 'AuxiliaryInventory.ps1')
           Copy-Item tools/TestImpact/Measure-SelectionMiss.ps1 (Join-Path $auditTools 'Measure-SelectionMiss.ps1')
           Copy-Item tools/TestImpact/New-ShardMapCertificate.ps1 (Join-Path $auditTools 'New-ShardMapCertificate.ps1')
 
@@ -376,7 +378,7 @@ jobs:
           # heuristic would never be measured against a complete matrix.
           $auditManifest = Join-Path $env:RUNNER_TEMP 'audit-shard-manifest.json'
           $auditShards = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
-          ConvertTo-Json -InputObject @($auditShards | Select-Object name, project, filter) -Depth 3 |
+          ConvertTo-Json -InputObject @($auditShards) -Depth 5 |
             Set-Content -LiteralPath $auditManifest -Encoding utf8
 
           $audit = $null
@@ -388,14 +390,24 @@ jobs:
           # are historical in this complete master run, so BaseSha equals HEAD: runtime deltas are
           # still replayed from the map SHA, but merged CI-control churn cannot wedge every later PR.
           if (Test-Path prevmap/shard-map.json) {
+            . (Join-Path $auditTools 'CiWorkloadKinds.ps1')
+            $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
+            $extension = Complete-CiMapWorkloads -Map $previousMap -Manifest $auditShards
+            $historicalMapFile = 'prevmap/shard-map.json'
+            if ($extension.Added.Count -gt 0) {
+              # Replay ordinary historical coverage with new auxiliary workloads mandatory.
+              # Do not claim that the old source measured these newly introduced workloads.
+              $extension.Map | ConvertTo-Json -Depth 12 -Compress | Set-Content prevmap/selection-map.json
+              $historicalMapFile = 'prevmap/selection-map.json'
+            }
             & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
                 -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
-                -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json `
+                -MapFile $historicalMapFile -OutcomesFile outcomes.json `
                 -CurrentChangeBaseSha $sourceSha -ShardManifestFile $auditManifest `
                 -OutFile historical-audit.json
             $auditExit = $LASTEXITCODE
             & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
-                -MapFile prevmap/shard-map.json -AuditFile historical-audit.json `
+                -MapFile $historicalMapFile -AuditFile historical-audit.json `
                 -OutcomesFile outcomes.json `
                 -CandidateMapRunId ([long] '${{ steps.source.outputs.map_run_id }}') `
                 -AuditSourceRunId ([long] '${{ steps.source.outputs.run_id }}') `
@@ -414,6 +426,20 @@ jobs:
               $audit = Get-Content historical-audit.json -Raw | ConvertFrom-Json
               $basis = 'historical replay'
               $certified = $true
+            }
+            if ($auditExit -eq 0) {
+              $candidate = Get-Content shard-map.json -Raw | ConvertFrom-Json
+              $auxiliaryNames = @($auditShards | Where-Object {
+                (Get-CiWorkloadKind $_) -ne [CiWorkloadKind]::Tests
+              } | ForEach-Object name)
+              $freshAuxiliaryCoverage = @($candidate.knownShards | Where-Object { $_ -cin $auxiliaryNames }).Count -gt 0
+              if ($extension.Added.Count -gt 0 -or $freshAuxiliaryCoverage) {
+                # A historical miss still blocks certification above. Once the old selector
+                # passes its replay, certify the complete freshly measured candidate below.
+                # Otherwise the old mandatory auxiliary set could persist forever, even after
+                # later source runs finally supplied successful worker-inclusive coverage.
+                $certified = $false
+              }
             }
           }
 

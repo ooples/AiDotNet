@@ -1317,7 +1317,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_Constructor_InitializesCorrectly()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
 
         Assert.Equal("TestDashboard", dashboard.Name);
         Assert.False(dashboard.IsRunning);
@@ -1326,7 +1326,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_Start_SetsIsRunning()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
 
         dashboard.Start();
 
@@ -1338,7 +1338,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_LogScalar_StoresValue()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
 
         dashboard.LogScalar("loss", step: 1, value: 0.5);
@@ -1355,7 +1355,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_LogScalars_StoresMultipleValues()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
 
         dashboard.LogScalars(new Dictionary<string, double>
@@ -1375,7 +1375,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_LogHistogram_StoresValues()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
 
         var values = Enumerable.Range(0, 100).Select(i => (double)i).ToArray();
@@ -1391,7 +1391,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_LogText_StoresText()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
 
         dashboard.LogText("summary", step: 1, text: "Training started successfully");
@@ -1403,7 +1403,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ConsoleDashboard_Clear_RemovesAllData()
     {
-        var dashboard = new ConsoleDashboard(name: "TestDashboard");
+        using var dashboard = new ConsoleDashboard(name: "TestDashboard");
         dashboard.Start();
 
         dashboard.LogScalar("loss", 1, 0.5);

@@ -19,6 +19,16 @@ if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
 }
 $cases = @(
     [pscustomobject]@{
+        Name = 'execution-impact-proof-commented'
+        Reason = 'CI execution-impact contracts must execute'
+        Content = $workflow.Replace('./tools/TestImpact/Test-CiPolicyImpact.ps1', '# ./tools/TestImpact/Test-CiPolicyImpact.ps1')
+    },
+    [pscustomobject]@{
+        Name = 'execution-impact-failure-ignored'
+        Reason = 'CI execution-impact contracts must execute'
+        Content = $workflow.Replace("throw 'CI execution-impact proof failed'", "Write-Warning 'CI execution-impact proof failed'")
+    },
+    [pscustomobject]@{
         Name = 'superseded-push-green'
         Reason = 'superseded push must explicitly block'
         Content = $workflow.Replace("if: steps.resolve.outputs.blocked == 'true'", "if: steps.resolve.outputs.blocked == 'false'")
@@ -166,6 +176,24 @@ foreach ($pair in @(
         Name = ($pair.Import -replace ' ', '-') + '-invocation-commented'
         Reason = 'delta importer.*matching download'
         Content = $workflow.Replace($import, $import.Replace($invocation, '          # ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1'))
+    }
+}
+foreach ($binding in @(
+    @{ Job = 'parameter-enumeration-sweep'; Flag = 'requires_sweeps' },
+    @{ Job = 'model-shape-conformance-windows'; Flag = 'requires_shapes' }
+)) {
+    $job = [regex]::Match($workflow, '(?ms)^  ' + $binding.Job + ':\r?\n.*?(?=^  [a-z][a-z0-9-]*:|\z)').Value
+    $flag = "fromJSON(needs.select-shards.outputs.$($binding.Flag))"
+    foreach ($mutation in @(
+        @{ Name = 'gate-removed'; Content = $job.Replace(" && $flag", '') },
+        @{ Name = 'gate-comment-decoy'; Content = $job.Replace(" && $flag", '') + "`n    # $flag`n" },
+        @{ Name = 'worker-link-commented'; Content = $job.Replace('          ./tools/TestImpact/Connect-WorkerCoverage.ps1', '          # ./tools/TestImpact/Connect-WorkerCoverage.ps1') }
+    )) {
+        $cases += [pscustomobject]@{
+            Name = "$($binding.Job)-$($mutation.Name)"
+            Reason = 'selected workload partition|parent-only coverage'
+            Content = $workflow.Replace($job, $mutation.Content)
+        }
     }
 }
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
