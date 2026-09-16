@@ -262,6 +262,10 @@ foreach ($output in 'execute_validation', 'execute_quality') {
 }
 Assert-Contract ($resolver.Contains('steps.resolve.outputs.reuse_scope || steps.defaults.outputs.reuse_scope')) `
     'validation-source does not publish the typed reuse scope'
+$policySelfTest = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Verify the impact tooling'
+Assert-Contract ($policySelfTest -match '(?m)^\s+\./tools/TestImpact/Test-CiPolicyImpact\.ps1\s*\r?$' -and
+    $policySelfTest -match '(?m)^\s+if \(\$LASTEXITCODE -ne 0\) \{ throw ''CI execution-impact proof failed'' \}\s*\r?$') `
+    'CI execution-impact contracts must execute and block failed policy validation'
 $resolveStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve exact-tree PR run'
 Assert-Contract ([bool] $resolveStep) `
     'the exact-tree resolver step is absent'
@@ -309,6 +313,42 @@ Assert-Contract ($validationReuseResolverText.Contains("'--paginate', '--slurp'"
 
 $selectorJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
 $selectorHeader = Get-JobHeader -JobBlock $selectorJob
+foreach ($binding in @(
+    @{ Job = 'test-net10-sharded'; Flag = 'requires_tests'; Matrix = 'matrix' },
+    @{ Job = 'parameter-enumeration-sweep'; Flag = 'requires_sweeps'; Matrix = 'parameter_matrix' },
+    @{ Job = 'model-shape-conformance-windows'; Flag = 'requires_shapes'; Matrix = 'shape_matrix' }
+)) {
+    $workloadJob = Get-JobBlock -WorkflowText $validation -Job $binding.Job
+    $workloadHeader = Get-JobHeader -JobBlock $workloadJob
+    $activeIf = [regex]::Matches($workloadHeader, '(?m)^    if:[^\r\n]+')
+    Assert-Contract ($activeIf.Count -eq 1 -and
+        $activeIf[0].Value.Contains("&& fromJSON(needs.select-shards.outputs.$($binding.Flag)) &&") -and
+        -not $activeIf[0].Value.Contains('||')) `
+        "$($binding.Job) is not gated by its selected workload partition"
+    $matrixInput = [regex]::Matches($workloadHeader, '(?m)^        (?:include|shard):[^\r\n]+')
+    Assert-Contract ($matrixInput.Count -eq 1 -and
+        $matrixInput[0].Value.Trim() -cmatch ('^(?:include|shard): \$\{\{ fromJSON\(needs\.select-shards\.outputs\.' +
+            [regex]::Escape($binding.Matrix) + '\) \}\}$')) `
+        "$($binding.Job) uses an independent matrix instead of the selected workload partition"
+}
+foreach ($consumer in @('test-regression-analysis', 'ci-test-analysis', 'sonarcloud')) {
+    $consumerHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job $consumer)
+    foreach ($producer in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
+        Assert-Contract (Test-JobDependency -JobHeader $consumerHeader -Dependency $producer) `
+            "$consumer can consume incomplete auxiliary artifacts before $producer finishes"
+    }
+}
+foreach ($producer in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
+    $job = Get-JobBlock -WorkflowText $validation -Job $producer
+    $link = Get-StepBlock -JobBlock $job -Step 'Connect isolated worker coverage'
+    Assert-Contract ($link -cmatch '(?m)^          \./tools/TestImpact/Connect-WorkerCoverage\.ps1') `
+        "$producer can publish parent-only coverage without linking the isolated worker"
+    $evidence = Get-StepBlock -JobBlock $job -Step 'Write auxiliary shard evidence'
+    Assert-Contract ($evidence -cmatch '(?m)^          \./tools/TestImpact/Write-AuxiliaryEvidence\.ps1') `
+        "$producer does not use the validated auxiliary evidence writer"
+    Assert-Contract ($job -cmatch '(?m)^    name: Tests \(\$\{\{ matrix\.framework \}\}\) - \$\{\{ matrix\.name \}\}') `
+        "$producer is invisible to the complete workload audit"
+}
 Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
     'select-shards does not depend on validation-source'
 Assert-Contract ($selectorHeader.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `
@@ -477,7 +517,7 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('enum ArtifactRequestDis
     'artifact retry state is represented by strings instead of a closed type'
 Assert-Contract ($requiredArtifactReceiverText.Contains('actions/artifacts/$ArtifactId/zip')) `
     'required artifact transport does not use the immutable-ID archive endpoint'
-Assert-Contract ($requiredArtifactReceiverText.Contains("--proto-redir '=https'")) `
+Assert-Contract ($requiredArtifactReceiverText.Contains("'--proto-redir', '=https'")) `
     'required artifact transport permits a redirect to downgrade from HTTPS'
 Assert-Contract (-not $requiredArtifactReceiverText.Contains('ArtifactService/ListArtifacts')) `
     'required artifact transport still performs the rate-limited artifact-list lookup'
@@ -485,7 +525,7 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('Test-ArtifactDigest')) 
     'direct artifact transport does not validate the upload digest before extraction'
 Assert-Contract ($requiredArtifactReceiverText.Contains('secondary rate limit')) `
     'artifact transport does not distinguish transient throttling from a permission denial'
-Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $delay')) `
+Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $seconds')) `
     'artifact transport retries immediately instead of applying its tested backoff policy'
 Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
     'native-command error handling can bypass the typed artifact retry policy'
