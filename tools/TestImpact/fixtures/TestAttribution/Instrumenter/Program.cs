@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using AttributionRuntime;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -38,10 +40,10 @@ if (assembly.Name.HasPublicKey || AllTypes(assembly.MainModule.Types).SelectMany
     .Where(method => method.HasBody).SelectMany(method => method.Body.Instructions)
     .Any(instruction => instruction.Operand is MethodReference reference &&
         reference.DeclaringType.FullName == typeof(Tracker).FullName && reference.Name is
-            nameof(Tracker.Hit) or nameof(Tracker.ObserveTask) or nameof(Tracker.CheckProcessStart) or
+            nameof(Tracker.Hit) or nameof(Tracker.HitMethod) or nameof(Tracker.ObserveTask) or nameof(Tracker.CheckProcessStart) or
             nameof(Tracker.UntrackedProcess) or nameof(Tracker.UntrackedConcurrency)))
     throw new InvalidOperationException("Signed or already instrumented inputs are unsupported by this prototype.");
-var hit = assembly.MainModule.ImportReference(typeof(Tracker).GetMethod(nameof(Tracker.Hit))
+var hit = assembly.MainModule.ImportReference(typeof(Tracker).GetMethod(nameof(Tracker.HitMethod))
     ?? throw new InvalidOperationException("Missing tracking method."));
 var observe = assembly.MainModule.ImportReference(typeof(Tracker).GetMethod(nameof(Tracker.ObserveTask))
     ?? throw new InvalidOperationException("Missing task observer."));
@@ -98,9 +100,10 @@ foreach (MethodDefinition method in type.Methods)
     // Method entry is deliberately conservative: all its source spans are dependencies,
     // not claims that each line/branch executed. Async MoveNext is instrumented as well.
     Instruction entry = method.Body.Instructions[0];
-    il.InsertBefore(entry, il.Create(OpCodes.Ldstr, key));
+    il.InsertBefore(entry, il.Create(OpCodes.Ldstr, inputHash));
+    il.InsertBefore(entry, il.Create(OpCodes.Ldc_I4, method.MetadataToken.ToInt32()));
     il.InsertBefore(entry, il.Create(OpCodes.Call, hit));
-    method.Body.MaxStackSize = Math.Max(method.Body.MaxStackSize, 1);
+    method.Body.MaxStackSize = Math.Max(method.Body.MaxStackSize, 2);
     methods.Add(new
     {
         Key = key, Name = method.FullName,
@@ -111,10 +114,16 @@ if (mode == InstrumentationMode.Methods && methods.Count == 0) throw new Invalid
 foreach (MethodDefinition method in AllTypes(assembly.MainModule.Types).SelectMany(type => type.Methods).Where(method => method.HasBody))
     method.Body.OptimizeMacros();
 assembly.Write(output, new WriterParameters { WriteSymbols = true });
+int inputStringHeapBytes = UserStringHeapBytes(input);
+int outputStringHeapBytes = UserStringHeapBytes(output);
+if (outputStringHeapBytes > 0x00ffffff)
+    throw new InvalidDataException("Instrumented user-string heap exceeds the safely addressable metadata range.");
 string outputHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(output)));
 File.WriteAllText(output + ".map.json", JsonSerializer.Serialize(new
 {
-    Schema = 1, InputHash = inputHash, PdbHash = pdbHash, OutputHash = outputHash, Methods = methods, TaskSites = taskSites, BoundarySites = boundarySites, Mode = mode.ToString(), DependencyGraph = dependencyGraph
+    Schema = 1, InputHash = inputHash, PdbHash = pdbHash, OutputHash = outputHash,
+    InputStringHeapBytes = inputStringHeapBytes, OutputStringHeapBytes = outputStringHeapBytes,
+    Methods = methods, TaskSites = taskSites, BoundarySites = boundarySites, Mode = mode.ToString(), DependencyGraph = dependencyGraph
 }, new JsonSerializerOptions { WriteIndented = true }));
 Console.WriteLine($"Instrumented {methods.Count} source-backed methods and {taskSites} task sites into private copy {output}");
 
@@ -125,6 +134,13 @@ static IEnumerable<TypeDefinition> AllTypes(IEnumerable<TypeDefinition> roots)
         yield return type;
         foreach (TypeDefinition nested in AllTypes(type.NestedTypes)) yield return nested;
     }
+}
+
+static int UserStringHeapBytes(string path)
+{
+    using var stream = File.OpenRead(path);
+    using var pe = new PEReader(stream);
+    return System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe).GetHeapSize(HeapIndex.UserString);
 }
 
 static void InsertBeforeIncludingTargets(MethodDefinition method, Instruction target, params Instruction[] inserted)

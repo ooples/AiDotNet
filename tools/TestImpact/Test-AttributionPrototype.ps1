@@ -41,7 +41,7 @@ function Assert-Evidence {
     $reports = @(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.json' -File | ForEach-Object {
         try { $value = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
         catch { Reject ReportInventory 'Malformed attribution report.' }
-        if ($value.Schema -ne 1 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
+        if ($value.Schema -ne 2 -or $_.BaseName -cne $value.Token -or $value.Kind -cnotin @('TestHost', 'Worker')) {
             Reject ReportInventory 'Unsupported report or filename.'
         }
         $value
@@ -64,6 +64,26 @@ function Assert-Evidence {
         }
     }
     $hostReport = $hosts[0]
+    $caseIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $recordedNames = [Collections.Generic.List[string]]::new()
+    foreach ($entry in $hostReport.Cases) {
+        if ([string]::IsNullOrWhiteSpace([string] $entry.Case.Id) -or -not $caseIds.Add([string] $entry.Case.Id) -or
+            $entry.Case.Owner -cnotin $expectedOwners -or $entry.Finished -isnot [bool] -or -not $entry.Finished -or
+            $entry.Case.Kind -cnotin @('Enumerated', 'DeferredOrCustom') -or @($entry.Results).Count -eq 0 -or
+            ($entry.Case.Kind -ceq 'Enumerated' -and @($entry.Results).Count -ne 1)) {
+            Reject ReportInventory 'Invalid or incomplete independently discovered case ledger.'
+        }
+        foreach ($result in $entry.Results) {
+            if ($result.Outcome -cne 'Passed' -or [string]::IsNullOrWhiteSpace([string] $result.DisplayName) -or
+                ($entry.Case.Kind -ceq 'Enumerated' -and $result.DisplayName -cne $entry.Case.DisplayName)) {
+                Reject ReportInventory 'Case ledger contains an invalid result.'
+            }
+            $recordedNames.Add([string] $result.DisplayName)
+        }
+    }
+    if ((($recordedNames | Sort-Object) -join '|') -cne ($actual -join '|')) {
+        Reject ReportInventory 'Case ledger and independent TRX results differ.'
+    }
     if (($expectedOwners -join '|') -cne (($hostReport.CompletedOwners | Sort-Object -Unique) -join '|')) {
         Reject MissingOwner 'Execution results and completed ownership boundaries differ.'
     }
@@ -77,7 +97,7 @@ function Assert-Evidence {
         if ($ticket.Completed -isnot [bool] -or -not $ticket.Completed -or
             $ticket.Run -cne $Run -or $ticket.Owner -cnotin $expectedOwners -or $matching.Count -ne 1 -or
             $matching[0].WorkerOwner -cne $ticket.Owner -or @($matching[0].CompletedOwners).Count -ne 1 -or
-            $matching[0].CompletedOwners[0] -cne $ticket.Owner -or @($matching[0].Workers).Count -ne 0) {
+            $matching[0].CompletedOwners[0] -cne $ticket.Owner -or @($matching[0].Workers).Count -ne 0 -or @($matching[0].Cases).Count -ne 0) {
             Reject MissingWorker 'Unmatched/incomplete worker ownership or unsupported nested worker.'
         }
     }
@@ -100,6 +120,7 @@ $positive = @('PrototypeTests.MethodTests.First(value: 1)', 'PrototypeTests.Meth
     'PrototypeTests.MethodTests.PotentialCaller',
     'PrototypeTests.InheritedLeftTests.Inherited', 'PrototypeTests.InheritedRightTests.Inherited',
     'PrototypeTests.CleanupTests.CleanupJoinsBackground',
+    'PrototypeTests.DeferredTests.AllRows(value: 1)', 'PrototypeTests.DeferredTests.AllRows(value: 2)',
     'PrototypeTests.ParallelLeftTests.Left', 'PrototypeTests.ParallelRightTests.Right', 'PrototypeTests.WorkerTests.Complete')
 $runs = [Collections.Generic.List[object]]::new()
 $rejections = [Collections.Generic.List[string]]::new()
@@ -183,8 +204,14 @@ try {
     $plainNames = @($plainTrx.SelectNodes('//*[local-name()="UnitTestResult"]') | ForEach-Object { [string] $_.testName } | Sort-Object)
     Check (($plainNames -join '|') -ceq (($positive | Sort-Object) -join '|')) 'Plain control inventory differs.'
     $hostReport = @($reports | Where-Object { $_.Kind -ceq 'TestHost' })[0]
+    $deferred = @($hostReport.Cases | Where-Object { $_.Case.Owner -ceq 'PrototypeTests:PrototypeTests.DeferredTests.AllRows' })
+    Check ($deferred.Count -eq 1 -and $deferred[0].Case.Kind -ceq 'DeferredOrCustom' -and $deferred[0].Results.Count -eq 2) `
+        'Deferred theory was not tracked as one discovered case with both actual rows.'
     Check ($hostReport.PeakScopes -ge 2) 'No actual test-scope overlap observed.'
     $mapData = Get-Content $map -Raw | ConvertFrom-Json
+    Check ($mapData.OutputStringHeapBytes -le 0x00ffffff -and
+        ($mapData.OutputStringHeapBytes - $mapData.InputStringHeapBytes) -le 256) `
+        'Instrumentation added per-method user strings instead of one shared module identity.'
     $potential = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match '::UntakenBranch\(' })
     $leftNode = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'Operations::Left\(' })
     Check ($potential.Count -eq 1 -and $leftNode.Count -eq 1 -and $leftNode[0].Key -cin $potential[0].LocalCalls) `
@@ -255,7 +282,8 @@ try {
     Expect-Rejected stale-binary Binary { Assert-Evidence $collected.directory $collected.run $positive $sourceAssembly $map }
     Expect-Rejected missing-test Results { Assert-Evidence $collected.directory $collected.run ($positive + 'PrototypeTests.Missing.Test') $instrumented $map }
     # Mutate private copies of real evidence, not hand-written success fixtures.
-    foreach ($mutation in @('missing-artifact', 'pending-artifact', 'malformed-artifact', 'unknown-method', 'skipped-case', 'wrong-worker-owner')) {
+    foreach ($mutation in @('missing-artifact', 'pending-artifact', 'malformed-artifact', 'unknown-method', 'skipped-case', 'wrong-worker-owner',
+        'missing-case-ledger', 'duplicate-case-ledger', 'unfinished-case-ledger', 'skipped-case-ledger', 'zero-test-results')) {
         $mutated = Join-Path $root "mutant-$mutation"
         Copy-Item -LiteralPath $collected.directory -Destination $mutated -Recurse
         $hostFile = Join-Path $mutated "attribution/$($hostReport.Token).json"
@@ -269,6 +297,16 @@ try {
             }
             'pending-artifact' { Move-Item -LiteralPath $workerFile -Destination ($workerFile + '.pending') }
             'malformed-artifact' { [IO.File]::WriteAllText($workerFile, '{truncated') }
+            { $_ -in @('missing-case-ledger', 'duplicate-case-ledger', 'unfinished-case-ledger', 'skipped-case-ledger') } {
+                $changed = Get-Content -LiteralPath $hostFile -Raw | ConvertFrom-Json
+                switch ($mutation) {
+                    'missing-case-ledger' { $changed.Cases = @($changed.Cases | Select-Object -Skip 1) }
+                    'duplicate-case-ledger' { $changed.Cases = @($changed.Cases) + @($changed.Cases[0]) }
+                    'unfinished-case-ledger' { $changed.Cases[0].Finished = $false }
+                    'skipped-case-ledger' { $changed.Cases[0].Results[0].Outcome = 'Skipped' }
+                }
+                $changed | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $hostFile
+            }
             'unknown-method' {
                 $changed = Get-Content -LiteralPath $hostFile -Raw | ConvertFrom-Json
                 $changed.Hits[0].Methods = @('unknown:method')
@@ -279,6 +317,15 @@ try {
                 $trxPath = Join-Path $mutated 'results.trx'
                 [xml] $changedTrx = Get-Content -LiteralPath $trxPath -Raw
                 $changedTrx.SelectNodes('//*[local-name()="UnitTestResult"]')[0].outcome = 'NotExecuted'
+                $changedTrx.Save($trxPath)
+                $expectedReason = [PrototypeRejection]::Results
+            }
+            'zero-test-results' {
+                $trxPath = Join-Path $mutated 'results.trx'
+                [xml] $changedTrx = Get-Content -LiteralPath $trxPath -Raw
+                foreach ($result in @($changedTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))) {
+                    [void] $result.ParentNode.RemoveChild($result)
+                }
                 $changedTrx.Save($trxPath)
                 $expectedReason = [PrototypeRejection]::Results
             }

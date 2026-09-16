@@ -13,6 +13,15 @@ public class AttributionTestFramework(IMessageSink diagnosticSink) : XunitTestFr
     protected override ITestFrameworkExecutor CreateExecutor(AssemblyName assemblyName) => Tracker.IsEnabled
         ? new AttributionExecutor(assemblyName, SourceInformationProvider, DiagnosticMessageSink)
         : base.CreateExecutor(assemblyName);
+
+    internal static string Owner(IXunitTestCase testCase)
+    {
+        if (testCase.TestMethod.TestClass.Class is not IReflectionTypeInfo type)
+            throw new InvalidOperationException("Missing concrete reflection test type.");
+        string assembly = type.Type.Assembly.GetName().Name ?? throw new InvalidOperationException("Missing test assembly identity.");
+        string concreteType = type.Type.FullName ?? throw new InvalidOperationException("Missing concrete test type.");
+        return $"{assembly}:{concreteType}.{testCase.TestMethod.Method.Name}";
+    }
 }
 
 internal sealed class AttributionExecutor(AssemblyName assemblyName, ISourceInformationProvider source,
@@ -21,8 +30,36 @@ internal sealed class AttributionExecutor(AssemblyName assemblyName, ISourceInfo
     protected override async void RunTestCases(IEnumerable<IXunitTestCase> testCases,
         IMessageSink executionSink, ITestFrameworkExecutionOptions options)
     {
-        using var runner = new AttributionAssemblyRunner(TestAssembly, testCases, DiagnosticMessageSink, executionSink, options);
+        IXunitTestCase[] inventory = testCases.ToArray();
+        Tracker.RegisterCases(inventory.Select(test => new DiscoveredCase(test.UniqueID,
+            AttributionTestFramework.Owner(test), test.DisplayName, test.GetType() == typeof(XunitTestCase)
+                ? DiscoveredCaseKind.Enumerated : DiscoveredCaseKind.DeferredOrCustom)));
+        using var runner = new AttributionAssemblyRunner(TestAssembly, inventory, DiagnosticMessageSink,
+            new AttributionExecutionSink(executionSink), options);
         await runner.RunAsync();
+    }
+}
+
+internal sealed class AttributionExecutionSink(IMessageSink next) : IMessageSink
+{
+    public bool OnMessage(IMessageSinkMessage message)
+    {
+        switch (message)
+        {
+            case ITestPassed passed:
+                Tracker.RecordCaseResult(passed.Test.TestCase.UniqueID, passed.Test.DisplayName, ObservedOutcome.Passed);
+                break;
+            case ITestFailed failed:
+                Tracker.RecordCaseResult(failed.Test.TestCase.UniqueID, failed.Test.DisplayName, ObservedOutcome.Failed);
+                break;
+            case ITestSkipped skipped:
+                Tracker.RecordCaseResult(skipped.Test.TestCase.UniqueID, skipped.Test.DisplayName, ObservedOutcome.Skipped);
+                break;
+            case ITestCaseFinished finished:
+                Tracker.FinishCase(finished.TestCase.UniqueID, finished.TestsRun, finished.TestsFailed, finished.TestsSkipped);
+                break;
+        }
+        return next.OnMessage(message);
     }
 }
 
@@ -65,9 +102,7 @@ internal sealed class AttributionMethodRunner(ITestMethod method, IReflectionTyp
 {
     protected override async Task<RunSummary> RunTestCaseAsync(IXunitTestCase testCase)
     {
-        string assembly = Class.Type.Assembly.GetName().Name ?? throw new InvalidOperationException("Missing test assembly identity.");
-        string concreteType = Class.Type.FullName ?? throw new InvalidOperationException("Missing concrete test type.");
-        string owner = $"{assembly}:{concreteType}.{testCase.TestMethod.Method.Name}";
+        string owner = AttributionTestFramework.Owner(testCase);
         Tracker.Begin(owner);
         try { return await base.RunTestCaseAsync(testCase); }
         finally { Tracker.End(owner); }

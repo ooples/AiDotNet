@@ -5,37 +5,54 @@ using System.Text.Json.Serialization;
 
 namespace AttributionRuntime;
 
-public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask, UntrackedProcess, UntrackedConcurrency }
+public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask, UntrackedProcess, UntrackedConcurrency, InvalidInventory, IncompleteCase, CaseResultsMismatch, UnsuccessfulCase }
 public enum AttributionProcessKind { TestHost, Worker }
 public enum HitCollectionMode { Serialized, Cached }
+public enum DiscoveredCaseKind { Enumerated, DeferredOrCustom }
+public enum ObservedOutcome { Passed, Failed, Skipped }
+public sealed record DiscoveredCase(string Id, string Owner, string DisplayName, DiscoveredCaseKind Kind);
+public sealed record ObservedCaseResult(string DisplayName, ObservedOutcome Outcome);
+public sealed record CaseExecutionReport(DiscoveredCase Case, bool Finished, ObservedCaseResult[] Results);
 public sealed record WorkerTicket(string Run, string Token, string Owner, bool Completed);
 public sealed record MethodHits(string Owner, string[] Methods);
 public sealed record AttributionReport(int Schema, string Run, string Token,
     AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes, HitCollectionMode CollectionMode,
-    MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers);
+    MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers, CaseExecutionReport[] Cases);
 
 // Prototype only: unknown-context hits apply to the entire test-host execution group.
 // AsyncLocal identifies ownership; a shared scope object detects hits after its owner closes.
 public static class Tracker
 {
+    private readonly record struct MethodIdentity(string Module, int Token)
+    {
+        public string Serialize() => Token == 0 ? Module : $"{Module}:{Token:X8}";
+    }
     public static bool IsEnabled => DirectoryPath is not null;
     public const string SharedOwner = "<execution-group>";
     private sealed class Scope(string owner)
     {
         public string Owner { get; } = owner;
         public bool Closed;
-        public ConcurrentDictionary<string, byte> Recorded { get; } = new(StringComparer.Ordinal);
+        public ConcurrentDictionary<MethodIdentity, byte> Recorded { get; } = new();
         public HashSet<Task> Tasks { get; } = new(ReferenceEqualityComparer.Instance);
     }
 
     private static readonly object Gate = new();
     private static readonly AsyncLocal<Scope?> Current = new();
-    private static readonly Dictionary<string, HashSet<string>> Hits = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, HashSet<MethodIdentity>> Hits = new(StringComparer.Ordinal);
     private static readonly HashSet<string> Completed = new(StringComparer.Ordinal);
     private static readonly HashSet<Scope> Open = new();
     private static readonly HashSet<AttributionFault> Faults = new();
     private static readonly List<WorkerTicket> Workers = new();
     private static readonly HashSet<Task> GroupTasks = new(ReferenceEqualityComparer.Instance);
+    private sealed class CaseExecution(DiscoveredCase descriptor)
+    {
+        public DiscoveredCase Descriptor { get; } = descriptor;
+        public List<ObservedCaseResult> Results { get; } = [];
+        public bool Finished;
+    }
+    private static readonly Dictionary<string, CaseExecution> Cases = new(StringComparer.Ordinal);
+    private static bool inventoryRegistered;
     private static readonly string? DirectoryPath = OptionalEnvironment("ATTRIBUTION_OUTPUT");
     private static readonly string Run = OptionalEnvironment("ATTRIBUTION_RUN") ?? "";
     private static readonly string? WorkerOwner = OptionalEnvironment("ATTRIBUTION_OWNER");
@@ -67,6 +84,61 @@ public static class Tracker
             if (!Guid.TryParseExact(Run, "N", out _) || !Guid.TryParseExact(Token, "N", out _))
                 throw new InvalidOperationException("Invalid prototype run or process token.");
             AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+        }
+    }
+
+    public static void RegisterCases(IEnumerable<DiscoveredCase> inventory)
+    {
+        if (DirectoryPath is null) return;
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            if (inventoryRegistered) Faults.Add(AttributionFault.InvalidInventory);
+            inventoryRegistered = true;
+            foreach (DiscoveredCase descriptor in inventory)
+            {
+                if (string.IsNullOrWhiteSpace(descriptor.Id) || string.IsNullOrWhiteSpace(descriptor.Owner) ||
+                    string.IsNullOrWhiteSpace(descriptor.DisplayName) || !Enum.IsDefined(descriptor.Kind) ||
+                    !Cases.TryAdd(descriptor.Id, new(descriptor))) Faults.Add(AttributionFault.InvalidInventory);
+            }
+            if (Cases.Count == 0) Faults.Add(AttributionFault.InvalidInventory);
+        }
+    }
+
+    public static void RecordCaseResult(string id, string displayName, ObservedOutcome outcome)
+    {
+        if (DirectoryPath is null) return;
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            if (!Cases.TryGetValue(id, out CaseExecution? execution) || execution.Finished ||
+                string.IsNullOrWhiteSpace(displayName) || !Enum.IsDefined(outcome))
+            {
+                Faults.Add(AttributionFault.CaseResultsMismatch);
+                return;
+            }
+            execution.Results.Add(new(displayName, outcome));
+            if (outcome != ObservedOutcome.Passed) Faults.Add(AttributionFault.UnsuccessfulCase);
+        }
+    }
+
+    public static void FinishCase(string id, int testsRun, int failed, int skipped)
+    {
+        if (DirectoryPath is null) return;
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            if (!Cases.TryGetValue(id, out CaseExecution? execution) || execution.Finished)
+            {
+                Faults.Add(AttributionFault.CaseResultsMismatch);
+                return;
+            }
+            execution.Finished = true;
+            if (testsRun <= 0 || testsRun != execution.Results.Count ||
+                failed != execution.Results.Count(result => result.Outcome == ObservedOutcome.Failed) ||
+                skipped != execution.Results.Count(result => result.Outcome == ObservedOutcome.Skipped) ||
+                (execution.Descriptor.Kind == DiscoveredCaseKind.Enumerated && testsRun != 1))
+                Faults.Add(AttributionFault.CaseResultsMismatch);
         }
     }
 
@@ -158,7 +230,15 @@ public static class Tracker
         }
     }
 
-    public static void Hit(string method)
+    // One shared module string plus an integer token avoids adding a long unique
+    // user string to the assembly metadata for every instrumented method. The
+    // canonical report key is formatted only during publication, not on the hot
+    // path. Typed identities avoid a second global lookup for every hit.
+    public static void HitMethod(string module, int token) => HitCore(new(module, token));
+
+    public static void Hit(string method) => HitCore(new(method, 0));
+
+    private static void HitCore(MethodIdentity method)
     {
         if (DirectoryPath is null) return;
         Scope? scope = Current.Value;
@@ -175,8 +255,8 @@ public static class Tracker
                 Faults.Add(AttributionFault.LateHit);
                 owner = SharedOwner;
             }
-            if (!Hits.TryGetValue(owner, out HashSet<string>? methods))
-                Hits.Add(owner, methods = new(StringComparer.Ordinal));
+            if (!Hits.TryGetValue(owner, out HashSet<MethodIdentity>? methods))
+                Hits.Add(owner, methods = new());
             methods.Add(method);
             if (scope is not null && !scope.Closed) scope.Recorded.TryAdd(method, 0);
         }
@@ -241,11 +321,16 @@ public static class Tracker
         {
             if (Open.Count != 0) Faults.Add(AttributionFault.UnclosedScope);
             if (GroupTasks.Any(task => !task.IsCompleted)) Faults.Add(AttributionFault.UnjoinedTask);
-            var report = new AttributionReport(1, Run, Token, Kind, Environment.ProcessId,
+            if (Kind == AttributionProcessKind.TestHost && (!inventoryRegistered || Cases.Count == 0))
+                Faults.Add(AttributionFault.InvalidInventory);
+            if (Cases.Values.Any(execution => !execution.Finished)) Faults.Add(AttributionFault.IncompleteCase);
+            var report = new AttributionReport(2, Run, Token, Kind, Environment.ProcessId,
                 WorkerOwner, peakScopes, CollectionMode,
                 Hits.OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new MethodHits(pair.Key, pair.Value.Order(StringComparer.Ordinal).ToArray())).ToArray(),
-                Completed.Order(StringComparer.Ordinal).ToArray(), Faults.Order().ToArray(), Workers.ToArray());
+                    .Select(pair => new MethodHits(pair.Key, pair.Value.Select(method => method.Serialize()).Order(StringComparer.Ordinal).ToArray())).ToArray(),
+                Completed.Order(StringComparer.Ordinal).ToArray(), Faults.Order().ToArray(), Workers.ToArray(),
+                Cases.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new CaseExecutionReport(
+                    pair.Value.Descriptor, pair.Value.Finished, pair.Value.Results.ToArray())).ToArray());
             Directory.CreateDirectory(DirectoryPath);
             string destination = Path.Combine(DirectoryPath, $"{Token}.json");
             string pending = destination + ".pending";

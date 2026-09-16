@@ -26,10 +26,18 @@ rejections passed. It is not a production CI validation certificate.
   assembly SHA-256 and metadata token. Maps record binary/PDB hashes and source
   spans. These are conservative method dependencies, **not executed-line or
   branch coverage**. Signed and already instrumented assemblies are rejected.
+  Calls encode one shared assembly-hash string plus an integer method token;
+  canonical text keys are formatted only when publishing the report. The output
+  user-string heap is checked before a method map can be issued.
 - The xUnit method runner carries ownership through AsyncLocal using the concrete
   test type, including inherited tests. It preserves custom case runners and wraps
   per-test construction and asynchronous cleanup. Theory rows share a method
   identity, but the harness independently checks that both rows executed.
+- Schema-2 reports record discovered xUnit case IDs before execution and observe
+  actual passed/failed/skipped messages plus case completion. A deferred theory
+  retains one discovery identity with all its runtime rows. The independent TRX
+  must match; missing, duplicate, unfinished, or unsuccessful ledger entries are
+  rejected. VSTest exit code zero alone is never success evidence.
 - Shared fixture and suppressed-context hits belong to the entire execution
   group. They are never guessed to belong to a neighboring active test.
 - Explicit worker registration passes a unique token/run/owner through that
@@ -53,19 +61,22 @@ rejections passed. It is not a production CI validation certificate.
 Windows, .NET SDK **10.0.401**, 2026-09-16:
 
 - Build: **zero warnings and errors**.
-- Positive execution: **11/11 cases passed**, both plain and instrumented.
+- Positive execution: **13/13 cases passed**, both plain and instrumented,
+  including both deferred-theory rows under one discovered case.
 - Source-backed methods and test task call sites instrumented; overlapping test scopes
   observed. A rendezvous requires real overlap between the two parallel tests.
 - Async/Task.Run and overlapping Left/Right tests received their expected
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **21 negative/mutation checks passed**: late work, detached task, unregistered process,
+- **26 negative/mutation checks passed**: late work, detached task, unregistered process,
   never-fired timer, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
   mismatched worker owner, forcibly killed worker, task-guard removal, preserved
   custom-case skipping, and covered execution after report publication.
+  Additional controls remove, duplicate, leave unfinished, or skip ledger cases,
+  and remove all TRX results while leaving its success summary untouched.
   Artifact cases mutate copies of real output. The guard-removal control rewrites
   a private collector DLL and proves the ordinary detached-task regression
   assertion fails when the observer is removed.
@@ -79,13 +90,13 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   boundaries. The IL extraction controls retain an untaken call, implicit type
   initialization, and external fields. These are algorithm/fixture checks, not
   authenticated production graph construction or actual narrowed execution.
-- Before/after wall time: **1.53 s plain / 2.58 s instrumented**. This is a
+- Before/after wall time: **1.54 s plain / 2.68 s instrumented**. This is a
   single small-fixture measurement including process startup and worker output,
   not a repository benchmark or evidence of net CI savings.
 - Original binary SHA-256 unchanged after the run.
 - Hot-call measurement (seven samples of 131,072 calls, identical independently
-  checked checksum): median **1.62 ns plain / 171.31 ns serialized collector /
-  74.77 ns cached collector**. Repeated published hits avoid the global lock,
+  checked checksum): median **1.66 ns plain / 344.32 ns serialized collector /
+  134.55 ns cached collector**. Repeated published hits avoid the global lock,
   but closure is checked before cache lookup. The late-hit test primes this
   cache before closing its test. This is not a representative model benchmark.
 - Opt-in real AiDotNet test-project build: **zero errors** (existing repository
@@ -94,6 +105,35 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   This verifies adapter integration, not production-code coverage: that assembly
   was not instrumented. CPU-only initialization is unchanged. MSBuild evaluation
   confirms opt-in applies only to net10.0, not net8.0/net471 or ordinary builds.
+
+## Real-assembly compatibility probe
+
+The first full-assembly rewrite exposed a defect absent from the small fixture:
+175,687 unique injected key strings grew AiDotNet's user-string heap to
+**33,227,820 bytes**. Startup failed with `BadImageFormatException`, and VSTest
+returned exit code zero with **no tests executed**. That run is failed evidence,
+not a successful test. The metadata emitter's
+[user-string offset limit](https://source.dot.net/System.Reflection.Metadata/System/Reflection/Metadata/Ecma335/MetadataBuilder.Heaps.cs.html)
+requires bounded encoding.
+
+After replacing per-method strings with shared module identity plus integer tokens:
+
+- Original heap **7,050,456 bytes**; rewritten heap **7,050,588 bytes** (+132).
+- All **175,687 methods** and **2,926 production task sites** instrumented in
+  **32.82 s**; the test assembly also included **32,436 task sites**.
+- The same five existing `ShardingConfiguration_*` cases passed before and after,
+  with identical discovered IDs, five completed owners, **83 owner/method pairs**
+  (including 20 shared-group dependencies), and **zero collector faults**.
+- Test wall time: **22.42 s control / 19.73 s instrumented**, including discovery.
+  This single noisy sample does not demonstrate a speedup or representative model
+  performance. TRX test durations were 31 ms and 32 ms respectively.
+- Original AiDotNet DLL SHA-256 remained
+  `1860E217DF46BFD9105F9453296E20992B0635D68BA579DDF1685D74D5FDF737`.
+  Only private temporary copies were rewritten. The fixture now asserts bounded
+  heap growth, and the real-run check requires five actual passing TRX results.
+
+This is compatibility/attribution evidence only, not proof of production selective
+filters, baseline authenticity, or changed-base reuse.
 
 Adversarial review added the explicit parent/worker completion requirement;
 child completion alone did not establish that its parent test joined it. It
