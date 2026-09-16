@@ -235,6 +235,15 @@ public partial class MGIE<T>
             throw new ArgumentOutOfRangeException(nameof(options.DropoutRate));
         if (options.NumDiffusionSteps <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumDiffusionSteps));
         if (options.MaxGenerationLength < 0) throw new ArgumentOutOfRangeException(nameof(options.MaxGenerationLength));
+        if (double.IsNaN(options.ConditionDropoutProbability) || options.ConditionDropoutProbability < 0 ||
+            options.ConditionDropoutProbability > 1)
+            throw new ArgumentOutOfRangeException(nameof(options.ConditionDropoutProbability));
+        if (!FiniteNonnegative(options.InstructionLossWeight))
+            throw new ArgumentOutOfRangeException(nameof(options.InstructionLossWeight));
+        if (!FiniteNonnegative(options.EditLossWeight))
+            throw new ArgumentOutOfRangeException(nameof(options.EditLossWeight));
+        if (!Enum.IsDefined(typeof(LanguageModelTrainableScope), options.TrainableLanguageModelScope))
+            throw new ArgumentOutOfRangeException(nameof(options.TrainableLanguageModelScope));
         long patches = options.ImageSize / options.VisionPatchSize;
         if (patches * patches + 1 + options.EditTokenCount + 1 > options.MaxSequenceLength)
             throw new ArgumentOutOfRangeException(nameof(options.MaxSequenceLength), "The sequence must hold image, edit and instruction tokens.");

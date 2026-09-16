@@ -1157,6 +1157,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// either <see cref="Vector{T}"/>.Length or
     /// <see cref="ParameterCount"/>.
     /// </remarks>
+    /// <summary>
+    /// The role reported for the parameters of the top-level layer at <paramref name="layerIndex"/>.
+    /// </summary>
+    /// <param name="layerIndex">Index into <see cref="Layers"/>.</param>
+    /// <param name="declared">The role the layer itself declares.</param>
+    /// <returns><paramref name="declared"/> unless a derived network freezes part of itself.</returns>
+    /// <remarks>
+    /// Freezing through the role keeps the parameters in the saved, cloned and counted state while the
+    /// optimizers, which update only <see cref="AiDotNet.Models.Parameters.ParameterSlotRole.Trainable"/>
+    /// chunks, leave them unchanged. Excluding a layer from the parameter surface instead would silently drop
+    /// its weights from checkpoints.
+    /// </remarks>
+    protected virtual AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(
+        int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) => declared;
+
+    /// <summary>The role reported for a network-level extra trainable tensor.</summary>
+    /// <param name="tensor">The tensor returned by <c>GetExtraTrainableTensors</c>.</param>
+    /// <param name="declared">The default role, trainable.</param>
+    /// <returns><paramref name="declared"/> unless a derived network freezes the tensor.</returns>
+    protected virtual AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(
+        Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared) => declared;
+
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
@@ -1182,7 +1204,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (layer is LayerBase<T> layerBase)
             {
                 foreach (var chunk in layerBase.GetParameterStateChunks($"layers/{i:D8}"))
-                    yield return chunk;
+                {
+                    var role = ResolveLayerParameterRole(i, chunk.Role);
+                    yield return role == chunk.Role
+                        ? chunk
+                        : new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                            chunk.StableId, role, chunk.Tensor, chunk.SourceTensor, chunk.IsWritableInPlace);
+                }
             }
             else
             {
@@ -1192,9 +1220,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // a flat vector, so this payload is a copy: writing into it updates nothing.
                 yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                     $"layers/{i:D8}",
-                    layer.SupportsTraining
+                    ResolveLayerParameterRole(i, layer.SupportsTraining
                         ? AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
-                        : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState,
+                        : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState),
                     new Tensor<T>(new[] { flat.Length }, flat),
                     sourceTensor: null,
                     writableInPlace: false);
@@ -1215,7 +1243,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (tensor is null || tensor.Length == 0) continue;
             yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                 $"extra-tensors/{extraTensorIndex++:D8}",
-                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                ResolveExtraTensorParameterRole(tensor, AiDotNet.Models.Parameters.ParameterSlotRole.Trainable),
                 tensor);
         }
 

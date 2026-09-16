@@ -684,7 +684,8 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
     private static ISymbol? FindDirectConstructorAssignment(
         INamedTypeSymbol type,
         IMethodSymbol constructor,
-        IParameterSymbol parameter)
+        IParameterSymbol parameter,
+        int depth = 0)
     {
         ISymbol? found = null;
         foreach (var syntaxReference in constructor.DeclaringSyntaxReferences)
@@ -700,14 +701,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
                 // authoritative value, and replaying it reproduces both the explicit and default
                 // cases. Requiring a bare identifier dropped exactly these option members and let a
                 // same-named base property win later by heuristic.
-                ExpressionSyntax carried = assignment.Right is BinaryExpressionSyntax coalesce
-                        && coalesce.IsKind(SyntaxKind.CoalesceExpression)
-                    ? coalesce.Left
-                    : assignment.Right;
-                if (carried is not IdentifierNameSyntax right
-                    || !string.Equals(right.Identifier.ValueText, parameter.Name,
-                        System.StringComparison.Ordinal))
-                    continue;
+                if (!CarriesParameter(assignment.Right, parameter.Name)) continue;
 
                 string? memberName = assignment.Left switch
                 {
@@ -745,7 +739,147 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
             }
         }
 
-        return found;
+        return found ?? FollowThisInitializer(type, constructor, parameter, depth);
+    }
+
+    /// <summary>
+    /// Resolves a parameter that this constructor forwards to another one with <c>: this(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// An overload that forwards stores nothing itself, so the search above finds no assignment and
+    /// the parameter falls through to the by-name and by-type heuristics. Those accept a member
+    /// holding the value MORE GENERALLY -- a model's own <c>MGIEOptions options</c> matching the
+    /// base's <c>ModelOptions Options</c> property -- and at runtime that member is not an instance
+    /// of the parameter type, so CloneEngine rejects the candidate. With every candidate rejected
+    /// the model is rebuilt from constructor defaults and silently comes back at default size.
+    /// Following the delegation finds the field the target constructor actually stores.
+    /// </remarks>
+    private static ISymbol? FollowThisInitializer(
+        INamedTypeSymbol type,
+        IMethodSymbol constructor,
+        IParameterSymbol parameter,
+        int depth)
+    {
+        // Forwarding chains are short by construction; the bound only guards against a cycle in
+        // source Roslyn has already reported on separately.
+        if (depth >= 4) return null;
+
+        foreach (var syntaxReference in constructor.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ConstructorDeclarationSyntax declaration
+                || declaration.Initializer is not ConstructorInitializerSyntax initializer
+                || !initializer.ThisOrBaseKeyword.IsKind(SyntaxKind.ThisKeyword))
+                continue;
+
+            var arguments = initializer.ArgumentList.Arguments;
+            for (int i = 0; i < arguments.Count; i++)
+            {
+                if (!CarriesParameter(arguments[i].Expression, parameter.Name)) continue;
+
+                var target = FindDelegationTarget(type, constructor, arguments);
+                if (target is null) return null;
+
+                var targetParameter = arguments[i].NameColon is NameColonSyntax nameColon
+                    ? target.Parameters.FirstOrDefault(candidate => string.Equals(
+                        candidate.Name, nameColon.Name.Identifier.ValueText, System.StringComparison.Ordinal))
+                    : i < target.Parameters.Length ? target.Parameters[i] : null;
+                if (targetParameter is null) return null;
+
+                var resolved = FindDirectConstructorAssignment(type, target, targetParameter, depth + 1);
+                // The forwarded value must still be carried as THIS parameter's type: an overload is
+                // free to widen or substitute what it passes on.
+                ITypeSymbol? storedType = resolved switch
+                {
+                    IPropertySymbol property => property.Type,
+                    IFieldSymbol field => field.Type,
+                    _ => null,
+                };
+                return storedType is not null && IsCarriedAs(storedType, parameter.Type) ? resolved : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether an expression carries the named parameter's effective value.</summary>
+    /// <remarks>
+    /// Three shapes all mean "this is where the argument went". A bare identifier is the plain case.
+    /// <c>x ?? new Default()</c> and <c>x ?? throw ...</c> carry x, with the right-hand side being
+    /// the substitute applied when x is null -- which the member then holds, so replaying it
+    /// reproduces both cases. A COPY, <c>new TOptions(x)</c>, is the third: a model that defends
+    /// itself against later mutation of the caller's options stores its own copy, and that copy is
+    /// the authoritative configuration afterwards. Matching it is safe because the caller still
+    /// checks that the MEMBER's type is carried as the parameter's type, so a constructor call that
+    /// merely consumes the parameter -- a layer built from a width -- cannot match.
+    /// </remarks>
+    private static bool CarriesParameter(ExpressionSyntax expression, string parameterName)
+    {
+        ExpressionSyntax carried = expression;
+        for (int unwrapped = 0; unwrapped < 4; unwrapped++)
+        {
+            switch (carried)
+            {
+                case BinaryExpressionSyntax coalesce when coalesce.IsKind(SyntaxKind.CoalesceExpression):
+                    carried = coalesce.Left;
+                    continue;
+                case ObjectCreationExpressionSyntax
+                {
+                    ArgumentList: { Arguments.Count: 1 } copyArguments
+                }:
+                    carried = copyArguments.Arguments[0].Expression;
+                    continue;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    carried = parenthesized.Expression;
+                    continue;
+            }
+
+            break;
+        }
+
+        return carried is IdentifierNameSyntax identifier
+            && string.Equals(identifier.Identifier.ValueText, parameterName, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The one constructor a <c>: this(...)</c> call can bind to, or null when more than one could.
+    /// </summary>
+    /// <remarks>
+    /// Arity alone is not enough: MGIE forwards eight arguments and has two eight-parameter
+    /// constructors. Each argument that passes a parameter straight through carries that
+    /// parameter's type, which rules out the overload whose slot cannot hold it. Anything less
+    /// certain than a single surviving candidate is left to the existing heuristics rather than
+    /// guessed at -- overload resolution is the compiler's job, not this generator's.
+    /// </remarks>
+    private static IMethodSymbol? FindDelegationTarget(
+        INamedTypeSymbol type,
+        IMethodSymbol constructor,
+        SeparatedSyntaxList<ArgumentSyntax> arguments)
+    {
+        IMethodSymbol? target = null;
+        foreach (var candidate in type.InstanceConstructors)
+        {
+            if (SymbolEqualityComparer.Default.Equals(candidate, constructor)
+                || candidate.Parameters.Length < arguments.Count
+                || candidate.Parameters.Count(p => !p.IsOptional) > arguments.Count)
+                continue;
+
+            bool compatible = true;
+            for (int i = 0; compatible && i < arguments.Count; i++)
+            {
+                if (arguments[i].NameColon is not null) continue;
+                var source = constructor.Parameters.FirstOrDefault(
+                    p => CarriesParameter(arguments[i].Expression, p.Name));
+                if (source is null || i >= candidate.Parameters.Length) continue;
+                compatible = IsCarriedAs(source.Type, candidate.Parameters[i].Type)
+                    || IsCarriedAs(candidate.Parameters[i].Type, source.Type);
+            }
+
+            if (!compatible) continue;
+            if (target is not null) return null;
+            target = candidate;
+        }
+
+        return target;
     }
 
     /// <summary>

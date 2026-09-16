@@ -122,6 +122,38 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
     #endregion
 
+    #region Trainable Scope
+
+    /// <summary>
+    /// Which parts of the native model an owning trainer may update. Defaults to every parameter.
+    /// </summary>
+    /// <remarks>
+    /// Freezing is reported through parameter roles, so frozen weights stay in checkpoints and clones while the
+    /// optimizers leave them unchanged. MGIE trains only the word embeddings and the LM head (Fu et al. 2024).
+    /// </remarks>
+    internal AiDotNet.Enums.LanguageModelTrainableScope TrainableScope { get; set; } =
+        AiDotNet.Enums.LanguageModelTrainableScope.All;
+
+    /// <inheritdoc />
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+    {
+        if (declared != AiDotNet.Models.Parameters.ParameterSlotRole.Trainable || TrainableScope == AiDotNet.Enums.LanguageModelTrainableScope.All)
+            return declared;
+        var layer = Layers[layerIndex];
+        bool tokenInterface = ReferenceEquals(layer, _textTokenEmbedding) || ReferenceEquals(layer, _outputProjection);
+        return TrainableScope == AiDotNet.Enums.LanguageModelTrainableScope.WordEmbeddingsAndHead && tokenInterface
+            ? declared
+            : AiDotNet.Models.Parameters.ParameterSlotRole.Frozen;
+    }
+
+    /// <inheritdoc />
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && TrainableScope != AiDotNet.Enums.LanguageModelTrainableScope.All
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
+
+    #endregion
+
     #region IMultimodalEmbedding Properties
 
     /// <inheritdoc/>

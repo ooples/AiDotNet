@@ -26,6 +26,9 @@ public sealed class MgieCloneConfigurationReviewTests
         Assert.True(CloneRegistry.IsVerified(modelType));
         Assert.Contains(plan.ConstructorCandidates, candidate =>
             candidate.Contains("_instructionEncoder") && candidate.Contains("_unet") &&
-            candidate.Contains("_vae") && candidate.Contains("_options"));
+            // _editOptions, not the base's general Options property: that one holds a
+            // DiffusionModelOptions at runtime, so a candidate naming it is rejected on type and the
+            // clone falls back to constructor defaults.
+            candidate.Contains("_vae") && candidate.Contains("_editOptions"));
     }
 }

@@ -1596,26 +1596,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // .OptimizerFactory — that optimizer's LR then drives training and this constant-LR default is
         // bypassed entirely. Mutating the model's LearningRate after the first Train does NOT retroactively
         // change the already-built default optimizer, by design.
-        _trainingOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            model: null,
-            options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // NumOps.ToDouble (not Convert.ToDouble) — the project's numeric abstraction converts any T
-                // consistently, whereas Convert.ToDouble only works for IConvertible T and boxes.
-                InitialLearningRate = NumOps.ToDouble(LearningRate),
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-                UseAdaptiveBetas = false,
-                UseAdaptiveLearningRate = false,
-                UseAMSGrad = false,
-                // DDPM does no NaN-skipping; disabling the guard also drops the O(total-gradient)
-                // pre-scan the lean Step kernel would otherwise run every step.
-                AnomalyGuardMode = AdamAnomalyGuardMode.Never,
-                EnableGradientClipping = true,
-                GradientClippingMethod = GradientClippingMethod.ByNorm,
-                MaxGradientNorm = 1.0,
-            });
+        var trainingOptimizer = GetOrCreateTrainingOptimizer();
 
         // Drive the optimizer through its tape-step entry point. Step(TapeStepContext) runs the
         // optimizer's fused, in-place, allocation-free SIMD kernel directly on the parameter tensors
@@ -1649,7 +1630,77 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             paramTensors, grads, lossValue,
             noisySampleTensor, noiseTensor,
             RecomputeForward, RecomputeLoss);
-        _trainingOptimizer.Step(stepContext);
+        trainingOptimizer.Step(stepContext);
+    }
+
+    /// <summary>
+    /// The optimizer every training step uses: the configured factory's, or the DDPM default of Adam with
+    /// global gradient-norm clipping at 1.0, built once on first use.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateTrainingOptimizer()
+    {
+            return _trainingOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                model: null,
+                options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // NumOps.ToDouble (not Convert.ToDouble) — the project's numeric abstraction converts any T
+                    // consistently, whereas Convert.ToDouble only works for IConvertible T and boxes.
+                    InitialLearningRate = NumOps.ToDouble(LearningRate),
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    UseAdaptiveBetas = false,
+                    UseAdaptiveLearningRate = false,
+                    UseAMSGrad = false,
+                    // DDPM does no NaN-skipping; disabling the guard also drops the O(total-gradient)
+                    // pre-scan the lean Step kernel would otherwise run every step.
+                    AnomalyGuardMode = AdamAnomalyGuardMode.Never,
+                    EnableGradientClipping = true,
+                    GradientClippingMethod = GradientClippingMethod.ByNorm,
+                    MaxGradientNorm = 1.0,
+                });
+    }
+
+    /// <summary>Runs one optimizer update against a caller-built differentiable objective.</summary>
+    /// <param name="computeLoss">Builds the scalar objective from the model's live parameters.</param>
+    /// <returns>The objective's value before the update.</returns>
+    /// <remarks>
+    /// <para>
+    /// For conditional models whose objective is not the noise-prediction error of <see cref="Train"/>, such
+    /// as an instruction loss combined with an edit loss. The closure runs once under a gradient tape, and
+    /// again whenever the optimizer re-evaluates, so it must replay the same timesteps, noise and dropout
+    /// decisions each time. The step uses the same optimizer, gradient clipping and gradient-surface retention
+    /// as <see cref="Train"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> a model with a custom training goal describes how to compute its loss; this
+    /// method turns that loss into one weight update exactly the way ordinary training does.</para>
+    /// </remarks>
+    protected T StepWithCustomLoss(Func<Tensor<T>> computeLoss)
+    {
+        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
+        _lastTrainingParameterGradients = null;
+        _trainingGradientSurfaceUnavailable = false;
+        EnsureOwnWeights();
+        var parameters = CollectTrainableParameters();
+        if (parameters.Length == 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name} has no trainable parameters discoverable via CollectTrainableParameters.");
+
+        using var tape = new GradientTape<T>();
+        var loss = computeLoss();
+        if (loss is null || loss.Length != 1)
+            throw new InvalidOperationException("A custom training objective must be a scalar tensor.");
+        var gradients = tape.ComputeGradients(loss, parameters);
+        if (RetainTrainingGradientSurface)
+            RetainTrainingParameterGradients(parameters, gradients);
+
+        T lossValue = loss[0];
+        var placeholder = new Tensor<T>(new[] { 1 });
+        GetOrCreateTrainingOptimizer().Step(new TapeStepContext<T>(
+            parameters, gradients, lossValue, placeholder, placeholder,
+            (input, target) => computeLoss(),
+            (objective, target) => objective));
+        return lossValue;
     }
 
     /// <inheritdoc />
