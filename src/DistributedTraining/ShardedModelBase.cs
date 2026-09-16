@@ -235,13 +235,13 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     /// </remarks>
     protected void EnsureShardingInitialized()
     {
-        // Read the wrapped source directly to avoid recursing through tensor-parallel
-        // authoritative sources. Lazy materialization invalidates the earlier shard layout.
+        // Inspect the wrapped model directly: the tensor-parallel authoritative source calls this
+        // initializer, so querying this wrapper's ParameterCount would recurse.
         var parameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
         if (!_isShardingInitialized || _initializedWrappedParameterCount != parameterCount)
         {
             _isShardingInitialized = false;
-            CachedFullParameters = null;
+            InvalidateLayoutState();
             OnBeforeInitializeSharding();
             InitializeSharding();
             _initializedWrappedParameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
@@ -261,6 +261,28 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     protected virtual void OnBeforeInitializeSharding()
     {
         // Default implementation does nothing
+    }
+
+    /// <summary>
+    /// Discards every cache computed against the previous parameter layout. Runs before each (re)initialization.
+    /// </summary>
+    /// <remarks>
+    /// The base owns the gathered full-parameter cache. A derived model that keeps gradients, gradient shards or
+    /// activations shaped by the layout overrides this, clears them, and calls the base. A model whose
+    /// layout-dependent state is rebuilt wholesale by <see cref="InitializeSharding"/> - tensor parallelism's
+    /// partitioned network - needs no override.
+    /// </remarks>
+    protected virtual void InvalidateLayoutState()
+    {
+        CachedFullParameters = null;
+    }
+
+    /// <summary>Refreshes a lazily materialized layout before publishing its newly computed gradients.</summary>
+    protected Vector<T> ComputeGradientsForCurrentLayout(TInput input, TOutput expectedOutput)
+    {
+        var gradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        EnsureShardingInitialized();
+        return gradients;
     }
 
     /// <summary>

@@ -1323,7 +1323,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             }
         }
 
-        return _numOps.Divide(totalDiff, _numOps.FromDouble(frames.Count * frames[0].ToVector().Length));
+        return _numOps.Divide(totalDiff, _numOps.FromDouble((double)frames.Count * frames[0].ToVector().Length));
     }
 
     private Vector<T> EncodeTextDescription(string description)

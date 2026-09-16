@@ -42,26 +42,20 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // it (vs. accepting "any exception in the AiDotNet.Distributed-
         // Training namespace" which would silently mask a regression
         // unrelated to routing — this PR's review C7G8U).
-        var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1);
+        var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1, DistributedEnvironmentId);
+        OwnCommunicationBackend(backend);
         // A downstream exception is not a successful configuration. Let it fail this
         // test with its original stack instead of accepting a distributed frame.
-        try
-        {
-            var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-                .ConfigureModel(model)
-                .ConfigureDataLoader(loader)
-                .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
-                .BuildAsync();
-            Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
-            Assert.True(backend.AccessCount > 0);
-            using var prediction = result.Predict(features);
-            Assert.NotEmpty(prediction.ToArray());
-            Assert.All(prediction.ToArray(), value => Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
-        }
-        finally
-        {
-            backend.Shutdown();
-        }
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(loader)
+            .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
+            .BuildAsync();
+        Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
+        Assert.True(backend.AccessCount > 0);
+        using var prediction = result.Predict(features);
+        Assert.NotEmpty(prediction.ToArray());
+        Assert.All(prediction.ToArray(), value => Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
     }
 
     /// <summary>
@@ -75,10 +69,10 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
     {
         private int _accessCount;
         public int AccessCount => System.Threading.Interlocked.CompareExchange(ref _accessCount, 0, 0);
-        // Each independent facade fixture owns a communication group. Reusing "default"
-        // collides with unrelated tests that initialized their own rank zero.
-        public RecordingCommBackend(int rank, int worldSize)
-            : base(rank, worldSize, Guid.NewGuid().ToString("N")) { }
+        // Each independent facade fixture owns a communication group, supplied by the fixture's
+        // DistributedEnvironmentId. Reusing "default" collides with unrelated tests that
+        // initialized their own rank zero.
+        public RecordingCommBackend(int rank, int worldSize, string environmentId) : base(rank, worldSize, environmentId) { }
         public override int Rank
         {
             get { System.Threading.Interlocked.Increment(ref _accessCount); return base.Rank; }
@@ -158,7 +152,8 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1, DistributedEnvironmentId);
+        OwnCommunicationBackend(backend);
 
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         builder.ConfigureModel(model);
@@ -190,12 +185,12 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         }
         else
         {
-            Assert.NotNull(buildException);
+            var failure = buildException ?? throw new InvalidOperationException("Build produced neither a result nor an exception.");
             Assert.True(
-                IsExceptionFromNamespace(buildException!, "AiDotNet.DistributedTraining"),
+                IsExceptionFromNamespace(failure, "AiDotNet.DistributedTraining"),
                 $"ConfigurePipelineParallelism build failed, but the failure did not originate inside " +
                 $"the AiDotNet.DistributedTraining namespace. Stored-but-not-consumed regression likely. " +
-                $"Top-frame: {buildException!.GetType().FullName} | message: {buildException.Message}");
+                $"Original failure: {failure}");
         }
     }
 
@@ -250,12 +245,12 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         {
             buildException = ex;
         }
-        Assert.NotNull(buildException);
+        var failure = buildException ?? throw new InvalidOperationException("Expected the unsupported federated configuration to fail.");
         Assert.True(
-            IsExceptionFromNamespace(buildException!, "AiDotNet.FederatedLearning"),
+            IsExceptionFromNamespace(failure, "AiDotNet.FederatedLearning"),
             $"ConfigureFederatedLearning build failed, but the failure did not originate inside " +
             $"the AiDotNet.FederatedLearning namespace. Stored-but-not-consumed regression " +
             $"would skip the federated branch and fall through to the supervised path. " +
-            $"Top-frame: {buildException!.GetType().FullName} | message: {buildException.Message}");
+            $"Original failure: {failure}");
     }
 }

@@ -225,6 +225,19 @@ public partial class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBas
         _supportsDecomposedBackward = WrappedModel is IPipelineDecomposableModel<T, TInput, TOutput>;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Checkpointed activations, deferred backward state and emulated weight gradients are all keyed by virtual
+    /// stage and sized by that stage's parameter range, so none survives a repartition.
+    /// </remarks>
+    protected override void InvalidateLayoutState()
+    {
+        base.InvalidateLayoutState();
+        _checkpointedActivations.Clear();
+        _cachedBackwardState.Clear();
+        _cachedWeightGradients.Clear();
+    }
+
     /// <summary>
     /// Initializes pipeline parallelism by partitioning parameters into stages,
     /// including virtual stage partitions for multi-stage schedules.

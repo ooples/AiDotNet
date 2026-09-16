@@ -90,7 +90,7 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Bimodality coefficient (Sarle's formula)
             // BC = (skewness² + 1) / (kurtosis + 3 × (n-1)²/((n-2)(n-3)))
             double skewSquared = skewness * skewness;
-            double sampleCorrection = 3.0 * (n - 1) * (n - 1) / ((n - 2) * (n - 3));
+            double sampleCorrection = 3.0 * (n - 1) * (n - 1) / ((double)(n - 2) * (n - 3));
             double denominator = kurtosis + sampleCorrection;
 
             // Avoid division by zero or negative

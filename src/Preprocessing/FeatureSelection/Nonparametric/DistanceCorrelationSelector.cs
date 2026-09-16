@@ -133,7 +133,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             rowMeans[i] /= n;
             colMeans[i] /= n;
         }
-        grandMean /= (n * n);
+        grandMean /= ((double)n * n);
 
         // Double centering
         for (int i = 0; i < n; i++)
@@ -161,9 +161,9 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             }
         }
 
-        dcovXY /= (n * n);
-        dcovXX /= (n * n);
-        dcovYY /= (n * n);
+        dcovXY /= ((double)n * n);
+        dcovXX /= ((double)n * n);
+        dcovYY /= ((double)n * n);
 
         double denom = Math.Sqrt(dcovXX) * Math.Sqrt(dcovYY);
         return denom > 1e-10 ? Math.Sqrt(Math.Max(0, dcovXY)) / Math.Sqrt(denom) : 0;

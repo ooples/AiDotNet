@@ -311,8 +311,6 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         double expected = 0;
         double variance = 0;
 
-        var leftSet = new HashSet<int>(leftIndices);
-
         foreach (double t in allEventTimes)
         {
             int leftAtRisk = leftIndices.Count(i => NumOps.ToDouble(times[i]) >= t);
@@ -335,8 +333,8 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
             // Variance contribution
             if (totalAtRisk > 1)
             {
-                variance += (double)(leftAtRisk * rightAtRisk * totalEvents * (totalAtRisk - totalEvents))
-                           / (totalAtRisk * totalAtRisk * (totalAtRisk - 1));
+                variance += (double)leftAtRisk * rightAtRisk * totalEvents * (totalAtRisk - totalEvents)
+                           / ((double)totalAtRisk * totalAtRisk * (totalAtRisk - 1));
             }
         }
 
