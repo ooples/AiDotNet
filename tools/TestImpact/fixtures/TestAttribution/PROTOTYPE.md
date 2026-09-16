@@ -47,17 +47,24 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
 
 - Build: **zero warnings and errors**.
 - Positive execution: **7/7 cases passed**, both plain and instrumented.
-- **10 source-backed methods** and **36 task call sites** instrumented; overlapping test scopes
+- **10 source-backed methods** and **41 task call sites** instrumented; overlapping test scopes
   observed. A rendezvous requires real overlap between the two parallel tests.
 - Async/Task.Run and overlapping Left/Right tests received their expected
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **17 negative checks rejected**: late work, detached task, unregistered process,
+- **19 negative/mutation checks passed**: late work, detached task, unregistered process,
   never-fired timer, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
-  and mismatched worker owner. Artifact cases mutate copies of real output.
+  mismatched worker owner, forcibly killed worker, and task-guard removal.
+  Artifact cases mutate copies of real output. The guard-removal control rewrites
+  a private collector DLL and proves the ordinary detached-task regression
+  assertion fails when the observer is removed.
+- **15 execution-protocol cases passed**: exact result inventories, complete
+  theory rows, full-vs-partial scope, source/build/profile/run binding, immutable
+  verified case lists, safe identical-plan reuse, and malformed receipt rejection.
+  The protocol does not authenticate GitHub or determine dependency impact.
 - Before/after wall time: **1.79 s plain / 2.57 s instrumented**. This is a
   single small-fixture measurement including process startup and worker output,
   not a repository benchmark or evidence of net CI savings.
@@ -93,8 +100,9 @@ for execution contexts that cannot safely identify an individual owner.
 - No selective production filters, complete-baseline publishing, PR/post-merge
   reuse, or compatibility migration has been enabled. The dedicated Linux
   collector canary uploads raw evidence; its result must be checked separately.
-- Safeguard-removal mutation testing and process-crash/cancellation testing are
-  still needed; corrupt-artifact tests are not substitutes for those checks.
+- Task-observer safeguard removal and a forcibly killed worker are now exercised.
+  Broader process/runner cancellation paths are still needed; these controls do
+  not establish production workflow cancellation correctness.
 
 The aggregate-coverage counterexample and original feasibility measurements
 remain in [README.md](README.md). Both proof scripts now record their effective

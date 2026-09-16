@@ -18,6 +18,31 @@ public sealed class WorkerTests
     [Fact, Trait("Scenario", "UnjoinedWorker")]
     public Task Unjoined() => RunWorker("complete", join: false);
 
+    [Fact, Trait("Scenario", "KilledWorker")]
+    public async Task KilledWorker()
+    {
+        string worker = Environment.GetEnvironmentVariable("ATTRIBUTION_WORKER_DLL")
+            ?? throw new InvalidOperationException("Missing worker fixture.");
+        var start = new ProcessStartInfo("dotnet")
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true
+        };
+        start.ArgumentList.Add(worker);
+        start.ArgumentList.Add("WaitForKill");
+        Tracker.AttachWorker(start);
+        using var child = Process.Start(start) ?? throw new InvalidOperationException("Worker did not start.");
+        try
+        {
+            Assert.Equal("ready", await child.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(15)));
+        }
+        finally
+        {
+            if (!child.HasExited) child.Kill(entireProcessTree: true);
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        Assert.NotEqual(0, child.ExitCode);
+    }
+
     private static async Task RunWorker(string mode, bool join = true)
     {
         string worker = Environment.GetEnvironmentVariable("ATTRIBUTION_WORKER_DLL")

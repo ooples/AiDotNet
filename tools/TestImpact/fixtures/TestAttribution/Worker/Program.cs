@@ -33,8 +33,14 @@ if (Environment.GetEnvironmentVariable("ATTRIBUTION_OUTPUT") is null)
     return;
 }
 string owner = Tracker.BeginWorker();
+if (scenario == WorkerScenario.WaitForKill)
+{
+    Console.WriteLine("ready");
+    await Task.Delay(Timeout.Infinite);
+    return;
+}
 if (scenario == WorkerScenario.Unclosed) return; // Exit without completing the ownership scope.
 Console.WriteLine(CodePaths.WorkerOnly(21));
 Tracker.End(owner);
 
-enum WorkerScenario { Complete, Missing, Unclosed, Benchmark }
+enum WorkerScenario { Complete, Missing, Unclosed, Benchmark, WaitForKill }

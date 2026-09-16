@@ -5,6 +5,7 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <ProjectReference Include="../Runtime/AttributionRuntime.csproj" />
+    <ProjectReference Include="../../../Attribution.Protocol/Attribution.Protocol.csproj" />
     <ProjectReference Include="../Subject/AttributionSubject.csproj" />
     <ProjectReference Include="../Worker/AttributionWorker.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Instrumenter/AttributionInstrumenter.csproj" ReferenceOutputAssembly="false" />

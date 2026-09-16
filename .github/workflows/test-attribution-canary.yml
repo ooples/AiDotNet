@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'tools/TestImpact/fixtures/TestAttribution/**'
+      - 'tools/TestImpact/Attribution.Protocol/**'
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
       - '.github/workflows/test-attribution-canary.yml'
 

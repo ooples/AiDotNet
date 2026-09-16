@@ -4,7 +4,7 @@ param([switch] $NoBuild, [string] $EvidenceDirectory)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-enum PrototypeRejection { Results; ReportInventory; WrongRun; Faulted; MissingWorker; UnknownMethod; Binary; MissingOwner }
+enum PrototypeRejection { Results; ReportInventory; WrongRun; Faulted; MissingWorker; UnknownMethod; Binary; MissingOwner; GuardTestFailed }
 function Reject([PrototypeRejection] $Reason, [string] $Message) {
     $failure = [IO.InvalidDataException]::new($Message)
     $failure.Data['Reason'] = $Reason
@@ -122,7 +122,7 @@ function Expect-Rejected([string] $Name, [PrototypeRejection] $Reason, [scriptbl
         if ($_.Exception.Data['Reason'] -ne $Reason) { throw }
         $observed = $true
     }
-    Check $observed "$Name unexpectedly accepted invalid evidence."
+    if (-not $observed) { Reject GuardTestFailed "$Name unexpectedly accepted invalid evidence." }
     $rejections.Add($Name)
 }
 
@@ -135,6 +135,13 @@ try {
     }
     $original = Join-Path $fixture 'PrototypeTests/bin/Release/net10.0'
     $workerOriginal = Join-Path $fixture 'Worker/bin/Release/net10.0'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=Protocol' `
+        "/ResultsDirectory:$(Join-Path $root 'protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Execution evidence protocol tests failed.'
+    [xml] $protocolTrx = Get-Content -LiteralPath (Join-Path $root 'protocol/results.trx') -Raw
+    $protocolCases = @($protocolTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($protocolCases.Count -eq 15 -and @($protocolCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Protocol checks did not execute the complete expected case set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -190,9 +197,25 @@ try {
         @('detached-task', 'DetachedTask', 'PrototypeTests.DetachedTaskTests.NeverHitsCoveredCode', [PrototypeRejection]::Faulted, 0),
         @('untracked-timer', 'UntrackedTimer', 'PrototypeTests.UntrackedBoundaryTests.TimerNeverFires', [PrototypeRejection]::Faulted, 0),
         @('untracked-process', 'UntrackedProcess', 'PrototypeTests.UntrackedBoundaryTests.ProcessNeverProducesCoverage', [PrototypeRejection]::Faulted, 0),
+        @('killed-worker', 'KilledWorker', 'PrototypeTests.WorkerTests.KilledWorker', [PrototypeRejection]::Faulted, 0),
         @('test-failure', 'Failure', 'PrototypeTests.FailingTests.FailsAfterCoverage', [PrototypeRejection]::Results, 1))) {
         $negative = Invoke-PrototypeRun $case[0] $case[1] $hostCopy $true $case[4]
         Expect-Rejected $case[0] $case[3] { Assert-Evidence $negative.directory $negative.run @($case[2]) $instrumented $map }
+    }
+    # Remove the safeguard in a private compiled copy and require the original
+    # detached-task regression assertion to fail, rather than merely checking a green control.
+    $mutantHost = Join-Path $root 'mutant-host'
+    Copy-Item -LiteralPath $hostCopy -Destination $mutantHost -Recurse
+    $mutantRuntime = Join-Path $root 'AttributionRuntime.dll'
+    dotnet $instrumenter (Join-Path $hostCopy 'AttributionRuntime.dll') $mutantRuntime RemoveTaskObserverForMutationTest
+    Check ($LASTEXITCODE -eq 0) 'Guard mutation setup failed.'
+    Copy-Item -LiteralPath $mutantRuntime -Destination (Join-Path $mutantHost 'AttributionRuntime.dll')
+    Copy-Item -LiteralPath ([IO.Path]::ChangeExtension($mutantRuntime, '.pdb')) -Destination (Join-Path $mutantHost 'AttributionRuntime.pdb')
+    $guardRun = Invoke-PrototypeRun guard-removal DetachedTask $mutantHost $true
+    Expect-Rejected guard-removal-regression GuardTestFailed {
+        Expect-Rejected detached-task-required Faulted {
+            Assert-Evidence $guardRun.directory $guardRun.run @('PrototypeTests.DetachedTaskTests.NeverHitsCoveredCode') $instrumented $map
+        }
     }
     Expect-Rejected wrong-run WrongRun { Assert-Evidence $collected.directory ([guid]::NewGuid().ToString('N')) $positive $instrumented $map }
     Expect-Rejected stale-binary Binary { Assert-Evidence $collected.directory $collected.run $positive $sourceAssembly $map }
@@ -251,7 +274,7 @@ try {
             nanosecondsPerCall = $measurement.NanosecondsPerCall; medianNanoseconds = $samples[3] }
     }
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

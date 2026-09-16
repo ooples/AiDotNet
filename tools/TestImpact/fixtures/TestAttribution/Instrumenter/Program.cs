@@ -22,10 +22,24 @@ using var assembly = AssemblyDefinition.ReadAssembly(input, new ReaderParameters
 {
     ReadSymbols = true, InMemory = true, AssemblyResolver = resolver
 });
+if (mode == InstrumentationMode.RemoveTaskObserverForMutationTest)
+{
+    if (assembly.Name.Name != "AttributionRuntime") throw new InvalidOperationException("Mutation control only accepts the fixture runtime.");
+    MethodDefinition observer = assembly.MainModule.Types.Single(type => type.FullName == typeof(Tracker).FullName)
+        .Methods.Single(method => method.Name == nameof(Tracker.ObserveTask));
+    observer.Body = new MethodBody(observer);
+    observer.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+    observer.DebugInformation.SequencePoints.Clear();
+    assembly.Write(output, new WriterParameters { WriteSymbols = true });
+    Console.WriteLine("Created unsafe private mutation control; never use as collection evidence.");
+    return;
+}
 if (assembly.Name.HasPublicKey || AllTypes(assembly.MainModule.Types).SelectMany(type => type.Methods)
     .Where(method => method.HasBody).SelectMany(method => method.Body.Instructions)
     .Any(instruction => instruction.Operand is MethodReference reference &&
-        reference.DeclaringType.FullName == typeof(Tracker).FullName && reference.Name is nameof(Tracker.Hit) or nameof(Tracker.ObserveTask)))
+        reference.DeclaringType.FullName == typeof(Tracker).FullName && reference.Name is
+            nameof(Tracker.Hit) or nameof(Tracker.ObserveTask) or nameof(Tracker.CheckProcessStart) or
+            nameof(Tracker.UntrackedProcess) or nameof(Tracker.UntrackedConcurrency)))
     throw new InvalidOperationException("Signed or already instrumented inputs are unsupported by this prototype.");
 var hit = assembly.MainModule.ImportReference(typeof(Tracker).GetMethod(nameof(Tracker.Hit))
     ?? throw new InvalidOperationException("Missing tracking method."));
@@ -114,6 +128,8 @@ static IEnumerable<TypeDefinition> AllTypes(IEnumerable<TypeDefinition> roots)
 
 static void InsertBeforeIncludingTargets(MethodDefinition method, Instruction target, params Instruction[] inserted)
 {
+    if (target.Previous?.OpCode.OpCodeType == OpCodeType.Prefix)
+        throw new InvalidOperationException("Prefixed escape calls are unsupported; refusing to emit invalid IL.");
     // A branch to the original call must not bypass its safety check.
     foreach (Instruction instruction in method.Body.Instructions)
     {
@@ -133,4 +149,4 @@ static void InsertBeforeIncludingTargets(MethodDefinition method, Instruction ta
     foreach (Instruction instruction in inserted) method.Body.GetILProcessor().InsertBefore(target, instruction);
 }
 
-enum InstrumentationMode { Methods, TaskBoundaries }
+enum InstrumentationMode { Methods, TaskBoundaries, RemoveTaskObserverForMutationTest }
