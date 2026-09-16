@@ -14,4 +14,6 @@ public static class CodePaths
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     public static int HotPath(int value) => value ^ 37;
+
+    public static int UntakenBranch(bool callLeft) => callLeft ? Operations.Left(1) : 0;
 }

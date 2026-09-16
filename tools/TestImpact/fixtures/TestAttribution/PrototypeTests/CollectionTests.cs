@@ -28,6 +28,9 @@ public sealed class MethodTests : IClassFixture<SharedFixture>
     }
 
     [Fact, Trait("Scenario", "Positive")]
+    public void PotentialCaller() => Assert.Equal(0, CodePaths.UntakenBranch(false));
+
+    [Fact, Trait("Scenario", "Positive")]
     public async Task SuppressedContext()
     {
         Task<int> work;

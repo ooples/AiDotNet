@@ -3,15 +3,14 @@ using Xunit;
 
 namespace PrototypeTests;
 
-public sealed class LateTests : IAsyncLifetime
+public sealed class LateReleaseFixture : IAsyncLifetime
 {
     private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? background;
 
     public Task InitializeAsync() => Task.CompletedTask;
 
-    [Fact, Trait("Scenario", "Late")]
-    public void LateBackground()
+    public void Start()
     {
         // Prime the deduplication cache; a repeated late hit must still be detected.
         Assert.Equal(61, CodePaths.Late());
@@ -24,11 +23,16 @@ public sealed class LateTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        // xUnit runs After before class disposal; execution context still contains
-        // the closed scope in the detached task. This must poison attribution.
+        // Shared fixture cleanup occurs after the individual test case has closed.
         release.SetResult();
         if (background is not null) await background.WaitAsync(TimeSpan.FromSeconds(15));
     }
+}
+
+public sealed class LateTests(LateReleaseFixture fixture) : IClassFixture<LateReleaseFixture>
+{
+    [Fact, Trait("Scenario", "Late")]
+    public void LateBackground() => fixture.Start();
 }
 
 public sealed class FailingTests
@@ -53,6 +57,15 @@ public sealed class DetachedTaskTests
 
 public sealed class UntrackedBoundaryTests
 {
+    [Fact, Trait("Scenario", "AfterPublication")]
+    public void ExitCallbackHitsAfterReport()
+    {
+        // The framework initialized Tracker before this test, so its exit
+        // publication handler runs before the callback registered here.
+        Assert.Equal(61, CodePaths.Late());
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => CodePaths.Late();
+    }
+
     [Fact, Trait("Scenario", "UntrackedTimer")]
     public void TimerNeverFires()
     {

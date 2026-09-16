@@ -37,6 +37,7 @@ function Assert-Evidence {
     $reportDirectory = Join-Path $Directory 'attribution'
     if (-not (Test-Path -LiteralPath $reportDirectory -PathType Container)) { Reject ReportInventory 'Missing attribution directory.' }
     if (@(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.pending' -File).Count -gt 0) { Reject ReportInventory 'Incomplete report publication.' }
+    if (@(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.invalid' -File).Count -gt 0) { Reject ReportInventory 'Report revoked after publication.' }
     $reports = @(Get-ChildItem -LiteralPath $reportDirectory -Filter '*.json' -File | ForEach-Object {
         try { $value = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
         catch { Reject ReportInventory 'Malformed attribution report.' }
@@ -96,6 +97,9 @@ foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER'
 }
 $positive = @('PrototypeTests.MethodTests.First(value: 1)', 'PrototypeTests.MethodTests.First(value: 2)',
     'PrototypeTests.MethodTests.Second', 'PrototypeTests.MethodTests.SuppressedContext',
+    'PrototypeTests.MethodTests.PotentialCaller',
+    'PrototypeTests.InheritedLeftTests.Inherited', 'PrototypeTests.InheritedRightTests.Inherited',
+    'PrototypeTests.CleanupTests.CleanupJoinsBackground',
     'PrototypeTests.ParallelLeftTests.Left', 'PrototypeTests.ParallelRightTests.Right', 'PrototypeTests.WorkerTests.Complete')
 $runs = [Collections.Generic.List[object]]::new()
 $rejections = [Collections.Generic.List[string]]::new()
@@ -174,11 +178,19 @@ try {
     $hostReport = @($reports | Where-Object { $_.Kind -ceq 'TestHost' })[0]
     Check ($hostReport.PeakScopes -ge 2) 'No actual test-scope overlap observed.'
     $mapData = Get-Content $map -Raw | ConvertFrom-Json
+    $potential = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match '::UntakenBranch\(' })
+    $leftNode = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'Operations::Left\(' })
+    Check ($potential.Count -eq 1 -and $leftNode.Count -eq 1 -and $leftNode[0].Key -cin $potential[0].LocalCalls) `
+        'Static graph lost the dependency in an unexecuted branch.'
+    $potentialOwner = @($reports.Hits | Where-Object { $_.Owner -ceq 'PrototypeTests:PrototypeTests.MethodTests.PotentialCaller' })
+    Check ($potentialOwner.Count -eq 1 -and $leftNode[0].Key -cnotin $potentialOwner[0].Methods) `
+        'Untaken-branch control unexpectedly executed Left.'
     function Methods-For([string] $Owner) {
         $keys = @($reports.Hits | Where-Object { $_.Owner -ceq $Owner } | ForEach-Object { $_.Methods })
         return @($mapData.Methods | Where-Object { $_.Key -cin $keys } | ForEach-Object { [string] $_.Name })
     }
     foreach ($case in @(@('MethodTests.First', 'Left', 'Right'), @('MethodTests.Second', 'Right', 'Left'),
+        @('InheritedLeftTests.Inherited', 'Left', 'Right'), @('InheritedRightTests.Inherited', 'Right', 'Left'),
         @('ParallelLeftTests.Left', 'Left', 'Right'), @('ParallelRightTests.Right', 'Right', 'Left'))) {
         $methods = @(Methods-For "PrototypeTests:PrototypeTests.$($case[0])")
         Check (@($methods | Where-Object { $_ -match "Operations::$($case[1])\(" }).Count -eq 1) "Missing expected dependency for $($case[0])."
@@ -198,8 +210,16 @@ try {
         @('untracked-timer', 'UntrackedTimer', 'PrototypeTests.UntrackedBoundaryTests.TimerNeverFires', [PrototypeRejection]::Faulted, 0),
         @('untracked-process', 'UntrackedProcess', 'PrototypeTests.UntrackedBoundaryTests.ProcessNeverProducesCoverage', [PrototypeRejection]::Faulted, 0),
         @('killed-worker', 'KilledWorker', 'PrototypeTests.WorkerTests.KilledWorker', [PrototypeRejection]::Faulted, 0),
+        @('custom-skip', 'CustomSkip', 'PrototypeTests.CustomCaseTests.CustomRunnerStillSkips', [PrototypeRejection]::Results, 0),
+        @('after-publication', 'AfterPublication', 'PrototypeTests.UntrackedBoundaryTests.ExitCallbackHitsAfterReport', [PrototypeRejection]::ReportInventory, 0),
         @('test-failure', 'Failure', 'PrototypeTests.FailingTests.FailsAfterCoverage', [PrototypeRejection]::Results, 1))) {
         $negative = Invoke-PrototypeRun $case[0] $case[1] $hostCopy $true $case[4]
+        if ($case[1] -ceq 'CustomSkip') {
+            [xml] $skipTrx = Get-Content -LiteralPath (Join-Path $negative.directory 'results.trx') -Raw
+            $skipResults = @($skipTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+            Check ($skipResults.Count -eq 1 -and $skipResults[0].outcome -ceq 'NotExecuted') `
+                'Custom test runner was bypassed or its skip became a failure.'
+        }
         Expect-Rejected $case[0] $case[3] { Assert-Evidence $negative.directory $negative.run @($case[2]) $instrumented $map }
     }
     # Remove the safeguard in a private compiled copy and require the original

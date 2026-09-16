@@ -51,6 +51,7 @@ var checkProcess = ImportTracker(nameof(Tracker.CheckProcessStart));
 var untrackedProcess = ImportTracker(nameof(Tracker.UntrackedProcess));
 var untrackedConcurrency = ImportTracker(nameof(Tracker.UntrackedConcurrency));
 var methods = new List<object>();
+var dependencyGraph = DependencyGraph.Read(assembly, inputHash);
 int taskSites = 0;
 int boundarySites = 0;
 foreach (TypeDefinition type in AllTypes(assembly.MainModule.Types))
@@ -113,7 +114,7 @@ assembly.Write(output, new WriterParameters { WriteSymbols = true });
 string outputHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(output)));
 File.WriteAllText(output + ".map.json", JsonSerializer.Serialize(new
 {
-    Schema = 1, InputHash = inputHash, PdbHash = pdbHash, OutputHash = outputHash, Methods = methods, TaskSites = taskSites, BoundarySites = boundarySites, Mode = mode.ToString()
+    Schema = 1, InputHash = inputHash, PdbHash = pdbHash, OutputHash = outputHash, Methods = methods, TaskSites = taskSites, BoundarySites = boundarySites, Mode = mode.ToString(), DependencyGraph = dependencyGraph
 }, new JsonSerializerOptions { WriteIndented = true }));
 Console.WriteLine($"Instrumented {methods.Count} source-backed methods and {taskSites} task sites into private copy {output}");
 

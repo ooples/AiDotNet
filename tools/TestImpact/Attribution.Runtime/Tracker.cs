@@ -18,6 +18,7 @@ public sealed record AttributionReport(int Schema, string Run, string Token,
 // AsyncLocal identifies ownership; a shared scope object detects hits after its owner closes.
 public static class Tracker
 {
+    public static bool IsEnabled => DirectoryPath is not null;
     public const string SharedOwner = "<execution-group>";
     private sealed class Scope(string owner)
     {
@@ -41,6 +42,8 @@ public static class Tracker
     private static readonly string Token = OptionalEnvironment("ATTRIBUTION_TOKEN") ?? Guid.NewGuid().ToString("N");
     private static readonly AttributionProcessKind Kind = WorkerOwner is null ? AttributionProcessKind.TestHost : AttributionProcessKind.Worker;
     private static int peakScopes;
+    private static bool published;
+    private static bool revoked;
     private static readonly HitCollectionMode CollectionMode = ReadCollectionMode();
 
     private static HitCollectionMode ReadCollectionMode()
@@ -73,6 +76,7 @@ public static class Tracker
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         lock (Gate)
         {
+            RevokePublishedReport();
             if (Current.Value is not null)
             {
                 Faults.Add(AttributionFault.InvalidBoundary);
@@ -90,6 +94,7 @@ public static class Tracker
         if (DirectoryPath is null) return;
         lock (Gate)
         {
+            RevokePublishedReport();
             Scope? scope = Current.Value;
             if (scope is null || scope.Closed || scope.Owner != owner)
             {
@@ -111,6 +116,7 @@ public static class Tracker
         if (DirectoryPath is null || task is null || task.IsCompleted) return;
         lock (Gate)
         {
+            RevokePublishedReport();
             Scope? scope = Current.Value;
             if (scope is null) GroupTasks.Add(task);
             else if (scope.Closed) Faults.Add(AttributionFault.LateHit);
@@ -123,6 +129,7 @@ public static class Tracker
         if (DirectoryPath is null) return;
         lock (Gate)
         {
+            RevokePublishedReport();
             Scope? scope = Current.Value;
             start.Environment.TryGetValue("ATTRIBUTION_TOKEN", out string? token);
             start.Environment.TryGetValue("ATTRIBUTION_RUN", out string? run);
@@ -135,12 +142,20 @@ public static class Tracker
 
     public static void UntrackedProcess()
     {
-        if (DirectoryPath is not null) lock (Gate) Faults.Add(AttributionFault.UntrackedProcess);
+        if (DirectoryPath is not null) lock (Gate)
+        {
+            RevokePublishedReport();
+            Faults.Add(AttributionFault.UntrackedProcess);
+        }
     }
 
     public static void UntrackedConcurrency()
     {
-        if (DirectoryPath is not null) lock (Gate) Faults.Add(AttributionFault.UntrackedConcurrency);
+        if (DirectoryPath is not null) lock (Gate)
+        {
+            RevokePublishedReport();
+            Faults.Add(AttributionFault.UntrackedConcurrency);
+        }
     }
 
     public static void Hit(string method)
@@ -150,9 +165,10 @@ public static class Tracker
         // Only already-published hits may bypass the global lock. Check closure
         // before the cache, so repeated hits from detached tasks still poison evidence.
         if (CollectionMode == HitCollectionMode.Cached && scope is not null &&
-            !Volatile.Read(ref scope.Closed) && scope.Recorded.ContainsKey(method)) return;
+            !Volatile.Read(ref published) && !Volatile.Read(ref scope.Closed) && scope.Recorded.ContainsKey(method)) return;
         lock (Gate)
         {
+            RevokePublishedReport();
             string owner = scope?.Owner ?? SharedOwner;
             if (scope?.Closed == true)
             {
@@ -171,6 +187,7 @@ public static class Tracker
         if (DirectoryPath is null) throw new InvalidOperationException("Attribution is disabled.");
         lock (Gate)
         {
+            RevokePublishedReport();
             Scope scope = Current.Value ?? throw new InvalidOperationException("Worker has no test owner.");
             if (scope.Closed) throw new InvalidOperationException("Worker owner already closed.");
             var ticket = new WorkerTicket(Run, Guid.NewGuid().ToString("N"), scope.Owner, false);
@@ -187,6 +204,7 @@ public static class Tracker
     {
         lock (Gate)
         {
+            RevokePublishedReport();
             Scope? scope = Current.Value;
             int index = Workers.FindIndex(worker => worker == ticket);
             if (scope is null || scope.Closed || scope.Owner != ticket.Owner || index < 0 || exitCode != 0)
@@ -204,6 +222,16 @@ public static class Tracker
         string owner = WorkerOwner ?? throw new InvalidOperationException("Missing worker ownership.");
         Begin(owner);
         return owner;
+    }
+
+    // Called only under Gate. Validation must wait for process termination and
+    // reject this marker, even when the original report was otherwise complete.
+    private static void RevokePublishedReport()
+    {
+        if (!published || revoked || DirectoryPath is null) return;
+        using var marker = new FileStream(Path.Combine(DirectoryPath, $"{Token}.json.invalid"),
+            FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        revoked = true;
     }
 
     private static void Flush()
@@ -227,6 +255,7 @@ public static class Tracker
             using (var stream = new FileStream(pending, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 JsonSerializer.Serialize(stream, report, options);
             File.Move(pending, destination, overwrite: false);
+            Volatile.Write(ref published, true);
         }
     }
 }
