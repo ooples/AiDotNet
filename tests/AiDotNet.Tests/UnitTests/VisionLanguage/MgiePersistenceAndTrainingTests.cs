@@ -91,12 +91,24 @@ public sealed class MgiePersistenceAndTrainingTests
         MgieSamplingPhysicsTests.AssertDifferent(beforeWrite, afterWrite);
         Assert.Equal(expected.ToArray(), model.EncodeEditGuidance(image, ids).ToArray());
         for (int i = 0; i < originalParameters.Length; i++) Assert.Equal(beforeOriginal[i], originalParameters[i].ToArray());
+        // The clone owns its raw state the same way the original does. The edit mapper's embeddings
+        // train, so the diffusion collector returns them; the MLLM's vision tensors are frozen under
+        // the paper's scope (Fu et al. 2024, Sec. 3.3), so they are registered rather than collected.
         var collected = JointVisionLanguageStateTests.Collect(cloned);
+        var encoder = MgieJointMapperTests.Field<LLaVANeuralNetwork<float>>(cloned, "_instructionEncoder");
+        var registered = encoder.GetParameterStateChunks().ToList();
         foreach (var parameter in clonedParameters)
-            Assert.Single(collected.Where(item => ReferenceEquals(item, parameter)));
+        {
+            bool trainable = collected.Any(item => ReferenceEquals(item, parameter));
+            bool frozen = registered.Any(item =>
+                ReferenceEquals(item.SourceTensor, parameter)
+                && item.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Frozen);
+            Assert.True(trainable ^ frozen,
+                "Every raw parameter must be either collected for training or registered as frozen state.");
+        }
     }
 
-    private static Tensor<float>[] RawParameters(MGIE<float> model)
+    internal static Tensor<float>[] RawParameters(MGIE<float> model)
     {
         var encoder = MgieJointMapperTests.Field<LLaVANeuralNetwork<float>>(model, "_instructionEncoder");
         var mapper = MgieJointMapperTests.Field<MultimodalEditMapperLayer<float>>(model, "_editMapper");

@@ -60,12 +60,25 @@ public sealed class MgieJointMapperTests
         var parameters = JointVisionLanguageStateTests.Collect(model);
         foreach (var parameter in new[]
         {
-            Field<Tensor<float>>(encoder, "_visionClsToken"),
-            Field<Tensor<float>>(encoder, "_visionPositionalEmbeddings"),
-            Field<Tensor<float>>(encoder, "_textPositionalEmbeddings"),
             Field<Tensor<float>>(mapper, "_editTokenEmbeddings"),
             Field<Tensor<float>>(mapper, "_queryEmbeddings")
         }) Assert.Single(parameters.Where(item => ReferenceEquals(item, parameter)));
+
+        // MGIE trains the MLLM's word embeddings and LM head only (Fu et al. 2024, Sec. 3.3), so the
+        // vision tower's raw state is registered — it clones and serializes — but is deliberately not
+        // part of the trainable set the diffusion collector returns.
+        var registered = encoder.GetParameterStateChunks().ToList();
+        foreach (var parameter in new[]
+        {
+            Field<Tensor<float>>(encoder, "_visionClsToken"),
+            Field<Tensor<float>>(encoder, "_visionPositionalEmbeddings"),
+            Field<Tensor<float>>(encoder, "_textPositionalEmbeddings")
+        })
+        {
+            var chunk = Assert.Single(registered.Where(item => ReferenceEquals(item.SourceTensor, parameter)));
+            Assert.Equal(AiDotNet.Models.Parameters.ParameterSlotRole.Frozen, chunk.Role);
+            Assert.DoesNotContain(parameters, item => ReferenceEquals(item, parameter));
+        }
     }
 
     [Fact]

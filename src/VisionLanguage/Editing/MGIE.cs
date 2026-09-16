@@ -218,6 +218,9 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
             seed: seed);
 
         _instructionEncoder = instructionEncoder ?? CreateInstructionEncoder(seed);
+        // MGIE keeps its MLLM frozen except the word embeddings and LM head (Fu et al. 2024, Sec. 4), unless
+        // the options widen or narrow that scope. The encoder is an owned component, so MGIE sets its scope.
+        _instructionEncoder.TrainableScope = _editOptions.TrainableLanguageModelScope;
         LayerInitializationSeedScope.ResetForModelConstruction(seed ?? _editOptions.Seed ?? Architecture?.RandomSeed);
         _editMapper = new MultimodalEditMapperLayer<T>(_editOptions.DecoderDim, _editOptions.EditHiddenDim,
             CROSS_ATTENTION_DIM, _editOptions.EditTokenCount, _editOptions.EditQueryCount,

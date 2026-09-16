@@ -45,6 +45,10 @@ public class MGIEOptions : EditingVLMOptions
         EditTokenCount = other.EditTokenCount;
         EditQueryCount = other.EditQueryCount;
         ImageGuidanceScale = other.ImageGuidanceScale;
+        ConditionDropoutProbability = other.ConditionDropoutProbability;
+        InstructionLossWeight = other.InstructionLossWeight;
+        EditLossWeight = other.EditLossWeight;
+        TrainableLanguageModelScope = other.TrainableLanguageModelScope;
     }
 
     public MGIEOptions()
@@ -84,4 +88,40 @@ public class MGIEOptions : EditingVLMOptions
 
     /// <summary>Image-only classifier-free guidance scale; the text scale is GuidanceScale.</summary>
     public double ImageGuidanceScale { get; set; } = 1.5;
+
+    /// <summary>
+    /// Probability of dropping a training example's conditioning, for classifier-free guidance.
+    /// </summary>
+    /// <remarks>
+    /// <para>Following InstructPix2Pix, MGIE removes the source image, the instruction guidance, or both for 5% of
+    /// the training data (Fu et al. 2024, Sec. 3.3), so the denoiser also learns the image-only and unconditional
+    /// branches that guided sampling combines.</para>
+    /// <para><b>For Beginners:</b> occasionally hiding the hints teaches the model what an edit looks like without
+    /// them, which is what lets guidance strengthen the edit at generation time.</para>
+    /// </remarks>
+    public double ConditionDropoutProbability { get; set; } = 0.05;
+
+    /// <summary>Weight of the instruction (language-model) loss in the total objective.</summary>
+    /// <remarks>
+    /// <para>MGIE optimizes L_all = L_ins + 0.5 L_edit (Fu et al. 2024, Eq. 5), so this defaults to 1.</para>
+    /// <para><b>For Beginners:</b> how strongly the language model is taught to write the expressive instruction.</para>
+    /// </remarks>
+    public double InstructionLossWeight { get; set; } = 1.0;
+
+    /// <summary>Weight of the edit (diffusion noise-prediction) loss in the total objective.</summary>
+    /// <remarks>
+    /// <para>MGIE optimizes L_all = L_ins + 0.5 L_edit (Fu et al. 2024, Eq. 5), so this defaults to 0.5.</para>
+    /// <para><b>For Beginners:</b> how strongly the image-editing part is taught to reproduce the target edit.</para>
+    /// </remarks>
+    public double EditLossWeight { get; set; } = 0.5;
+
+    /// <summary>Which parts of the instruction language model training updates.</summary>
+    /// <remarks>
+    /// <para>MGIE keeps the MLLM frozen except its word embeddings and LM head (Fu et al. 2024, Sec. 4), which is the
+    /// default.</para>
+    /// <para><b>For Beginners:</b> the large language model mostly stays as it is; only the pieces that read and
+    /// write tokens learn during editing training.</para>
+    /// </remarks>
+    public AiDotNet.Enums.LanguageModelTrainableScope TrainableLanguageModelScope { get; set; } =
+        AiDotNet.Enums.LanguageModelTrainableScope.WordEmbeddingsAndHead;
 }

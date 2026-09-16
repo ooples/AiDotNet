@@ -50,6 +50,24 @@ public partial class LLaVANeuralNetwork<T>
         return ForwardLLM(joint);
     }
 
+    /// <summary>
+    /// Positions that precede the instruction tokens in <see cref="EncodeJointHiddenStates"/>: the patch tokens and
+    /// the vision class token.
+    /// </summary>
+    internal int JointVisualTokenCount => _numVisualTokens + 1;
+
+    /// <summary>Projects language-model hidden states [rows, width] to vocabulary logits [rows, vocabulary].</summary>
+    /// <remarks>Uses the model's live LM head and keeps its tape connection, for training language objectives.</remarks>
+    internal Tensor<T> ProjectToVocabulary(Tensor<T> hiddenRows)
+    {
+        Guard.NotNull(hiddenRows);
+        if (!_useNativeMode || _outputProjection is null)
+            throw new NotSupportedException("Vocabulary projection requires the native language-model head.");
+        if (hiddenRows.Rank != 2 || hiddenRows.Shape[1] != _lmHiddenDim)
+            throw new ArgumentException("Hidden rows must be [rows, embedding width].", nameof(hiddenRows));
+        return _outputProjection.Forward(hiddenRows);
+    }
+
     /// <summary>Tokenizes an instruction using this model's configured tokenizer.</summary>
     public IReadOnlyList<int> EncodeInstructionTokens(string instruction)
     {
