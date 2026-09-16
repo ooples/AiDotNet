@@ -206,7 +206,7 @@ jobs:
               -CertificateFile delta-map/certification.json -CertificationRunId ([long] $resolution.runId)
           if ($LASTEXITCODE -ne 0) { throw "certified map provenance is invalid (exit $LASTEXITCODE)" }
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
-          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+          ConvertTo-Json -InputObject @($all) -Depth 5 |
             Set-Content -LiteralPath delta-shard-manifest.json -Encoding utf8
           'map_file=delta-map/shard-map.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           'manifest_file=delta-shard-manifest.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -594,6 +594,12 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
+      ledger_matrix: ${{ steps.select.outputs.ledger_matrix }}
+      parameter_matrix: ${{ steps.select.outputs.parameter_matrix }}
+      shape_matrix: ${{ steps.select.outputs.shape_matrix }}
+      requires_tests: ${{ steps.select.outputs.requires_tests }}
+      requires_sweeps: ${{ steps.select.outputs.requires_sweeps }}
+      requires_shapes: ${{ steps.select.outputs.requires_shapes }}
       escalated: ${{ steps.select.outputs.escalated }}
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
@@ -686,6 +692,11 @@ jobs:
       # These are deterministic contract tests for checked-in CI code. Runtime uncertainty (missing
       # map, expired artifact, unmapped line) falls back to all shards, but a broken selector or
       # workflow contract must block the change rather than merge green with the feature disabled.
+      - name: Setup .NET for worker coverage proof
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Verify the impact tooling
         id: selftest
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
@@ -718,6 +729,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
+          ./tools/TestImpact/Test-CiWorkloads.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Workload partition proof failed' }
+          ./tools/TestImpact/Test-CiPolicyImpact.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI execution-impact proof failed' }
+          ./tools/TestImpact/Test-AuxiliaryEvidence.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence proof failed' }
+          ./tools/TestImpact/Test-AuxiliaryInventory.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary inventory proof failed' }
+          ./tools/TestImpact/Test-WorkerCoverage.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated worker coverage proof failed' }
           ./tools/TestImpact/Test-ValidationReuseModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
 
@@ -744,7 +765,7 @@ jobs:
           }
           # Test sources are never instrumented, so the coverage map cannot route them; the selector
           # routes them through these same filters instead.
-          ConvertTo-Json -InputObject @($all | Select-Object name, project, filter) -Depth 3 |
+          ConvertTo-Json -InputObject @($all) -Depth 5 |
             Set-Content -LiteralPath shard-manifest.json -Encoding utf8
 
           function Read-RequiredJsonBoolean {
@@ -943,6 +964,17 @@ jobs:
             $escalate = $true
           }
 
+          . './tools/TestImpact/CiWorkloadKinds.ps1'
+          $ledgerImports = @(if ($deltaPartial -and -not $escalate) { $importShards })
+          $runnable = Complete-CiWorkloadSelection -All $all -Selected @($matrixShards) `
+            -RequiresValidation $requiresValidation -Escalated $escalate -ImportedNames $ledgerImports
+          if ($runnable.Escalated -and -not $escalate) {
+            Write-Host '::warning::no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
+          }
+          $matrixShards = @($runnable.Shards)
+          $ledgerShards = @($runnable.LedgerShards)
+          $escalate = $runnable.Escalated
+
           # Slug exactly as the test job does, because that string is the regression analyzer's
           # shard key - it reads it back from shard-metadata.json.
           $running = [System.Collections.Generic.HashSet[string]]::new(
@@ -958,8 +990,24 @@ jobs:
               ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' }
           )
 
-          $json = ConvertTo-Json -InputObject @($matrixShards) -Depth 5 -Compress
+          . ./tools/TestImpact/CiWorkloadKinds.ps1
+          # Validate the complete catalog, including entries omitted from this selection.
+          $null = Split-CiWorkloads -Shards $all
+          $workloads = Split-CiWorkloads -Shards @($matrixShards)
+          $json = ConvertTo-Json -InputObject @($workloads.Tests) -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "ledger_matrix=$(ConvertTo-Json -InputObject @($ledgerShards) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "parameter_matrix=$(ConvertTo-Json -InputObject @($workloads.ParameterSweep) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "shape_matrix=$(ConvertTo-Json -InputObject @($workloads.ModelShape) -Depth 5 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_tests=$(($workloads.Tests.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_sweeps=$(($workloads.ParameterSweep.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "requires_shapes=$(($workloads.ModelShape.Count -gt 0).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "skipped=$(ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1117,7 +1165,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -1859,7 +1907,7 @@ jobs:
           retention-days: 30
 
   parameter-enumeration-sweep:
-    name: Parameter sweep (${{ matrix.label }})
+    name: Tests (${{ matrix.framework }}) - ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: [validation-source, select-shards]
     # LEAST PRIVILEGE, DECLARED. With no permissions block this job inherited the workflow
@@ -1873,14 +1921,14 @@ jobs:
     # nature, which is exactly why it is not allowed inside a test shard: dropped into
     # "Integration P-Q" (which its class name matches) it would consume that shard's whole budget.
     # The Sweep category keeps it out of every shard filter; this job is the only thing that runs it.
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || 60 }}
     # THE SAME CONDITION AS EVERY OTHER JOB IN THIS FILE, and it was not.
     # 'release-please' without the trailing double dash also matches an unrelated
     # branch such as release-please-notes, and the release-push guard was missing
     # entirely -- on a push github.head_ref is empty, so this job ran on release
-    # commits while every other job skipped, building the whole solution and
-    # holding a runner for up to 60 minutes to do it.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # commits while every other job skipped. The selected workload partition now also
+    # determines whether this family has any current work (including post-merge delta runs).
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_sweeps) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     # NO continue-on-error. It made the guards below decorative: the step printed
     # `::error::Sweep harness failed to START` and exited 1, and the job was marked
     # green anyway -- the loud failure those guards promise could never be heard.
@@ -1896,17 +1944,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { sweep: ParameterCountContractTests, count_shard: '0', label: 'ParameterCountContractTests 0/8', artifact_suffix: 'parameter-count-0' }
-          - { sweep: ParameterCountContractTests, count_shard: '1', label: 'ParameterCountContractTests 1/8', artifact_suffix: 'parameter-count-1' }
-          - { sweep: ParameterCountContractTests, count_shard: '2', label: 'ParameterCountContractTests 2/8', artifact_suffix: 'parameter-count-2' }
-          - { sweep: ParameterCountContractTests, count_shard: '3', label: 'ParameterCountContractTests 3/8', artifact_suffix: 'parameter-count-3' }
-          - { sweep: ParameterCountContractTests, count_shard: '4', label: 'ParameterCountContractTests 4/8', artifact_suffix: 'parameter-count-4' }
-          - { sweep: ParameterCountContractTests, count_shard: '5', label: 'ParameterCountContractTests 5/8', artifact_suffix: 'parameter-count-5' }
-          - { sweep: ParameterCountContractTests, count_shard: '6', label: 'ParameterCountContractTests 6/8', artifact_suffix: 'parameter-count-6' }
-          - { sweep: ParameterCountContractTests, count_shard: '7', label: 'ParameterCountContractTests 7/8', artifact_suffix: 'parameter-count-7' }
-          - { sweep: ParameterChunkParityTests, count_shard: '', label: 'ParameterChunkParityTests', artifact_suffix: 'parameter-chunks' }
-          - { sweep: ParameterEnumerationParityTests, count_shard: '', label: 'ParameterEnumerationParityTests', artifact_suffix: 'parameter-enumeration' }
+        include: ${{ fromJSON(needs.select-shards.outputs.parameter_matrix) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1943,7 +1981,17 @@ jobs:
         run: |
           ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
 
+      - name: Connect isolated worker coverage
+        if: ${{ inputs.collect_coverage_everywhere }}
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Connect-WorkerCoverage.ps1 `
+            -ParentDirectory tests/AiDotNet.Tests/bin/Release/net10.0 `
+            -WorkerDirectory tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+          if ($LASTEXITCODE -ne 0) { throw 'Worker coverage connection failed' }
+
       - name: Run the sweep
+        id: auxiliary-tests
         env:
           # See the identical note on the conformance window below: the hardening script's
           # DOTNET_gcServer=0 goes into GITHUB_ENV, and this workflow's top-level
@@ -1987,9 +2035,14 @@ jobs:
           set -o pipefail
           # --no-build/--no-restore are what make the hardening stick: a rebuild here would
           # regenerate xunit.runner.json from the checked-in copy and silently undo the step above.
+          coverage_args=()
+          if [ '${{ inputs.collect_coverage_everywhere }}' = 'true' ]; then
+            coverage_args=(--collect:'XPlat Code Coverage' --settings coverlet.runsettings)
+          fi
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
             --no-build --no-restore \
-            --filter "FullyQualifiedName~${{ matrix.sweep }}" \
+            --filter "${{ matrix.filter }}" \
+            "${coverage_args[@]}" \
             --logger 'console;verbosity=detailed' \
             --logger 'trx;LogFileName=sweep.trx' \
             --results-directory TestResults 2>&1 | tee sweep-output.txt
@@ -2035,6 +2088,48 @@ jobs:
           cp sweep-output.txt sweep-artifacts/ 2>/dev/null || true
           ls -la sweep-artifacts/
 
+      - name: Write auxiliary shard evidence
+        id: auxiliary-evidence
+        if: always()
+        shell: pwsh
+        env:
+          CI_WORKLOAD_JSON: ${{ toJSON(matrix) }}
+        run: |
+          ./tools/TestImpact/Write-AuxiliaryEvidence.ps1 -WorkloadJson $env:CI_WORKLOAD_JSON `
+            -TestStepOutcome '${{ steps.auxiliary-tests.outcome }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence failed' }
+
+      # Keep reporter findings out of the ordinary test-regression ledger. Their existing
+      # job-level policy remains authoritative; incomplete evidence still fails this job.
+      - name: Upload auxiliary coverage and results
+        if: always() && steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: auxiliary-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: TestResults/
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload auxiliary diagnostics
+        if: always() && steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/shard-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload auxiliary impact digest
+        if: steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: impact-digest-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: impact-digest/*.digest.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload sweep report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -2050,7 +2145,7 @@ jobs:
           retention-days: 14
 
   model-shape-conformance-windows:
-    name: Model shape conformance (offset ${{ matrix.offset }})
+    name: Tests (${{ matrix.framework }}) - ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: [build, validation-source, select-shards]
     permissions:
@@ -2061,12 +2156,12 @@ jobs:
     # and each concrete law is probed in its own bounded worker, which fixes the former runner OOM.
     # Keeping deterministic five-model windows preserves per-family inventory reports and ensures a
     # future wave of concrete contracts scales horizontally instead of rebuilding one serial bottleneck.
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || 60 }}
     # This is a real gate. Explicitly unavailable contracts are accounted for without construction;
     # every concrete contract runs in a bounded child process and must agree with Predict. That makes
     # a window containing only honest declines valid while preserving strict failure for a mismatch,
     # crash, timeout, or unconstructable claimed contract.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shapes) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
@@ -2077,7 +2172,7 @@ jobs:
         # Five is also the forward-looking resource envelope: each concrete contract receives up to
         # three minutes and 1 GiB in an isolated worker, so one window has a known upper bound even as
         # the current explicit-unavailability backlog is replaced by generated contracts.
-        offset: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]
+        include: ${{ fromJSON(needs.select-shards.outputs.shape_matrix) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -2125,7 +2220,17 @@ jobs:
         run: |
           ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
 
+      - name: Connect isolated worker coverage
+        if: ${{ inputs.collect_coverage_everywhere }}
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Connect-WorkerCoverage.ps1 `
+            -ParentDirectory tests/AiDotNet.Tests/bin/Release/net10.0 `
+            -WorkerDirectory tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+          if ($LASTEXITCODE -ne 0) { throw 'Worker coverage connection failed' }
+
       - name: Run the conformance window
+        id: auxiliary-tests
         env:
           # WORKSTATION GC, SET HERE BECAUSE GITHUB_ENV CANNOT WIN THIS ARGUMENT. The hardening
           # script exports DOTNET_gcServer=0 two ways: into its own process, and into GITHUB_ENV
@@ -2150,10 +2255,16 @@ jobs:
           set -o pipefail
           # --no-build/--no-restore: a rebuild would regenerate xunit.runner.json and undo the
           # hardening step above.
+          coverage_args=()
+          if [ '${{ inputs.collect_coverage_everywhere }}' = 'true' ]; then
+            coverage_args=(--collect:'XPlat Code Coverage' --settings coverlet.runsettings)
+          fi
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
             --no-build --no-restore \
-            --filter "FullyQualifiedName~ModelContractConformanceTests" \
+            --filter "${{ matrix.filter }}" \
+            "${coverage_args[@]}" \
             --logger 'console;verbosity=detailed' \
+            --logger 'trx;LogFileName=conformance.trx' \
             --results-directory TestResults 2>&1 | tee window-output.txt
           dotnet_status=${PIPESTATUS[0]}
           set +o pipefail
@@ -2185,6 +2296,46 @@ jobs:
           fi
           exit "${dotnet_status}"
 
+      - name: Write auxiliary shard evidence
+        id: auxiliary-evidence
+        if: always()
+        shell: pwsh
+        env:
+          CI_WORKLOAD_JSON: ${{ toJSON(matrix) }}
+        run: |
+          ./tools/TestImpact/Write-AuxiliaryEvidence.ps1 -WorkloadJson $env:CI_WORKLOAD_JSON `
+            -TestStepOutcome '${{ steps.auxiliary-tests.outcome }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence failed' }
+
+      - name: Upload auxiliary coverage and results
+        if: always() && steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: auxiliary-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: TestResults/
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload auxiliary diagnostics
+        if: always() && steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/shard-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload auxiliary impact digest
+        if: steps.auxiliary-evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: impact-digest-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
+          path: impact-digest/*.digest.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload window report
         if: always() && steps.download-build-artifacts.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -2207,6 +2358,8 @@ jobs:
     needs:
       - build
       - test-net10-sharded
+      - parameter-enumeration-sweep
+      - model-shape-conformance-windows
       - validation-source
       - select-shards
     permissions:
@@ -2373,7 +2526,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
-          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.matrix }}
+          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2409,7 +2562,8 @@ jobs:
           } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
           Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
 
-          # The shards this run actually dispatched. Inventory mode (a master push, which has no
+          # Ordinary shards dispatched or imported by this run. Imports must remain expected
+          # even when only auxiliary workloads rerun. Inventory mode (a master push, which has no
           # baseline to diff against) previously had no expected set, so a shard whose runner died
           # before uploading was simply absent: the counts were taken over whatever arrived and the
           # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
@@ -2420,7 +2574,7 @@ jobs:
             & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
           )
           "inventory_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-          Write-Host "expected shards from the dispatched matrix: $($expectedShardNames.Count)"
+          Write-Host "expected ordinary shards from reruns and imports: $($expectedShardNames.Count)"
 
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
@@ -2514,6 +2668,8 @@ jobs:
     needs:
       - build
       - test-net10-sharded
+      - parameter-enumeration-sweep
+      - model-shape-conformance-windows
       - validation-source
       - select-shards
     env:
@@ -2795,6 +2951,8 @@ jobs:
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - test-net10-sharded
+      - parameter-enumeration-sweep
+      - model-shape-conformance-windows
       - validation-source
       - select-shards
     permissions:
@@ -2971,6 +3129,9 @@ jobs:
             -ReuseScope None `
             -SourceResult '${{ needs.validation-source.result }}' `
             -RequiresValidation '${{ needs.select-shards.outputs.requires_validation || 'true' }}' `
+            -RequiresTests '${{ needs.select-shards.outputs.requires_tests || 'true' }}' `
+            -RequiresSweeps '${{ needs.select-shards.outputs.requires_sweeps || 'true' }}' `
+            -RequiresShapes '${{ needs.select-shards.outputs.requires_shapes || 'true' }}' `
             -SelectResult '${{ needs.select-shards.result }}' `
             -BuildResult '${{ needs.build.result }}' `
             -BuildCompatResult '${{ needs.build-compat.result }}' `

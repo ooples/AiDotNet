@@ -853,7 +853,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = vocabSize * embeddingDim;
-        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
+        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2.0));
 
         // Store unweighted loss for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;

@@ -8,6 +8,9 @@ param(
     [Parameter(Mandatory)] [ValidateSet('None', 'Validation', 'Complete')] [string] $ReuseScope,
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
+    [string] $RequiresTests = 'true',
+    [string] $RequiresSweeps = 'true',
+    [string] $RequiresShapes = 'true',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
@@ -88,6 +91,9 @@ function Add-RequiredSuccess {
 $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
+$requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
+$requiresSweepsNow = ConvertTo-RequiredBoolean $RequiresSweeps 'RequiresSweeps'
+$requiresShapesNow = ConvertTo-RequiredBoolean $RequiresShapes 'RequiresShapes'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 
 $source = ConvertTo-CiJobConclusion $SourceResult 'SourceResult'
@@ -116,12 +122,16 @@ if ($gateStage -eq [CiGateStage]::Validation) {
     if ($requiresRuntimeValidation) {
         Add-RequiredSuccess $requirements 'build' $build
         Add-RequiredSuccess $requirements 'build-compat' $buildCompat
-        Add-RequiredSuccess $requirements 'parameter-enumeration-sweep' $parameterSweep
-        Add-RequiredSuccess $requirements 'model-shape-conformance-windows' $modelShape
+        if ($requiresSweepsNow -or $parameterSweep -ne [CiJobConclusion]::Skipped) {
+            Add-RequiredSuccess $requirements 'parameter-enumeration-sweep' $parameterSweep
+        }
+        if ($requiresShapesNow -or $modelShape -ne [CiJobConclusion]::Skipped) {
+            Add-RequiredSuccess $requirements 'model-shape-conformance-windows' $modelShape
+        }
         Add-RequiredSuccess $requirements 'test-regression-analysis' $regression
         Add-RequiredSuccess $requirements 'ci-test-analysis' $aggregate
         Add-RequiredSuccess $requirements 'size-check' $sizeCheck
-        if (-not $verdictIsEnforced) {
+        if (-not $verdictIsEnforced -and ($requiresTestsNow -or $tests -ne [CiJobConclusion]::Skipped)) {
             Add-RequiredSuccess $requirements 'test-net10-sharded' $tests
         }
     }

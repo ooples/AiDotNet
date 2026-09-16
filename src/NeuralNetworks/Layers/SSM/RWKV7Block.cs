@@ -805,10 +805,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        // Per-step outputs are concatenated on the autodiff tape (end of loop) rather
-        // than written into a rented buffer via SafeSetSlice, which detached the output.
-        var outputSlices = new System.Collections.Generic.List<Tensor<T>>(seqLen);
-
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head.
         // Statefulness is for autoregressive streaming inference only; in training each
         // sequence is independent, so start from a fresh zero state every Forward (otherwise

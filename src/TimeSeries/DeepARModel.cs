@@ -576,7 +576,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public Dictionary<double, Vector<T>> ForecastWithQuantiles(Vector<T> history, double[] quantiles)
     {
-        var result = new Dictionary<double, Vector<T>>();
         var samples = new List<Vector<T>>();
 
         for (int s = 0; s < _options.NumSamples; s++)

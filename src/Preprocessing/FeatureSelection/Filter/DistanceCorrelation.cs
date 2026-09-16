@@ -159,7 +159,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             rowMeans[i] /= n;
             colMeans[i] /= n;
         }
-        grandMean /= (n * n);
+        grandMean /= ((double)n * n);
 
         // Double centering
         for (int i = 0; i < n; i++)
@@ -176,7 +176,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int k = 0; k < n; k++)
                 sum += a[i, k] * b[i, k];
 
-        return sum / (n * n);
+        return sum / ((double)n * n);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

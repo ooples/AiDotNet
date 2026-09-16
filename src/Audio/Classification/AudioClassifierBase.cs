@@ -229,13 +229,13 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
             if (count > 0)
             {
                 // Inverse frequency weighting
-                double weight = (double)totalSamples / (numClasses * count);
+                double weight = (double)totalSamples / ((double)numClasses * count);
                 weights[label] = NumOps.FromDouble(weight);
             }
             else
             {
                 // Assign maximum weight to classes with zero samples (they need the most attention)
-                double maxWeight = nonZeroCounts.Max(kvp => (double)totalSamples / (numClasses * kvp.Value));
+                double maxWeight = nonZeroCounts.Max(kvp => (double)totalSamples / ((double)numClasses * kvp.Value));
                 weights[label] = NumOps.FromDouble(maxWeight);
             }
         }
