@@ -155,8 +155,17 @@ internal static class XunitLifecycleReader
 
     private static void AddBeforeAfter(CustomAttribute attribute, HashSet<string> roots)
     {
-        if (Derives(attribute.AttributeType, "Xunit.Sdk.BeforeAfterTestAttribute"))
-            AddAll(Resolve(attribute.AttributeType), roots, "before-after:" + attribute.AttributeType.FullName);
+        if (!Derives(attribute.AttributeType, "Xunit.Sdk.BeforeAfterTestAttribute")) return;
+        TypeDefinition? type = Resolve(attribute.AttributeType);
+        AddLifetime(type, roots);
+        // The runner invokes constructors, named setters and Before/After, not
+        // every static helper inherited from System.Attribute. Calls made by
+        // the hooks themselves remain ordinary transitive IL dependencies.
+        HashSet<string> setters = attribute.Properties.Select(property => "set_" + property.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (TypeDefinition owner in Hierarchy(type))
+            foreach (MethodDefinition method in owner.Methods.Where(method =>
+                !method.IsStatic && (method.Name is "Before" or "After" || setters.Contains(method.Name))))
+                roots.Add(Id(method));
     }
 
     private static void AddLifetime(TypeDefinition? type, HashSet<string> roots)

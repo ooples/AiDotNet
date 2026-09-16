@@ -1,4 +1,5 @@
 using Mono.Cecil;
+using AiDotNet.TestImpact;
 using Mono.Cecil.Cil;
 using Xunit;
 
@@ -7,6 +8,21 @@ namespace PrototypeTests;
 [Trait("Scenario", "SourceImpact")]
 public sealed class GraphExtractionTests
 {
+    [Fact, BeforeAfterProbe]
+    public void BeforeAfterRootsExcludeUnrelatedAttributeHelpers()
+    {
+        using var resolver = new DefaultAssemblyResolver();
+        resolver.AddSearchDirectory(Path.GetDirectoryName(typeof(GraphExtractionTests).Assembly.Location));
+        resolver.AddSearchDirectory(Path.GetDirectoryName(typeof(object).Assembly.Location));
+        using var assembly = AssemblyDefinition.ReadAssembly(typeof(GraphExtractionTests).Assembly.Location,
+            new ReaderParameters { AssemblyResolver = resolver });
+        SourceTestLifecycle test = XunitLifecycleReader.Read(assembly).Map.Tests.Single(test =>
+            test.Owner.EndsWith("GraphExtractionTests.BeforeAfterRootsExcludeUnrelatedAttributeHelpers", StringComparison.Ordinal));
+        Assert.Contains(test.Roots, root => root.Contains("BeforeAfterProbeAttribute::Before", StringComparison.Ordinal));
+        Assert.DoesNotContain(test.Roots, root => root.Contains("UnusedHelper", StringComparison.Ordinal) ||
+            root.Contains("System.Attribute::GetCustomAttribute", StringComparison.Ordinal));
+    }
+
     private static AssemblyDefinition Assembly() => AssemblyDefinition.CreateAssembly(
         new AssemblyNameDefinition("GraphFixture", new Version(1, 0)), "GraphFixture", ModuleKind.Dll);
 
@@ -64,4 +80,10 @@ public sealed class GraphExtractionTests
         MethodDependencyNode node = Assert.Single(DependencyGraph.Read(assembly, "fixture", selectedMethods: [caller]).Methods);
         Assert.Equal(virtualCall, node.OpenDependencies.Any(boundary => boundary.Kind == OpenDependencyKind.VirtualDispatch));
     }
+}
+
+public sealed class BeforeAfterProbeAttribute : Xunit.Sdk.BeforeAfterTestAttribute
+{
+    public override void Before(System.Reflection.MethodInfo methodUnderTest) { }
+    public static void UnusedHelper() => throw new InvalidOperationException("The runner never invokes this helper.");
 }
