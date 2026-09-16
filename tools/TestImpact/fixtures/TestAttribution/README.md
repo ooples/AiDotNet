@@ -1,5 +1,9 @@
 # Test-level impact attribution: feasibility checkpoint
 
+The subsequent [custom collector prototype](PROTOTYPE.md) has local positive
+and negative execution evidence. This page retains the initial aggregate-only
+counterexample; neither checkpoint enables production selection.
+
 Status: **incomplete; production test selection is not enabled**. This fixture is
 the first gate of the test-level selection work, separate from PR #2213. It does
 not change workflows, filters, certificates, baseline maps, or production code.

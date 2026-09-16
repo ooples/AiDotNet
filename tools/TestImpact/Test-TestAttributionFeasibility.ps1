@@ -82,6 +82,8 @@ function Invoke-ProbeRun {
 
 $priorSwap = $env:ATTRIBUTION_SWAP
 try {
+    $sdkVersion = (& dotnet --version | Out-String).Trim()
+    Assert-Probe ($LASTEXITCODE -eq 0 -and $sdkVersion.Length -gt 0) 'Could not resolve the effective SDK.'
     # Small exploratory build is the explicitly agreed feasibility gate, not a model-suite run.
     dotnet build $project -c Release --nologo -m:2 -p:UseSharedCompilation=false
     Assert-Probe ($LASTEXITCODE -eq 0) 'Attribution fixture build failed.'
@@ -104,6 +106,7 @@ try {
 
     $evidence = [ordered]@{
         schemaVersion = 1
+        sdkVersion = $sdkVersion
         capability = ([AttributionCapability]::AggregateOnly).ToString()
         isolatedControl = ([AttributionCapability]::MethodIsolated).ToString()
         productionSelectionEnabled = $false
