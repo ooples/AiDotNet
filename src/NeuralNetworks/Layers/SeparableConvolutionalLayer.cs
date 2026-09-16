@@ -795,24 +795,27 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
         // Update depthwise kernels using Engine operations
         var dwL2 = Engine.TensorMultiplyScalar(_depthwiseKernels, l2RegularizationFactor);
         var dwGradWithL2 = Engine.TensorAdd(_depthwiseKernelsGradient, dwL2);
-        _depthwiseKernelsVelocity = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(_depthwiseKernelsVelocity, momentum),
-            Engine.TensorMultiplyScalar(dwGradWithL2, learningRate));
-        _depthwiseKernels = Engine.TensorSubtract(_depthwiseKernels, _depthwiseKernelsVelocity);
+        // In-place: momentum state must keep its own persistent storage. Rebinding the field to
+        // an Engine result hands it arena scratch that is recycled before the next step reads it.
+        Engine.TensorMultiplyScalarInPlace(_depthwiseKernelsVelocity, momentum);
+        Engine.TensorAddInPlace(_depthwiseKernelsVelocity, Engine.TensorMultiplyScalar(dwGradWithL2, learningRate));
+        Engine.TensorSubtractInPlace(_depthwiseKernels, _depthwiseKernelsVelocity);
 
         // Update pointwise kernels using Engine operations
         var pwL2 = Engine.TensorMultiplyScalar(_pointwiseKernels, l2RegularizationFactor);
         var pwGradWithL2 = Engine.TensorAdd(_pointwiseKernelsGradient, pwL2);
-        _pointwiseKernelsVelocity = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(_pointwiseKernelsVelocity, momentum),
-            Engine.TensorMultiplyScalar(pwGradWithL2, learningRate));
-        _pointwiseKernels = Engine.TensorSubtract(_pointwiseKernels, _pointwiseKernelsVelocity);
+        // In-place: momentum state must keep its own persistent storage. Rebinding the field to
+        // an Engine result hands it arena scratch that is recycled before the next step reads it.
+        Engine.TensorMultiplyScalarInPlace(_pointwiseKernelsVelocity, momentum);
+        Engine.TensorAddInPlace(_pointwiseKernelsVelocity, Engine.TensorMultiplyScalar(pwGradWithL2, learningRate));
+        Engine.TensorSubtractInPlace(_pointwiseKernels, _pointwiseKernelsVelocity);
 
         // Update biases using Engine operations (no L2 on biases)
-        _biasesVelocity = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(_biasesVelocity, momentum),
-            Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
-        _biases = Engine.TensorSubtract(_biases, _biasesVelocity);
+        // In-place: momentum state must keep its own persistent storage. Rebinding the field to
+        // an Engine result hands it arena scratch that is recycled before the next step reads it.
+        Engine.TensorMultiplyScalarInPlace(_biasesVelocity, momentum);
+        Engine.TensorAddInPlace(_biasesVelocity, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        Engine.TensorSubtractInPlace(_biases, _biasesVelocity);
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_depthwiseKernels);

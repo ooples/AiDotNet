@@ -374,7 +374,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
             // Always extract layer references even for custom layers
             ExtractLayerReferences();
         }
