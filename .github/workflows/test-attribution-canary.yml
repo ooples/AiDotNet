@@ -12,6 +12,7 @@ on:
       - 'tests/AiDotNet.Tests/Startup.cs'
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
       - 'tools/TestImpact/Test-PlannedAttribution.ps1'
+      - 'tools/TestImpact/Test-SourceSelection.ps1'
       - '.github/workflows/test-attribution-canary.yml'
 
 permissions:
@@ -54,3 +55,7 @@ jobs:
             ${{ runner.temp }}/attribution-proof/planned/*.log
             ${{ runner.temp }}/attribution-proof/planned/*/results.trx
             ${{ runner.temp }}/attribution-proof/planned/*/reports/*
+            ${{ runner.temp }}/attribution-proof/source-selection/*.json
+            ${{ runner.temp }}/attribution-proof/source-selection/*.log
+            ${{ runner.temp }}/attribution-proof/source-selection/*/results.trx
+            ${{ runner.temp }}/attribution-proof/source-selection/*/reports/*

@@ -1,10 +1,55 @@
 using AiDotNet.TestImpact;
-using AttributionRuntime;
 
 if (args.Length == 0 || !Enum.TryParse(args[0], out Command command) || !Enum.IsDefined(command))
-    throw new ArgumentException("Expected Prepare or Verify command.");
+    throw new ArgumentException("Expected Prepare, Verify, SelectChanges, PrepareReuse or CompleteReuse command.");
 switch (command)
 {
+    case Command.PrepareReuse:
+    {
+        if (args.Length != 4) throw new ArgumentException("PrepareReuse request.json plan-output partition-output");
+        ReusePartition partition = SourceReuseCommands.Prepare(args[1]);
+        if (partition.Execution is ExecutionPlan execution) RunnerBinding.WriteNew(args[2], execution);
+        RunnerBinding.WriteNew(args[3], new { partition.Context, partition.Workload, partition.InventoryHash,
+            partition.Cases, partition.ReusedCases, ExecutionRequired = partition.Execution is not null,
+            BaselineOrigin = partition.Baseline.Origin, AuthenticatedWorkflowOrigin = false });
+        break;
+    }
+    case Command.CompleteReuse:
+    {
+        if (args.Length is < 3 or > 4) throw new ArgumentException("CompleteReuse request.json result-output [execution-input.json]");
+        VerifiedReusePartition completed = SourceReuseCommands.Complete(args[1], args.Length == 4 ? args[3] : null);
+        RunnerBinding.WriteNew(args[2], new { completed.Partition.Context, completed.Partition.Workload,
+            completed.Partition.Cases, completed.Partition.ReusedCases, ExecutedCases = completed.Executed?.Cases,
+            BaselineOrigin = completed.Partition.Baseline.Origin, ExecutionOrigin = completed.Executed?.Origin,
+            BaselineContext = completed.Partition.Baseline.Context, BaselinePlanHash = completed.Partition.Baseline.PlanHash,
+            completed.CanReplaceFullBaseline, AuthenticatedWorkflowOrigin = false, ProductionSelectionEnabled = false });
+        break;
+    }
+    case Command.SelectChanges:
+    {
+        if (args.Length != 10) throw new ArgumentException("SelectChanges repository before-snapshot after-snapshot before-inventory after-inventory before-bundle after-bundle plan-output selection-output");
+        SourceSnapshot before = Read<SourceSnapshot>(args[2]);
+        SourceSnapshot after = Read<SourceSnapshot>(args[3]);
+        DiscoveryManifest oldInventory = Read<DiscoveryManifest>(args[4]);
+        DiscoveryManifest currentInventory = Read<DiscoveryManifest>(args[5]);
+        LocalEvidenceReader.ValidateSnapshot(before, oldInventory, args[6]);
+        LocalEvidenceReader.ValidateSnapshot(after, currentInventory, args[7]);
+        if (oldInventory.Workload != currentInventory.Workload) throw new InvalidDataException("Workload identity changed.");
+        SourceDelta delta = GitSourceDelta.Read(args[1], before.SourceTree, after.SourceTree);
+        if (oldInventory.Context.ProfileFingerprint != currentInventory.Context.ProfileFingerprint) delta = delta with { Unmapped = true };
+        SourceSelection selected = SourceImpact.Select(before, after, oldInventory.Cases, currentInventory.Cases, delta);
+        // No fabricated successful zero-test execution. A reuse-only result needs
+        // the separately verified baseline protocol, not an empty runner plan.
+        if (selected.Methods.Length == 0) throw new EvidenceException(EvidenceFailure.Scope, "No execution required by this graph; verified baseline reuse is required before skipping.");
+        ValidationScope scope = selected.Methods.Length == currentInventory.Cases.Select(test => test.MethodId).Distinct(StringComparer.Ordinal).Count()
+            ? ValidationScope.FullWorkload : ValidationScope.SelectedMethods;
+        ExecutionPlan plan = RunnerBinding.Prepare(currentInventory, scope == ValidationScope.FullWorkload ? [] :
+            selected.Methods.Select(method => method.MethodId).ToArray(), scope);
+        RunnerBinding.WriteNew(args[9], new { Before = before.SourceTree, After = after.SourceTree, Delta = delta,
+            Selection = selected, ProductionSelectionEnabled = false, AuthenticatedWorkflowOrigin = false });
+        RunnerBinding.WriteNew(args[8], plan);
+        break;
+    }
     case Command.Prepare:
     {
         if (args.Length < 4 || !Enum.TryParse(args[3], out ValidationScope scope) || !Enum.IsDefined(scope))
@@ -16,17 +61,9 @@ switch (command)
     case Command.Verify:
     {
         if (args.Length != 10) throw new ArgumentException("Verify inventory.json plan.json report-directory results.trx collection-run repository workflow-run attempt output.json");
-        string[] files = Directory.GetFileSystemEntries(args[3]);
-        // A revoked/pending report or unexplained extra process is never ignored.
-        if (files.Length != 1 || !File.Exists(files[0]) || Path.GetExtension(files[0]) != ".json")
-            throw new EvidenceException(EvidenceFailure.Outcome, "Expected one complete, non-revoked single-bundle host report.");
-        AttributionReport report = Read<AttributionReport>(files[0]);
-        if (Path.GetFileNameWithoutExtension(files[0]) != report.Token)
-            throw new EvidenceException(EvidenceFailure.Provenance, "Report filename differs from its process identity.");
         var origin = new RunIdentity(args[6], long.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture),
             int.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture));
-        VerifiedExecution result = PlannedEvidence.Verify(Read<DiscoveryManifest>(args[1]), Read<ExecutionPlan>(args[2]),
-            report, args[4], args[5], origin);
+        VerifiedExecution result = LocalEvidenceReader.Verify(Read<DiscoveryManifest>(args[1]), new(args[2], args[3], args[4], args[5], origin));
         RunnerBinding.WriteNew(args[9], new { result.Scope, result.PlanHash, result.InventoryHash, result.Context,
             result.Workload, result.Origin, result.Cases, result.CanReplaceFullBaseline,
             AuthenticatedWorkflowOrigin = false });
@@ -35,4 +72,4 @@ switch (command)
 }
 
 static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocument<T>(File.ReadAllText(path));
-enum Command { Prepare, Verify }
+enum Command { Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse }

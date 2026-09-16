@@ -1,11 +1,46 @@
 using AiDotNet.TestImpact;
 using Xunit;
+using Xunit.Abstractions;
+using Xunit.Sdk;
+using AiDotNet.TestImpact.Xunit;
 
 namespace PrototypeTests;
 
 [Trait("Scenario", "RunnerProtocol")]
 public sealed class RunnerBindingTests
 {
+    private sealed class RecordingSink(Action<IMessageSinkMessage> record) : LongLivedMarshalByRefObject, IMessageSink
+    {
+        public bool OnMessage(IMessageSinkMessage message) { record(message); return true; }
+    }
+
+    private static TestAssemblyFinished Finished() => new([], new TestAssembly(new ReflectionAssemblyInfo(typeof(RunnerBindingTests).Assembly)), 0m, 0, 0, 0);
+
+    [Fact]
+    public void AssemblyCompletionCannotReachVstestBeforePublication()
+    {
+        bool published = false;
+        var observed = new List<IMessageSinkMessage>();
+        var sink = new AttributionExecutionSink(new RecordingSink(message => { Assert.True(published); observed.Add(message); }));
+        TestAssemblyFinished completion = Finished();
+        Assert.True(sink.OnMessage(completion));
+        Assert.Empty(observed);
+        published = true;
+        sink.Complete();
+        Assert.Same(completion, Assert.Single(observed));
+    }
+
+    [Fact]
+    public void MissingOrDuplicateAssemblyCompletionIsRejected()
+    {
+        var sink = new AttributionExecutionSink(new RecordingSink(_ => { }));
+        Assert.Throws<InvalidOperationException>(() => sink.Complete());
+        sink.OnMessage(Finished());
+        Assert.Throws<InvalidOperationException>(() => sink.OnMessage(Finished()));
+        sink.Complete();
+        Assert.Throws<InvalidOperationException>(() => sink.Complete());
+    }
+
     private static TestCaseIdentity[] Cases() => [new("one", "Theory"), new("two", "Theory"), new("other", "Other")];
     private static ExecutionContextIdentity Context() => new(new('a', 40), new('b', 64), new('c', 64));
 

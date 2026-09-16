@@ -1,5 +1,6 @@
 using System.Reflection;
 using AttributionRuntime;
+using Xunit;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 
@@ -41,19 +42,35 @@ internal sealed class AttributionExecutor(AssemblyName assemblyName, ISourceInfo
             Tracker.RegisterCases(required.Select(test => new DiscoveredCase(test.UniqueID,
             AttributionTestFramework.Owner(test), test.DisplayName, test.GetType() == typeof(XunitTestCase)
                 ? DiscoveredCaseKind.Enumerated : DiscoveredCaseKind.DeferredOrCustom)));
-        using var runner = new AttributionAssemblyRunner(TestAssembly, required, DiagnosticMessageSink,
-            new AttributionExecutionSink(executionSink), options);
-        await runner.RunAsync();
+        var sink = new AttributionExecutionSink(executionSink);
+        using (var runner = new AttributionAssemblyRunner(TestAssembly, required, DiagnosticMessageSink, sink, options))
+            await runner.RunAsync();
         RunnerInvocation.CheckBundleAfterExecution();
+        Tracker.CompleteTestHost();
+        sink.Complete();
     }
 }
 
-internal sealed class AttributionExecutionSink(IMessageSink next) : IMessageSink
+internal sealed class AttributionExecutionSink(IMessageSink next) : LongLivedMarshalByRefObject, IMessageSink
 {
+    private ITestAssemblyFinished? completed;
+    public void Complete()
+    {
+        ITestAssemblyFinished message = Interlocked.Exchange(ref completed, null)
+            ?? throw new InvalidOperationException("Runner did not finish its assembly.");
+        next.OnMessage(message);
+    }
+
     public bool OnMessage(IMessageSinkMessage message)
     {
         switch (message)
         {
+            case ITestAssemblyFinished finishedAssembly:
+                if (Interlocked.CompareExchange(ref completed, finishedAssembly, null) is not null)
+                    throw new InvalidOperationException("Duplicate assembly completion.");
+                // VSTest may tear down the host immediately after this message.
+                // Forward it only after bundle validation and report publication.
+                return true;
             case ITestPassed passed:
                 Tracker.RecordCaseResult(passed.Test.TestCase.UniqueID, passed.Test.DisplayName, ObservedOutcome.Passed);
                 break;

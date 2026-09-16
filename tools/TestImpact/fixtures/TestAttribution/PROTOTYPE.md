@@ -161,10 +161,11 @@ and TRX. This single-bundle path rejects worker-backed evidence.
 full-workload rows** (3 versus 11 discovery cases). It rejected partial results
 presented as a full baseline, a stale binary identity, a removed theory case,
 an unknown method, changed invocation profile/workload/source, and a revoked
-report. Five additional receipt mutations cover missing/duplicate discovery
-cases, skipped results, a foreign run identity, and a missing TRX row. Rejected
+report. Six additional receipt mutations cover missing/duplicate discovery
+cases, skipped results, a foreign run identity, a missing TRX row, and a still-running
+test host. Rejected
 runner invocations must fail with the expected reason and execute zero tests.
-The full fixture harness also passed its 6 runner-binding tests, 15
+The full fixture harness also passed its 8 runner-binding tests, 15
 execution-protocol tests, 17 dependency-selection tests, and existing 31 rejection
 controls. These are actual runner checks, not merely assertions on a filter string.
 
@@ -195,7 +196,59 @@ Twelve protocol tests cover these boundaries, mutable returned plans, old edges,
 open native dependencies, shared state, and missing/stale/wrong-scope execution.
 The caller still must establish graph/change-set completeness and authenticate
 the baseline. This is **not live changed-base CI reuse proof**; automatic graph
-construction, trusted artifact import, and production dispatch remain unwired.
+construction across production assemblies, trusted artifact import, and production
+dispatch remain unwired.
+
+### Automatic source-to-runner selection
+
+`Test-SourceSelection.ps1` builds a small real xUnit assembly from clean Git
+revisions. `SourceSnapshotReader` verifies PDB document checksums, binds both
+the DLL and PDB, uses stable method identities, and fingerprints IL plus referenced
+metadata. A body-stripped assembly envelope detects declaration/resource/attribute
+changes. Inputs are checked again before publishing a snapshot.
+
+The CLI reads the actual Git diff, checks both revisions' source spans, combines
+old/new dependency edges and binary changes, then creates a bound runner plan.
+No list of selected method names is supplied to this proof. Local results:
+
+- Full baseline: **3 passed**; changed executable code: **1 selected and passed**.
+- Identical source but changed compiled IL: **1 selected and passed**.
+- Identical source but changed assembly metadata: **3 required and passed**.
+- Unmapped configuration change: **3 required and passed**.
+- Old binary/PDB against changed source: **rejected**, with no execution plan.
+- Actual baseline plus changed-source execution: **2 reused and 1 freshly passed**,
+  preserving both source identities without claiming a fresh full baseline.
+- Missing fresh execution and an actual partial baseline: **rejected**.
+- Unchanged baseline: **3 reused**, with no fabricated zero-test execution.
+- Twelve source-impact tests cover source-span gaps, deletions, missing roots,
+  changed theory inventories, metadata, shared helpers and open dependencies.
+
+The fixture intentionally keeps informational-version metadata stable; version
+metadata changes currently require full execution. It uses closed IL-only
+assertions, not an assumed purity exemption for assertion libraries. External
+calls, unsupported generics, shared helpers and lifecycle dependencies remain
+conservative. This single-assembly proof does **not** establish useful narrowing
+across all AiDotNet models or authenticated production reuse.
+
+This test exposed a collector completion race: VSTest could terminate its host
+after receiving assembly completion but before atomic report publication. The
+adapter now disposes the runner, checks the bundle and publishes the report before
+forwarding completion. Process-exit publication is idempotent; later tracked work
+still revokes the report. Dedicated sink-ordering tests and all existing late-hit
+controls passed with this ordering.
+
+The local verifier waits for host exit and checks the report directory again for
+shutdown revocation before accepting evidence. This local PID check is not an
+artifact-authentication mechanism and must not be applied to a remote workflow's
+PID. The `PrepareReuse` and `CompleteReuse` commands consume raw local reports and
+TRXs, revalidate binary/source bindings, and recompute the exact partition; they
+do not issue a trusted production certificate.
+
+After the publication-order changes, the opt-in real AiDotNet test project was
+rebuilt successfully (zero errors), and its focused runner check was repeated:
+five existing sharding-configuration cases discovered, exactly one selected case
+executed and passed, with independently verified report/TRX evidence. This checks
+the real adapter integration, not automatic cross-assembly impact selection.
 
 - This is not a VSTest-packaged collector; the xUnit assembly opts in once,
   its adapter supplies the discovery inventory, and workers explicitly join.
@@ -207,9 +260,11 @@ construction, trusted artifact import, and production dispatch remain unwired.
   dependencies are not generally detected. Both pre-publication and process-exit
   post-publication hits are tested; arbitrary unobserved execution is not proven.
   These limitations block production enablement.
-- Source spans are local PDB paths. Repository normalization, source-content
-  verification, generated-source policies, dependency closure, native/GPU code,
-  other target frameworks/platforms, and full assembly coverage are not proven.
+- Source snapshots normalize checkout-relative PDB paths and verify source
+  checksums. Arbitrary generated-source/path-remapping policies, cross-assembly
+  closure, native/GPU code, other target frameworks/platforms and full production
+  assembly coverage are not proven. The checksum-verified empty SDK entry point
+  is accepted only when its IL contains no instructions except `nop`/`ret`.
 - The runtime uses a lock on first hits and unowned hits; repeated scoped hits
   use a concurrent cache. Hot-path overhead, memory use,
   large-method inventories and report size require representative measurement

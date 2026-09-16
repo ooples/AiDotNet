@@ -180,7 +180,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
     [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
     $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($runnerCases.Count -eq 6 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($runnerCases.Count -eq 8 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runner binding checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=ReuseProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'reuse-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
@@ -189,6 +189,13 @@ try {
     $reuseCases = @($reuseTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
     Check ($reuseCases.Count -eq 12 -and @($reuseCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Changed-base partition checks did not execute the expected complete set.'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=SourceImpact' `
+        "/ResultsDirectory:$(Join-Path $root 'source-impact')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
+    [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
+    $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($sourceCases.Count -eq 12 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Source-impact checks did not execute the expected complete set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -376,8 +383,10 @@ try {
     }
     & (Join-Path $PSScriptRoot 'Test-PlannedAttribution.ps1') -Binaries $hostCopy -EvidenceDirectory (Join-Path $root 'planned')
     Check (Test-Path (Join-Path $root 'planned/proof.json')) 'Planned-execution proof was not completed.'
+    & (Join-Path $PSScriptRoot 'Test-SourceSelection.ps1') -EvidenceDirectory (Join-Path $root 'source-selection')
+    Check (Test-Path (Join-Path $root 'source-selection/proof.json')) 'Actual source-selection proof was not completed.'
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; runnerCases = $runnerCases.Count; reuseCases = $reuseCases.Count; sourceCases = $sourceCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

@@ -12,7 +12,7 @@ $testDll = Join-Path $Binaries 'PrototypeTests.dll'
 $filter = 'Scenario=Positive&FullyQualifiedName!~PrototypeTests.WorkerTests'
 $saved = @{}
 enum PlannedRunMode { Discover; ExecutePlan }
-enum ReceiptMutation { MissingCase; SkippedRow; DuplicateCase; WrongRun; MissingTrxRow }
+enum ReceiptMutation { MissingCase; SkippedRow; DuplicateCase; WrongRun; MissingTrxRow; HostStillRunning }
 $names = @('ATTRIBUTION_MODE','ATTRIBUTION_PLAN','ATTRIBUTION_INVENTORY','ATTRIBUTION_OUTPUT','ATTRIBUTION_RUN',
     'ATTRIBUTION_OWNER','ATTRIBUTION_TOKEN','ATTRIBUTION_SOURCE_TREE','ATTRIBUTION_PROFILE_HASH','ATTRIBUTION_WORKLOAD')
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $null) }
@@ -93,6 +93,7 @@ try {
             ([ReceiptMutation]::SkippedRow) { $changed.Cases[0].Results[0].Outcome = 'Skipped' }
             ([ReceiptMutation]::DuplicateCase) { $changed.Cases += $changed.Cases[0] }
             ([ReceiptMutation]::WrongRun) { $changed.Run = [guid]::NewGuid().ToString('N') }
+            ([ReceiptMutation]::HostStillRunning) { $changed.ProcessId = $PID }
             ([ReceiptMutation]::MissingTrxRow) {
                 $row = $changedTrx.SelectSingleNode('//*[local-name()="UnitTestResult"]')
                 [void]$row.ParentNode.RemoveChild($row)

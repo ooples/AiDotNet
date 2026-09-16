@@ -340,11 +340,18 @@ public static class Tracker
         revoked = true;
     }
 
+    public static void CompleteTestHost()
+    {
+        if (Kind != AttributionProcessKind.TestHost) throw new InvalidOperationException("Only the test host can complete the assembly report.");
+        Flush();
+    }
+
     private static void Flush()
     {
         if (DirectoryPath is null) return;
         lock (Gate)
         {
+            if (published) return;
             if (Open.Count != 0) Faults.Add(AttributionFault.UnclosedScope);
             if (GroupTasks.Any(task => !task.IsCompleted)) Faults.Add(AttributionFault.UnjoinedTask);
             if (Kind == AttributionProcessKind.TestHost && (!inventoryRegistered || Cases.Count == 0))
