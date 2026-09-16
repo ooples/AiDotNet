@@ -498,11 +498,13 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     {
         // Update weights using Engine operations: w = w - lr * gradient
         var scaledWeightGradients = Engine.TensorMultiplyScalar(_weightGradients, learningRate);
-        _weights = Engine.TensorSubtract(_weights, scaledWeightGradients);
+        Engine.TensorSubtractInPlace(_weights, scaledWeightGradients);
+        Engine.InvalidatePersistentTensor(_weights);
 
         // Update biases using Engine operations: b = b - lr * gradient
         var scaledBiasGradients = Engine.TensorMultiplyScalar(_biasGradients, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGradients);
+        Engine.TensorSubtractInPlace(_bias, scaledBiasGradients);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <summary>

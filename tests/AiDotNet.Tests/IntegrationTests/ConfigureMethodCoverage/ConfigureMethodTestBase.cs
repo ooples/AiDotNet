@@ -55,8 +55,34 @@ public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture
 /// degenerate-output bugs flip the top-1 assertion.
 /// </para>
 /// </remarks>
-public abstract class ConfigureMethodTestBase
+public abstract class ConfigureMethodTestBase : IDisposable
 {
+    private readonly List<Action> _backendCleanup = new();
+    private bool _disposed;
+
+    // All ranks in one test share a session; independent xUnit instances do not.
+    protected string DistributedEnvironmentId { get; } = Guid.NewGuid().ToString("N");
+
+    protected void OwnCommunicationBackend<T>(AiDotNet.DistributedTraining.ICommunicationBackend<T> backend)
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().Name);
+        _backendCleanup.Add(backend.Shutdown);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        var failures = new List<Exception>();
+        foreach (var shutdown in _backendCleanup)
+        {
+            try { shutdown(); }
+            catch (Exception ex) { failures.Add(ex); }
+        }
+        _backendCleanup.Clear();
+        if (failures.Count > 0) throw new AggregateException("Distributed test cleanup failed.", failures);
+    }
+
     /// <summary>Vocabulary size for the canary memorization task. V=8 keeps the task small enough
     /// that a B=8 TrainBatched run converges within ~100 batch steps (mirrors the V=256 B=32
     /// 100-step pattern from <c>TransformerEndToEndIntegrationTests.TrainBatched_V256_LearnsBatchAfter100Steps</c>).</summary>
