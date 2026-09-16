@@ -192,9 +192,9 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _imageSize = _options.ImageSize;
         _numPerceiverTokens = _options.NumPerceiverTokens;
         _maxImagesInContext = _options.MaxImagesInContext;
-        _visionHiddenDim = _options.VisionHiddenDim;
+        _visionHiddenDim = _options.VisionDim;
         _lmHiddenDim = _options.LmHiddenDim;
-        _numVisionLayers = _options.NumVisionLayers;
+        _numVisionLayers = _options.VisionLayers;
         _numLmLayers = _options.NumLmLayers;
         _numHeads = _options.NumHeads;
         _patchSize = 14;
@@ -264,9 +264,9 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _imageSize = _options.ImageSize;
         _numPerceiverTokens = _options.NumPerceiverTokens;
         _maxImagesInContext = _options.MaxImagesInContext;
-        _visionHiddenDim = _options.VisionHiddenDim;
+        _visionHiddenDim = _options.VisionDim;
         _lmHiddenDim = _options.LmHiddenDim;
-        _numVisionLayers = _options.NumVisionLayers;
+        _numVisionLayers = _options.VisionLayers;
         _numLmLayers = _options.NumLmLayers;
         _numHeads = _options.NumHeads;
         _patchSize = 14;

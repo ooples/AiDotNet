@@ -354,7 +354,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 architecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 10,
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 10 },
                 optimizer: optimizer.Object);
 
             var metadata = pinn.GetModelMetadata();
@@ -380,7 +380,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 restoredArchitecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 10);
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 10 });
             restored.Deserialize(modelData);
             Assert.Equal(updatedCoefficient, restored.Parameters[0]);
         }

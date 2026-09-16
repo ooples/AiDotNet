@@ -31,7 +31,7 @@ public class Blip2Options : VisionLanguageModelOptions
         PatchSize = 14;
         VocabSize = 30522;
         QformerHiddenDim = 768;
-        VisionHiddenDim = 1408;
+        VisionDim = 1408;
         LmHiddenDim = 2560;
         NumQformerLayers = 12;
         NumQueryTokens = 32;

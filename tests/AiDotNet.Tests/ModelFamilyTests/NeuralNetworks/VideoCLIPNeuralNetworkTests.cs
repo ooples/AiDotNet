@@ -100,7 +100,7 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase<float>
                 VocabSize = 49408,           // Paper: 49408 BPE tokens (CLIP tokenizer)
                 MaxSequenceLength = 77,      // Paper: 77 (CLIP text encoder max length)
                 EmbeddingDimension = 64,     // Paper: 512 (joint embedding space)
-                VisionHiddenDim = 128,       // Paper: 768 (ViT-B hidden dim)
+                VisionDim = 128,       // Paper: 768 (ViT-B hidden dim)
                 TextHiddenDim = 64,          // Paper: 512 (CLIP text encoder hidden dim)
                 NumFrameEncoderLayers = 2,   // Paper: 12 (ViT-B depth)
                 NumTemporalLayers = 2,       // Paper: 4 (temporal transformer depth)

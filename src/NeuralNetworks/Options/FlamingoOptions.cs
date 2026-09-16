@@ -30,9 +30,9 @@ public class FlamingoOptions : VisionLanguageModelOptions
         NumPerceiverTokens = 64;
         MaxImagesInContext = 5;
         Channels = 3;
-        VisionHiddenDim = 1024;
+        VisionDim = 1024;
         LmHiddenDim = 2048;
-        NumVisionLayers = 24;
+        VisionLayers = 24;
         NumLmLayers = 32;
         NumHeads = 16;
         VocabSize = 32000;

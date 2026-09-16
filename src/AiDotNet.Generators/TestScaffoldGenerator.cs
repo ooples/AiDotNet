@@ -5114,8 +5114,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
                     "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
                     "MaxSequenceLength = 16, ImageSize = 32, Channels = 3, NumPerceiverTokens = 4, " +
-                    "MaxImagesInContext = 1, VisionHiddenDim = 64, LmHiddenDim = 64, " +
-                    "NumVisionLayers = 1, NumLmLayers = 1, NumHeads = 2, VocabSize = 64, " +
+                    "MaxImagesInContext = 1, VisionDim = 64, LmHiddenDim = 64, " +
+                    "VisionLayers = 1, NumLmLayers = 1, NumHeads = 2, VocabSize = 64, " +
                     "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
@@ -9172,7 +9172,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
                     "options: new AiDotNet.NeuralNetworks.Options.LLaVAOptions { ImageSize = 112, Channels = 3, " +
                     "PatchSize = 14, VocabSize = 32, MaxSequenceLength = 16, " +
-                    "EmbeddingDimension = 32, VisionHiddenDim = 32, NumVisionLayers = 2, " +
+                    "EmbeddingDimension = 32, VisionDim = 32, VisionLayers = 2, " +
                     "NumLmLayers = 2, NumHeads = 4 })";
             }
             else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)

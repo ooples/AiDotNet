@@ -213,7 +213,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _supportedDetailLevels = new List<string> { "low", "high", "auto" };
         _vocabularySize = _options.VocabSize;
         _hiddenDim = _options.EmbeddingDimension;
-        _numVisionLayers = _options.NumVisionLayers;
+        _numVisionLayers = _options.VisionLayers;
         _numLanguageLayers = _options.NumLanguageLayers;
         _numHeads = _options.NumHeads;
         _patchSize = _options.PatchSize;
@@ -243,7 +243,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _contextWindowSize = _options.ContextWindowSize;
         _imageSize = _options.ImageSize;
         _hiddenDim = _options.HiddenDim;
-        _numVisionLayers = _options.NumVisionLayers;
+        _numVisionLayers = _options.VisionLayers;
         _numLanguageLayers = _options.NumLanguageLayers;
         _numHeads = _options.NumHeads;
         _patchSize = _options.PatchSize;

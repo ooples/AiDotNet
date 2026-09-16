@@ -30,8 +30,8 @@ public class LLaVAOptions : VisionLanguageModelOptions
         Channels = 3;
         PatchSize = 14;
         VocabSize = 32000;
-        VisionHiddenDim = 1024;
-        NumVisionLayers = 24;
+        VisionDim = 1024;
+        VisionLayers = 24;
         NumLmLayers = 32;
         NumHeads = 16;
         LanguageModelBackbone = LanguageModelBackbone.LLaMA;

@@ -195,7 +195,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
         _patchSize = _options.PatchSize;
-        _visionHiddenDim = _options.VisionHiddenDim;
+        _visionHiddenDim = _options.VisionDim;
         _textHiddenDim = _options.TextHiddenDim;
         _numFrameEncoderLayers = _options.NumFrameEncoderLayers;
         _numTemporalLayers = _options.NumTemporalLayers;
@@ -245,7 +245,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
-        _visionHiddenDim = _options.VisionHiddenDim;
+        _visionHiddenDim = _options.VisionDim;
         _textHiddenDim = _options.TextHiddenDim;
         _numFrameEncoderLayers = _options.NumFrameEncoderLayers;
         _numTemporalLayers = _options.NumTemporalLayers;
