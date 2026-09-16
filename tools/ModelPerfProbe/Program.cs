@@ -408,12 +408,13 @@ internal static class Program
                 if (timing && series.Count >= MinimumSeriesPoints)
                 {
                     double envelope = series.Max(point => point.Value);
-                    if (current <= envelope)
+                    if (current - envelope <= noiseFloor)
                     {
                         diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
                             $"moved {ratio:F2}x ({previous:F2} -> {current:F2}), but {current:F2} is "
-                            + $"inside the {series.Count}-run envelope this fixture has already "
-                            + $"occupied on this environment (max {envelope:F2}); the baseline drew a "
+                            + $"inside the {series.Count}-run envelope this fixture has already occupied "
+                            + $"on this environment plus the metric's {noiseFloor:F2} noise floor "
+                            + $"(max {envelope:F2}); the baseline drew a "
                             + "low point rather than this run regressing"));
                         continue;
                     }
@@ -675,6 +676,22 @@ internal static class Program
         if (!comparisonDiagnostics.Any(d => d.Metric == TimingMetric
                 && d.Message.Contains("envelope", StringComparison.Ordinal)))
             return Fail("suppressing on the envelope must still report why");
+
+        // A measured envelope is not an exact floating-point boundary. EchoStateNetwork's train
+        // step had already occupied 83.0062 ms on the same runner model; a later 83.1867 ms sample
+        // failed because it exceeded that maximum by 0.1805 ms despite timing's 25 ms noise floor.
+        // The tolerance must apply at the envelope edge just as it does at the baseline edge.
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [TimingRun(477.4)],
+            TimingPoint("eeeeeee", 5, 48.0, 100_000_000),
+            new Options(),
+            comparisonDiagnostics,
+            dispersed);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == TimingMetric)
+            || !comparisonDiagnostics.Any(d => d.Metric == TimingMetric
+                && d.Message.Contains("noise floor", StringComparison.Ordinal)))
+            return Fail("a timing value within the noise floor of its measured envelope must not be an error");
 
         // StreamDiffVSR's real numbers: 2765.9 is 2.5x above everything the fixture has ever done.
         BaselineDocument[] tight =

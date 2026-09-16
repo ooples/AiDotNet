@@ -625,7 +625,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "HasInitialCondition", _initialCondition != null },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

@@ -985,7 +985,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else
         {

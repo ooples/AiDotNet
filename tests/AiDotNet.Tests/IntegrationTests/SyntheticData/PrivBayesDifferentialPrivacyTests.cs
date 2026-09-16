@@ -387,41 +387,34 @@ public class PrivBayesDifferentialPrivacyTests
     }
 
     /// <summary>
-    /// A budget allocated entirely to one phase is rejected rather than accepted and degraded.
+    /// A budget split that starves either phase is REJECTED, not degraded. At 1.0 the conditional
+    /// distributions would be published with no privacy noise while differential privacy still
+    /// reported as enabled; at 0.0 the structure would be learned non-privately. Both look like
+    /// working configurations, which is why BayesianNetworkSynthOptions refuses them outright.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This test previously asserted that fractions of 0.0 and 1.0 "degrade gracefully instead of
-    /// dividing by zero", which was the contract when degenerate splits were permitted. They are
-    /// not permitted any more, and the reason is on the setter: at 1.0 the marginal phase receives
-    /// no budget, so the conditional distributions are published with NO privacy noise while the
-    /// object still reports differential privacy as enabled -- a privacy failure that presents as a
-    /// working configuration. Producing finite numbers in that state is precisely the wrong
-    /// outcome, so the assertion is inverted rather than relaxed.
-    /// </para>
+    /// This test originally asserted the opposite (graceful degradation at the endpoints). It never
+    /// ran in CI - no shard filter selected this class - so it went stale when the option began
+    /// validating its range. The graceful-degradation intent is kept at the extremes that remain
+    /// legal, below.
     /// </remarks>
     [Theory]
     [InlineData(0.0)]
     [InlineData(1.0)]
     public void DegenerateBudgetSplit_IsRejected(double fraction)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BayesianNetworkSynthOptions<double>
-        {
-            Seed = 5,
-            MaxParents = 2,
-            NumBins = 5,
-            StructureBudgetFraction = fraction
-        });
+        var options = new BayesianNetworkSynthOptions<double>();
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.StructureBudgetFraction = fraction);
     }
 
     /// <summary>
-    /// A split close to either extreme is still valid, and must produce finite output -- the
-    /// numerical property the rejected test was reaching for, asserted where it applies.
+    /// The most lopsided splits that ARE allowed must still leave both phases a usable budget:
+    /// no division by zero, no NaN in the synthetic output.
     /// </summary>
     [Theory]
-    [InlineData(0.01)]
-    [InlineData(0.99)]
-    public void NearDegenerateBudgetSplit_DoesNotProduceNaN(double fraction)
+    [InlineData(0.001)]
+    [InlineData(0.999)]
+    public void ExtremeLegalBudgetSplit_DoesNotProduceNaN(double fraction)
     {
         var m = FitAndGenerate(new BayesianNetworkSynthOptions<double>
         {

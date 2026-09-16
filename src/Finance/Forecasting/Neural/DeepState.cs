@@ -379,7 +379,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
             // Wire layer references for custom layers too
             ExtractLayerReferences();
         }
@@ -566,7 +566,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 

@@ -3584,7 +3584,7 @@ public static class DeserializationHelper
         {
             try
             {
-                lb.ResolveFromShape(inputShape);
+                lb.ResolveFromPublishedShape(inputShape);
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {

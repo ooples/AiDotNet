@@ -42,7 +42,7 @@ public class CpuOffloadShardingConfigTests
     public async Task ShardingConfiguration_DefaultsAllOffloadFlagsToFalse()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = new ShardingConfiguration<double>(backend);
 
         Assert.False(config.CpuOffloadOptimizer);
@@ -54,7 +54,7 @@ public class CpuOffloadShardingConfigTests
     public async Task ShardingConfiguration_CreateForZeROOffload_SetsOnlyOptimizerFlag()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = ShardingConfiguration<double>.CreateForZeROOffload(backend);
 
         Assert.True(config.CpuOffloadOptimizer, "CreateForZeROOffload must enable optimizer-state offload.");
@@ -66,7 +66,7 @@ public class CpuOffloadShardingConfigTests
     public async Task ShardingConfiguration_CreateForZeROOffloadFull_SetsAllThreeFlags()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = ShardingConfiguration<double>.CreateForZeROOffloadFull(backend);
 
         Assert.True(config.CpuOffloadOptimizer);
@@ -88,7 +88,7 @@ public class CpuOffloadShardingConfigTests
     public async Task ShardingConfiguration_OffloadFlags_AreIndependentlySettable()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = new ShardingConfiguration<double>(backend)
         {
             CpuOffloadOptimizer = true,
@@ -116,7 +116,7 @@ public class CpuOffloadShardingConfigTests
     public async Task RunWrappedOptimizerStep_SwapsToCpuAndRestoresExactOuter_WhenFlagOn_AndOuterIsNonCpu()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = ShardingConfiguration<double>.CreateForZeROOffload(backend);
 
         var priorEngine = AiDotNetEngine.Current;
@@ -148,7 +148,7 @@ public class CpuOffloadShardingConfigTests
     public async Task RunWrappedOptimizerStep_RestoresExactOuter_WhenWrappedStepThrows()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = ShardingConfiguration<double>.CreateForZeROOffload(backend);
 
         var priorEngine = AiDotNetEngine.Current;
@@ -182,7 +182,7 @@ public class CpuOffloadShardingConfigTests
         await Task.Yield();
         // Documents the fast path: when the outer engine is already a CpuEngine there is
         // nothing to swap, so the wrapped step sees that same instance and it is untouched.
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = ShardingConfiguration<double>.CreateForZeROOffload(backend);
 
         var priorEngine = AiDotNetEngine.Current;
@@ -213,7 +213,7 @@ public class CpuOffloadShardingConfigTests
         await Task.Yield();
         // Flag off → the sharded wrapper is a pass-through; the outer engine reference the
         // wrapped optimizer sees is the same instance we set before the step (no scope swap).
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = new ShardingConfiguration<double>(backend); // flag off
 
         var priorEngine = AiDotNetEngine.Current;
@@ -249,7 +249,7 @@ public class CpuOffloadShardingConfigTests
     public async Task GradientOffload_DrainsDeferredDownload_BeforeReduce()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = new ShardingConfiguration<double>(backend)
         {
             AutoSyncGradients = true,
@@ -291,7 +291,7 @@ public class CpuOffloadShardingConfigTests
     public async Task GradientOffload_IsNoOp_WhenFlagOff()
     {
         await Task.Yield();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         var config = new ShardingConfiguration<double>(backend); // CpuOffloadGradients=false
 
         var gradients = new Vector<double>(new double[8]);
@@ -313,6 +313,13 @@ public class CpuOffloadShardingConfigTests
     }
 
     // ── test-only helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// A fresh in-memory environment per backend. The sharded optimizer's constructor initializes the backend and
+    /// these tests never shut it down, so under the process-wide "default" id each one left rank 0 active and the
+    /// next test that initialized a rank 0 in "default" - here or in another class - failed before its assertions.
+    /// </summary>
+    private static string IsolatedEnvironment() => Guid.NewGuid().ToString("N");
 
 #if !NETFRAMEWORK
     /// <summary>

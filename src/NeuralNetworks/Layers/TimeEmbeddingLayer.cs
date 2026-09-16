@@ -432,10 +432,10 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             _linear2WeightsGradient == null || _linear2BiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _linear1Weights = Engine.TensorSubtract(_linear1Weights, Engine.TensorMultiplyScalar(_linear1WeightsGradient, learningRate));
-        _linear1Bias = Engine.TensorSubtract(_linear1Bias, Engine.TensorMultiplyScalar(_linear1BiasGradient, learningRate));
-        _linear2Weights = Engine.TensorSubtract(_linear2Weights, Engine.TensorMultiplyScalar(_linear2WeightsGradient, learningRate));
-        _linear2Bias = Engine.TensorSubtract(_linear2Bias, Engine.TensorMultiplyScalar(_linear2BiasGradient, learningRate));
+        Engine.TensorSubtractInPlace(_linear1Weights, Engine.TensorMultiplyScalar(_linear1WeightsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_linear1Bias, Engine.TensorMultiplyScalar(_linear1BiasGradient, learningRate));
+        Engine.TensorSubtractInPlace(_linear2Weights, Engine.TensorMultiplyScalar(_linear2WeightsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_linear2Bias, Engine.TensorMultiplyScalar(_linear2BiasGradient, learningRate));
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_linear1Weights);

@@ -1279,12 +1279,12 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             // Use Engine operations for parameter updates
             var scaledWeightsGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
-            _weights = Engine.TensorSubtract(_weights, scaledWeightsGrad);
+            Engine.TensorSubtractInPlace(_weights, scaledWeightsGrad);
 
             if (_useBias)
             {
                 var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
-                _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+                Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
             }
 
             // Notify engine that parameters have changed (for GPU cache invalidation if needed)
