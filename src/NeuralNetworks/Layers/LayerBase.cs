@@ -3472,6 +3472,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Resolves a reconstructed layer from the shape that the source layer published through
+    /// <see cref="GetInputShape"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A published layer shape normally describes one sample, while <see cref="ResolveFromShape"/>
+    /// deliberately accepts the tensor shape seen by the first forward. Those are not interchangeable
+    /// for a batch-aware structural layer. A resolved <see cref="FlattenLayer{T}"/>, for example,
+    /// publishes <c>[channels, height, width]</c>; replaying that directly makes it interpret channels
+    /// as the batch and silently flatten only height by width.
+    /// </para>
+    /// <para>
+    /// <see cref="IBatchAwareShapeContract"/> is the type-safe declaration that the distinction changes
+    /// the layer's result, so those layers receive an explicit singleton batch. Other layers retain the
+    /// established bare-first behavior, with a batched retry for layers such as Conv1D whose forward
+    /// requires a batch even though their published shape omits it.
+    /// </para>
+    /// </remarks>
+    internal void ResolveFromPublishedShape(int[] publishedShape)
+    {
+        if (publishedShape is null) throw new ArgumentNullException(nameof(publishedShape));
+
+        if (this is IBatchAwareShapeContract)
+        {
+            ResolveFromShape(LayerCloning.WithBatchAxis(publishedShape));
+            return;
+        }
+
+        try
+        {
+            ResolveFromShape(publishedShape);
+        }
+        catch (Exception ex) when (
+            (ex is ArgumentException || ex is InvalidOperationException)
+            && !IsShapeResolved)
+        {
+            ResolveFromShape(LayerCloning.WithBatchAxis(publishedShape));
+        }
+    }
+
+    /// <summary>
     /// A tensor that carries <paramref name="shape"/> for shape resolution, without paying for the
     /// storage that shape implies.
     /// </summary>
@@ -6260,24 +6301,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
         else if (savedShape is not null && !IsShapeResolved)
         {
-            // The saved shape is what the layer PUBLISHED for itself, and a layer may publish one
-            // sample while its forward requires the batch axis: Conv1DLayer resolves to
-            // [channels, time] and then rejects anything that is not [B, C, T], so restoring it
-            // from its own declaration threw at its own shape. Offer the batched form too rather
-            // than relaxing the layer's rank check, which is deliberate and documented. Same
-            // try-batched-then-bare that CompleteShapeOnlyResolutionIfPending and
-            // LayerCloning.ProbeShapes already use for exactly this split.
-            try
-            {
-                ResolveFromShape(savedShape);
-            }
-            catch (ArgumentException)
-            {
-                var batched = new int[savedShape.Length + 1];
-                batched[0] = 1;
-                System.Array.Copy(savedShape, 0, batched, 1, savedShape.Length);
-                ResolveFromShape(batched);
-            }
+            ResolveFromPublishedShape(savedShape);
         }
 
         if (IsShapeResolved)

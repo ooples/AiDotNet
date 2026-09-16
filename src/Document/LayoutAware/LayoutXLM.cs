@@ -599,7 +599,7 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
                 { "use_native_mode", _useNativeMode },
                 { "total_parameters", totalParams }
             },
-            ModelData = totalParams > 50_000_000 ? Array.Empty<byte>() : this.Serialize()
+            ModelDataProvider = () => totalParams > 50_000_000 ? Array.Empty<byte>() : this.Serialize()
         };
     }
 

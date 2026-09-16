@@ -310,7 +310,7 @@ public class MeyerWavelet<T> : WaveletFunctionBase<T>
             }
             else if (freq <= 4.0 / 3)
             {
-                double v = Math.PI * (3 / 2 * freq - 1);
+                double v = Math.PI * (3.0 / 2 * freq - 1);
                 double psi = Math.Sin(Math.PI / 2 * Vf(v));
                 coefficients[i] = NumOps.FromDouble(psi);
             }

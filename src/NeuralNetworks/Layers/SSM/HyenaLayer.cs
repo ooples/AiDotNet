@@ -486,50 +486,42 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         // Update input projections
         for (int i = 0; i <= _order; i++)
         {
-            _inputProjectionWeights[i] = Engine.TensorAdd(
-                _inputProjectionWeights[i],
-                Engine.TensorMultiplyScalar(_inputProjectionWeightsGradients[i], negLR));
-            _inputProjectionBiases[i] = Engine.TensorAdd(
-                _inputProjectionBiases[i],
-                Engine.TensorMultiplyScalar(_inputProjectionBiasesGradients[i], negLR));
+            var weightUpdate = Engine.TensorMultiplyScalar(_inputProjectionWeightsGradients[i], negLR);
+            Engine.TensorAddInPlace(_inputProjectionWeights[i], weightUpdate);
+            Engine.InvalidatePersistentTensor(_inputProjectionWeights[i]);
+
+            var biasUpdate = Engine.TensorMultiplyScalar(_inputProjectionBiasesGradients[i], negLR);
+            Engine.TensorAddInPlace(_inputProjectionBiases[i], biasUpdate);
+            Engine.InvalidatePersistentTensor(_inputProjectionBiases[i]);
         }
 
         // Update filter networks
         for (int i = 0; i < _order; i++)
         {
-            _filterWeights1[i] = Engine.TensorAdd(
-                _filterWeights1[i],
-                Engine.TensorMultiplyScalar(_filterWeights1Gradients[i], negLR));
-            _filterBiases1[i] = Engine.TensorAdd(
-                _filterBiases1[i],
-                Engine.TensorMultiplyScalar(_filterBiases1Gradients[i], negLR));
-            _filterWeights2[i] = Engine.TensorAdd(
-                _filterWeights2[i],
-                Engine.TensorMultiplyScalar(_filterWeights2Gradients[i], negLR));
-            _filterBiases2[i] = Engine.TensorAdd(
-                _filterBiases2[i],
-                Engine.TensorMultiplyScalar(_filterBiases2Gradients[i], negLR));
+            var weight1Update = Engine.TensorMultiplyScalar(_filterWeights1Gradients[i], negLR);
+            Engine.TensorAddInPlace(_filterWeights1[i], weight1Update);
+            Engine.InvalidatePersistentTensor(_filterWeights1[i]);
+
+            var bias1Update = Engine.TensorMultiplyScalar(_filterBiases1Gradients[i], negLR);
+            Engine.TensorAddInPlace(_filterBiases1[i], bias1Update);
+            Engine.InvalidatePersistentTensor(_filterBiases1[i]);
+
+            var weight2Update = Engine.TensorMultiplyScalar(_filterWeights2Gradients[i], negLR);
+            Engine.TensorAddInPlace(_filterWeights2[i], weight2Update);
+            Engine.InvalidatePersistentTensor(_filterWeights2[i]);
+
+            var bias2Update = Engine.TensorMultiplyScalar(_filterBiases2Gradients[i], negLR);
+            Engine.TensorAddInPlace(_filterBiases2[i], bias2Update);
+            Engine.InvalidatePersistentTensor(_filterBiases2[i]);
         }
 
         // Update output projection
-        _outputProjectionWeights = Engine.TensorAdd(
-            _outputProjectionWeights,
+        Engine.TensorAddInPlace(_outputProjectionWeights,
             Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient, negLR));
-        _outputProjectionBias = Engine.TensorAdd(
-            _outputProjectionBias,
+        Engine.TensorAddInPlace(_outputProjectionBias,
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
-
-        // Register trainable parameters for tape-based autodiff
-        // The array-held projections and filter MLPs are NOT registered by hand here. Their
-        // [TrainableParameter] attributes give TrainableParameterGenerator the whole surface via
-        // ParameterCollectionKind.Array, and an explicit loop would defeat that: the generator's
-        // HasUnmappableRegistration treats an INDEXED argument as unmappable and then declines to
-        // emit GetTrainableParameters/SetTrainableParameters at all. Writing those loops shrank the
-        // generated partial from a full surface to a bare AppendDeclaredParameterComponents and
-        // turned the round trip into "HyenaLayer has 0 registered parameters but received 16".
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
-
+        Engine.InvalidatePersistentTensor(_outputProjectionWeights);
+        Engine.InvalidatePersistentTensor(_outputProjectionBias);
     }
 
     /// <inheritdoc />
