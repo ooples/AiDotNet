@@ -5,12 +5,19 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the GLALanguageModel.
 /// </summary>
-public class GLAOptions : NeuralNetworkOptions
+public class GLAOptions : SequenceModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
     /// </summary>
-    public GLAOptions() { }
+    public GLAOptions()
+    {
+        VocabSize = 50277;
+        ModelDimension = 256;
+        NumLayers = 4;
+        NumHeads = 8;
+        MaxSequenceLength = 512;
+    }
 
     /// <summary>
     /// Initializes a new instance by copying every property from another instance.
@@ -20,19 +27,12 @@ public class GLAOptions : NeuralNetworkOptions
     /// Thrown when <paramref name="other"/> is null.
     /// </exception>
     /// <remarks>
-    /// <see cref="LearningRate"/> IS COPIED HERE, AND MUST STAY COPIED. This constructor is what
-    /// <c>GLALanguageModel&lt;T&gt;.CreateNewInstance</c> calls, so a property
-    /// missing from it is not merely absent from the clone -- the clone silently reverts to the
-    /// default while the original keeps the configured value, and nothing reports the divergence.
-    /// A model cloned for evaluation would then train at a different rate than the one it was
-    /// cloned from.
+    /// Copies <see cref="LearningRate"/> here and delegates inherited settings to the base copy
+    /// constructor. Callers can derive a new configuration without silently reverting any value
+    /// to its default. This options-copy contract is independent of the generated model clone plan.
     /// </remarks>
-    public GLAOptions(GLAOptions other)
+    public GLAOptions(GLAOptions other) : base(other)
     {
-        if (other is null)
-            throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
         LearningRate = other.LearningRate;
     }
 
@@ -44,11 +44,25 @@ public class GLAOptions : NeuralNetworkOptions
     /// <para>
     /// The model previously constructed <c>AdamWOptimizer</c> with no options at all, so it trained at
     /// the library-wide AdamW default of 1e-3 -- neither the published rate nor reachable by a caller
-    /// who passed <c>options</c> but let the optimizer default. Supplying your own optimizer still wins;
-    /// this value is only consulted when the model has to build one.
+    /// who passed <c>options</c> but let the optimizer default. A supplied optimizer still controls
+    /// the actual training rate; the stored options must nevertheless pass <see cref="Validate"/>,
+    /// including a finite, positive learning rate, before model construction.
     /// </para>
     /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. The default is the
     /// value the paper's authors used, so training here starts from the same recipe they published.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 3e-4;
+
+    /// <summary>
+    /// Throws if a required model dimension or consumed training setting is invalid.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
+    /// </exception>
+    internal void Validate()
+    {
+        ValidateCore(requiresHeads: true, requiresState: false);
+        Require(LearningRate, nameof(LearningRate));
+    }
 }

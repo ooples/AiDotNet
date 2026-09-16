@@ -5081,8 +5081,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.EagleOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16 })";
             }
             else if (model.ClassName == "FinchLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -5092,9 +5091,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16, " +
-                    "learningRate: 1e-5)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.FinchOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FlamingoNeuralNetwork" && model.TypeParameterCount == 1)
             {
@@ -5109,10 +5106,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
-                    "embeddingDimension: 64, maxSequenceLength: 16, imageSize: 32, channels: 3, " +
-                    "numPerceiverTokens: 4, maxImagesInContext: 1, visionHiddenDim: 64, lmHiddenDim: 64, " +
-                    "numVisionLayers: 1, numLmLayers: 1, numHeads: 2, vocabularySize: 64, " +
-                    "numPerceiverLayers: 1, learningRate: 1e-5)";
+                    "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
+                    "MaxSequenceLength = 16, ImageSize = 32, PatchSize = 8, Channels = 3, NumPerceiverTokens = 4, " +
+                    "MaxImagesInContext = 1, VisionDim = 64, LmHiddenDim = 64, " +
+                    "VisionLayers = 1, NumLmLayers = 4, NumHeads = 2, VocabSize = 64, " +
+                    "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
             {
@@ -5633,8 +5631,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 128, outputSize: 4), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 1, numHeads: 4, maxSeqLength: 128, " +
-                    "options: new AiDotNet.NeuralNetworks.Options.XLSTMOptions { LearningRate = 3e-4 })";
+                    "new AiDotNet.NeuralNetworks.Options.XLSTMOptions { VocabSize = 64, " +
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 128, " +
+                    "LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
             {
@@ -6521,8 +6520,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, inputSize: 32, outputSize: 128), " +
-                    "vocabSize: 128, modelDimension: 32, numLayers: 1, maxSeqLength: 32, " +
-                    $"options: new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ RecurrenceDimension = 40 }})";
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32, " +
+                    // NOT an interpolated segment, so a single brace is a single brace.
+                    "RecurrenceDimension = 40 })";
             }
             else if (model.ClassName == "DocGCN" && model.TypeParameterCount == 1)
             {
@@ -6546,25 +6547,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, maxSeqLength: 32)";
-            }
-            else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
-            {
-                // Float and iteration capping made the paper-default fixture fit the watchdog, but
-                // its 50,277-way embedding/head still reduced the memorization loss by only 0.75%
-                // in 15 steps (the invariant requires >1%). Exercise the same public
-                // embedding -> stacked ExtendedLSTM -> normalization -> LM-head construction path
-                // with two recurrent blocks at smoke width/vocabulary/context. Supplying no custom
-                // architecture layers deliberately preserves the model contract: InitializeLayers
-                // builds these defaults through LayerHelper, while production/user custom layers and
-                // all production constructor defaults remain untouched.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 16, outputSize: 64), vocabSize: 64, modelDimension: 32, " +
-                    "numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Mamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "BloombergGPT" && model.TypeParameterCount == 1)
             {
@@ -6966,10 +6949,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 1, stateDimension: 8, expandFactor: 2, maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.FalconMambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 1, StateDimension = 8, ExpandFactor = 2, MaxSequenceLength = 32 })";
             }
-            else if ((model.ClassName is "HawkLanguageModel" or "GLALanguageModel" or "GatedDeltaNetLanguageModel")
+            else if ((model.ClassName is "GLALanguageModel" or "GatedDeltaNetLanguageModel")
                      && model.TypeParameterCount == 1)
             {
                 // These recurrent language models retain their paper/default vocabulary, width,
@@ -6979,12 +6961,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Pin generated-test initialization because these recurrent gates otherwise draw
                 // from the process-shared RNG and the exact trajectory depends on sibling test order.
                 pinInitSeed = true;
-                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "numHeads: 4, ";
+                string recurrentOptionsType = model.ClassName.Replace("LanguageModel", "Options");
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    $"numLayers: 1, {headArgument}maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), " +
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -6995,8 +6978,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.ZambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "Zamba2LanguageModel" && model.TypeParameterCount == 1)
             {
@@ -7006,8 +6988,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Zamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "ChronosBolt" && model.TypeParameterCount == 1)
             {
@@ -7158,10 +7139,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 32, channels: 3, patchSize: 8, vocabularySize: 64, " +
-                    "maxSequenceLength: 8, embeddingDimension: 4, hiddenDim: 32, " +
-                    "numEncoderLayers: 1, numHeads: 4, audioSampleRate: 16000, " +
-                    "audioMaxDuration: 1, imuTimesteps: 8, numVideoFrames: 2)";
+                    "options: new AiDotNet.NeuralNetworks.Options.ImageBindOptions { ImageSize = 32, Channels = 3, " +
+                    "PatchSize = 8, VocabSize = 64, MaxSequenceLength = 8, EmbeddingDimension = 4, " +
+                    "HiddenDim = 32, NumEncoderLayers = 1, NumHeads = 4, AudioSampleRate = 16000, " +
+                    "AudioMaxDuration = 1, ImuTimesteps = 8, NumVideoFrames = 2 })";
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
@@ -9195,9 +9176,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 112, channels: 3, patchSize: 14, vocabularySize: 32, " +
-                    "maxSequenceLength: 16, embeddingDimension: 32, visionHiddenDim: 32, " +
-                    "numVisionLayers: 2, numLmLayers: 2, numHeads: 4)";
+                    "options: new AiDotNet.NeuralNetworks.Options.LLaVAOptions { ImageSize = 112, Channels = 3, " +
+                    "PatchSize = 14, VocabSize = 32, MaxSequenceLength = 16, " +
+                    "EmbeddingDimension = 32, VisionDim = 32, VisionLayers = 2, " +
+                    "NumLmLayers = 2, NumHeads = 4 })";
             }
             else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)
             {
@@ -9312,9 +9294,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 16), " +
-                    "vocabSize: 16, modelDimension: 32, numLayers: 2, stateDimension: 8, " +
-                    "attentionInterval: 2, maxSeqLength: 8)";
+                    "inputSize: 8, outputSize: 16), new AiDotNet.NeuralNetworks.Options.JambaOptions { VocabSize = 16, ModelDimension = 32, NumLayers = 2, StateDimension = 8, AttentionInterval = 2, MaxSequenceLength = 8 })";
             }
             else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1
                      && model.FullyQualifiedName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
@@ -11421,20 +11401,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"taskType: {taskTypeExpr}, " +
                     $"{sizeExpr})";
 
-                // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to a 256k
-                // vocabulary, giving a foundation-sized embedding and language head. Keep the
+                // RecurrentGemma defaults to a 256k vocabulary, giving a foundation-sized
+                // embedding and language head. Keep the
                 // production defaults untouched and construct runnable generated fixtures through
                 // their public scale knobs. RecurrentGemma reached the timeout ladder's shrink rung
                 // even after FP32 and repetition/sample caps: its finite-difference invariant still
                 // exceeded 120 s when run after the rest of its class. Preserve the complete
                 // embedding -> RG-LRU -> normalization -> logits topology at one 32-wide recurrent
-                // block and a 256-token smoke vocabulary; Griffin/Hawk remain at the earlier vocab-
-                // only cap because their full-width fixtures already fit the gate.
+                // block and a 256-token smoke vocabulary. Griffin/Hawk use their dedicated
+                // bounded constructor rule above and never reach this fallback.
+                const string optionsNamespace = "AiDotNet.NeuralNetworks.Options.";
                 string scaleArgs = model.ClassName switch
                 {
                     "RecurrentGemmaLanguageModel" =>
-                        ", vocabSize: 256, modelDimension: 32, numLayers: 1, maxSeqLength: 128",
-                    "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
+                        ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
+                            + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
                     _ => ""
                 };
 
