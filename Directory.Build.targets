@@ -7,5 +7,8 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <EnableSourceLink>false</EnableSourceLink>
     <SourceLink />
+    <!-- Preserve the compiler's exact bytes across checkout EOL conversion.
+         Only checksum-verified embedded source may explain an EOL-only mismatch. -->
+    <EmbedAllSources>true</EmbedAllSources>
   </PropertyGroup>
 </Project>

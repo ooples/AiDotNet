@@ -86,7 +86,7 @@ internal static class SourceSnapshotReader
                 {
                     bool inertEntryPoint = method == assembly.EntryPoint && method.HasBody &&
                         method.Body.Instructions.All(instruction => instruction.OpCode.Code is Code.Nop or Code.Ret) &&
-                        File.Exists(point.Document.Url) && MatchesChecksum(point.Document, File.ReadAllBytes(point.Document.Url));
+                        File.Exists(point.Document.Url) && SourceDocumentVerifier.MatchesChecksum(point.Document, File.ReadAllBytes(point.Document.Url));
                     if (!inertEntryPoint) verified = false;
                     continue;
                 }
@@ -206,21 +206,10 @@ internal static class SourceSnapshotReader
                 if (current == root) break;
             }
             byte[] bytes = File.ReadAllBytes(full);
-            if (!linked && MatchesChecksum(document, bytes)) path = relative.Replace('\\', '/');
+            if (!linked && SourceDocumentVerifier.Match(document, bytes) != SourceDocumentMatch.Rejected) path = relative.Replace('\\', '/');
         }
         cache.Add(key, path);
         return path;
-    }
-
-    private static bool MatchesChecksum(Document document, byte[] bytes)
-    {
-        byte[]? checksum = document.HashAlgorithm switch
-        {
-            DocumentHashAlgorithm.SHA256 => SHA256.HashData(bytes),
-            DocumentHashAlgorithm.SHA1 => SHA1.HashData(bytes),
-            _ => null
-        };
-        return checksum is not null && checksum.SequenceEqual(document.Hash);
     }
 
     private static string Git(string root, params string[] arguments)

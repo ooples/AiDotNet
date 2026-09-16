@@ -60,7 +60,7 @@ function Build([string] $Name, [string] $Define = '') {
     $bundle = Join-Path $root "$Name-bundle"
     $buildOptions = @()
     if ($Define) { $buildOptions += "-p:DefineConstants=$Define" }
-    dotnet build (Join-Path $checkout 'SourceCases.csproj') -c Release -o $bundle --nologo -v:quiet @buildOptions | Out-Host
+    dotnet build (Join-Path $checkout 'SourceCases.csproj') -c Release -o $bundle --nologo -v:quiet -p:EmbedAllSources=true @buildOptions | Out-Host
     Check ($LASTEXITCODE -eq 0) "$Name build failed."
     return $bundle
 }
@@ -98,11 +98,25 @@ $names = @('ATTRIBUTION_MODE','ATTRIBUTION_PLAN','ATTRIBUTION_INVENTORY','ATTRIB
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $null) }
 try {
     $null = Invoke-Git @('init','--quiet')
+    $null = Invoke-Git @('config','core.autocrlf','true')
+    $eolSourcePath = Join-Path $checkout 'Cases.cs'
+    $eolSource = [IO.File]::ReadAllText($eolSourcePath).Replace("`r`n", "`n")
+    $mixedSource = $eolSource.Replace("`n", "`r`n").Replace("using Xunit;`r`n", "using Xunit;`n")
+    [IO.File]::WriteAllText($eolSourcePath, $mixedSource)
     $before = Commit 'test: baseline source selection proof'
     $env:ATTRIBUTION_PROFILE_HASH = 'source-selection-net10-fixed-workload'
     $env:ATTRIBUTION_WORKLOAD = 'source-cases/net10.0'
     $oldBundle = Build before
+    # Preserve the actual compiled bytes in the portable PDB, then reproduce a
+    # clean checkout's EOL conversion without rebuilding the binary.
+    [IO.File]::WriteAllText($eolSourcePath, $eolSource)
+    $null = Invoke-Git @('add','Cases.cs')
+    $null = Invoke-Git @('diff','--cached','--exit-code')
+    Check ([string]::IsNullOrWhiteSpace((Invoke-Git @('status','--porcelain')))) 'EOL-only rewrite changed the Git source identity.'
     $oldSnapshot = Snapshot before $oldBundle
+    $eolSnapshot = Get-Content $oldSnapshot -Raw | ConvertFrom-Json
+    $eolAssemblies = if ($CrossAssembly) { @($eolSnapshot.Assemblies) } else { @($eolSnapshot) }
+    Check (@($eolAssemblies | Where-Object Status -ne 'Verified').Count -eq 0) 'Compiler-verified embedded EOL source was rejected.'
     $oldInventory = Discover before $oldBundle $before
     dotnet $cli Prepare $oldInventory "$root/baseline-plan.json" FullWorkload | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Cannot prepare real full baseline.'
@@ -252,7 +266,7 @@ try {
         configurationFallback=3; identicalSourceBinarySelected=1; identicalSourceMetadataFallback=3;
         changedSourceReused=2; changedSourceExecuted=1; mixedCannotReplaceBaseline=$true;
         partialBaselineRejected=$true; missingFreshExecutionRejected=$true; reuseOnlyCases=3;
-        staleBinaryRejected=$true; productionSelectionEnabled=$false } |
+        staleBinaryRejected=$true; embeddedLineEndingsVerified=$true; productionSelectionEnabled=$false } |
         ConvertTo-Json | Set-Content "$root/proof.json"
     Write-Host "Actual source selection passed: 1/3 tests, configuration fallback 3/3, stale binary rejected. Evidence: $root"
 } finally {
