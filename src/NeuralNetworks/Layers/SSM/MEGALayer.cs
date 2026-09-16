@@ -645,21 +645,21 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-        _emaAlphaLogit = Engine.TensorAdd(_emaAlphaLogit, Engine.TensorMultiplyScalar(_emaAlphaLogitGradient!, negLR));
-        _emaProjectInWeights = Engine.TensorAdd(_emaProjectInWeights, Engine.TensorMultiplyScalar(_emaProjectInWeightsGradient!, negLR));
-        _emaProjectInBias = Engine.TensorAdd(_emaProjectInBias, Engine.TensorMultiplyScalar(_emaProjectInBiasGradient!, negLR));
-        _emaProjectOutWeights = Engine.TensorAdd(_emaProjectOutWeights, Engine.TensorMultiplyScalar(_emaProjectOutWeightsGradient!, negLR));
-        _emaProjectOutBias = Engine.TensorAdd(_emaProjectOutBias, Engine.TensorMultiplyScalar(_emaProjectOutBiasGradient!, negLR));
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _queryBias = Engine.TensorAdd(_queryBias, Engine.TensorMultiplyScalar(_queryBiasGradient!, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _keyBias = Engine.TensorAdd(_keyBias, Engine.TensorMultiplyScalar(_keyBiasGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _valueBias = Engine.TensorAdd(_valueBias, Engine.TensorMultiplyScalar(_valueBiasGradient!, negLR));
-        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
-        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_emaAlphaLogit, Engine.TensorMultiplyScalar(_emaAlphaLogitGradient!, negLR));
+        Engine.TensorAddInPlace(_emaProjectInWeights, Engine.TensorMultiplyScalar(_emaProjectInWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_emaProjectInBias, Engine.TensorMultiplyScalar(_emaProjectInBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_emaProjectOutWeights, Engine.TensorMultiplyScalar(_emaProjectOutWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_emaProjectOutBias, Engine.TensorMultiplyScalar(_emaProjectOutBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_queryBias, Engine.TensorMultiplyScalar(_queryBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_keyBias, Engine.TensorMultiplyScalar(_keyBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_valueBias, Engine.TensorMultiplyScalar(_valueBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
     }
 

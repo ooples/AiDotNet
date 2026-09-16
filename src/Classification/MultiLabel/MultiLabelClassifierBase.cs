@@ -619,7 +619,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
             }
         }
 
-        double avgGradient = parameters.Length > 0 ? totalGradient / (input.Rows * NumLabels * parameters.Length) : 0;
+        double avgGradient = parameters.Length > 0 ? totalGradient / ((double)input.Rows * NumLabels * parameters.Length) : 0;
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = NumOps.FromDouble(avgGradient);

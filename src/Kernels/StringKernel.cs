@@ -183,7 +183,7 @@ public class StringKernel<T>
         {
             if (counts2.TryGetValue(kvp.Key, out int count2))
             {
-                dotProduct += kvp.Value * count2;
+                dotProduct += (double)kvp.Value * count2;
             }
         }
 
@@ -191,11 +191,11 @@ public class StringKernel<T>
         double norm1 = 0, norm2 = 0;
         foreach (var count in counts1.Values)
         {
-            norm1 += count * count;
+            norm1 += (double)count * count;
         }
         foreach (var count in counts2.Values)
         {
-            norm2 += count * count;
+            norm2 += (double)count * count;
         }
 
         norm1 = Math.Sqrt(norm1);
@@ -448,7 +448,7 @@ public class StringKernel<T>
         {
             if (words2.TryGetValue(kvp.Key, out int count2))
             {
-                dotProduct += kvp.Value * count2;
+                dotProduct += (double)kvp.Value * count2;
             }
         }
 
@@ -456,11 +456,11 @@ public class StringKernel<T>
         double norm1 = 0, norm2 = 0;
         foreach (var count in words1.Values)
         {
-            norm1 += count * count;
+            norm1 += (double)count * count;
         }
         foreach (var count in words2.Values)
         {
-            norm2 += count * count;
+            norm2 += (double)count * count;
         }
 
         norm1 = Math.Sqrt(norm1);

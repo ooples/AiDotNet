@@ -2388,12 +2388,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        Assert.NotNull(mutableSource);");
-        sb.AppendLine("        Assert.NotNull(mutableClone);");
-        sb.AppendLine("        float sourceValue = mutableSource![0];");
-        sb.AppendLine("        mutableClone![0] = sourceValue + 1.0f;");
-        sb.AppendLine("        Assert.Equal(sourceValue, mutableSource[0]);");
-        sb.AppendLine("        Assert.NotEqual(mutableSource[0], mutableClone[0]);");
+        sb.AppendLine("        var sourceToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableSource);");
+        sb.AppendLine("        var cloneToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableClone);");
+        sb.AppendLine("        float sourceValue = sourceToMutate[0];");
+        sb.AppendLine("        cloneToMutate[0] = sourceValue + 1.0f;");
+        sb.AppendLine("        Assert.Equal(sourceValue, sourceToMutate[0]);");
+        sb.AppendLine("        Assert.NotEqual(sourceToMutate[0], cloneToMutate[0]);");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    [Fact(Timeout = 120000)]");
@@ -16357,6 +16357,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        finally");
             sb.AppendLine("        {");
             sb.AppendLine("            global::AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+        }
+
+        if (layer.ClassName == "QuantumLayer")
+        {
+            // A parameter update reconstructs the complete circuit from its angles. If it applies
+            // those angles to the already-rotated circuit instead, a zero-sized update still changes
+            // predictions. Emit this with the layer scaffold so the invariant follows QuantumLayer's
+            // generated fixture and cannot drift into a separate hand-maintained test.
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public void ZeroLearningRateUpdate_PreservesCircuitBehavior()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var arena = global::AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var layer = CreateLayer();");
+            sb.AppendLine($"        using var input = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<{numericType}>(InputShape);");
+            sb.AppendLine("        for (int i = 0; i < input.Length; i++) input[i] = ToT((i + 1) * 0.125);");
+            sb.AppendLine("        var before = layer.Forward(input).ToArray();");
+            sb.AppendLine("        layer.UpdateParameters(NumOps.Zero);");
+            sb.AppendLine("        var after = layer.Forward(input).ToArray();");
+            sb.AppendLine("        Assert.Equal(before.Length, after.Length);");
+            sb.AppendLine("        for (int i = 0; i < before.Length; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            double delta = global::System.Math.Abs(ToD(before[i]) - ToD(after[i]));");
+            sb.AppendLine("            Assert.True(delta <= Tolerance,");
+            sb.AppendLine("                $\"A zero-learning-rate update changed circuit output {i} by {delta:R}.\");");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
         }

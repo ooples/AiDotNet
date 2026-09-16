@@ -13,11 +13,13 @@
     merely plausible - which matters, because a map mixing coordinate systems is the failure this
     whole feature has been bitten by twice.
 
-    Everything else is instrumented:
+    Every shard receives exactly one typed disposition:
 
-      a shard whose covered files changed     its ranges may have moved
-      a shard absent from the previous map    never mapped, or its last run failed
-      any shard, when there is no previous map  first build
+      Instrument          collect a fresh digest because its ranges may have moved, it has no
+                          previous result, or it produces coverage naturally
+      Carried             reconstruct its byte-identical digest from the previous map
+      RunWithoutCoverage  execute all correctness tests, but do not instrument a known heavy or
+                          timing shard that the previous map already classified as always-run
 
     Conservative by construction: a shard is only skipped on positive evidence that nothing it
     touches moved. Any doubt - unreadable map, unknown shard, missing digest - instruments.
@@ -34,12 +36,13 @@
 .PARAMETER AllShards
     The current shard manifest.
 
-.PARAMETER CarryOnly
-    Restrict carrying to these shards. The nightly passes the heavy and timing shards here, because
-    every OTHER shard collects coverage in any run and produces a fresh digest on success - and a
-    carried digest colliding with a fresh one makes New-ShardMap abort the whole map, by design.
-    A clean mapped shard NOT in this list is simply left to re-produce its own digest; it is neither
-    instrumented by force nor carried. Omit to allow carrying everything (the self-contained case).
+.PARAMETER NoCoverageShards
+    Shards that do not collect coverage in an ordinary run because instrumentation exceeds their
+    memory envelope or invalidates timing assertions. A mapped, unchanged member is carried; a
+    dirty or previously unseen member is instrumented; and a member already in the map's alwaysRun
+    set runs without coverage. Shards outside this list produce coverage naturally and therefore
+    receive Instrument. Omit to treat every shard as eligible for carrying (the self-contained
+    compatibility case).
 
 .PARAMETER GlobalDirtyPrefixes
     Path prefixes whose changes invalidate EVERY carry (default: tests/). Coverage digests contain
@@ -57,7 +60,7 @@
     no knowledge of any of this.
 
 .PARAMETER OutFile
-    JSON: { instrument: [...], carried: [...] }.
+    JSON: { instrument: [...], carried: [...], runWithoutCoverage: [...] }.
 
 .PARAMETER SelfTest
     Runs the built-in checks and exits.
@@ -67,7 +70,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $PreviousMap,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ChangedFiles,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $AllShards,
-    [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $CarryOnly,
+    [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $NoCoverageShards,
     [Parameter(ParameterSetName = 'Select')] [string[]] $GlobalDirtyPrefixes = @('tests/'),
     [Parameter(ParameterSetName = 'Select')] [string] $CarryForwardDirectory,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
@@ -77,6 +80,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+enum CoverageDisposition {
+    Instrument
+    Carried
+    RunWithoutCoverage
+}
+
 function Split-CoverageWork {
     <#
         Pure: given a parsed map, the changed paths and the shard manifest, decide what to
@@ -85,11 +94,18 @@ function Split-CoverageWork {
     param(
         [Parameter(Mandatory)] [AllowNull()] $Map,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $ChangedFiles,
-        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllShards
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllShards,
+        [AllowEmptyCollection()] [string[]] $NoCoverageShards,
+        [switch] $DisableCarry
     )
 
     if ($null -eq $Map) {
-        return [pscustomobject]@{ Instrument = @($AllShards); Carried = @(); Reason = 'no previous map' }
+        return [pscustomobject]@{
+            Instrument        = @($AllShards)
+            Carried           = @()
+            RunWithoutCoverage = @()
+            Reason            = 'no previous map'
+        }
     }
 
     $changed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -109,21 +125,52 @@ function Split-CoverageWork {
     }
 
     $mapped = [System.Collections.Generic.HashSet[string]]::new([string[]] $known, [System.StringComparer]::Ordinal)
+    $alwaysRun = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    if ($Map.PSObject.Properties['alwaysRun']) {
+        foreach ($s in @($Map.alwaysRun)) { if ($s) { [void] $alwaysRun.Add([string] $s) } }
+    }
+
+    $noCoverage = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
+        foreach ($s in $NoCoverageShards) { if ($s) { [void] $noCoverage.Add([string] $s) } }
+    }
+    else {
+        foreach ($s in $AllShards) { if ($s) { [void] $noCoverage.Add([string] $s) } }
+    }
 
     $instrument = [System.Collections.Generic.List[string]]::new()
     $carried    = [System.Collections.Generic.List[string]]::new()
+    $runWithoutCoverage = [System.Collections.Generic.List[string]]::new()
     foreach ($s in $AllShards) {
         $name = [string] $s
-        # Absent from the map means never mapped or last run failed - it has nothing to carry.
-        if (-not $mapped.Contains($name)) { [void] $instrument.Add($name); continue }
-        if ($dirty.Contains($name))       { [void] $instrument.Add($name); continue }
-        [void] $carried.Add($name)
+        $disposition = [CoverageDisposition]::Instrument
+
+        if ($noCoverage.Contains($name) -and $alwaysRun.Contains($name)) {
+            # The preceding complete map run already proved this no-coverage shard could not
+            # produce a digest. Repeating the same memory-hungry instrumentation cannot teach the
+            # map anything: execute its complete correctness suite and retain alwaysRun instead.
+            $disposition = [CoverageDisposition]::RunWithoutCoverage
+        }
+        elseif ($noCoverage.Contains($name) -and -not $DisableCarry -and
+                $mapped.Contains($name) -and -not $dirty.Contains($name)) {
+            $disposition = [CoverageDisposition]::Carried
+        }
+
+        switch ($disposition) {
+            ([CoverageDisposition]::Carried) { [void] $carried.Add($name); break }
+            ([CoverageDisposition]::RunWithoutCoverage) {
+                [void] $runWithoutCoverage.Add($name)
+                break
+            }
+            default { [void] $instrument.Add($name) }
+        }
     }
 
     return [pscustomobject]@{
-        Instrument = @($instrument)
-        Carried    = @($carried)
-        Reason     = "$($changed.Count) changed file(s)"
+        Instrument         = @($instrument)
+        Carried            = @($carried)
+        RunWithoutCoverage = @($runWithoutCoverage)
+        Reason             = "$($changed.Count) changed file(s)"
     }
 }
 
@@ -187,10 +234,13 @@ if ($SelfTest) {
     } | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     $all = @('Alpha', 'Beta', 'Heavy')
 
-    # 1. Nothing changed: everything mapped is carried, and only the unmapped shard is instrumented.
+    # 1. Nothing changed: mapped no-coverage shards are carried, while an explicitly known
+    #    always-run shard executes without the instrumentation that already failed to map it.
     $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all
     Assert-True ($r.Carried.Count -eq 2) 'with no changes both mapped shards are carried'
-    Assert-True ($r.Instrument -contains 'Heavy') 'a shard absent from the map must be instrumented'
+    Assert-True ($r.RunWithoutCoverage -contains 'Heavy') `
+        'a known always-run no-coverage shard must execute without instrumentation'
+    Assert-True ($r.Instrument.Count -eq 0) 'the three dispositions must not overlap'
     Assert-True (-not ($r.Instrument -contains 'Alpha')) 'an unaffected shard must not be instrumented'
 
     # 2. A changed file dirties exactly the shards that execute it - the core of the saving, and
@@ -213,7 +263,8 @@ if ($SelfTest) {
     # 5. No previous map instruments everything. Without this the first build would carry nothing
     #    forward and silently produce an empty map.
     $r = Split-CoverageWork -Map $null -ChangedFiles @('src/A.cs') -AllShards $all
-    Assert-True ($r.Instrument.Count -eq 3 -and $r.Carried.Count -eq 0) 'no map means instrument everything'
+    Assert-True ($r.Instrument.Count -eq 3 -and $r.Carried.Count -eq 0 -and
+        $r.RunWithoutCoverage.Count -eq 0) 'no map means instrument everything'
 
     # 6. Ordinal matching: shard names differing only in case are different shards.
     $r = Split-CoverageWork -Map $map -ChangedFiles @('src/A.cs') -AllShards @('alpha')
@@ -231,19 +282,39 @@ if ($SelfTest) {
     Assert-True (-not $d.files.PSObject.Properties['src/B.cs']) "another shard's file must not leak in"
     Assert-True ($d.carriedFrom -eq 'abc123') 'the carried digest records the commit it came from'
 
-    # 8. CarryOnly restricts carrying WITHOUT touching the instrument set. A shard displaced by
-    #    the filter is a natural producer: it re-creates its own digest in any run, so carrying it
-    #    would collide with the fresh one and New-ShardMap aborts the whole map on duplicates.
-    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all
-    $allow = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    [void] $allow.Add('Alpha')
-    $restricted = @($r.Carried | Where-Object { $allow.Contains([string] $_) })
-    Assert-True ($restricted.Count -eq 1 -and $restricted -contains 'Alpha') `
-        'CarryOnly must keep exactly the intersection'
-    Assert-True ($r.Instrument -contains 'Heavy' -and $r.Instrument.Count -eq 1) `
-        'CarryOnly must not move displaced shards into the instrument set'
+    # 8. The no-coverage boundary creates a complete, disjoint three-way partition. A mapped shard
+    #    outside the boundary is a natural coverage producer, so it must not be carried.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy')
+    Assert-True ($r.Carried.Count -eq 1 -and $r.Carried -contains 'Alpha') `
+        'the mapped no-coverage shard must be carried'
+    Assert-True ($r.Instrument.Count -eq 1 -and $r.Instrument -contains 'Beta') `
+        'a natural coverage producer must receive Instrument'
+    Assert-True ($r.RunWithoutCoverage.Count -eq 1 -and $r.RunWithoutCoverage -contains 'Heavy') `
+        'the prior always-run no-coverage shard must receive RunWithoutCoverage'
+    Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
+        'the typed coverage dispositions must cover every shard exactly once'
 
-    # 9. A historical map holding two occurrences of one shard for one path must MERGE their
+    # 9. alwaysRun alone is not permission to suppress instrumentation. The shard must also be in
+    #    the explicit workflow-derived no-coverage boundary; otherwise it remains Instrument and
+    #    gets another opportunity to produce a digest.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha')
+    Assert-True ($r.Instrument -contains 'Heavy' -and
+        -not ($r.RunWithoutCoverage -contains 'Heavy')) `
+        'an always-run shard outside the no-coverage boundary must remain Instrument'
+
+    # 10. A global-dirty tests/** change invalidates carries but cannot make a known memory-bound
+    #    always-run shard safely instrumentable. The former becomes Instrument; the latter retains
+    #    RunWithoutCoverage and therefore stays permanently selected.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @('tests/NewTest.cs') -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy') -DisableCarry
+    Assert-True ($r.Instrument -contains 'Alpha' -and $r.Instrument -contains 'Beta') `
+        'global dirty must turn every coverage-capable shard into Instrument'
+    Assert-True ($r.RunWithoutCoverage -contains 'Heavy') `
+        'global dirty must not retry instrumentation already known to exceed the runner envelope'
+
+    # 11. A historical map holding two occurrences of one shard for one path must MERGE their
     #    ranges into the carried digest, never overwrite - dropped ranges would make the map
     #    claim the shard does not execute lines it does, which is a silent selection miss.
     $dupMap = @{
@@ -261,7 +332,7 @@ if ($SelfTest) {
     Assert-True ((@($d2.files.'src/Dup.cs') -join ',') -eq '1,2,9,9') `
         'duplicate occurrences must merge ranges, not overwrite'
 
-    # 10. TEST-CODE changes must invalidate every carry. Digests hold only product code, so a
+    # 12. TEST-CODE changes must invalidate every carry. Digests hold only product code, so a
     #     tests/** change is invisible to the per-shard dirty check - yet a new test can create
     #     coverage edges the map must learn, and re-carrying would hide them from enforce-mode
     #     selection permanently. The pure split cannot see this; the caller-level rule must.
@@ -306,42 +377,57 @@ if ($PreviousMap -and (Test-Path -LiteralPath $PreviousMap)) {
     }
 }
 
-$split = Split-CoverageWork -Map $map -ChangedFiles $ChangedFiles -AllShards $AllShards
-
-$carriedFinal = @($split.Carried)
+$disableCarry = $false
 foreach ($path in $ChangedFiles) {
     if (-not $path) { continue }
     foreach ($prefix in $GlobalDirtyPrefixes) {
         if (([string] $path).StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
             Write-Host "change under '$prefix' ($path) - test code is invisible to digests, so nothing is carried tonight"
-            $carriedFinal = @()
+            $disableCarry = $true
             break
         }
     }
-    if ($carriedFinal.Count -eq 0) { break }
+    if ($disableCarry) { break }
 }
-if ($PSBoundParameters.ContainsKey('CarryOnly')) {
-    $allow = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($s in $CarryOnly) { if ($s) { [void] $allow.Add([string] $s) } }
-    $carriedFinal = @($split.Carried | Where-Object { $allow.Contains([string] $_) })
+
+$splitArgs = @{
+    Map          = $map
+    ChangedFiles = $ChangedFiles
+    AllShards    = $AllShards
+    DisableCarry = $disableCarry
 }
-$selfProducing = @($split.Carried).Count - $carriedFinal.Count
-Write-Host "instrument $($split.Instrument.Count), carry forward $($carriedFinal.Count), self-producing $selfProducing  [$($split.Reason)]"
+if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
+    $splitArgs.NoCoverageShards = $NoCoverageShards
+}
+$split = Split-CoverageWork @splitArgs
+
+$carriedFinal = @($split.Carried)
+$runWithoutCoverage = @($split.RunWithoutCoverage)
+Write-Host "instrument $($split.Instrument.Count), carry forward $($carriedFinal.Count), run without coverage $($runWithoutCoverage.Count)  [$($split.Reason)]"
 
 if ($CarryForwardDirectory -and $carriedFinal.Count -gt 0) {
     # .NET call rather than New-Item: New-Item has no -LiteralPath, and its -Path is
     # wildcard-expanded, so a directory name containing [ or ] would be created somewhere else.
-    # CreateDirectory is verbatim and idempotent.
-    [void] [System.IO.Directory]::CreateDirectory($CarryForwardDirectory)
+    # Resolve through PowerShell first: Directory.CreateDirectory resolves a relative path from
+    # Environment.CurrentDirectory, which does NOT follow Push-Location. The generated-repository
+    # proof deliberately changes the PowerShell location and caught the resulting split-brain path.
+    $resolvedCarryDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(
+        $CarryForwardDirectory)
+    [void] [System.IO.Directory]::CreateDirectory($resolvedCarryDirectory)
     foreach ($shard in $carriedFinal) {
         $slug = $shard -replace '[\\/:*?"<>|\s-]+', '_'
-        $n = Export-ShardDigest -Map $map -Shard $shard -Path (Join-Path $CarryForwardDirectory "$slug.digest.json")
+        $n = Export-ShardDigest -Map $map -Shard $shard -Path (Join-Path $resolvedCarryDirectory "$slug.digest.json")
         Write-Verbose "carried $shard ($n file(s))"
     }
     Write-Host "wrote $($carriedFinal.Count) carried digest(s) to $CarryForwardDirectory"
 }
 
 if ($OutFile) {
-    [pscustomobject]@{ instrument = @($split.Instrument); carried = @($carriedFinal) } |
+    [pscustomobject]@{
+        schemaVersion      = 1
+        instrument         = @($split.Instrument)
+        carried            = @($carriedFinal)
+        runWithoutCoverage = @($runWithoutCoverage)
+    } |
         ConvertTo-Json -Depth 4 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8
 }

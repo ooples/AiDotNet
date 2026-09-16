@@ -441,22 +441,22 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     {
         if (_weightsGrad != null)
         {
-            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGrad, learningRate));
+            Engine.TensorSubtractInPlace(_weights, Engine.TensorMultiplyScalar(_weightsGrad, learningRate));
         }
 
         if (_bias != null && _biasGrad != null)
         {
-            _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(_biasGrad, learningRate));
+            Engine.TensorSubtractInPlace(_bias, Engine.TensorMultiplyScalar(_biasGrad, learningRate));
         }
 
         if (_rVectorsGrad != null)
         {
-            _rVectors = Engine.TensorSubtract(_rVectors, Engine.TensorMultiplyScalar(_rVectorsGrad, learningRate));
+            Engine.TensorSubtractInPlace(_rVectors, Engine.TensorMultiplyScalar(_rVectorsGrad, learningRate));
         }
 
         if (_sVectorsGrad != null)
         {
-            _sVectors = Engine.TensorSubtract(_sVectors, Engine.TensorMultiplyScalar(_sVectorsGrad, learningRate));
+            Engine.TensorSubtractInPlace(_sVectors, Engine.TensorMultiplyScalar(_sVectorsGrad, learningRate));
         }
 
         // Register trainable parameters for tape-based autodiff

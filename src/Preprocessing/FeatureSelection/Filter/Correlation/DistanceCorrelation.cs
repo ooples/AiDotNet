@@ -160,7 +160,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
                 sum += a[i, j] * b[i, j];
-        return sum / (n * n);
+        return sum / ((double)n * n);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
