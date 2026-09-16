@@ -132,13 +132,26 @@ internal static class ShapeObservationWorker
         if (profile.UseDefaultConstructor)
             return type.GetConstructor(Type.EmptyTypes) is not null ? Activator.CreateInstance(type) : null;
 
-        var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(c =>
-        {
-            var parameters = c.GetParameters();
-            return parameters.Length > 0
-                && parameters[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && parameters.Skip(1).All(p => p.HasDefaultValue);
-        });
+        // Several models publish MORE THAN ONE architecture-first constructor whose remaining
+        // parameters are all optional -- GraphNeuralNetwork has two, one taking vector activation
+        // functions and one taking scalar ones. FirstOrDefault would hand the observation to whichever
+        // Type.GetConstructors happened to return first, which reflection does not order, so the same
+        // model could be probed through a different overload on a different run. Order the matches by
+        // a stable signature key and take the first: fewest parameters wins (the narrowest surface),
+        // then the parameter type names alphabetically so ties are broken identically every time.
+        var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
+            .Where(c =>
+            {
+                var parameters = c.GetParameters();
+                return parameters.Length > 0
+                    && parameters[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
+                    && parameters.Skip(1).All(p => p.HasDefaultValue);
+            })
+            .OrderBy(c => c.GetParameters().Length)
+            .ThenBy(
+                c => string.Join(",", c.GetParameters().Select(p => p.ParameterType.FullName ?? p.ParameterType.Name)),
+                StringComparer.Ordinal)
+            .FirstOrDefault();
 
         if (ctor is null)
         {

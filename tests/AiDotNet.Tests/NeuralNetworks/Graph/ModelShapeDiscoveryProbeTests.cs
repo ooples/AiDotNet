@@ -192,7 +192,13 @@ public class ModelShapeDiscoveryProbeTests
         // worker process (1 GB managed heap, per-model deadline), a bounded batch at a time, and the
         // results are consumed in candidate order so the probed set is exactly the one the sequential
         // loop selected. A batch may observe a few candidates past the budget; those are discarded.
-        int workers = EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1);
+        // Same ceiling as the shape-law sweep, and for the same reason: ADNSHAPE_WORKERS is a
+        // CI-sizing hook a capable host may raise, but each worker is a process holding its own
+        // 1 GiB managed heap and they are awaited together, so the value is clamped to what the
+        // declared aggregate budget supports instead of being taken unbounded.
+        int workers = Math.Min(
+            EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1),
+            ModelFamilyLawTests.MaxSupportedWorkers);
         var modelTimeout = TimeSpan.FromSeconds(EnvInt("ADNSHAPE_MODEL_TIMEOUT_SECONDS", 180, 1));
         var sweepClock = System.Diagnostics.Stopwatch.StartNew();
         int observedCandidates = 0;

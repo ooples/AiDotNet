@@ -2,6 +2,7 @@
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -39,4 +40,42 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase<float>
     // noise can be larger than the smooth-gradient default tolerance while the
     // supervised objective remains stable and finite.
     protected override double TrainingLossReductionTolerance => 5e-3;
+
+    /// <summary>
+    /// Two networks built under the same seed and pre-trained on the same input must end with
+    /// identical parameters.
+    /// </summary>
+    /// <remarks>
+    /// The inherited <c>Predict_ShouldBeDeterministic</c> only calls one network twice, so it cannot
+    /// see a seed that fails to reach the RBM stack: CD-1 draws Gibbs samples
+    /// (<c>RBMLayer.SampleBinaryStatesTensor</c>) as well as the Glorot init, and an unseeded draw in
+    /// either would leave one instance reproducible with itself while diverging from a sibling built
+    /// the same way. Comparing two instances is what makes the seed's reach observable, and it is the
+    /// property the fixture's AmbientFallbackSeed scope exists to provide.
+    /// </remarks>
+    [Fact]
+    public void TwoNetworksWithTheSameSeed_PreTrainToIdenticalParameters()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
+
+        using var first = (DeepBeliefNetwork<float>)CreateNetwork();
+        using var second = (DeepBeliefNetwork<float>)CreateNetwork();
+
+        first.PreTrain(input);
+        second.PreTrain(input);
+
+        var firstParameters = first.GetParameters();
+        var secondParameters = second.GetParameters();
+
+        Assert.Equal(firstParameters.Length, secondParameters.Length);
+        for (int i = 0; i < firstParameters.Length; i++)
+        {
+            Assert.True(
+                firstParameters[i].Equals(secondParameters[i]),
+                $"Parameter {i} of {firstParameters.Length} differs between two seed-1337 networks "
+                + $"pre-trained on the same input: {firstParameters[i]} vs {secondParameters[i]}. "
+                + "Some draw in construction or CD-1 is not taking the seeded stream.");
+        }
+    }
 }

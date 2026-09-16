@@ -112,7 +112,13 @@ public class ModelFamilyLawTests
         // managed heap and a deadline (ModelShapeConformanceProcess), so one slow or pathological
         // model costs at most memberTimeout instead of the whole sweep's xUnit Timeout. Both knobs are
         // measurement/CI-sizing hooks; the defaults are the real configuration.
-        int workers = EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1);
+        // ADNSHAPE_WORKERS is a CI-sizing hook, so a capable host may raise it above the default --
+        // but every worker is a process holding its own WorkerHeapBudgetMiB managed heap and they are
+        // awaited together, so an unbounded value can exhaust the test host. Clamp to what the
+        // declared SweepMemoryBudgetMiB supports rather than to a fixed number.
+        int workers = Math.Min(
+            EnvInt("ADNSHAPE_WORKERS", Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2)), 1),
+            MaxSupportedWorkers);
         var memberTimeout = TimeSpan.FromSeconds(EnvInt("ADNSHAPE_MODEL_TIMEOUT_SECONDS", 180, 1));
         var observationProfiles = Profiles
             .Select(p => new ModelShapeConformanceProcess.ObservationProfile(
@@ -282,4 +288,25 @@ public class ModelFamilyLawTests
 
     private static int EnvInt(string name, int fallback, int minimum) =>
         int.TryParse(Environment.GetEnvironmentVariable(name), out int v) && v >= minimum ? v : fallback;
+
+    /// <summary>
+    /// The managed heap each shape-observation worker process is given
+    /// (<c>DOTNET_GCHeapHardLimit</c> in ModelShapeConformanceProcess), in mebibytes.
+    /// </summary>
+    internal const int WorkerHeapBudgetMiB = 1024;
+
+    /// <summary>
+    /// The aggregate worker memory this sweep is allowed to have outstanding, in mebibytes. Workers
+    /// run concurrently and are awaited together, so the ceiling on <c>ADNSHAPE_WORKERS</c> is this
+    /// budget divided by <see cref="WorkerHeapBudgetMiB"/> rather than a fixed number: a bigger host
+    /// may legitimately raise the knob, but not past what its memory can hold. Eight GiB is the
+    /// smallest configuration the sweep is supported on (the GitHub runner is 16 GB and also hosts
+    /// the xUnit process itself), so the default ceiling is eight concurrent workers.
+    /// </summary>
+    internal const int SweepMemoryBudgetMiB = 8192;
+
+    /// <summary>
+    /// The largest worker count the declared memory budget supports, floored at one.
+    /// </summary>
+    internal static int MaxSupportedWorkers => Math.Max(1, SweepMemoryBudgetMiB / WorkerHeapBudgetMiB);
 }

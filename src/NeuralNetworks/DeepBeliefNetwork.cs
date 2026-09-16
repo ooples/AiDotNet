@@ -199,9 +199,19 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="DeepBeliefNetwork{T}"/> class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration, which must include RBM layers.</param>
-    /// <param name="learningRate">The learning rate for fine-tuning. Default is 0.01 converted to type T.</param>
     /// <param name="epochs">The number of epochs for fine-tuning. Default is 10.</param>
     /// <param name="batchSize">The batch size for training. Default is 32.</param>
+    /// <param name="optimizer">
+    /// The optimizer used for supervised fine-tuning. When null, the network builds the SGD+momentum
+    /// optimizer the DBN papers fine-tune with: an initial learning rate of 0.001, momentum 0.9, and
+    /// the <paramref name="batchSize"/> given here. There is no separate learning-rate parameter --
+    /// supply an optimizer to choose a different rate.
+    /// </param>
+    /// <param name="lossFunction">
+    /// The loss minimized during fine-tuning. When null, the default for the architecture's task type
+    /// is used.
+    /// </param>
+    /// <param name="options">Additional DBN settings. When null, <see cref="DeepBeliefNetworkOptions"/> defaults are used.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Deep Belief Network with the specified architecture. The architecture

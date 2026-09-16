@@ -88,26 +88,37 @@ public class PixelToSequenceDocumentTests
         encoderDim: TestWidth, decoderDim: TestWidth, encoderLayers: TestLayers,
         decoderLayers: TestLayers, numHeads: TestHeads, vocabSize: TestVocab, maxPatchesPerImage: 64);
 
-    private static void AssertPredictReturnsOutput(DocumentNeuralNetworkBase<double> model)
+    /// <summary>
+    /// Asserts the model's full prediction contract: the exact output shape it publishes, not merely
+    /// that something non-empty came back.
+    /// </summary>
+    /// <remarks>
+    /// The shape is passed in per model because these five do NOT agree on one: the decoder-headed
+    /// models emit [batch, positions, vocab] with their own position count, while Donut's PredictCore
+    /// returns the Swin ENCODER output and Dessurt publishes an unbatched [positions, vocab]. A rank
+    /// or axis regression in any of them is a real defect, and the previous assertion -- non-empty
+    /// shape, positive first dimension -- passed for a degenerate [1] just as happily.
+    ///
+    /// Both tensors are scoped: CreateSmallImage allocates one and Predict returns another, and
+    /// Tensor&lt;T&gt;.Dispose releases pooled or GPU-backed storage. Neither is owned by the model, so
+    /// without this the storage sat until GC and lifted the test host's peak -- which is what killed
+    /// the Integration D shard on the 16 GB runner in the first place.
+    /// </remarks>
+    private static void AssertPredictReturnsOutput(
+        DocumentNeuralNetworkBase<double> model,
+        params int[] expectedShape)
     {
-        var output = model.Predict(CreateSmallImage());
-        Assert.NotNull(output);
-        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
-        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
+        Assert.Equal(expectedShape, output.Shape);
     }
 
     #region Donut Tests
 
     [Fact(Timeout = 120000)]
-    public async Task Donut_NativeConstruction_Succeeds()
-    {
-        Assert.NotNull(CreateDonut());
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task Donut_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreateDonut());
+        AssertPredictReturnsOutput(CreateDonut(), 1, 4, 256);
     }
 
     [Fact(Timeout = 120000)]
@@ -121,15 +132,9 @@ public class PixelToSequenceDocumentTests
     #region Nougat Tests
 
     [Fact(Timeout = 120000)]
-    public async Task Nougat_NativeConstruction_Succeeds()
-    {
-        Assert.NotNull(CreateNougat());
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task Nougat_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreateNougat());
+        AssertPredictReturnsOutput(CreateNougat(), 1, 1, 256);
     }
 
     [Fact(Timeout = 120000)]
@@ -143,15 +148,9 @@ public class PixelToSequenceDocumentTests
     #region Pix2Struct Tests
 
     [Fact(Timeout = 120000)]
-    public async Task Pix2Struct_NativeConstruction_Succeeds()
-    {
-        Assert.NotNull(CreatePix2Struct());
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task Pix2Struct_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreatePix2Struct());
+        AssertPredictReturnsOutput(CreatePix2Struct(), 1, 1, 256);
     }
 
     [Fact(Timeout = 120000)]
@@ -165,15 +164,9 @@ public class PixelToSequenceDocumentTests
     #region Dessurt Tests
 
     [Fact(Timeout = 120000)]
-    public async Task Dessurt_NativeConstruction_Succeeds()
-    {
-        Assert.NotNull(CreateDessurt());
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task Dessurt_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreateDessurt());
+        AssertPredictReturnsOutput(CreateDessurt(), 16, 256);
     }
 
     [Fact(Timeout = 120000)]
@@ -187,15 +180,9 @@ public class PixelToSequenceDocumentTests
     #region MATCHA Tests
 
     [Fact(Timeout = 120000)]
-    public async Task MATCHA_NativeConstruction_Succeeds()
-    {
-        Assert.NotNull(CreateMatcha());
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task MATCHA_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreateMatcha());
+        AssertPredictReturnsOutput(CreateMatcha(), 1, 16, 256);
     }
 
     [Fact(Timeout = 120000)]

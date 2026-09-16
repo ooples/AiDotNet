@@ -1113,9 +1113,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             writer.Parameters.Where(p => p.IsState || p.UseBackedActivation).Select(p => p.Key), System.StringComparer.Ordinal);
         var names = new HashSet<string>(writer.Parameters.Select(p => p.Name), System.StringComparer.Ordinal);
         var extra = new List<ParamModel>();
-        foreach (var parameter in candidates.Skip(1).SelectMany(candidate => candidate.Parameters))
+        // The state/backing-member test is a pure predicate, so it filters the sequence. The key and
+        // name checks below are NOT: Add both records the parameter and reports whether it was new, so
+        // it stays in the body where the mutation is visible rather than hiding inside a Where.
+        var restorable = candidates
+            .Skip(1)
+            .SelectMany(candidate => candidate.Parameters)
+            .Where(parameter => parameter.IsState && parameter.BackingMember is not null);
+        foreach (var parameter in restorable)
         {
-            if (!parameter.IsState || parameter.BackingMember is null) continue;
             if (!keys.Add(parameter.Key) || !names.Add(parameter.Name)) continue;
             if (parameter.Kind == ValueKind.Int32 && IsPositiveDimensionName(parameter.Name))
                 parameter.OmitWhenNonPositive = true;
