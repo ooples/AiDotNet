@@ -160,6 +160,8 @@ try {
         dotnet build $project -c Release --nologo -m:2 -p:UseSharedCompilation=false
         Check ($LASTEXITCODE -eq 0) 'Prototype build failed.'
     }
+    & (Join-Path $PSScriptRoot 'Test-AttributionBuildBinding.ps1') -EvidenceDirectory (Join-Path $root 'build-binding')
+    Check (Test-Path (Join-Path $root 'build-binding/proof.json')) 'Stable attribution build binding was not proved.'
     $original = Join-Path $fixture 'PrototypeTests/bin/Release/net10.0'
     $workerOriginal = Join-Path $fixture 'Worker/bin/Release/net10.0'
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -212,7 +214,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 58 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 67 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=RuntimeEffects' `
         "/ResultsDirectory:$(Join-Path $root 'runtime-effects')" '/Logger:trx;LogFileName=results.trx' | Out-Host

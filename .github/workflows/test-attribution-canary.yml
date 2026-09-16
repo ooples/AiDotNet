@@ -8,10 +8,12 @@ on:
       - 'tools/TestImpact/Attribution.Runtime/**'
       - 'tools/TestImpact/Attribution.Xunit/**'
       - 'tools/TestImpact/Attribution.Cli/**'
+      - 'tools/TestImpact/AttributionBuild.props'
       - 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
       - 'tests/AiDotNet.Tests/Startup.cs'
       - 'tests/AiDotNet.Tests/ModuleInitializer.cs'
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
+      - 'tools/TestImpact/Test-AttributionBuildBinding.ps1'
       - 'tools/TestImpact/Test-PlannedAttribution.ps1'
       - 'tools/TestImpact/Test-SourceSelection.ps1'
       - 'tools/TestImpact/Test-RuntimeEffectsSlice.ps1'
@@ -49,6 +51,7 @@ jobs:
           retention-days: 7
           path: |
             ${{ runner.temp }}/attribution-proof/proof.json
+            ${{ runner.temp }}/attribution-proof/build-binding/*
             ${{ runner.temp }}/attribution-proof/discovery-*.jsonl
             ${{ runner.temp }}/attribution-proof/*.map.json
             ${{ runner.temp }}/attribution-proof/*/results.trx

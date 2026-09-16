@@ -77,3 +77,21 @@ composition with the normal selector and authenticated reuse evidence. Neither
 these diagnostic contracts nor the 2/5 experimental candidate set close those
 boundaries. Production test selection remains disabled until those gates and
 the real-change/live acceptance cases pass.
+
+Discovery also has a narrowly reviewed `SkippableFact` 1.5.85 contract, bound
+to package SHA-256
+`f8fb7e54fb771f40c0a6b773e20954545277fb0ba71286c87bfd07410c3c1160` and the
+reviewed xUnit/runtime binaries. It reads exception-type metadata and creates
+a case with null method arguments; it does not invoke the test. Execution of
+that custom case remains unresolved. Unknown trait discoverers remain shared
+discovery boundaries. The real assembly no longer acquires unused inherited
+`System.Attribute.GetCustomAttribute` helpers as executable roots.
+
+Standalone and opt-in builds previously embedded different commit metadata in
+unchanged attribution dependencies. These non-packable tools now share build
+settings; release/package projects are unchanged. The canary forcibly rebuilds
+the three runtime components with different revision IDs and opt-in modes,
+requiring identical DLL **and** PDB hashes rather than normalizing a mismatch.
+The combined local harness passed 283 protocol/control tests, 33 rejection
+controls, and both forced-build comparisons; the refreshed real slice passed
+5/5 with owner/CPU observations and startup-input rejection intact.

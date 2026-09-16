@@ -18,6 +18,7 @@ internal static class XunitLifecycleReader
         var assemblyCallbacks = new HashSet<string>(StringComparer.Ordinal);
         var tests = new List<SourceTestLifecycle>();
         var synthetic = new Dictionary<string, SourceMethod>(StringComparer.Ordinal);
+        var reviewedDiscovery = new ReviewedFactDiscovery();
         bool deferredTheories = assembly.CustomAttributes
             .Where(attribute => attribute.AttributeType.FullName == "Xunit.TestFrameworkAttribute")
             .Select(attribute => NamedType(attribute, assembly))
@@ -30,6 +31,7 @@ internal static class XunitLifecycleReader
 
         foreach (CustomAttribute attribute in assembly.CustomAttributes)
         {
+            AddTraitDiscovery(attribute, groups, reviewedDiscovery);
             AddAssemblyBeforeAfter(attribute, groups, assemblyCallbacks, synthetic);
             if (attribute.AttributeType.FullName == "Xunit.TestFrameworkAttribute")
             {
@@ -61,6 +63,7 @@ internal static class XunitLifecycleReader
                         AddFixture(fixture.GenericArguments[0], "class:" + classIdentity, lifetime, synthetic);
                 foreach (CustomAttribute attribute in owner.CustomAttributes)
                 {
+                    AddTraitDiscovery(attribute, groups, reviewedDiscovery);
                     AddBeforeAfter(attribute, lifetime);
                     if (attribute.AttributeType.FullName == "Xunit.TestCaseOrdererAttribute")
                         AddAll(NamedType(attribute, assembly), lifetime, "class-orderer:" + classIdentity);
@@ -106,13 +109,23 @@ internal static class XunitLifecycleReader
                     complete &= !method.HasGenericParameters;
                     foreach (CustomAttribute attribute in method.CustomAttributes)
                     {
+                        AddTraitDiscovery(attribute, groups, reviewedDiscovery);
                         AddBeforeAfter(attribute, roots);
                         if (Derives(attribute.AttributeType, "Xunit.FactAttribute") &&
                             attribute.AttributeType.FullName is not ("Xunit.FactAttribute" or "Xunit.TheoryAttribute"))
                         {
                             complete = false;
-                            AddAll(Resolve(attribute.AttributeType), groups, "custom-fact:" + attribute.AttributeType.FullName);
-                            groups.Add("unresolved:xunit:custom-discoverer:" + attribute.AttributeType.FullName);
+                            SourceMethod? reviewed = reviewedDiscovery.Read(attribute);
+                            if (reviewed is not null)
+                            {
+                                synthetic.TryAdd(reviewed.Dependency.Id, reviewed);
+                                groups.Add(reviewed.Dependency.Id);
+                            }
+                            else
+                            {
+                                AddLifetime(Resolve(attribute.AttributeType), groups);
+                                groups.Add("unresolved:xunit:custom-discoverer:" + attribute.AttributeType.FullName);
+                            }
                         }
                         if (attribute.AttributeType.FullName == "Xunit.MemberDataAttribute") AddMemberData(attribute, type, deferredTheories ? roots : groups);
                         else if (attribute.AttributeType.FullName == "Xunit.ClassDataAttribute" && attribute.ConstructorArguments.Count == 1 &&
@@ -168,6 +181,41 @@ internal static class XunitLifecycleReader
             foreach (MethodDefinition method in owner.Methods.Where(method =>
                 !method.IsStatic && (method.Name is "Before" or "After" || setters.Contains(method.Name))))
                 roots.Add(Id(method));
+    }
+
+    private static void AddTraitDiscovery(CustomAttribute attribute, HashSet<string> groups, ReviewedFactDiscovery reviewed)
+    {
+        TypeDefinition? type = Resolve(attribute.AttributeType);
+        if (type is null)
+        {
+            groups.Add("unresolved:xunit:attribute:" + attribute.AttributeType.FullName);
+            return;
+        }
+        var interfaces = new Stack<TypeReference>(Hierarchy(type).SelectMany(ancestor => ancestor.Interfaces).Select(item => item.InterfaceType));
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        bool trait = false;
+        while (interfaces.TryPop(out TypeReference? reference))
+        {
+            if (!seen.Add(reference.FullName + "@" + reference.Scope)) continue;
+            if (seen.Count > 64)
+            {
+                groups.Add("unresolved:xunit:attribute-interfaces:" + type.FullName);
+                return;
+            }
+            trait |= reference.FullName == "Xunit.Sdk.ITraitAttribute";
+            TypeDefinition? definition = Resolve(reference);
+            if (definition is null)
+            {
+                groups.Add("unresolved:xunit:attribute-interface:" + reference.FullName);
+                return;
+            }
+            foreach (InterfaceImplementation inherited in definition.Interfaces) interfaces.Push(inherited.InterfaceType);
+        }
+        if (!trait || reviewed.IsStandardTrait(attribute)) return;
+        // Case initialization may invoke a custom trait discoverer even when
+        // that test is later filtered out. Never hide it behind a reviewed Fact.
+        AddLifetime(type, groups);
+        groups.Add("unresolved:xunit:trait-discoverer:" + type.FullName);
     }
 
     private static void AddAssemblyBeforeAfter(CustomAttribute attribute, HashSet<string> groups,
