@@ -110,9 +110,16 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     {
         _options = options ?? new MedFlamingoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Declared, not routed. The paper's "8-bit AdamW" is a memory-reduction form of AdamW --
+        // the same algorithm with quantized moment state -- adopted to fit the model on the
+        // authors' hardware, and it states no learning rate at all. Building it here would swap
+        // this model's AdamW for block-quantized Adam8Bit at the library's default rate, which is
+        // a numerical change with nothing in the paper behind it: it drove the memorization probe
+        // to NaN by step 100 and made every training step 2.5x slower. Verifying instead keeps the
+        // citation as an assertion over the optimizer this model actually builds, which is what
+        // DeepSeek-VL2 and MiniGPT-4 in this same family already do.
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
