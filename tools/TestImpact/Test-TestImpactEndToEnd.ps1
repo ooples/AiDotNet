@@ -4,15 +4,34 @@
 #>
 [CmdletBinding()]
 param()
+. "$PSScriptRoot/CiWorkloadKinds.ps1"
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+foreach ($review in 'Test-CertificateEvidenceReview', 'Test-ReviewFixtureCleanup') {
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot "$review.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "$review failed." }
+}
+
+enum InvalidMapFixture {
+    Missing
+    Malformed
+    Unresolvable
+}
+
+& (Join-Path $PSScriptRoot 'Test-CiImpactWorkflowReview.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Workflow review negative controls failed.' }
+
+& (Join-Path $PSScriptRoot 'Test-CiValidationReuseReview.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Delta reuse artifact review controls failed.' }
 
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
 $coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
 $missMeasurer = Join-Path $PSScriptRoot 'Measure-SelectionMiss.ps1'
 $certificateWriter = Join-Path $PSScriptRoot 'New-ShardMapCertificate.ps1'
 $certificateValidator = Join-Path $PSScriptRoot 'Test-CertifiedShardMap.ps1'
+$reuseResolver = Join-Path $PSScriptRoot 'Resolve-CiValidationReuse.ps1'
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ("aidotnet-impact-e2e-" + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
@@ -64,7 +83,7 @@ try {
         $disabledHooks = Join-Path $fixture 'disabled-hooks'
         New-Item -ItemType Directory -Path $disabledHooks -Force | Out-Null
         Invoke-Git config core.hooksPath $disabledHooks
-        @('one', 'alpha before', 'three', 'beta unchanged', 'five') |
+        @('class Feature {', 'int Alpha() { return 1; }', '', 'int Beta() { return 1; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs
         Invoke-Git commit --quiet -m baseline
@@ -206,7 +225,7 @@ try {
             (Test-Path -LiteralPath unchanged-certified/certification.json)) `
             'the policy did not certify the clean identical-tree audit'
 
-        @('one', 'alpha after', 'three', 'beta unchanged', 'five') |
+        @('class Feature {', 'int Alpha() { return 2; }', '', 'int Beta() { return 1; }', '}') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs
         Invoke-Git commit --quiet -m narrow-change
@@ -339,6 +358,285 @@ try {
         Assert-True (@($renameSelection.shards).Count -eq 3) `
             'normal shard selection did not retain both mapped source shards and always-run validation'
 
+        # ---- A pull request BEHIND master, through a real GitHub-shaped merge commit. -------------
+        # Master gains a selector-control commit after the pull request branched from the map's
+        # commit. The event's base.sha still names that old commit, which is exactly how #2100 was
+        # charged with 16 merged CI-control files and escalated to all 116 shards.
+        Invoke-Git checkout --quiet --detach $baseSha
+        New-Item -ItemType Directory -Path tools/TestImpact -Force | Out-Null
+        'merged selector fix' | Set-Content -LiteralPath tools/TestImpact/Merged.ps1 -Encoding utf8
+        Invoke-Git add tools/TestImpact/Merged.ps1
+        Invoke-Git commit --quiet -m master-moves-on
+        $masterSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+
+        Invoke-Git checkout --quiet --detach $baseSha
+        @('class Feature {', 'int Alpha() { return 3; }', '', 'int Beta() { return 1; }', '}') |
+            Set-Content -LiteralPath src/Feature.cs -Encoding utf8
+        New-Item -ItemType Directory -Path tests/Proj/UnitTests/Alpha -Force | Out-Null
+        @(
+            'using Xunit;',
+            'namespace Proj.UnitTests.Alpha;',
+            'public class NewAlphaTests',
+            '{',
+            '    [Fact]',
+            '    public void Works() { }',
+            '}'
+        ) | Set-Content -LiteralPath tests/Proj/UnitTests/Alpha/NewAlphaTests.cs -Encoding utf8
+        Invoke-Git add src/Feature.cs tests/Proj/UnitTests/Alpha/NewAlphaTests.cs
+        Invoke-Git commit --quiet -m pull-request-change
+        $prHeadSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+
+        # refs/pull/N/merge: base-branch tip first, pull request head second.
+        Invoke-Git checkout --quiet --detach $masterSha
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $testedMergeSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        @(
+            [ordered]@{ name = 'Alpha'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~UnitTests.Alpha' },
+            [ordered]@{ name = 'Beta'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~UnitTests.Beta' },
+            [ordered]@{ name = 'Always'; project = 'tests/Proj/Proj.csproj'; filter = 'Category=Heavy' }
+        ) | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath shard-manifest.json -Encoding utf8
+        $shardNames = @('Alpha', 'Beta', 'Always')
+
+        # Reproduction first: the stale base, exactly as the workflow used to pass it.
+        $staleOutput = @(& $selector -MapFile certified/shard-map.json -BaseSha $baseSha `
+            -ExpectedShards $shardNames -OutFile behind-stale-selection.json 6>&1)
+        foreach ($line in $staleOutput) {
+            Write-Host (('[expected escalation, stale base] ' + [string] $line) -replace '::warning::', '')
+        }
+        $stale = Get-Content behind-stale-selection.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $stale.escalate -and (@($stale.reasons) -join ';') -like '*tools/TestImpact/Merged.ps1*') `
+            'reproduction failed: the stale base did not charge master''s merged control file to the pull request'
+        & $selector -ClassifyOnly -BaseSha $baseSha -OutFile behind-stale-classification.json
+        $staleClassification = Get-Content behind-stale-classification.json -Raw | ConvertFrom-Json
+        Assert-True (@($staleClassification.changedPaths).Count -eq 3) `
+            'reproduction failed: the stale base did not report master''s file as a pull-request path'
+
+        # Fixed: the merge commit's first parent.
+        & $selector -ClassifyOnly -PullRequestHeadSha $prHeadSha -OutFile behind-classification.json
+        $behindClassification = Get-Content behind-classification.json -Raw | ConvertFrom-Json
+        Assert-True ((@($behindClassification.changedPaths | Sort-Object) -join ',') -eq
+            'src/Feature.cs,tests/Proj/UnitTests/Alpha/NewAlphaTests.cs') `
+            'a behind pull request was classified on paths other than its own'
+        Assert-True ([string] $behindClassification.baseSha -eq $masterSha) `
+            'classification did not use the merge commit''s first parent as the base'
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $prHeadSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile behind-selection.json
+        Assert-True ($LASTEXITCODE -eq 0) 'selection for a behind pull request failed'
+        $behind = Get-Content behind-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $behind.escalate) `
+            "a behind pull request still escalated: $(@($behind.reasons) -join '; ')"
+        Assert-True ((@($behind.shards) -join ',') -eq 'Alpha,Always') `
+            "a behind pull request did not select exactly its covering/new-test shard and always-run (a strict 2/3): $(@($behind.shards) -join ',')"
+        Assert-True (@($behind.routes | Where-Object { $_ -like 'Alpha <= runs tests affected by tests/Proj/UnitTests/Alpha/NewAlphaTests.cs*' }).Count -eq 1) `
+            'the new test file was not routed to Alpha through its filter'
+
+        # The head must be the merge commit's second parent, and the checkout must be a merge.
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $masterSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile wrong-head-selection.json 6>$null
+        $wrongHead = Get-Content wrong-head-selection.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $wrongHead.escalate) 'a head that is not the merge commit''s second parent was trusted'
+        & $selector -ClassifyOnly -PullRequestHeadSha $masterSha -OutFile wrong-head-classification.json 6>$null
+        Assert-True ([bool] (Get-Content wrong-head-classification.json -Raw | ConvertFrom-Json).requiresValidation) `
+            'classification trusted a head that is not the merge commit''s second parent'
+        Invoke-Git checkout --quiet --detach $prHeadSha
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $prHeadSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile non-merge-selection.json 6>$null
+        Assert-True ([bool] (Get-Content non-merge-selection.json -Raw | ConvertFrom-Json).escalate) `
+            'a checkout that is not a merge commit was trusted as a pull-request merge'
+
+        # A pull request that DELETES a test file: no file at HEAD names its types, so the reference
+        # search's git grep exits 1. The selector must still exit 0 - callers read a nonzero exit as
+        # a selector failure and throw away the (valid) selection for the full matrix.
+        # Its own small repository, because the file must exist in the MAP's commit for its deletion
+        # to be a map-coordinate change at all.
+        $deletionRepo = Join-Path $fixture 'deletion-repo'
+        New-Item -ItemType Directory -Path (Join-Path $deletionRepo 'tests/Proj/UnitTests/Alpha') -Force | Out-Null
+        Push-Location $deletionRepo
+        try {
+            Invoke-Git init --quiet
+            Invoke-Git config user.email 'ci-impact-fixture@example.invalid'
+            Invoke-Git config user.name 'CI impact fixture'
+            Invoke-Git config commit.gpgSign false
+            Invoke-Git config core.hooksPath $disabledHooks
+            @('namespace Proj.UnitTests.Alpha;', 'public class DoomedTests', '{', '    [Fact]',
+              '    public void Works() { }', '}') |
+                Set-Content -LiteralPath tests/Proj/UnitTests/Alpha/DoomedTests.cs -Encoding utf8
+            Invoke-Git add .
+            Invoke-Git commit --quiet -m map-commit
+            $deletionBase = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+            Invoke-Git rm --quiet tests/Proj/UnitTests/Alpha/DoomedTests.cs
+            Invoke-Git commit --quiet -m delete-a-test-file
+            $deletingHeadSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+            Invoke-Git checkout --quiet --detach $deletionBase
+            Invoke-Git commit --quiet --allow-empty -m base-moves-on
+            Invoke-Git merge --quiet --no-ff --no-edit $deletingHeadSha
+            [ordered]@{
+                schemaVersion = 1; sha = $deletionBase; knownShards = @('Alpha', 'Beta'); alwaysRun = @('Always')
+                files = [ordered]@{ 'src/Placeholder.cs' = @([ordered]@{ s = 1; r = @(1, 1) }) }
+            } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath deletion-map.json -Encoding utf8
+            $global:LASTEXITCODE = 99
+            & $selector -MapFile deletion-map.json -PullRequestHeadSha $deletingHeadSha `
+                -ShardManifestFile ../shard-manifest.json -ExpectedShards $shardNames `
+                -OutFile deleted-test-selection.json 6>$null
+            $deletedExit = $LASTEXITCODE
+            $deletedTest = Get-Content deleted-test-selection.json -Raw | ConvertFrom-Json
+        }
+        finally { Pop-Location }
+        Assert-True (-not [bool] $deletedTest.escalate -and $deletedTest.shards -contains 'Alpha') `
+            "deleting a test file was not routed to its shard: $(@($deletedTest.reasons) -join '; ')"
+        Assert-True ($deletedExit -eq 0) `
+            "a valid selection exited $deletedExit, which the workflow reads as a selector failure"
+
+        # Every result shape - escalations included - carries routes; consumers read it under StrictMode.
+        & $selector -MapFile absent-map.json -ExpectedShards $shardNames -OutFile escalated-selection.json 6>$null
+        $escalated = Get-Content escalated-selection.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $escalated.escalate -and $null -ne $escalated.PSObject.Properties['routes']) `
+            'an escalated selection result has no routes property'
+
+        # ---- Post-merge DELTA reuse, from the same pull request. --------------------------------
+        # The pull request was validated as $testedMergeSha and its run executed Alpha and Always.
+        # Before it lands, master gains more commits. Exact-tree reuse can never match now; delta
+        # reuse must rebuild the validated tree from its parents and decide from what master added.
+        $testedTree = ((Invoke-Git rev-parse "$testedMergeSha^{tree}") | Out-String).Trim()
+        $pullRequestShards = '["Alpha","Always"]'
+        function Invoke-DeltaPlanFixture([string] $Name, [string] $Tree = $testedTree, [string] $MapPath = 'certified/shard-map.json') {
+            & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $Tree `
+                -PullRequestShardsJson $pullRequestShards -MapFile $MapPath `
+                -ShardManifestFile shard-manifest.json -SelectorPath $selector -OutFile "$Name.json" 6>$null
+            return Get-Content "$Name.json" -Raw | ConvertFrom-Json
+        }
+
+        # (a) Master edits a line only Beta executes. Δ selects Beta + Always; the pull request ran
+        #     Alpha + Always. Rerun Beta + Always (no assumed master evidence), import Alpha.
+        Invoke-Git checkout --quiet --detach $masterSha
+        @('class Feature {', 'int Alpha() { return 1; }', '', 'int Beta() { return 2; }', '}') |
+            Set-Content -LiteralPath src/Feature.cs -Encoding utf8
+        Invoke-Git commit --quiet -am master-runtime-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-partial'
+        Assert-True ($plan.mode -ceq 'Partial') "an overlapping master delta did not plan a partial re-run: $($plan.mode) - $($plan.why)"
+        Assert-True ((@($plan.rerun) -join ',') -ceq 'Always,Beta') `
+            "the partial re-run omitted delta effects: rerun=$(@($plan.rerun) -join ','); routes=$(@($plan.routes) -join ' | ')"
+        Assert-True ((@($plan.import) -join ',') -ceq 'Alpha') `
+            "the partial re-run did not import the untouched pull-request shard: import=$(@($plan.import) -join ',')"
+        Assert-True ($plan.tree -ceq $testedTree) 'the validated tree was not rebuilt exactly from its parents'
+        Write-Host "Post-merge runtime delta: mode=$($plan.mode); rerun=$(@($plan.rerun) -join ','); import=$(@($plan.import) -join ',')"
+        $workloadManifest = @(Get-Content shard-manifest.json -Raw | ConvertFrom-Json)
+        $workloadManifest[0] | Add-Member -NotePropertyName workload -NotePropertyValue 'ParameterSweep'
+        $workloadManifest[1] | Add-Member -NotePropertyName workload -NotePropertyValue 'ModelShape'
+        $deltaWorkloads = Split-CiWorkloads @($workloadManifest | Where-Object { $_.name -cin $plan.rerun })
+        $importedWorkloads = Split-CiWorkloads @($workloadManifest | Where-Object { $_.name -cin $plan.import })
+        Assert-True ($deltaWorkloads.Tests.Count -eq 1 -and $deltaWorkloads.ModelShape.Count -eq 1 -and
+            $deltaWorkloads.ParameterSweep.Count -eq 0 -and $importedWorkloads.ParameterSweep.Count -eq 1) `
+            'post-merge delta widened an imported parameter sweep or omitted affected model conformance'
+        $workloadManifest | ConvertTo-Json -Depth 5 | Set-Content auxiliary-manifest.json
+        # Profile the fixture's current catalog, before the PR/master body-only changes.
+        # The line coordinates are unchanged; old master's unmapped helper already exists.
+        $auxiliaryMap = Get-Content certified/shard-map.json -Raw | ConvertFrom-Json
+        $auxiliaryMap.sha = $masterSha
+        $auxiliaryMap | ConvertTo-Json -Depth 8 | Set-Content auxiliary-map.json
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile auxiliary-manifest.json -SelectorPath $selector -OutFile auxiliary-delta.json 6>$null
+        $auxiliaryPlan = Get-Content auxiliary-delta.json -Raw | ConvertFrom-Json
+        Assert-True ($auxiliaryPlan.mode -ceq 'Partial' -and
+            ($auxiliaryPlan.rerun -join ',') -ceq 'Always,Beta' -and ($auxiliaryPlan.import -join ',') -ceq 'Alpha') `
+            "typed auxiliary delta did not preserve selective reuse: $($auxiliaryPlan.why)"
+        $legacyUpgradeManifest = @(Get-Content shard-manifest.json -Raw | ConvertFrom-Json) + @(
+            [pscustomobject]@{ name = 'Count'; workload = 'ParameterSweep'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~CountFixture' },
+            [pscustomobject]@{ name = 'Shape'; workload = 'ModelShape'; project = 'tests/Proj/Proj.csproj'; filter = 'FullyQualifiedName~ShapeFixture' }
+        )
+        $legacyUpgradeManifest | ConvertTo-Json -Depth 5 | Set-Content legacy-upgrade-manifest.json
+        & $selector -MapFile auxiliary-map.json -DeltaFromTree $testedTree `
+            -ShardManifestFile legacy-upgrade-manifest.json -ExpectedShards @($legacyUpgradeManifest.name) `
+            -OutFile legacy-upgrade-selection.json 6>$null
+        $upgradeSelection = Get-Content legacy-upgrade-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not $upgradeSelection.escalate -and
+            ($upgradeSelection.shards -join ',') -ceq 'Always,Beta,Count,Shape') `
+            'legacy rollout reran untouched ordinary Alpha or omitted mandatory unmapped auxiliary jobs'
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile legacy-upgrade-manifest.json -SelectorPath $selector -OutFile legacy-upgrade-plan.json 6>$null
+        $upgradePlan = Get-Content legacy-upgrade-plan.json -Raw | ConvertFrom-Json
+        Assert-True ($upgradePlan.mode -ceq 'Partial' -and ($upgradePlan.import -join ',') -ceq 'Alpha' -and
+            ($upgradePlan.rerun -join ',') -ceq 'Always,Beta,Count,Shape') `
+            'legacy workload rollout disabled selective post-merge reuse'
+        $landedSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        (Get-Content src/Feature.cs -Raw).Replace('class Feature', 'class RenamedFeature') | Set-Content src/Feature.cs
+        Invoke-Git commit --quiet -am changed-model-inventory
+        & $reuseResolver -PlanDelta -TestedBaseSha $masterSha -TestedHeadSha $prHeadSha -TestedTree $testedTree `
+            -PullRequestShardsJson $pullRequestShards -MapFile auxiliary-map.json `
+            -ShardManifestFile auxiliary-manifest.json -SelectorPath $selector -OutFile auxiliary-unsafe.json 6>$null
+        $unsafeAuxiliary = Get-Content auxiliary-unsafe.json -Raw | ConvertFrom-Json
+        Assert-True ($unsafeAuxiliary.mode -ceq 'None') 'changed ordinal inventory reused old auxiliary identities'
+        Invoke-Git checkout --quiet --detach $landedSha
+
+        # Every fail-closed selector result has the same JSON shape. The delta resolver uses
+        # StrictMode and must return an explicit full-matrix plan, not throw on missing routes.
+        foreach ($invalidMapKind in [Enum]::GetValues[InvalidMapFixture]()) {
+            $invalidMap = $invalidMapKind.ToString().ToLowerInvariant() + '-map.json'
+            if ($invalidMapKind -eq [InvalidMapFixture]::Malformed) {
+                '{ not valid JSON' | Set-Content -LiteralPath $invalidMap -Encoding utf8
+            }
+            elseif ($invalidMapKind -eq [InvalidMapFixture]::Unresolvable) {
+                $unresolvableMap = Get-Content certified/shard-map.json -Raw | ConvertFrom-Json
+                $unresolvableMap.sha = '1111111111111111111111111111111111111111'
+                $unresolvableMap | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $invalidMap -Encoding utf8
+            }
+            $invalidName = 'delta-' + $invalidMap.Replace('.json', '')
+            $invalidPlan = $null
+            try { $invalidPlan = Invoke-DeltaPlanFixture $invalidName $testedTree $invalidMap }
+            catch { [void] $failures.Add("${invalidMap}: selector fallback threw instead of planning full validation: $($_.Exception.Message)") }
+            if ($null -ne $invalidPlan) {
+                Assert-True ($invalidPlan.mode -ceq 'None' -and @($invalidPlan.routes).Count -eq 0 -and
+                    @($invalidPlan.rerun).Count -eq 0 -and @($invalidPlan.import).Count -eq 0) `
+                    "$invalidMap did not produce the explicit empty-route, full-validation plan"
+            }
+        }
+
+        # A deleted test has no remaining HEAD referrers. git grep legitimately returns 1, but the
+        # selector has successfully routed the deleted source from its tested revision. That
+        # native status must not leak into the selector's process-level success contract.
+        Invoke-Git checkout --quiet --detach $testedMergeSha
+        Invoke-Git rm --quiet -- tests/Proj/UnitTests/Alpha/NewAlphaTests.cs
+        Invoke-Git commit --quiet -m delete-tested-alpha-test
+        & git grep -l -w -F -e NewAlphaTests HEAD -- ':(glob)tests/Proj/**/*.cs' 2>$null
+        Assert-True ($LASTEXITCODE -eq 1) 'the deleted-test fixture did not exercise a real no-match git grep'
+        & $selector -MapFile certified/shard-map.json -BaseSha $testedMergeSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile deleted-test-selection.json 6>$null
+        Assert-True ($LASTEXITCODE -eq 0) 'a successful deleted-test selection leaked the no-match git grep exit code'
+        $deleted = Get-Content deleted-test-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $deleted.escalate -and (@($deleted.shards) -join ',') -ceq 'Alpha,Always') `
+            'the deleted test did not keep its original Alpha route and always-run shard'
+        $plan = Invoke-DeltaPlanFixture 'delta-deleted-test'
+        Assert-True ($plan.mode -ceq 'Partial' -and (@($plan.rerun) -join ',') -ceq 'Alpha,Always') `
+            "a valid deleted-test delta failed planning after git grep found no referrers: $($plan.why)"
+
+        # (b) Master adds only documentation: nothing the pull request certified can have changed.
+        Invoke-Git checkout --quiet --detach $masterSha
+        New-Item -ItemType Directory -Path docs -Force | Out-Null
+        'release notes' | Set-Content -LiteralPath docs/notes.md -Encoding utf8
+        Invoke-Git add docs/notes.md
+        Invoke-Git commit --quiet -m master-docs-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-reuse'
+        Assert-True ($plan.mode -ceq 'Reuse') "a documentation-only master delta was not reused outright: $($plan.mode) - $($plan.why)"
+        Write-Host "Post-merge documentation delta: mode=$($plan.mode); rerun count=$(@($plan.rerun).Count)"
+
+        # (c) Master changes CI control: the full matrix, whatever the pull request ran.
+        Invoke-Git checkout --quiet --detach $masterSha
+        'later selector change' | Set-Content -LiteralPath tools/TestImpact/Later.ps1 -Encoding utf8
+        Invoke-Git add tools/TestImpact/Later.ps1
+        Invoke-Git commit --quiet -m master-control-change
+        Invoke-Git merge --quiet --no-ff --no-edit $prHeadSha
+        $plan = Invoke-DeltaPlanFixture 'delta-control'
+        Assert-True ($plan.mode -ceq 'None') 'a master delta containing a CI-control edit was reused'
+
+        # (d) A tree that the parents do not rebuild to is never trusted.
+        $plan = Invoke-DeltaPlanFixture 'delta-wrong-tree' (((Invoke-Git rev-parse "$baseSha^{tree}") | Out-String).Trim())
+        Assert-True ($plan.mode -ceq 'None' -and $plan.why -like '*could not be rebuilt*') `
+            'a validated tree that its parents do not rebuild to was trusted'
+
         $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1
         $badCertificate | ConvertTo-Json -Depth 5 | Set-Content bad-certification.json -Encoding utf8
@@ -380,5 +678,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Test-impact end-to-end proof passed: covered edit selected 2/3; #2118 selected none; CI control edit escalated.'
+Write-Host 'Test-impact end-to-end proof passed: covered edit and behind-master PR selected 2/3; #2118 selected none; post-merge runtime delta reran Always + Beta and imported Alpha; documentation delta reused; control/invalid-map deltas required full validation; deleted-test delta retained its route and succeeded.'
 exit 0

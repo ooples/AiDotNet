@@ -137,6 +137,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private readonly List<ILayer<T>> _layers;
 
+    /// <summary>
+    /// Indicates that this model has crossed the architecture-layer ownership boundary.
+    /// </summary>
+    /// <remarks>
+    /// Keeps the ownership guard off inference and training hot paths after the first layer-collection
+    /// access. A competing first access may repeat the idempotent same-model claim, but neither access can
+    /// return the collection until the architecture's atomic claim has completed.
+    /// </remarks>
+    private int _architectureLayerOwnershipEstablished;
+
+    /// <summary>
+    /// Tracks nested validation entry points so one failed validation chain rolls back its provisional
+    /// architecture claim exactly once at the outer transaction boundary.
+    /// </summary>
+    private int _customLayerValidationDepth;
+
 
     /// <summary>
     /// Gets the collection of layers that make up this neural network (read-only access).
@@ -150,7 +166,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
     /// </para>
     /// </remarks>
-    public List<ILayer<T>> Layers => _layers;
+    public List<ILayer<T>> Layers
+    {
+        get
+        {
+            // Claim only at the first point where this model can take references to the architecture's
+            // mutable layers. Claiming in the base constructor poisoned the architecture when a derived
+            // constructor rejected its configuration before touching Layers; a corrected construction
+            // then looked like an illegal second owner. The getter is evaluated before Add/AddRange can
+            // capture anything, while ClaimForModel's lock still makes competing captures atomic.
+            if (Volatile.Read(ref _architectureLayerOwnershipEstablished) == 0)
+            {
+                Architecture.ClaimForModel(this);
+                Volatile.Write(ref _architectureLayerOwnershipEstablished, 1);
+            }
+
+            return _layers;
+        }
+    }
 
     /// <summary>
     /// Moves the whole model — every layer's parameters and buffers — to the given device, the model-level
@@ -3979,14 +4012,73 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <remarks>
     /// <b>For Beginners:</b> Not all combinations of layers make a valid neural network. This method checks that
     /// the layers can properly connect to each other (like making sure puzzle pieces fit together).
+    /// Derived implementations may add model-specific checks. Their initialization path must enter through
+    /// <see cref="ValidateCustomLayersWithOwnershipRollback"/> so failures after the base checks also release
+    /// the provisional architecture claim.
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
-        ValidateCustomLayersInternal(layers);
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
     }
 
+    /// <summary>
+    /// Runs a model-specific custom-layer validator inside the architecture ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
+    /// <remarks>
+    /// Derived models that override <see cref="ValidateCustomLayers"/> call this non-virtual entry point from
+    /// initialization. It catches failures thrown after the base validator returns while preserving the existing
+    /// protected virtual extension point for downstream models.
+    /// </remarks>
+    protected void ValidateCustomLayersWithOwnershipRollback(List<ILayer<T>> layers)
+    {
+        ValidateWithOwnershipRollback(() => ValidateCustomLayers(layers));
+    }
+
+    /// <summary>
+    /// Validates only the common layer contracts while preserving the ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
     protected void ValidateCustomLayersInternal(List<ILayer<T>> layers)
+    {
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
+    }
+
+    private void ValidateWithOwnershipRollback(Action validate)
+    {
+        bool ownsRollback = _customLayerValidationDepth++ == 0;
+        try
+        {
+            validate();
+        }
+        catch
+        {
+            if (ownsRollback)
+            {
+                RollbackRejectedCustomLayers();
+            }
+
+            throw;
+        }
+        finally
+        {
+            _customLayerValidationDepth--;
+        }
+    }
+
+    private void RollbackRejectedCustomLayers()
+    {
+        // Validation is the commit point for a caller-supplied layer graph. Until it succeeds, the
+        // ownership claim is provisional. Drop this model's references before releasing the claim so
+        // an immediate corrected construction can take the graph without ever overlapping owners.
+        _layers.Clear();
+        InvalidateParameterCountCache();
+        Architecture.ReleaseForModel(this);
+        Volatile.Write(ref _architectureLayerOwnershipEstablished, 0);
+    }
+
+    private void ValidateCustomLayersInternalCore(List<ILayer<T>> layers)
     {
         if (layers == null || layers.Count == 0)
         {

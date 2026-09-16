@@ -16,6 +16,9 @@ function Invoke-GateCase {
         [string] $Stage = 'Complete',
         [string] $ReuseScope = 'None',
         [string] $RequiresValidation = 'true',
+        [string] $RequiresTests = 'true',
+        [string] $RequiresSweeps = 'true',
+        [string] $RequiresShapes = 'true',
         [string] $Source = 'success',
         [string] $Select = 'success',
         [string] $Build = 'success',
@@ -36,6 +39,7 @@ function Invoke-GateCase {
 
     & $Gate -Stage $Stage -ReuseScope $ReuseScope -SourceResult $Source `
         -RequiresValidation $RequiresValidation -SelectResult $Select `
+        -RequiresTests $RequiresTests -RequiresSweeps $RequiresSweeps -RequiresShapes $RequiresShapes `
         -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
         -ParameterSweepResult $ParameterSweep -ModelShapeResult $ModelShape `
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
@@ -49,6 +53,18 @@ function Invoke-GateCase {
 
 # Validation evidence is independent of quality jobs.
 Invoke-GateCase -Name validation_runtime_success -Stage Validation -ExpectedExit 0
+Invoke-GateCase -Name validation_selective_auxiliary_skip -Stage Validation `
+    -RequiresSweeps false -RequiresShapes false -ParameterSweep skipped -ModelShape skipped -ExpectedExit 0
+Invoke-GateCase -Name validation_required_sweep_missing -Stage Validation -ParameterSweep skipped -ExpectedExit 1
+Invoke-GateCase -Name validation_required_shape_missing -Stage Validation -ModelShape skipped -ExpectedExit 1
+Invoke-GateCase -Name validation_unexpected_sweep_failure -Stage Validation `
+    -RequiresSweeps false -ParameterSweep failure -ExpectedExit 1
+Invoke-GateCase -Name validation_unexpected_shape_cancel -Stage Validation `
+    -RequiresShapes false -ModelShape cancelled -ExpectedExit 1
+Invoke-GateCase -Name validation_auxiliary_only -Stage Validation `
+    -RequiresTests false -Tests skipped -Verdict false -ExpectedExit 0
+Invoke-GateCase -Name validation_required_tests_missing -Stage Validation `
+    -Tests skipped -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_ignores_quality_failure -Stage Validation `
     -CodeQL failure -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name validation_known_test_failure -Stage Validation `
@@ -85,6 +101,11 @@ Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresV
     -Promotion skipped -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
     -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
+
+Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
+    -ValidationGate skipped -ExpectedExit 1
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI Gate mode proof FAILED:'

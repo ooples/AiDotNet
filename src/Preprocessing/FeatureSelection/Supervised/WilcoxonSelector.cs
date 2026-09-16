@@ -115,8 +115,8 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double U = Math.Min(U1, U0);
 
             // Standardized statistic (approximate normal for large samples)
-            double meanU = n0 * n1 / 2.0;
-            double stdU = Math.Sqrt(n0 * n1 * (n0 + n1 + 1.0) / 12);
+            double meanU = (double)n0 * n1 / 2.0;
+            double stdU = Math.Sqrt((double)n0 * n1 * (n0 + n1 + 1.0) / 12);
 
             _testStatistics[j] = Math.Abs(U - meanU) / (stdU + 1e-10);
         }
