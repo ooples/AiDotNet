@@ -4,6 +4,8 @@ public enum RuntimeContractId { XunitBooleanAssertion293 }
 public enum RuntimeContractStatus { Unknown, ReviewedConditional }
 public enum RuntimeContractEffect { ReadScalarArguments, ThrowOnFailure }
 public enum AssertionFailurePropagation { Unresolved, LeavesMethod, ForwardsToTaskBuilder }
+public enum AsyncOwnerBinding { Unresolved, ReturnsStateMachineTask }
+public enum OwnedFactoryCallPath { Unresolved, NullGuardPrecedesOwnedChange }
 public enum RuntimeContractRequirement
 {
     ExactBinaryAndRuntimeBinding,

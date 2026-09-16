@@ -4,12 +4,13 @@ using Mono.Cecil.Cil;
 
 // Factory ownership ends at return. This second check follows the value in a
 // caller; passing a derived bool to an assertion is NOT automatically harmless
-// (throwing may invoke first-chance handlers). No external sink is whitelisted.
+// (throwing may invoke first-chance handlers). Reviewed sinks produce a
+// conditional result, never an unconditional local-effect certificate.
 internal static class OwnedReturnUseReader
 {
     private enum Value { Unrelated, OwnedReference, DerivedValue }
 
-    internal static OwnedReturnUse Read(MethodDefinition caller, int factoryCall)
+    internal static OwnedReturnUse Read(MethodDefinition caller, int factoryCall, MethodDefinition? owner = null)
     {
         var unresolved = new HashSet<string>(StringComparer.Ordinal);
         OwnedReturnUse Result(OwnedReturnUseStatus status, int instruction) => new(status, instruction, unresolved.Order(StringComparer.Ordinal).ToArray());
@@ -22,6 +23,8 @@ internal static class OwnedReturnUseReader
         var locals = new Value[caller.Body.Variables.Count];
         stack.Push(Value.OwnedReference);
         bool boundary = caller.Body.ExceptionHandlers.Count != 0;
+        bool conditional = false;
+        bool asyncOwner = owner is not null && AsyncOwnerReader.Read(owner, caller) == AsyncOwnerBinding.ReturnsStateMachineTask;
         bool Pop(out Value value) => stack.TryPop(out value);
         for (int index = factoryCall + 1; index < caller.Body.Instructions.Count; index++)
         {
@@ -68,6 +71,14 @@ internal static class OwnedReturnUseReader
                         stack.Push(Value.DerivedValue); break;
                     }
                     if (receiver == Value.OwnedReference) return Result(OwnedReturnUseStatus.Escapes, index);
+                    if (owner is not null && instruction.OpCode.Code == Code.Call &&
+                        AssertionFailureReader.Read(caller, index) is var propagation &&
+                        (owner == caller && propagation == AssertionFailurePropagation.LeavesMethod ||
+                         asyncOwner && propagation == AssertionFailurePropagation.ForwardsToTaskBuilder))
+                    {
+                        conditional = true;
+                        break;
+                    }
                     unresolved.Add(call.FullName + "@" + call.DeclaringType.Scope);
                     boundary = true;
                     if (call.ReturnType.MetadataType != MetadataType.Void) stack.Push(Value.DerivedValue);
@@ -76,7 +87,12 @@ internal static class OwnedReturnUseReader
                 case Code.Ret:
                     if (caller.ReturnType.MetadataType != MetadataType.Void && (!Pop(out Value returned) || returned != Value.Unrelated))
                         return Result(OwnedReturnUseStatus.Escapes, index);
-                    return Result(boundary || stack.Count != 0 ? OwnedReturnUseStatus.NeedsBoundaryProof : OwnedReturnUseStatus.DiscardedLocally, index);
+                    return Result(boundary || stack.Count != 0 ? OwnedReturnUseStatus.NeedsBoundaryProof :
+                        conditional ? OwnedReturnUseStatus.ConditionalOnSuccessfulOwner : OwnedReturnUseStatus.DiscardedLocally, index);
+                case Code.Leave: case Code.Leave_S:
+                    return Result(asyncOwner && owner is not null && conditional && unresolved.Count == 0 && stack.Count == 0 &&
+                        IsCompletionTail(caller, instruction, owner) ? OwnedReturnUseStatus.ConditionalOnSuccessfulOwner :
+                        OwnedReturnUseStatus.NeedsBoundaryProof, index);
                 default:
                     // Branches, exception exits, await/address/boxing/delegate
                     // operations require a stronger path/lifetime proof.
@@ -84,6 +100,33 @@ internal static class OwnedReturnUseReader
             }
         }
         return Result(OwnedReturnUseStatus.NeedsBoundaryProof, caller.Body.Instructions.Count);
+    }
+
+    private static bool IsCompletionTail(MethodDefinition caller, Instruction leave, MethodDefinition owner)
+    {
+        if (leave.Operand is not Instruction target || caller.Body.ExceptionHandlers.Count != 1 ||
+            caller.Body.ExceptionHandlers[0].HandlerEnd != target) return false;
+        int index = caller.Body.Instructions.IndexOf(target);
+        if (index < 0 || caller.Body.Instructions.Count - index != 7) return false;
+        Instruction[] tail = caller.Body.Instructions.Skip(index).ToArray();
+        if (!tail.Select(instruction => instruction.OpCode.Code).SequenceEqual(
+            new[] { Code.Ldarg_0, Code.Ldc_I4_S, Code.Stfld, Code.Ldarg_0, Code.Ldflda, Code.Call, Code.Ret }) ||
+            tail[1].Operand is not sbyte state || state != -2 || tail[2].Operand is not FieldReference stateField ||
+            tail[4].Operand is not FieldReference builder || tail[5].Operand is not MethodReference complete ||
+            owner.Body.Instructions[2].Operand is not FieldReference expectedBuilder || owner.Body.Instructions[5].Operand is not FieldReference expectedState)
+            return false;
+        try
+        {
+            MethodDefinition? completion = complete.Resolve();
+            return builder.Resolve() == expectedBuilder.Resolve() && stateField.Resolve() == expectedState.Resolve() &&
+                complete.FullName == "System.Void System.Runtime.CompilerServices.AsyncTaskMethodBuilder::SetResult()" &&
+                completion is not null && string.Equals(Path.GetFullPath(completion.Module.FileName), Path.GetFullPath(typeof(object).Assembly.Location),
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch (Exception error) when (error is AssemblyResolutionException or ResolutionException or IOException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static bool IsTrivialPrimitiveGetter(MethodReference reference, TypeReference allocated)

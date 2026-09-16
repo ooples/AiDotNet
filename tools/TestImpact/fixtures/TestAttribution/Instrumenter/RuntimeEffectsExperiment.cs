@@ -96,7 +96,12 @@ internal static class RuntimeEffectsExperiment
                     .Where(site => site.offset > index && site.item.OpCode.Code == Code.Call && site.item.Operand is MethodReference reference &&
                         contracts.Any(contract => contract.Method == reference.FullName))
                     .Select(site => new { Instruction = site.offset, Propagation = AssertionFailureReader.Read(caller, site.offset) }).ToArray();
+                MethodDefinition[] entries = sourceMethods.Values.Where(method =>
+                    method.Module.Assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name == owner).ToArray();
+                AsyncOwnerBinding ownerBinding = entries.Length == 1 ? AsyncOwnerReader.Read(entries[0], caller) : AsyncOwnerBinding.Unresolved;
                 uses.Add(new { Caller = DependencyGraph.Stable(caller), Use = OwnedReturnUseReader.Read(caller, index),
+                    ReviewedUse = OwnedReturnUseReader.Read(caller, index, entries.Length == 1 ? entries[0] : null), OwnerTaskBinding = ownerBinding,
+                    FactoryPath = OwnedFactoryCallReader.Read(caller, oldMethod, newMethod),
                     ReviewedContracts = contracts, FailureExits = failureExits, RequirementsProven = false });
             }
             return new { Owner = owner, Calls = uses.ToArray(), MissingCallsiteProof = uses.Count == 0 };

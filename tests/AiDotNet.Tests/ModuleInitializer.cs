@@ -35,6 +35,10 @@ internal static class TestModuleInitializer
     private static void InitializeCpuMode()
     {
         if (_initialized) return;
+#if AIDOTNET_TEST_ATTRIBUTION
+        // Bind the inputs before CPU/license setup replaces their values.
+        AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuStartup();
+#endif
         _initialized = true;
 
         // Pin BLAS backends to a single thread per xUnit worker. Without this,

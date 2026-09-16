@@ -40,6 +40,7 @@ internal static class RunnerInvocation
             Runtime = RuntimeInformation.FrameworkDescription, RuntimeVersion = Environment.Version.ToString(),
             OS = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture,
             Culture = CultureInfo.CurrentCulture.Name, UICulture = CultureInfo.CurrentUICulture.Name,
+            RuntimeContracts = new { Effective = RuntimeContractEnvironment.Capture(), Initialization = RuntimeContractInitialization.CpuStartup },
             CpuCount = Environment.ProcessorCount, Parallel = options.ParallelAlgorithmOrDefault(),
             DisableParallel = options.DisableParallelizationOrDefault(), MaxThreads = options.MaxParallelThreadsOrDefault(),
             StopOnFailure = options.StopOnTestFailOrDefault(), SyncMessages = options.SynchronousMessageReportingOrDefault(),
