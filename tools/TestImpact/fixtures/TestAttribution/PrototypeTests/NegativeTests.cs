@@ -50,3 +50,33 @@ public sealed class DetachedTaskTests
         _ = Task.Run(async () => await never.Task);
     }
 }
+
+public sealed class UntrackedBoundaryTests
+{
+    [Fact, Trait("Scenario", "UntrackedTimer")]
+    public void TimerNeverFires()
+    {
+        using var timer = new Timer(_ => throw new InvalidOperationException("Must never fire."),
+            null, Timeout.Infinite, Timeout.Infinite);
+    }
+
+    [Fact, Trait("Scenario", "UntrackedProcess")]
+    public async Task ProcessNeverProducesCoverage()
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true };
+        start.ArgumentList.Add(Environment.GetEnvironmentVariable("ATTRIBUTION_WORKER_DLL")
+            ?? throw new InvalidOperationException("Missing worker fixture."));
+        start.ArgumentList.Add("missing");
+        using var child = System.Diagnostics.Process.Start(start)
+            ?? throw new InvalidOperationException("Child did not start.");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try { await child.WaitForExitAsync(deadline.Token); }
+        catch (OperationCanceledException)
+        {
+            child.Kill(entireProcessTree: true);
+            await child.WaitForExitAsync();
+            throw;
+        }
+        Assert.Equal(0, child.ExitCode);
+    }
+}

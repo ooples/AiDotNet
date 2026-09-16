@@ -47,13 +47,14 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
 
 - Build: **zero warnings and errors**.
 - Positive execution: **7/7 cases passed**, both plain and instrumented.
-- **10 source-backed methods** and **33 task call sites** instrumented; overlapping test scopes
+- **10 source-backed methods** and **36 task call sites** instrumented; overlapping test scopes
   observed. A rendezvous requires real overlap between the two parallel tests.
 - Async/Task.Run and overlapping Left/Right tests received their expected
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **15 negative checks rejected**: late work, detached task, missing worker, unclosed worker,
+- **17 negative checks rejected**: late work, detached task, unregistered process,
+  never-fired timer, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
   and mismatched worker owner. Artifact cases mutate copies of real output.
@@ -76,7 +77,8 @@ for execution contexts that cannot safely identify an individual owner.
 
 - This is not a VSTest-packaged collector or automatic test inventory adapter;
   the fixture assembly opts in once and workers explicitly join.
-  Unregistered workers, timers, threads and tasks created inside uninstrumented
+  Direct process starts, timer construction and thread/queue starts in instrumented
+  code now poison evidence unless supported/registered. Escapes inside uninstrumented
   dependencies are not generally detected. Late hits are tested only when executed
   before report publication. These limitations block production enablement.
 - Source spans are local PDB paths. Repository normalization, source-content
@@ -97,3 +99,13 @@ for execution contexts that cannot safely identify an individual owner.
 The aggregate-coverage counterexample and original feasibility measurements
 remain in [README.md](README.md). Both proof scripts now record their effective
 SDK rather than assuming the roll-forward version in the root global.json.
+
+## Live collector verification
+
+[Linux run 35096965934](https://github.com/ooples/AiDotNet/actions/runs/35096965934)
+passed at commit `d835f76e58`. Its uploaded artifact was downloaded and checked:
+7 plain and 7 collected positive results; 15 expected rejections; 3 overlapping
+scopes; SDK 10.0.401; production selection disabled. The deliberately failing
+test's TRX is failed, while the harness correctly rejects that result.
+This run predates the two new process/timer rejection cases; it does not prove
+those cases or production PR/post-merge selective execution.

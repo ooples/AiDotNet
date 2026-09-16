@@ -188,6 +188,8 @@ try {
         @('unclosed-worker', 'UnclosedWorker', 'PrototypeTests.WorkerTests.Unclosed', [PrototypeRejection]::Faulted, 0),
         @('unjoined-worker', 'UnjoinedWorker', 'PrototypeTests.WorkerTests.Unjoined', [PrototypeRejection]::Faulted, 0),
         @('detached-task', 'DetachedTask', 'PrototypeTests.DetachedTaskTests.NeverHitsCoveredCode', [PrototypeRejection]::Faulted, 0),
+        @('untracked-timer', 'UntrackedTimer', 'PrototypeTests.UntrackedBoundaryTests.TimerNeverFires', [PrototypeRejection]::Faulted, 0),
+        @('untracked-process', 'UntrackedProcess', 'PrototypeTests.UntrackedBoundaryTests.ProcessNeverProducesCoverage', [PrototypeRejection]::Faulted, 0),
         @('test-failure', 'Failure', 'PrototypeTests.FailingTests.FailsAfterCoverage', [PrototypeRejection]::Results, 1))) {
         $negative = Invoke-PrototypeRun $case[0] $case[1] $hostCopy $true $case[4]
         Expect-Rejected $case[0] $case[3] { Assert-Evidence $negative.directory $negative.run @($case[2]) $instrumented $map }

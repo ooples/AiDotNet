@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace AttributionRuntime;
 
-public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask }
+public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask, UntrackedProcess, UntrackedConcurrency }
 public enum AttributionProcessKind { TestHost, Worker }
 public enum HitCollectionMode { Serialized, Cached }
 public sealed record WorkerTicket(string Run, string Token, string Owner, bool Completed);
@@ -116,6 +116,31 @@ public static class Tracker
             else if (scope.Closed) Faults.Add(AttributionFault.LateHit);
             else scope.Tasks.Add(task);
         }
+    }
+
+    public static void CheckProcessStart(ProcessStartInfo start)
+    {
+        if (DirectoryPath is null) return;
+        lock (Gate)
+        {
+            Scope? scope = Current.Value;
+            start.Environment.TryGetValue("ATTRIBUTION_TOKEN", out string? token);
+            start.Environment.TryGetValue("ATTRIBUTION_RUN", out string? run);
+            start.Environment.TryGetValue("ATTRIBUTION_OWNER", out string? owner);
+            if (scope is null || scope.Closed || run != Run || owner != scope.Owner ||
+                !Workers.Any(worker => worker.Token == token && worker.Owner == owner && !worker.Completed))
+                Faults.Add(AttributionFault.UntrackedProcess);
+        }
+    }
+
+    public static void UntrackedProcess()
+    {
+        if (DirectoryPath is not null) lock (Gate) Faults.Add(AttributionFault.UntrackedProcess);
+    }
+
+    public static void UntrackedConcurrency()
+    {
+        if (DirectoryPath is not null) lock (Gate) Faults.Add(AttributionFault.UntrackedConcurrency);
     }
 
     public static void Hit(string method)
