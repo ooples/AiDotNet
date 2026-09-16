@@ -74,7 +74,7 @@ public sealed class OwnedResultEffectsTests
     }
 
     [Fact]
-    public void AssertionFailureCanAffectAnotherCaseWithoutEscapingItsObject()
+    public void SwallowedAssertionFailureCanAffectAnotherCaseEvenWhenSelectedTestPasses()
     {
         int observedFailure = 0;
         string marker = "owned-result-first-chance-" + Guid.NewGuid().ToString("N");
@@ -89,7 +89,7 @@ public sealed class OwnedResultEffectsTests
             // object never reaches the observer or a shared field.
             var value = new PrivateFlag { Value = flag };
             try { Assert.True(value.Value, marker); return CaseOutcome.Passed; }
-            catch (Xunit.Sdk.TrueException) { return CaseOutcome.Failed; }
+            catch (Xunit.Sdk.TrueException) { return CaseOutcome.Passed; }
         }
         AppDomain.CurrentDomain.FirstChanceException += handler;
         try
@@ -97,6 +97,8 @@ public sealed class OwnedResultEffectsTests
             var before = new[] { new TestCaseResult("direct", Execute(true)), new TestCaseResult("observer", observedFailure == 0 ? CaseOutcome.Passed : CaseOutcome.Failed) };
             var after = new[] { new TestCaseResult("direct", Execute(false)), new TestCaseResult("observer", observedFailure == 0 ? CaseOutcome.Passed : CaseOutcome.Failed) };
             Assert.Equal(CaseOutcome.Passed, before[1].Outcome);
+            Assert.Equal(CaseOutcome.Passed, before[0].Outcome);
+            Assert.Equal(CaseOutcome.Passed, after[0].Outcome);
             Assert.Equal(CaseOutcome.Failed, after[1].Outcome);
             Assert.Throws<InvalidDataException>(() => RuntimeEffectControl.Compare(["direct", "observer"], ["direct"], before, after, [after[0]]));
         }

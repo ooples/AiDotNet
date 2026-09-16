@@ -86,7 +86,18 @@ internal static class RuntimeEffectsExperiment
                 if (instruction.OpCode.Code is not (Code.Call or Code.Callvirt) || instruction.Operand is not MethodReference target ||
                     target.Name != newMethod.Name || target.DeclaringType.GetElementType().FullName != newMethod.DeclaringType.FullName)
                     continue;
-                uses.Add(new { Caller = DependencyGraph.Stable(caller), Use = OwnedReturnUseReader.Read(caller, index) });
+                RuntimeContractAssessment[] contracts = caller.Body.Instructions.Skip(index + 1)
+                    .Where(item => item.OpCode.Code is Code.Call or Code.Callvirt)
+                    .Select(item => item.Operand).OfType<MethodReference>()
+                    .Select(ReviewedRuntimeContracts.Assess)
+                    .Where(assessment => assessment.Status == RuntimeContractStatus.ReviewedConditional)
+                    .DistinctBy(assessment => assessment.Method).ToArray();
+                var failureExits = caller.Body.Instructions.Select((item, offset) => new { item, offset })
+                    .Where(site => site.offset > index && site.item.OpCode.Code == Code.Call && site.item.Operand is MethodReference reference &&
+                        contracts.Any(contract => contract.Method == reference.FullName))
+                    .Select(site => new { Instruction = site.offset, Propagation = AssertionFailureReader.Read(caller, site.offset) }).ToArray();
+                uses.Add(new { Caller = DependencyGraph.Stable(caller), Use = OwnedReturnUseReader.Read(caller, index),
+                    ReviewedContracts = contracts, FailureExits = failureExits, RequirementsProven = false });
             }
             return new { Owner = owner, Calls = uses.ToArray(), MissingCallsiteProof = uses.Count == 0 };
         }).ToArray();
