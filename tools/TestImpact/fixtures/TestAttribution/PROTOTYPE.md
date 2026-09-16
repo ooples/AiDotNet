@@ -4,6 +4,34 @@ Status: **fixture prototype verified locally; production selection disabled**.
 This is the next checkpoint on draft PR #2215, not completion of its production
 selection/reuse acceptance criteria. PR #2213 is untouched.
 
+## Latest evidence and remaining acceptance gap
+
+- [Live Linux run 35132755921](https://github.com/ooples/AiDotNet/actions/runs/35132755921)
+  passed at `ca0c86bd6a`: 95 protocol cases, 33 collector rejection controls,
+  exact selected/full TRX reconciliation, and the cross-assembly source edit
+  executing one test while reusing two. Its artifact was downloaded and verified.
+  Authenticated import accepted its 11-case full inventory and rejected the
+  wrong commit, wrong workflow, and partial-as-full controls.
+- Real AiDotNet build at `6e302c542f`: zero errors; existing warnings remain.
+  Both actual DLL/PDB source maps are checksum-verified after emitting generated
+  sources under `obj` for attribution builds. The compact 417,796,977-byte map
+  was read by the streaming CLI, not a small-fixture substitute.
+- The real runner discovered five existing CPU sharding-configuration tests and
+  executed exactly one selected test with a verified schema-4 receipt.
+  `Test-RealIdenticalReuse.ps1` subsequently ran all five as a full baseline and
+  verified five reused outcomes with no new execution for the identical plan.
+  Reuse is not relabeled as five newly executed tests or a fresh full baseline.
+- The identical-plan protocol has 14 passing tests, including changed source,
+  binaries, profile, discovery, mapped and unmapped input rejection controls.
+- **Changed-code production selection is not proven.** The real map still has
+  overly broad test-assembly group roots and unresolved external dependencies.
+  Identical-plan reuse does not relax those changed-input safety boundaries.
+  Production dispatch, outcome-ledger/coverage integration and live changed-base
+  acceptance remain incomplete; the PR must not be marked ready on these checks.
+
+The measurements below retain their earlier checkpoint context; they are not
+claims that the production acceptance gap is closed.
+
 ## Run the proof
 
 ```powershell

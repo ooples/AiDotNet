@@ -27,6 +27,11 @@ public static class ExecutionReuse
         RequireExactMethods(after.Graph, current);
         HashSet<string> selected = DependencySelection.Select(before.Graph, after.Graph, changedNodes, unmappedChange)
             .Select(method => method.MethodId).ToHashSet(StringComparer.Ordinal);
+        // Unknown edges prevent changed-input reuse, not reuse of the exact
+        // already-passed plan. Still validate both graphs above, and never use
+        // this path if the caller reports any changed or unmapped input.
+        if (!unmappedChange && changedNodes.Length == 0 && ExecutionEvidence.CanReuseIdenticalExecution(baseline, full))
+            return new ReusePartition(full, null, current, baseline);
         var oldMethods = baseline.Cases.GroupBy(test => test.MethodId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(test => test.CaseId).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
         foreach (var method in current.GroupBy(test => test.MethodId, StringComparer.Ordinal))

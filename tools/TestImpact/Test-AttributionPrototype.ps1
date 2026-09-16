@@ -188,7 +188,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Changed-base partition protocol tests failed.'
     [xml] $reuseTrx = Get-Content -LiteralPath (Join-Path $root 'reuse-protocol/results.trx') -Raw
     $reuseCases = @($reuseTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($reuseCases.Count -eq 12 -and @($reuseCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($reuseCases.Count -eq 14 -and @($reuseCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Changed-base partition checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=SourceImpact' `
         "/ResultsDirectory:$(Join-Path $root 'source-impact')" '/Logger:trx;LogFileName=results.trx' | Out-Host

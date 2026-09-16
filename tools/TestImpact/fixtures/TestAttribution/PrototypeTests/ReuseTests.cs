@@ -142,4 +142,31 @@ public sealed class ReuseTests
         DependencySnapshot state = Graph with { Nodes = Graph.Nodes.Select(node => node with { SharedState = ["shared"] }).ToArray() };
         Assert.Empty(Partition(["a"], after: state).ReusedCases);
     }
+
+    [Fact]
+    public void ExactSuccessfulPlanCanBeReusedDespiteUnknownDependencies()
+    {
+        DependencySnapshot open = Graph with { Nodes = Graph.Nodes.Select(node => node with { Boundary = DependencyBoundary.External }).ToArray(), GroupRoots = ["a"] };
+        ReusePartition partition = Partition([], before: open, after: open, context: Old);
+        Assert.Null(partition.Execution);
+        Assert.Equal(Cases, partition.ReusedCases);
+        Assert.False(ExecutionReuse.Complete(partition, null).CanReplaceFullBaseline);
+    }
+
+    [Fact]
+    public void IdenticalReuseCannotHideChangedInputsOrDiscovery()
+    {
+        DependencySnapshot open = Graph with { Nodes = Graph.Nodes.Select(node => node with { Boundary = DependencyBoundary.External }).ToArray(), GroupRoots = ["a"] };
+        foreach (ReusePartition partition in new[] {
+            Partition([], before: open, after: open, context: Old, unmapped: true),
+            Partition(["a"], before: open, after: open, context: Old),
+            Partition([], before: open, after: open, context: Old with { SourceTree = new('d', 40) }),
+            Partition([], before: open, after: open, context: Old with { BuildFingerprint = new('e', 64) }),
+            Partition([], before: open, after: open, context: Old with { ProfileFingerprint = new('f', 64) }),
+            Partition([], before: open, after: open, context: Old, cases: Cases.Append(new TestCaseIdentity("a3", "A")).ToArray()) })
+        {
+            Assert.Empty(partition.ReusedCases);
+            Assert.Equal(ValidationScope.FullWorkload, Assert.IsType<ExecutionPlan>(partition.Execution).Scope);
+        }
+    }
 }
