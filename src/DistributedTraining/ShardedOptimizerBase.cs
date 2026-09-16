@@ -254,8 +254,8 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         var paramModel = InterfaceGuard.Parameterizable(model);
         var gradModel = InterfaceGuard.GradientComputable(model);
 
-        // The first backward pass may materialize lazy parameters. Compute once before
-        // snapshotting their layout; this does not apply an optimizer update.
+        // Backward may materialize lazy parameters. Snapshot only after it resolves their layout,
+        // without an extra warm-up pass or optimizer update.
         var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         var originalParams = paramModel.GetParameters();
         if (originalParams is null || originalParams.Length == 0)
@@ -380,8 +380,7 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         var paramModel = InterfaceGuard.Parameterizable(model);
         var gradModel = InterfaceGuard.GradientComputable(model);
 
-        // Snapshot after backward has resolved lazy layers, but before applying any update.
-        // No extra warm-up forward or second backward pass is needed.
+        // Resolve lazy parameters before the snapshot; compute gradients exactly once.
         var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
         var originalParams = paramModel.GetParameters();
         if (originalParams is null || originalParams.Length == 0)

@@ -377,7 +377,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 error += diff * diff;
             }
         }
-        return error / (n * p);
+        return error / ((double)n * p);
     }
 
     private static double[,] InvertMatrix(double[,] matrix, int n)

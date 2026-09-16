@@ -201,7 +201,7 @@ public class AdjustedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix
 
                 for (int nij = minNij; nij <= maxNij; nij++)
                 {
-                    double term = (double)nij / n * Math.Log((double)n * nij / (ai * bj));
+                    double term = (double)nij / n * Math.Log((double)n * nij / ((double)ai * bj));
                     double hyperProb = HypergeometricPMF(nij, ai, bj, n);
                     emi += term * hyperProb;
                 }
