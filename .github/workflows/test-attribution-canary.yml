@@ -10,6 +10,7 @@ on:
       - 'tools/TestImpact/Attribution.Cli/**'
       - 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
       - 'tests/AiDotNet.Tests/Startup.cs'
+      - 'tests/AiDotNet.Tests/ModuleInitializer.cs'
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
       - 'tools/TestImpact/Test-PlannedAttribution.ps1'
       - 'tools/TestImpact/Test-SourceSelection.ps1'

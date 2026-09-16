@@ -11,5 +11,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="PrototypeTests" />
     <ProjectReference Include="../Attribution.Runtime/AttributionRuntime.csproj" />
+    <ProjectReference Include="../fixtures/TestAttribution/Instrumenter/AttributionInstrumenter.csproj" />
   </ItemGroup>
 </Project>

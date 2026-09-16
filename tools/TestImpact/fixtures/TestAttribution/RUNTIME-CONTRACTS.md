@@ -50,8 +50,29 @@ check with a synthetic source identity, not authenticated source-change or
 production-reuse evidence. The real five-test workload is still not safely
 narrowed by these checks alone.
 
-Remaining integration gates are the observed-owner completion proof, reviewed
-CPU initialization and per-owner file/AsyncLocal lifecycle effects, and their
+The observed-owner proof now retains standard-case identities through local
+verification and authenticated workflow import. Its bounded catalog pins
+xUnit execution/core 2.9.3, the trusted attribution runner/runtime, and the
+reviewed Windows .NET 10.0.12 core library. Other runtime binaries remain
+unresolved. The timeout path requires the underlying task to complete; custom
+case runners, overridden framework execution, substituted tasks, stale bundles,
+and unverified results cannot satisfy this proof. Bundle hashing is batched
+across owners rather than repeated for each test.
+
+The profile preimage now accompanies discovery and must hash to the execution
+identity. Startup records distinguish completed CPU setup from merely entering
+initialization, without changing non-attribution builds. Assembly Before/After
+callbacks are per-test roots; construction stays shared, and shared attribute
+instance fields retain explicit state dependencies.
+
+Verification of this integration passed 274 protocol/control tests and 33
+rejection controls. A fresh real five-test execution passed 5/5, all five owners
+received the reviewed task-observation proof, CPU completion was present in the
+verified profile, and changed startup inputs were rejected. These remain local
+component results, not a changed-source reuse certificate or live proof.
+
+Remaining integration gates are the reviewed CPU initialization semantics,
+per-owner file/AsyncLocal lifecycle and concrete numeric-provider effects, and their
 composition with the normal selector and authenticated reuse evidence. Neither
 these diagnostic contracts nor the 2/5 experimental candidate set close those
 boundaries. Production test selection remains disabled until those gates and

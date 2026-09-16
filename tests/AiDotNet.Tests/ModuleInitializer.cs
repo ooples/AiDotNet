@@ -163,5 +163,9 @@ internal static class TestModuleInitializer
             System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY",
                 Helpers.LicenseTestSupport.SignedKey("testdefault1"));
         }
+#if AIDOTNET_TEST_ATTRIBUTION
+        AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuCompletion(
+            AiDotNetEngine.Current is CpuEngine, AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
+#endif
     }
 }

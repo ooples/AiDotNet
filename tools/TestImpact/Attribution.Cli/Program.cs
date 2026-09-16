@@ -1,4 +1,5 @@
 using AiDotNet.TestImpact;
+using AttributionRuntime;
 
 if (args.Length == 0 || !Enum.TryParse(args[0], out Command command) || !Enum.IsDefined(command))
     throw new ArgumentException("Expected Prepare, Verify, SelectChanges, PrepareReuse, CompleteReuse or ImportWorkflow command.");
@@ -7,10 +8,11 @@ switch (command)
     case Command.ImportWorkflow:
     {
         if (args.Length != 4) throw new ArgumentException("ImportWorkflow request.json new-download-directory output.json");
-        VerifiedExecution imported = await GitHubEvidenceReader.Verify(Read<WorkflowImportRequest>(args[1]), args[2]);
+        VerifiedObservedExecution observed = await GitHubEvidenceReader.VerifyObserved(Read<WorkflowImportRequest>(args[1]), args[2]);
+        VerifiedExecution imported = observed.Execution;
         RunnerBinding.WriteNew(args[3], new { imported.Scope, imported.PlanHash, imported.InventoryHash, imported.Context,
             imported.Workload, imported.Origin, imported.Cases, imported.CanReplaceFullBaseline,
-            AuthenticatedWorkflowOrigin = true, ProductionSelectionEnabled = false });
+            observed.StandardCases, observed.RuntimeProfile, AuthenticatedWorkflowOrigin = true, ProductionSelectionEnabled = false });
         break;
     }
     case Command.PrepareReuse:
@@ -69,13 +71,16 @@ switch (command)
     }
     case Command.Verify:
     {
-        if (args.Length != 10) throw new ArgumentException("Verify inventory.json plan.json report-directory results.trx collection-run repository workflow-run attempt output.json");
+        if (args.Length is not (10 or 12)) throw new ArgumentException("Verify inventory.json plan.json report-directory results.trx collection-run repository workflow-run attempt output.json [bundle test-assembly-file]");
         var origin = new RunIdentity(args[6], long.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture),
             int.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture));
-        VerifiedExecution result = LocalEvidenceReader.Verify(Read<DiscoveryManifest>(args[1]), new(args[2], args[3], args[4], args[5], origin));
+        VerifiedObservedExecution observed = LocalEvidenceReader.VerifyObserved(Read<DiscoveryManifest>(args[1]), new(args[2], args[3], args[4], args[5], origin));
+        VerifiedExecution result = observed.Execution;
+        var ownerCompletion = args.Length == 12 ? ReviewedOwnerCompletion.ReadAll(args[10], args[11],
+            result.Cases.Select(item => item.MethodId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), observed) : [];
         RunnerBinding.WriteNew(args[9], new { result.Scope, result.PlanHash, result.InventoryHash, result.Context,
             result.Workload, result.Origin, result.Cases, result.CanReplaceFullBaseline,
-            AuthenticatedWorkflowOrigin = false });
+            observed.StandardCases, observed.RuntimeProfile, OwnerCompletion = ownerCompletion, AuthenticatedWorkflowOrigin = false });
         break;
     }
 }

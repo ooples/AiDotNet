@@ -6,6 +6,7 @@ public enum RuntimeContractEffect { ReadScalarArguments, ThrowOnFailure }
 public enum AssertionFailurePropagation { Unresolved, LeavesMethod, ForwardsToTaskBuilder }
 public enum AsyncOwnerBinding { Unresolved, ReturnsStateMachineTask }
 public enum OwnedFactoryCallPath { Unresolved, NullGuardPrecedesOwnedChange }
+public enum OwnerCompletionProof { Unresolved, ReviewedStandardTaskObserved }
 public enum RuntimeContractRequirement
 {
     ExactBinaryAndRuntimeBinding,

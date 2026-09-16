@@ -64,6 +64,9 @@ internal static class LocalEvidenceReader
     }
 
     public static VerifiedExecution Verify(DiscoveryManifest manifest, LocalExecutionInput input)
+        => VerifyObserved(manifest, input).Execution;
+
+    public static VerifiedObservedExecution VerifyObserved(DiscoveryManifest manifest, LocalExecutionInput input)
     {
         ValidateInput(input);
         string[] files = Directory.GetFileSystemEntries(input.Reports);
@@ -85,7 +88,7 @@ internal static class LocalEvidenceReader
             throw new EvidenceException(EvidenceFailure.Outcome, "Host shutdown revoked or changed the evidence set.");
         if (Path.GetFileNameWithoutExtension(files[0]) != report.Token)
             throw new EvidenceException(EvidenceFailure.Provenance, "Report filename differs from its process identity.");
-        return PlannedEvidence.Verify(manifest, SourceReuseCommands.Read<ExecutionPlan>(input.Plan), report, input.Trx,
+        return PlannedEvidence.VerifyObserved(manifest, SourceReuseCommands.Read<ExecutionPlan>(input.Plan), report, input.Trx,
             input.CollectionRun, input.Origin);
     }
 

@@ -40,13 +40,14 @@ internal static class RunnerInvocation
             Runtime = RuntimeInformation.FrameworkDescription, RuntimeVersion = Environment.Version.ToString(),
             OS = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture,
             Culture = CultureInfo.CurrentCulture.Name, UICulture = CultureInfo.CurrentUICulture.Name,
-            RuntimeContracts = new { Effective = RuntimeContractEnvironment.Capture(), Initialization = RuntimeContractInitialization.CpuStartup },
+            RuntimeContracts = new RuntimeContractProfile(RuntimeContractEnvironment.Capture(), RuntimeContractInitialization.CpuStartup),
             CpuCount = Environment.ProcessorCount, Parallel = options.ParallelAlgorithmOrDefault(),
             DisableParallel = options.DisableParallelizationOrDefault(), MaxThreads = options.MaxParallelThreadsOrDefault(),
             StopOnFailure = options.StopOnTestFailOrDefault(), SyncMessages = options.SynchronousMessageReportingOrDefault(),
             Diagnostics = options.DiagnosticMessagesOrDefault(), LiveOutput = options.ShowLiveOutputOrDefault() };
+        string profileJson = RunnerBinding.Serialize(effectiveProfile);
         var context = new ExecutionContextIdentity(Required("ATTRIBUTION_SOURCE_TREE"), RunnerBinding.HashBundle(bundle),
-            Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(effectiveProfile))));
+            Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(profileJson))));
         string workload = Required("ATTRIBUTION_WORKLOAD");
         TestCaseIdentity[] cases = inventory.Select(test => new TestCaseIdentity(test.UniqueID,
             AttributionTestFramework.Owner(test))).ToArray();
@@ -58,7 +59,7 @@ internal static class RunnerInvocation
             // Validate identities/context but do not turn discovery into a passing
             // execution. The empty runner emits no passing cases or receipt.
             _ = ExecutionEvidence.CreatePlan(workload, cases, [], ValidationScope.FullWorkload, context);
-            RunnerBinding.WriteNew(path, new DiscoveryManifest(1, workload, context, cases));
+            RunnerBinding.WriteNew(path, new DiscoveryManifest(1, workload, context, cases, profileJson));
             return [];
         }
         planPath = Required("ATTRIBUTION_PLAN");

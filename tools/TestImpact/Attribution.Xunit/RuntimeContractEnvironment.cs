@@ -4,9 +4,6 @@ using System.Text.Json;
 
 namespace AiDotNet.TestImpact.Xunit;
 
-internal enum RuntimeObserverSignals { NoneReported, Present }
-internal sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals);
-
 // Inputs used by the bounded CPU/startup/file contracts. This is NOT a complete
 // model of arbitrary process state. Unknown runtime effects still stay open.
 internal static class RuntimeContractEnvironment

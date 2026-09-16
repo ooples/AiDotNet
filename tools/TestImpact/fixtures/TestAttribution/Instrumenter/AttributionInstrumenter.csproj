@@ -2,7 +2,9 @@
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="PrototypeTests" />
+    <InternalsVisibleTo Include="Attribution.Cli" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../../../Attribution.Runtime/AttributionRuntime.csproj" />
+    <ProjectReference Include="../../../Attribution.Xunit/Attribution.Xunit.csproj" />
   </ItemGroup>
 </Project>

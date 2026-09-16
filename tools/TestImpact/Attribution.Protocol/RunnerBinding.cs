@@ -6,7 +6,8 @@ using System.Text.Json.Serialization;
 namespace AiDotNet.TestImpact;
 
 public enum AttributionRunMode { Collect, Discover, ExecutePlan }
-public sealed record DiscoveryManifest(int Schema, string Workload, ExecutionContextIdentity Context, TestCaseIdentity[] Cases);
+public sealed record DiscoveryManifest(int Schema, string Workload, ExecutionContextIdentity Context, TestCaseIdentity[] Cases,
+    string? ProfileJson = null);
 
 public static class RunnerBinding
 {

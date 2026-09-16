@@ -15,6 +15,7 @@ internal static class XunitLifecycleReader
     {
         TypeDefinition[] types = AllTypes(assembly.MainModule.Types).ToArray();
         var groups = new HashSet<string>(StringComparer.Ordinal);
+        var assemblyCallbacks = new HashSet<string>(StringComparer.Ordinal);
         var tests = new List<SourceTestLifecycle>();
         var synthetic = new Dictionary<string, SourceMethod>(StringComparer.Ordinal);
         bool deferredTheories = assembly.CustomAttributes
@@ -29,7 +30,7 @@ internal static class XunitLifecycleReader
 
         foreach (CustomAttribute attribute in assembly.CustomAttributes)
         {
-            AddBeforeAfter(attribute, groups);
+            AddAssemblyBeforeAfter(attribute, groups, assemblyCallbacks, synthetic);
             if (attribute.AttributeType.FullName == "Xunit.TestFrameworkAttribute")
             {
                 TypeDefinition? framework = NamedType(attribute, assembly);
@@ -94,6 +95,7 @@ internal static class XunitLifecycleReader
             foreach (IGrouping<string, MethodDefinition> overloads in facts.GroupBy(method => method.Name, StringComparer.Ordinal))
             {
                 var roots = new HashSet<string>(lifetime, StringComparer.Ordinal);
+                roots.UnionWith(assemblyCallbacks);
                 bool complete = classComplete;
                 // Reflection inherits FactAttribute across overrides. Include
                 // the concrete implementation even when it does not repeat the
@@ -166,6 +168,36 @@ internal static class XunitLifecycleReader
             foreach (MethodDefinition method in owner.Methods.Where(method =>
                 !method.IsStatic && (method.Name is "Before" or "After" || setters.Contains(method.Name))))
                 roots.Add(Id(method));
+    }
+
+    private static void AddAssemblyBeforeAfter(CustomAttribute attribute, HashSet<string> groups,
+        HashSet<string> callbacks, Dictionary<string, SourceMethod> synthetic)
+    {
+        if (!Derives(attribute.AttributeType, "Xunit.Sdk.BeforeAfterTestAttribute")) return;
+        TypeDefinition? type = Resolve(attribute.AttributeType);
+        // Attribute construction is shared/discovery work. Before/After execute
+        // for each owner, not once for the assembly. Keep both phases explicit.
+        AddLifetime(type, groups);
+        HashSet<string> setters = attribute.Properties.Select(property => "set_" + property.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (TypeDefinition ancestor in Hierarchy(type))
+        {
+            foreach (MethodDefinition method in ancestor.Methods.Where(method => !method.IsStatic))
+            {
+                if (method.Name is "Before" or "After") callbacks.Add(Id(method));
+                if (setters.Contains(method.Name)) groups.Add(Id(method));
+            }
+        }
+        // An assembly attribute instance may be cached and shared by xUnit.
+        // Do not mistake instance fields for per-owner state after moving its
+        // callbacks. Static fields retain their ordinary graph dependencies.
+        if (Hierarchy(type).Any(ancestor => ancestor.Fields.Any(field => !field.IsStatic)))
+        {
+            string id = "xunit-assembly-attribute-state:" + attribute.AttributeType.FullName + "@" + attribute.AttributeType.Scope;
+            string hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)));
+            synthetic.TryAdd(id, new(new(id, [], [id], DependencyBoundary.Closed), id, hash, [], false));
+            callbacks.Add(id);
+            groups.Add(id);
+        }
     }
 
     private static void AddLifetime(TypeDefinition? type, HashSet<string> roots)

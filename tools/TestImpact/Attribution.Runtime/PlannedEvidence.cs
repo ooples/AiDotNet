@@ -11,7 +11,12 @@ public static class PlannedEvidence
     // is deliberately not reusable through this single-bundle path.
     public static VerifiedExecution Verify(DiscoveryManifest manifest, ExecutionPlan plan,
         AttributionReport report, string trxPath, string expectedCollectionRun, RunIdentity origin)
+        => VerifyObserved(manifest, plan, report, trxPath, expectedCollectionRun, origin).Execution;
+
+    public static VerifiedObservedExecution VerifyObserved(DiscoveryManifest manifest, ExecutionPlan plan,
+        AttributionReport report, string trxPath, string expectedCollectionRun, RunIdentity origin)
     {
+        RuntimeContractProfile? runtimeProfile = RuntimeProfileEvidence.Read(manifest);
         if (manifest.Schema != 1 || report.Schema != 4 || report.Kind != AttributionProcessKind.TestHost ||
             report.Run != expectedCollectionRun || !Guid.TryParseExact(report.Run, "N", out _) ||
             !Guid.TryParseExact(report.Token, "N", out _) || report.WorkerOwner is not null ||
@@ -29,6 +34,7 @@ public static class PlannedEvidence
         var results = new List<TestCaseResult>();
         var names = new List<string>();
         var boundRows = new List<(string Name, string Marker)>();
+        var standardCases = new List<string>();
         foreach (CaseExecutionReport execution in report.Cases)
         {
             if (execution is null || execution.Case is null || !execution.Finished || execution.Results is null ||
@@ -45,6 +51,7 @@ public static class PlannedEvidence
                 boundRows.Add((result.DisplayName, CaseOutputIdentity.Format(report.Run, report.Token, execution.Case.Id)));
             }
             results.Add(new(execution.Case.Id, CaseOutcome.Passed));
+            if (execution.Case.Kind == DiscoveredCaseKind.Enumerated) standardCases.Add(execution.Case.Id);
         }
         using var reader = XmlReader.Create(trxPath, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
         XDocument trx = XDocument.Load(reader);
@@ -69,6 +76,36 @@ public static class PlannedEvidence
             throw new EvidenceException(EvidenceFailure.Provenance, "TRX belongs to a different execution.");
         var receipt = new ExecutionReceipt(1, expected.Workload, expected.Scope, expected.Context,
             expected.InventoryHash, expected.PlanHash, origin, results.ToArray());
-        return ExecutionEvidence.Verify(expected, manifest.Cases, receipt, origin);
+        VerifiedExecution verified = ExecutionEvidence.Verify(expected, manifest.Cases, receipt, origin);
+        // Preserve the independently checked case kind. A generic passing receipt
+        // or a custom case runner cannot prove that standard xUnit awaited a task.
+        string[] standard = standardCases.Order(StringComparer.Ordinal).ToArray();
+        return new(verified, standard, runtimeProfile);
+    }
+}
+
+// Consistency evidence, not workflow authentication or an assertion that the
+// supplied runner binary implements the reviewed xUnit task-awaiting semantics.
+// Those bindings must be checked separately before this can close a contract.
+public sealed class VerifiedObservedExecution
+{
+    private readonly HashSet<string> standardCases;
+
+    internal VerifiedObservedExecution(VerifiedExecution execution, string[] standard, RuntimeContractProfile? runtimeProfile)
+    {
+        Execution = execution;
+        standardCases = standard.ToHashSet(StringComparer.Ordinal);
+        StandardCases = Array.AsReadOnly(standard.ToArray());
+        RuntimeProfile = runtimeProfile;
+    }
+
+    public VerifiedExecution Execution { get; }
+    public IReadOnlyList<string> StandardCases { get; }
+    public RuntimeContractProfile? RuntimeProfile { get; }
+
+    public bool HasStandardOwnerCompletion(string owner)
+    {
+        TestCaseIdentity[] cases = Execution.Cases.Where(item => item.MethodId == owner).ToArray();
+        return cases.Length != 0 && cases.All(item => standardCases.Contains(item.CaseId));
     }
 }

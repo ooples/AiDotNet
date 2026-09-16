@@ -10,6 +10,9 @@ internal sealed record WorkflowImportRequest(WorkflowImportPolicy Policy, string
 internal static partial class GitHubEvidenceReader
 {
     public static async Task<VerifiedExecution> Verify(WorkflowImportRequest request, string directory)
+        => (await VerifyObserved(request, directory)).Execution;
+
+    public static async Task<VerifiedObservedExecution> VerifyObserved(WorkflowImportRequest request, string directory)
     {
         ValidateRequest(request);
         WorkflowImportPolicy policy = request.Policy;
@@ -76,7 +79,7 @@ internal static partial class GitHubEvidenceReader
             throw new EvidenceException(EvidenceFailure.Provenance, "Remote report filename differs from its identity.");
         // Completed GitHub job is the remote termination barrier. Never inspect
         // the producer's PID on the importing host.
-        VerifiedExecution execution = PlannedEvidence.Verify(manifest, plan, report, Contained(extracted, request.Trx), report.Run,
+        VerifiedObservedExecution execution = PlannedEvidence.VerifyObserved(manifest, plan, report, Contained(extracted, request.Trx), report.Run,
             new(policy.Repository, policy.RunId, policy.Attempt));
         WorkflowRunEvidence finalRun = ReadRun(await Json(endpoint));
         JsonElement finalArtifact = await Json($"repos/{policy.Repository}/actions/artifacts/{artifactId}");

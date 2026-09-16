@@ -198,7 +198,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
     [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
     $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($runnerCases.Count -eq 31 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($runnerCases.Count -eq 58 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runner binding checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=ReuseProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'reuse-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
@@ -212,14 +212,14 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Source-impact protocol tests failed.'
     [xml] $sourceTrx = Get-Content -LiteralPath (Join-Path $root 'source-impact/results.trx') -Raw
     $sourceCases = @($sourceTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($sourceCases.Count -eq 56 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($sourceCases.Count -eq 58 -and @($sourceCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Source-impact checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=RuntimeEffects' `
         "/ResultsDirectory:$(Join-Path $root 'runtime-effects')" '/Logger:trx;LogFileName=results.trx' | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Runtime-effects experimental controls failed.'
     [xml] $effectsTrx = Get-Content -LiteralPath (Join-Path $root 'runtime-effects/results.trx') -Raw
     $effectsCases = @($effectsTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($effectsCases.Count -eq 82 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($effectsCases.Count -eq 91 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runtime-effects controls did not execute the complete expected set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host

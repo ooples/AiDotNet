@@ -73,6 +73,34 @@ public sealed class GraphExtractionTests
     private static AssemblyDefinition Assembly() => AssemblyDefinition.CreateAssembly(
         new AssemblyNameDefinition("GraphFixture", new Version(1, 0)), "GraphFixture", ModuleKind.Dll);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AssemblyHooksRunPerOwnerWithoutLosingSharedAttributeState(bool sharedField)
+    {
+        using var resolver = new DefaultAssemblyResolver();
+        resolver.AddSearchDirectory(Path.GetDirectoryName(typeof(GraphExtractionTests).Assembly.Location));
+        resolver.AddSearchDirectory(Path.GetDirectoryName(typeof(object).Assembly.Location));
+        using var assembly = AssemblyDefinition.ReadAssembly(typeof(GraphExtractionTests).Assembly.Location,
+            new ReaderParameters { AssemblyResolver = resolver });
+        TypeDefinition hook = assembly.MainModule.Types.Single(type => type.FullName == typeof(BeforeAfterProbeAttribute).FullName);
+        assembly.CustomAttributes.Add(new CustomAttribute(hook.Methods.Single(method => method.IsConstructor && !method.IsStatic)));
+        if (sharedField) hook.Fields.Add(new("state", FieldAttributes.Public, assembly.MainModule.TypeSystem.Int32));
+        XunitLifecycleResult result = XunitLifecycleReader.Read(assembly);
+        string callback = DependencyGraph.Stable(hook.Methods.Single(method => method.Name == "Before"));
+        Assert.DoesNotContain(callback, result.Map.GroupRoots);
+        Assert.All(result.Map.Tests, test => Assert.Contains(callback, test.Roots));
+        Assert.Contains(DependencyGraph.Stable(hook.Methods.Single(method => method.IsConstructor)), result.Map.GroupRoots);
+        SourceMethod[] shared = result.SyntheticMethods.Where(method => method.Dependency.Id.StartsWith("xunit-assembly-attribute-state:", StringComparison.Ordinal)).ToArray();
+        if (sharedField)
+        {
+            string id = Assert.Single(shared).Dependency.Id;
+            Assert.Contains(id, result.Map.GroupRoots);
+            Assert.All(result.Map.Tests, test => Assert.Contains(id, test.Roots));
+        }
+        else Assert.Empty(shared);
+    }
+
     private static MethodDefinition Method(TypeDefinition type, string name)
     {
         var method = new MethodDefinition(name, MethodAttributes.Public | MethodAttributes.Static, type.Module.TypeSystem.Void);
