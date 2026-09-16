@@ -1254,8 +1254,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
-            _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-            _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+            Engine.TensorSubtractInPlace(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+            Engine.TensorSubtractInPlace(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);

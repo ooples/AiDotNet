@@ -69,6 +69,127 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
     }
 
     [Fact(Timeout = 60000)]
+    public async Task ExecuteSql_WithSQLiteAttachOfHostDatabase_CannotReadHostData()
+    {
+        // A pre-existing database file on the server (stand-in for Serving's own persistence DB).
+        var hostDb = NewTempPath();
+        try
+        {
+            await using (var setup = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={hostDb};Pooling=False"))
+            {
+                await setup.OpenAsync();
+                await using var cmd = setup.CreateCommand();
+                cmd.CommandText = "CREATE TABLE secrets (v TEXT); INSERT INTO secrets VALUES ('host-secret-value');";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var request = new SqlExecuteRequest
+            {
+                Dialect = SqlDialect.SQLite,
+                SchemaSql = $"ATTACH DATABASE '{hostDb}' AS host;",
+                Query = "SELECT v FROM host.secrets"
+            };
+
+            var response = await PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.False(response.IsSuccessStatusCode, body);
+            Assert.DoesNotContain("host-secret-value", body, StringComparison.Ordinal);
+            var result = JsonConvert.DeserializeObject<SqlExecuteResponse>(body, JsonSettings);
+            Assert.NotNull(result);
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDelete(hostDb);
+        }
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("query-attach")]
+    [InlineData("script-attach-write")]
+    [InlineData("vacuum-into")]
+    public async Task ExecuteSql_WithSQLite_CannotCreateFilesOnHost(string vector)
+    {
+        var target = NewTempPath();
+        try
+        {
+            var request = vector switch
+            {
+                "query-attach" => new SqlExecuteRequest
+                {
+                    Dialect = SqlDialect.SQLite,
+                    Query = $"ATTACH DATABASE '{target}' AS outside"
+                },
+                "script-attach-write" => new SqlExecuteRequest
+                {
+                    Dialect = SqlDialect.SQLite,
+                    SchemaSql = $"ATTACH DATABASE '{target}' AS outside; CREATE TABLE outside.dropped (payload TEXT);",
+                    SeedSql = "INSERT INTO outside.dropped VALUES ('attacker-controlled');",
+                    Query = "SELECT 1"
+                },
+                _ => new SqlExecuteRequest
+                {
+                    Dialect = SqlDialect.SQLite,
+                    SchemaSql = "CREATE TABLE t (payload TEXT); INSERT INTO t VALUES ('attacker-controlled');",
+                    Query = $"VACUUM INTO '{target}'"
+                }
+            };
+
+            var response = await PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
+            var result = await ReadFromJsonAsync<SqlExecuteResponse>(response.Content);
+
+            Assert.False(File.Exists(target), $"{vector}: sandboxed SQL created a file on the host at {target}.");
+            Assert.NotNull(result);
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDelete(target);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ExecuteSql_WithSQLiteMultiStatementScripts_StillWorks()
+    {
+        var request = new SqlExecuteRequest
+        {
+            Dialect = SqlDialect.SQLite,
+            SchemaSql = "CREATE TABLE a (id INTEGER); CREATE TABLE b (id INTEGER, a_id INTEGER);",
+            SeedSql = "INSERT INTO a VALUES (1); INSERT INTO a VALUES (2); INSERT INTO b VALUES (10, 2);",
+            Query = "WITH j AS (SELECT a.id AS aid, b.id AS bid FROM a JOIN b ON b.a_id = a.id) SELECT aid, bid FROM j"
+        };
+
+        var response = await PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
+        response.EnsureSuccessStatusCode();
+
+        var result = await ReadFromJsonAsync<SqlExecuteResponse>(response.Content);
+        Assert.NotNull(result);
+        Assert.True(result.Success);
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(2, row["aid"].IntegerValue);
+        Assert.Equal(10, row["bid"].IntegerValue);
+    }
+
+    private static string NewTempPath() =>
+        Path.Combine(Path.GetTempPath(), $"aidotnet-sql-escape-{Guid.NewGuid():N}.db");
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup of a temp file.
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task ExecuteSql_WithPostgresWithoutConfiguration_ReturnsBadRequest()
     {
         var request = new SqlExecuteRequest

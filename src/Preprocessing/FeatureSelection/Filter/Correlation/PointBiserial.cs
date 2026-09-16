@@ -109,7 +109,7 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 continue;
             }
 
-            double pq = (double)(n0 * n1) / (n * n);
+            double pq = (double)n0 * n1 / ((double)n * n);
             _correlations[j] = Math.Abs((mean1 - mean0) / stdTotal * Math.Sqrt(pq));
         }
 

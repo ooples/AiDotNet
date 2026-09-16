@@ -401,7 +401,7 @@ public partial class XMeans<T> : ClusteringBase<T>
             }
         }
 
-        return NumOps.Divide(variance, NumOps.FromDouble(n * d));
+        return NumOps.Divide(variance, NumOps.FromDouble((double)n * d));
     }
 
     /// <inheritdoc />

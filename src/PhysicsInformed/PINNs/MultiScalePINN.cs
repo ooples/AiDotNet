@@ -441,7 +441,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 UpdateAllScaleNetworks();
             }
 
-            return NumOps.Divide(totalLoss, NumOps.FromDouble(numPoints / batchSize));
+            // Average over the number of batches actually processed (the last one may be partial).
+            return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Ceiling((double)numPoints / batchSize)));
         }
 
         /// <summary>

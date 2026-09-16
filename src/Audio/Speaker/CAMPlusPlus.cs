@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -51,7 +50,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     private readonly CAMPlusPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ConcurrentDictionary<string, SpeakerProfile<T>> _enrolledSpeakers;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -79,7 +77,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
         InitializeLayers();
     }
 
@@ -93,7 +90,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);
-        _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
         InitializeLayers();
     }
 

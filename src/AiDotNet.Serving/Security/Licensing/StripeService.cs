@@ -114,7 +114,7 @@ internal sealed class StripeService : IStripeService
 
         _logger.LogInformation(
             "Created Stripe Customer Portal session for customer {CustomerId}",
-            stripeCustomerId);
+            LogSanitizer.Sanitize(stripeCustomerId));
 
         return session.Url;
     }
@@ -405,7 +405,7 @@ internal sealed class StripeService : IStripeService
         {
             _logger.LogWarning(
                 "ValidateCustomerOwnership: Stripe customer {CustomerId} not found in database",
-                stripeCustomerId);
+                LogSanitizer.Sanitize(stripeCustomerId));
             return false;
         }
 
@@ -414,7 +414,7 @@ internal sealed class StripeService : IStripeService
         {
             _logger.LogWarning(
                 "ValidateCustomerOwnership: UserId mismatch for customer {CustomerId}",
-                stripeCustomerId);
+                LogSanitizer.Sanitize(stripeCustomerId));
             return false;
         }
 
@@ -429,7 +429,7 @@ internal sealed class StripeService : IStripeService
         {
             _logger.LogWarning(
                 "ValidateCustomerOwnership: No active subscription found for customer {CustomerId}",
-                stripeCustomerId);
+                LogSanitizer.Sanitize(stripeCustomerId));
         }
 
         return hasSubscription;

@@ -1080,20 +1080,20 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-        _inputProjectionWeights = Engine.TensorAdd(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient, negLR));
-        _inputProjectionBias = Engine.TensorAdd(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
-        _convWeights = Engine.TensorAdd(_convWeights, Engine.TensorMultiplyScalar(_convWeightsGradient!, negLR));
-        _convBias = Engine.TensorAdd(_convBias, Engine.TensorMultiplyScalar(_convBiasGradient!, negLR));
-        _bProjectionWeights = Engine.TensorAdd(_bProjectionWeights, Engine.TensorMultiplyScalar(_bProjectionWeightsGradient!, negLR));
-        _cProjectionWeights = Engine.TensorAdd(_cProjectionWeights, Engine.TensorMultiplyScalar(_cProjectionWeightsGradient!, negLR));
-        _aLog = Engine.TensorAdd(_aLog, Engine.TensorMultiplyScalar(_aLogGradient!, negLR));
-        _dtProjectionWeights = Engine.TensorAdd(_dtProjectionWeights, Engine.TensorMultiplyScalar(_dtProjectionWeightsGradient!, negLR));
-        _dtProjectionBias = Engine.TensorAdd(_dtProjectionBias, Engine.TensorMultiplyScalar(_dtProjectionBiasGradient!, negLR));
-        _dParam = Engine.TensorAdd(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
-        _normGamma = Engine.TensorAdd(_normGamma, Engine.TensorMultiplyScalar(_normGammaGradient!, negLR));
-        _normBeta = Engine.TensorAdd(_normBeta, Engine.TensorMultiplyScalar(_normBetaGradient!, negLR));
+        Engine.TensorAddInPlace(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_convWeights, Engine.TensorMultiplyScalar(_convWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_convBias, Engine.TensorMultiplyScalar(_convBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_bProjectionWeights, Engine.TensorMultiplyScalar(_bProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_cProjectionWeights, Engine.TensorMultiplyScalar(_cProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_aLog, Engine.TensorMultiplyScalar(_aLogGradient!, negLR));
+        Engine.TensorAddInPlace(_dtProjectionWeights, Engine.TensorMultiplyScalar(_dtProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_dtProjectionBias, Engine.TensorMultiplyScalar(_dtProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_normGamma, Engine.TensorMultiplyScalar(_normGammaGradient!, negLR));
+        Engine.TensorAddInPlace(_normBeta, Engine.TensorMultiplyScalar(_normBetaGradient!, negLR));
 
         // Re-register against the new tensor instances created above so the autodiff registry tracks the
         // live weights (now the full parameter set, matching GetParameters).

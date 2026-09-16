@@ -399,7 +399,7 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
         // Update column embeddings
         if (_columnEmbeddings != null && _columnEmbeddingsGrad != null)
         {
-            _columnEmbeddings = Engine.TensorSubtract(_columnEmbeddings,
+            Engine.TensorSubtractInPlace(_columnEmbeddings,
                 Engine.TensorMultiplyScalar(_columnEmbeddingsGrad, learningRate));
         }
 

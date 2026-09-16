@@ -1490,15 +1490,15 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             var scaledBr = Engine.TensorMultiplyScalar(_dbr, learningRate);
             var scaledBh = Engine.TensorMultiplyScalar(_dbh, learningRate);
 
-            _Wz = Engine.TensorSubtract(_Wz, scaledWz);
-            _Wr = Engine.TensorSubtract(_Wr, scaledWr);
-            _Wh = Engine.TensorSubtract(_Wh, scaledWh);
-            _Uz = Engine.TensorSubtract(_Uz, scaledUz);
-            _Ur = Engine.TensorSubtract(_Ur, scaledUr);
-            _Uh = Engine.TensorSubtract(_Uh, scaledUh);
-            _bz = Engine.TensorSubtract(_bz, scaledBz);
-            _br = Engine.TensorSubtract(_br, scaledBr);
-            _bh = Engine.TensorSubtract(_bh, scaledBh);
+            Engine.TensorSubtractInPlace(_Wz, scaledWz);
+            Engine.TensorSubtractInPlace(_Wr, scaledWr);
+            Engine.TensorSubtractInPlace(_Wh, scaledWh);
+            Engine.TensorSubtractInPlace(_Uz, scaledUz);
+            Engine.TensorSubtractInPlace(_Ur, scaledUr);
+            Engine.TensorSubtractInPlace(_Uh, scaledUh);
+            Engine.TensorSubtractInPlace(_bz, scaledBz);
+            Engine.TensorSubtractInPlace(_br, scaledBr);
+            Engine.TensorSubtractInPlace(_bh, scaledBh);
 
             Engine.InvalidatePersistentTensor(_Wz);
             Engine.InvalidatePersistentTensor(_Wr);
