@@ -180,6 +180,23 @@ passing result, independently verified against its recorded plan and TRX.
 This checks real-project runner integration, not impact-map completeness; that
 run did not instrument production methods or claim a performance improvement.
 
+### Changed-base partition protocol
+
+`ExecutionReuse` now partitions a current inventory using the conservative
+old/new dependency selector and a previously verified **full** execution. It
+requires exact graph-to-inventory method coverage and graph revision/build
+bindings. Changed theory inventories rerun the complete current method; changed
+profiles and unmapped changes force full execution. Completion requires the
+exact fresh execution plan, while reused cases retain their baseline provenance.
+A reuse-only partition is not represented as a successful zero-test execution,
+and a mixed partition cannot become a new freshly observed full baseline.
+
+Twelve protocol tests cover these boundaries, mutable returned plans, old edges,
+open native dependencies, shared state, and missing/stale/wrong-scope execution.
+The caller still must establish graph/change-set completeness and authenticate
+the baseline. This is **not live changed-base CI reuse proof**; automatic graph
+construction, trusted artifact import, and production dispatch remain unwired.
+
 - This is not a VSTest-packaged collector; the xUnit assembly opts in once,
   its adapter supplies the discovery inventory, and workers explicitly join.
   Direct process starts, timer construction and thread/queue starts in instrumented
