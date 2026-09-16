@@ -8,7 +8,7 @@
     <ProjectReference Include="../../../Attribution.Runtime/AttributionRuntime.csproj" />
     <ProjectReference Include="../../../Attribution.Xunit/Attribution.Xunit.csproj" />
     <ProjectReference Include="../../../Attribution.Protocol/Attribution.Protocol.csproj" />
-    <ProjectReference Include="../../../Attribution.Cli/Attribution.Cli.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../../Attribution.Cli/Attribution.Cli.csproj" />
     <ProjectReference Include="../Subject/AttributionSubject.csproj" />
     <ProjectReference Include="../Worker/AttributionWorker.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Instrumenter/AttributionInstrumenter.csproj" ReferenceOutputAssembly="false" />

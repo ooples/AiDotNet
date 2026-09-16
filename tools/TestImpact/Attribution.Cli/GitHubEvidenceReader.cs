@@ -11,6 +11,7 @@ internal static partial class GitHubEvidenceReader
 {
     public static async Task<VerifiedExecution> Verify(WorkflowImportRequest request, string directory)
     {
+        ValidateRequest(request);
         WorkflowImportPolicy policy = request.Policy;
         if (!RepositoryName().IsMatch(policy.Repository) || policy.RunId <= 0 || policy.Attempt <= 0)
             throw new EvidenceException(EvidenceFailure.Provenance, "Invalid GitHub workflow identity.");
@@ -87,6 +88,16 @@ internal static partial class GitHubEvidenceReader
         return execution;
     }
 
+    internal static void ValidateRequest(WorkflowImportRequest request)
+    {
+        if (request is null || request.Policy is null || string.IsNullOrWhiteSpace(request.Policy.Repository) ||
+            string.IsNullOrWhiteSpace(request.Policy.HeadSha) || string.IsNullOrWhiteSpace(request.Policy.WorkflowPath) ||
+            string.IsNullOrWhiteSpace(request.Policy.JobName) || string.IsNullOrWhiteSpace(request.Policy.ArtifactName) ||
+            string.IsNullOrWhiteSpace(request.Inventory) || string.IsNullOrWhiteSpace(request.Plan) ||
+            string.IsNullOrWhiteSpace(request.Reports) || string.IsNullOrWhiteSpace(request.Trx))
+            throw new EvidenceException(EvidenceFailure.Format, "Missing workflow import request fields.");
+    }
+
     private static WorkflowRunEvidence ReadRun(JsonElement run) => new(
         Text(run.GetProperty("repository"), "full_name"), Text(run.GetProperty("head_repository"), "full_name"),
         run.GetProperty("id").GetInt64(), run.GetProperty("run_attempt").GetInt32(), Text(run, "head_sha"), Text(run, "path"),
@@ -109,10 +120,13 @@ internal static partial class GitHubEvidenceReader
     private static async Task<JsonElement> Json(string endpoint)
     {
         using Process process = Start("api", endpoint);
-        Task<string> errors = process.StandardError.ReadToEndAsync();
-        string output = await process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0) throw new IOException("GitHub metadata request failed: " + await errors);
+        (string output, string errors) = await ProcessDeadline.Run(process, TimeSpan.FromMinutes(2), async token =>
+        {
+            Task<string> stderr = process.StandardError.ReadToEndAsync(token);
+            string stdout = await process.StandardOutput.ReadToEndAsync(token);
+            return (stdout, await stderr);
+        });
+        if (process.ExitCode != 0) throw new IOException("GitHub metadata request failed: " + errors);
         using JsonDocument document = JsonDocument.Parse(output);
         return document.RootElement.Clone();
     }
@@ -137,24 +151,23 @@ internal static partial class GitHubEvidenceReader
     }
     private static async Task Download(string endpoint, string output)
     {
-        using Process process = Start("api", endpoint);
-        Task<string> errors = process.StandardError.ReadToEndAsync();
         await using var destination = new FileStream(output, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        byte[] buffer = new byte[81920];
-        long length = 0;
-        int read;
-        while ((read = await process.StandardOutput.BaseStream.ReadAsync(buffer)) != 0)
+        using Process process = Start("api", endpoint);
+        string errors = await ProcessDeadline.Run(process, TimeSpan.FromMinutes(5), async token =>
         {
-            length += read;
-            if (length > 268435456)
+            Task<string> stderr = process.StandardError.ReadToEndAsync(token);
+            byte[] buffer = new byte[81920];
+            long length = 0;
+            int read;
+            while ((read = await process.StandardOutput.BaseStream.ReadAsync(buffer, token)) != 0)
             {
-                process.Kill(entireProcessTree: true);
-                throw new IOException("Artifact archive exceeds the import size limit.");
+                length += read;
+                if (length > 268435456) throw new IOException("Artifact archive exceeds the import size limit.");
+                await destination.WriteAsync(buffer.AsMemory(0, read), token);
             }
-            await destination.WriteAsync(buffer.AsMemory(0, read));
-        }
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0) throw new IOException("GitHub artifact download failed: " + await errors);
+            return await stderr;
+        });
+        if (process.ExitCode != 0) throw new IOException("GitHub artifact download failed: " + errors);
     }
     private static string Contained(string root, string relative)
         => ArtifactArchive.ResolveContained(root, relative);

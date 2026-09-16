@@ -12,6 +12,7 @@ internal static class SourceReuseCommands
 
     private static ReusePartition Prepare(SourceReuseRequest request)
     {
+        Validate(request);
         SourceBundleSnapshot before = LocalEvidenceReader.ReadSource(request.Before.Snapshot);
         SourceBundleSnapshot after = LocalEvidenceReader.ReadSource(request.After.Snapshot);
         DiscoveryManifest oldInventory = Read<DiscoveryManifest>(request.Before.Inventory);
@@ -33,6 +34,18 @@ internal static class SourceReuseCommands
     }
 
     internal static T Read<T>(string path) where T : class => ExecutionEvidence.ReadDocumentFile<T>(path);
+
+    internal static void Validate(SourceReuseRequest request)
+    {
+        if (request is null || request.Before is null || request.After is null || request.Baseline is null ||
+            string.IsNullOrWhiteSpace(request.Repository))
+            throw new EvidenceException(EvidenceFailure.Format, "Missing source reuse request records.");
+        foreach (SourceRevisionInput revision in new[] { request.Before, request.After })
+            if (string.IsNullOrWhiteSpace(revision.Snapshot) || string.IsNullOrWhiteSpace(revision.Inventory) ||
+                string.IsNullOrWhiteSpace(revision.Bundle))
+                throw new EvidenceException(EvidenceFailure.Format, "Missing source revision paths.");
+        LocalEvidenceReader.ValidateInput(request.Baseline);
+    }
 }
 
 internal static class LocalEvidenceReader
@@ -52,6 +65,7 @@ internal static class LocalEvidenceReader
 
     public static VerifiedExecution Verify(DiscoveryManifest manifest, LocalExecutionInput input)
     {
+        ValidateInput(input);
         string[] files = Directory.GetFileSystemEntries(input.Reports);
         if (files.Length != 1 || !File.Exists(files[0]) || Path.GetExtension(files[0]) != ".json")
             throw new EvidenceException(EvidenceFailure.Outcome, "Expected one complete, non-revoked single-bundle host report.");
@@ -73,6 +87,14 @@ internal static class LocalEvidenceReader
             throw new EvidenceException(EvidenceFailure.Provenance, "Report filename differs from its process identity.");
         return PlannedEvidence.Verify(manifest, SourceReuseCommands.Read<ExecutionPlan>(input.Plan), report, input.Trx,
             input.CollectionRun, input.Origin);
+    }
+
+    internal static void ValidateInput(LocalExecutionInput input)
+    {
+        if (input is null || input.Origin is null || string.IsNullOrWhiteSpace(input.Plan) ||
+            string.IsNullOrWhiteSpace(input.Reports) || string.IsNullOrWhiteSpace(input.Trx) ||
+            string.IsNullOrWhiteSpace(input.CollectionRun))
+            throw new EvidenceException(EvidenceFailure.Format, "Missing local execution request fields.");
     }
 
     public static void ValidateSnapshot(SourceSnapshot snapshot, DiscoveryManifest inventory, string bundle)

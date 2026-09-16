@@ -6,8 +6,10 @@ public static class ArtifactArchive
 {
     public static string ResolveContained(string root, string relative)
     {
+        if (string.IsNullOrWhiteSpace(relative))
+            throw new EvidenceException(EvidenceFailure.Format, "Artifact paths must be normalized relative paths.");
         string[] parts = relative.Split('/');
-        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.IndexOfAny(['\\', ':', '<', '>', '"', '|', '?', '*']) >= 0 ||
+        if (Path.IsPathRooted(relative) || relative.IndexOfAny(['\\', ':', '<', '>', '"', '|', '?', '*']) >= 0 ||
             relative.Any(char.IsControl) || parts.Any(part => part is ".." or "." or "" || part.EndsWith(' ') || part.EndsWith('.') || Reserved(part)))
             throw new EvidenceException(EvidenceFailure.Format, "Artifact paths must be normalized relative paths.");
         string fullRoot = Path.GetFullPath(root);
@@ -31,6 +33,8 @@ public static class ArtifactArchive
         long size = 0;
         if (archive.Entries.Count > 100_000) throw new InvalidDataException("Too many artifact entries.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Validate the complete layout before writing even the first file.
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
@@ -40,6 +44,17 @@ public static class ArtifactArchive
             string name = entry.FullName.TrimEnd('/');
             _ = ResolveContained(root, name);
             if (!names.Add(name)) throw new InvalidDataException("Duplicate artifact path.");
+            bool directory = entry.FullName.EndsWith('/');
+            if (files.Contains(name) || (!directory && directories.Contains(name)))
+                throw new InvalidDataException("Artifact file/directory paths conflict.");
+            if (directory) directories.Add(name);
+            else files.Add(name);
+            for (int separator = name.LastIndexOf('/'); separator >= 0; separator = name.LastIndexOf('/', separator - 1))
+            {
+                string parent = name[..separator];
+                if (files.Contains(parent)) throw new InvalidDataException("Artifact file/directory paths conflict.");
+                directories.Add(parent);
+            }
         }
         Directory.CreateDirectory(root);
         foreach (ZipArchiveEntry entry in archive.Entries)

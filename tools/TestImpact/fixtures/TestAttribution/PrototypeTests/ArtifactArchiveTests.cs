@@ -65,4 +65,24 @@ public sealed class ArtifactArchiveTests
         Assert.Throws<InvalidDataException>(() => ArtifactArchive.Extract(artifact.Zip, artifact.Output));
         Assert.False(Directory.Exists(artifact.Output));
     }
+
+    [Fact]
+    public void FileDirectoryPrefixConflictsAreRejectedInEitherOrder()
+    {
+        foreach (string child in new[] { "cache/report.json", "CACHE/nested/report.json", "cache/nested/" })
+            foreach (bool reverse in new[] { false, true })
+            {
+                var artifact = reverse ? Archive((child, 0), ("cache", 0)) : Archive(("cache", 0), (child, 0));
+                Assert.Throws<InvalidDataException>(() => ArtifactArchive.Extract(artifact.Zip, artifact.Output));
+                Assert.False(Directory.Exists(artifact.Output));
+            }
+    }
+
+    [Fact]
+    public void ExplicitParentDirectoryCanFollowItsChild()
+    {
+        var artifact = Archive(("cache/report.json", 0), ("cache/", 0));
+        ArtifactArchive.Extract(artifact.Zip, artifact.Output);
+        Assert.Equal("evidence", File.ReadAllText(Path.Combine(artifact.Output, "cache/report.json")));
+    }
 }

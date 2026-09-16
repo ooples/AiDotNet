@@ -7,6 +7,13 @@ if (args.Length != 1) throw new ArgumentException("Expected worker scenario.");
 if (!Enum.TryParse(args[0], ignoreCase: true, out WorkerScenario scenario) || !Enum.IsDefined(scenario))
     throw new ArgumentException("Unknown worker scenario.");
 if (scenario == WorkerScenario.Missing) return; // Simulate a child that never joins attribution.
+if (scenario is WorkerScenario.StalledOutput or WorkerScenario.StalledExit)
+{
+    Console.WriteLine("ready");
+    if (scenario == WorkerScenario.StalledExit) { Console.Out.Close(); Console.Error.Close(); }
+    await Task.Delay(Timeout.Infinite);
+    return;
+}
 if (scenario == WorkerScenario.Benchmark)
 {
     bool collecting = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ATTRIBUTION_OUTPUT"));
@@ -43,4 +50,4 @@ if (scenario == WorkerScenario.Unclosed) return; // Exit without completing the 
 Console.WriteLine(CodePaths.WorkerOnly(21));
 Tracker.End(owner);
 
-enum WorkerScenario { Complete, Missing, Unclosed, Benchmark, WaitForKill }
+enum WorkerScenario { Complete, Missing, Unclosed, Benchmark, WaitForKill, StalledOutput, StalledExit }

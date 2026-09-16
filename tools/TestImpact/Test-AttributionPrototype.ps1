@@ -161,6 +161,7 @@ try {
     }
     $original = Join-Path $fixture 'PrototypeTests/bin/Release/net10.0'
     $workerOriginal = Join-Path $fixture 'Worker/bin/Release/net10.0'
+    $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=Protocol' `
         "/ResultsDirectory:$(Join-Path $root 'protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
     Check ($LASTEXITCODE -eq 0) 'Execution evidence protocol tests failed.'
@@ -201,7 +202,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Workflow import protocol tests failed.'
     [xml] $workflowTrx = Get-Content -LiteralPath (Join-Path $root 'workflow-protocol/results.trx') -Raw
     $workflowCases = @($workflowTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($workflowCases.Count -eq 15 -and @($workflowCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($workflowCases.Count -eq 21 -and @($workflowCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Workflow import checks did not execute the expected complete set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
