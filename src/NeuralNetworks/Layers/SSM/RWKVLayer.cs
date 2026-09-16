@@ -625,24 +625,24 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
         }
 
         T negLR = NumOps.Negate(learningRate);
-        _timeMixR = Engine.TensorAdd(_timeMixR, Engine.TensorMultiplyScalar(_timeMixRGradient, negLR));
-        _timeMixK = Engine.TensorAdd(_timeMixK, Engine.TensorMultiplyScalar(_timeMixKGradient, negLR));
-        _timeMixV = Engine.TensorAdd(_timeMixV, Engine.TensorMultiplyScalar(_timeMixVGradient, negLR));
-        _receptanceWeights = Engine.TensorAdd(_receptanceWeights, Engine.TensorMultiplyScalar(_receptanceWeightsGradient, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
-        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
-        _decayBias = Engine.TensorAdd(_decayBias, Engine.TensorMultiplyScalar(_decayBiasGradient, negLR));
-        _bonus = Engine.TensorAdd(_bonus, Engine.TensorMultiplyScalar(_bonusGradient, negLR));
-        _channelMixR = Engine.TensorAdd(_channelMixR, Engine.TensorMultiplyScalar(_channelMixRGradient, negLR));
-        _channelMixK = Engine.TensorAdd(_channelMixK, Engine.TensorMultiplyScalar(_channelMixKGradient, negLR));
-        _channelKeyWeights = Engine.TensorAdd(_channelKeyWeights, Engine.TensorMultiplyScalar(_channelKeyWeightsGradient, negLR));
-        _channelValueWeights = Engine.TensorAdd(_channelValueWeights, Engine.TensorMultiplyScalar(_channelValueWeightsGradient, negLR));
-        _channelReceptanceWeights = Engine.TensorAdd(_channelReceptanceWeights, Engine.TensorMultiplyScalar(_channelReceptanceWeightsGradient, negLR));
-        _normGamma1 = Engine.TensorAdd(_normGamma1, Engine.TensorMultiplyScalar(_normGamma1Gradient, negLR));
-        _normBeta1 = Engine.TensorAdd(_normBeta1, Engine.TensorMultiplyScalar(_normBeta1Gradient, negLR));
-        _normGamma2 = Engine.TensorAdd(_normGamma2, Engine.TensorMultiplyScalar(_normGamma2Gradient, negLR));
-        _normBeta2 = Engine.TensorAdd(_normBeta2, Engine.TensorMultiplyScalar(_normBeta2Gradient, negLR));
+        Engine.TensorAddInPlace(_timeMixR, Engine.TensorMultiplyScalar(_timeMixRGradient, negLR));
+        Engine.TensorAddInPlace(_timeMixK, Engine.TensorMultiplyScalar(_timeMixKGradient, negLR));
+        Engine.TensorAddInPlace(_timeMixV, Engine.TensorMultiplyScalar(_timeMixVGradient, negLR));
+        Engine.TensorAddInPlace(_receptanceWeights, Engine.TensorMultiplyScalar(_receptanceWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_decayBias, Engine.TensorMultiplyScalar(_decayBiasGradient, negLR));
+        Engine.TensorAddInPlace(_bonus, Engine.TensorMultiplyScalar(_bonusGradient, negLR));
+        Engine.TensorAddInPlace(_channelMixR, Engine.TensorMultiplyScalar(_channelMixRGradient, negLR));
+        Engine.TensorAddInPlace(_channelMixK, Engine.TensorMultiplyScalar(_channelMixKGradient, negLR));
+        Engine.TensorAddInPlace(_channelKeyWeights, Engine.TensorMultiplyScalar(_channelKeyWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_channelValueWeights, Engine.TensorMultiplyScalar(_channelValueWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_channelReceptanceWeights, Engine.TensorMultiplyScalar(_channelReceptanceWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_normGamma1, Engine.TensorMultiplyScalar(_normGamma1Gradient, negLR));
+        Engine.TensorAddInPlace(_normBeta1, Engine.TensorMultiplyScalar(_normBeta1Gradient, negLR));
+        Engine.TensorAddInPlace(_normGamma2, Engine.TensorMultiplyScalar(_normGamma2Gradient, negLR));
+        Engine.TensorAddInPlace(_normBeta2, Engine.TensorMultiplyScalar(_normBeta2Gradient, negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_receptanceWeights, PersistentTensorRole.Weights);

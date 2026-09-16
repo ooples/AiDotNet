@@ -746,10 +746,10 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
         // Use Engine operations for GPU/CPU acceleration
         var scaledTransformGrad = Engine.TensorMultiplyScalar(_transformationMatrixGradient, learningRate);
-        _transformationMatrix = Engine.TensorSubtract(_transformationMatrix, scaledTransformGrad);
+        Engine.TensorSubtractInPlace(_transformationMatrix, scaledTransformGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
     }
 
     /// <summary>
