@@ -170,8 +170,8 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     private double EstimateTempoFromEnvelope(double[] onsetEnvelope)
     {
         // Compute autocorrelation of onset envelope
-        int maxLag = (int)(_options.SampleRate / _options.HopLength * 60.0 / _options.MinTempo);
-        int minLag = (int)(_options.SampleRate / _options.HopLength * 60.0 / _options.MaxTempo);
+        int maxLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MinTempo);
+        int minLag = (int)(_options.SampleRate / (double)_options.HopLength * 60.0 / _options.MaxTempo);
 
         var autocorr = new double[maxLag];
         double maxCorr = 0;

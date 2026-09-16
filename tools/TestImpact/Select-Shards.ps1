@@ -90,6 +90,14 @@ $script:SelectionControlPaths = @(
 $script:BuildTimeDirectories = @('src/AiDotNet.Generators/')
 $script:FullValidationDirectories = @('.github/actions/', '.github/scripts/') + $script:BuildTimeDirectories
 $script:SelectionControlDirectories = @('tools/TestImpact/')
+# These helpers cannot choose shards or certify validation. They are exercised by the
+# mandatory tooling checks before selection, including real HTTP transfer regressions.
+# Keep this exact: unknown helpers and selection/certificate policy remain fail-closed.
+$script:IndependentToolPaths = @(
+    'tools/TestImpact/Receive-RequiredArtifact.ps1',
+    'tools/TestImpact/Test-RequiredArtifactResume.ps1',
+    'tools/TestImpact/Test-CiImpactWorkflow.ps1'
+)
 $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/azure-functions-deploy.yml',
     '.github/workflows/cancel-on-pr-close.yml',
@@ -144,6 +152,11 @@ function Get-ChangedPathImpact {
     param([Parameter(Mandatory)] [string] $Path)
 
     $normalized = $Path.Replace('\', '/')
+    foreach ($entry in $script:IndependentToolPaths) {
+        if ($normalized.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) {
+            return [ChangedPathImpact]::NonRuntime
+        }
+    }
     if (Test-SelectionControl -Path $normalized) {
         return [ChangedPathImpact]::SelectionControl
     }
@@ -593,7 +606,9 @@ function Select-ImpactedShards {
         [AllowEmptyCollection()] [string[]] $CurrentPaths = @(),
         [switch] $ScopeToCurrentPaths,
         [hashtable] $TestRoutes = @{},
-        [switch] $AuditUnchangedMap
+        [switch] $AuditUnchangedMap,
+        [string[]] $ReviewedControlPaths = @(),
+        [string[]] $RequiredShards = @()
     )
 
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -604,6 +619,11 @@ function Select-ImpactedShards {
     # different map in the same process cannot reuse another map's directory owners.
     $directoryOwnerIndex = $null
     $escalate = $false
+    foreach ($name in $RequiredShards) {
+        if ($name -cnotin (@($Map.knownShards) + @($Map.alwaysRun))) { throw "Required policy workload is absent from the map: $name" }
+        [void] $selected.Add($name)
+        [void] $routes.Add("$name <= its manifest or execution policy changed")
+    }
     $currentPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $effectiveCurrentPaths = if ($PSBoundParameters.ContainsKey('CurrentPaths')) {
         @($CurrentPaths)
@@ -636,6 +656,7 @@ function Select-ImpactedShards {
         $changedPathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $Changed.Keys) { [void] $changedPathSet.Add(([string] $key).Replace('\', '/')) }
         foreach ($currentPath in ($currentPathSet | Sort-Object)) {
+            if ($currentPath -cin $ReviewedControlPaths) { continue }
             if ((Get-ChangedPathImpact -Path $currentPath) -eq [ChangedPathImpact]::NonRuntime) { continue }
             if (-not $changedPathSet.Contains($currentPath)) {
                 $escalate = $true
@@ -649,6 +670,7 @@ function Select-ImpactedShards {
             continue
         }
         $impact = Get-ChangedPathImpact -Path $path
+        if ($path -cin $ReviewedControlPaths) { continue }
         switch ($impact) {
             ([ChangedPathImpact]::NonRuntime) { continue }
             ([ChangedPathImpact]::SelectionControl) {
@@ -705,12 +727,15 @@ function Select-ImpactedShards {
     # A non-runtime-only change is a deliberate empty selection, distinct from a selector failure.
     # Keep that state typed here and expose only a JSON boolean at the workflow boundary.
     if ($mappedPaths.Count -eq 0) {
+        if ($selected.Count -gt 0) {
+            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+        }
         return [pscustomobject]@{
             Escalate          = $escalate
-            RequiresValidation = $escalate
+            RequiresValidation = $escalate -or $selected.Count -gt 0
             Reasons           = $reasons
-            Shards            = @()
-            Routes            = @()
+            Shards            = @($selected | Sort-Object)
+            Routes            = @($routes)
         }
     }
 
@@ -1023,18 +1048,18 @@ function ConvertTo-CodeOnlyCSharp {
         offsets and line numbers survive), leaving only code. Brace matching and declaration
         matching then cannot be fooled by '{' in a string or 'class X' in a comment.
     #>
-    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [switch] $PreserveStrings)
 
     $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
-    $builder = [System.Text.StringBuilder]::new($Text.Length)
-    $last = 0
-    foreach ($match in [regex]::Matches($Text, $pattern)) {
-        [void] $builder.Append($Text, $last, $match.Index - $last)
-        [void] $builder.Append(($match.Value -replace '[^\r\n]', ' '))
-        $last = $match.Index + $match.Length
-    }
-    [void] $builder.Append($Text, $last, $Text.Length - $last)
-    return $builder.ToString()
+    # A managed replacement avoids repeatedly logging/Stringifying an ever-growing
+    # StringBuilder under PowerShell member-invocation logging (quadratic on generators).
+    return [regex]::Replace($Text, $pattern, [System.Text.RegularExpressions.MatchEvaluator] {
+        param($match)
+        if ($PreserveStrings -and -not ($match.Value.StartsWith('//') -or $match.Value.StartsWith('/*'))) {
+            return $match.Value
+        }
+        return ($match.Value -replace '[^\r\n]', ' ')
+    })
 }
 
 function Get-CSharpTestShape {
@@ -1043,7 +1068,8 @@ function Get-CSharpTestShape {
         name, the Category traits the file can carry, and the top-level types other files could
         reference. Returns ParseError instead of guessing when the braces do not balance.
     #>
-    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text,
+        [bool] $GeneratedDependenciesKnown = $false)
 
     $code = ConvertTo-CodeOnlyCSharp -Text $Text
     $shape = [pscustomobject]@{
@@ -1052,6 +1078,7 @@ function Get-CSharpTestShape {
         Categories     = $null
         Hazard         = $null
         ParseError     = $null
+        Collections    = [System.Collections.Generic.List[string]]::new()
     }
 
     # Brace pairs by position.
@@ -1227,15 +1254,27 @@ function Get-CSharpTestShape {
         'declares global usings'               = '(?m)^\s*global\s+using\b'
         'declares assembly-level attributes'   = '\[\s*assembly\s*:'
         'declares a module initializer'        = '\bModuleInitializer\b'
-        'declares an xUnit collection definition' = '\bCollectionDefinition\b'
     }
     foreach ($hazard in $hazards.Keys) {
         if ($code -match $hazards[$hazard]) { $shape.Hazard = $hazard; break }
     }
+    # Use code-only offsets so examples in comments/string literals are not attributes.
+    $definitions = @([regex]::Matches($code, '\bCollectionDefinition(?:Attribute)?\b'))
+    foreach ($definition in $definitions) {
+        $tail = $Text.Substring($definition.Index)
+        $literal = [regex]::Match($tail, '^CollectionDefinition(?:Attribute)?\s*\(\s*"(?<name>[A-Za-z0-9_. -]+)"\s*(?:,\s*DisableParallelization\s*=\s*(?:true|false)\s*)?\)')
+        $nameof = [regex]::Match($tail, '^CollectionDefinition(?:Attribute)?\s*\(\s*nameof\(\s*(?:[\w.]+\.)?(?<name>[A-Za-z_]\w*)\s*\)\s*(?:,\s*DisableParallelization\s*=\s*(?:true|false)\s*)?\)')
+        if ($literal.Success) { $shape.Collections.Add($literal.Groups['name'].Value) }
+        elseif ($nameof.Success) { $shape.Collections.Add($nameof.Groups['name'].Value) }
+        else { $shape.Hazard = 'declares an unresolved xUnit collection definition' }
+    }
+    if ($shape.Collections.Count -gt 0 -and -not $GeneratedDependenciesKnown) {
+        $shape.Hazard = 'declares an xUnit collection definition without reviewed generated dependencies'
+    }
     # An abstract class is a base by construction, and the scaffold generator derives test classes
     # from bases whose names it can compose at build time. Those derived classes are not in the
     # tree, so reference search cannot find them.
-    if (-not $shape.Hazard -and @($shape.Types | Where-Object { $_.IsAbstract }).Count -gt 0) {
+    if (-not $GeneratedDependenciesKnown -and -not $shape.Hazard -and @($shape.Types | Where-Object { $_.IsAbstract }).Count -gt 0) {
         $shape.Hazard = 'declares an abstract class, which build-time generated test classes may derive from'
     }
     return $shape
@@ -1286,8 +1325,12 @@ function Get-TestFileRoutes {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Manifest,
         [Parameter(Mandatory)] [scriptblock] $ReadFile,
+        [scriptblock] $ReadPriorFile,
         [Parameter(Mandatory)] [scriptblock] $FindReferrers,
         [Parameter(Mandatory)] [scriptblock] $FindBuildTimeReferences,
+        [scriptblock] $FindCollectionReferrers,
+        [bool] $GeneratedDependenciesKnown = $false,
+        [string[]] $GeneratedDependencyProjects = @(),
         [int] $MaximumClosure = 200
     )
 
@@ -1306,6 +1349,7 @@ function Get-TestFileRoutes {
             continue
         }
         $projectShards = @($Manifest | Where-Object { (Get-ShardProjectDirectory -Shard $_) -ieq $projectDirectory })
+        $projectGenerationKnown = $GeneratedDependenciesKnown -and $projectDirectory -cin $GeneratedDependencyProjects
 
         $visited = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $queue = [System.Collections.Generic.Queue[string]]::new()
@@ -1320,9 +1364,20 @@ function Get-TestFileRoutes {
             $file = $queue.Dequeue()
             $text = & $ReadFile $file
             if ($null -eq $text) { $failure = "cannot read test source $file"; break }
-            $shape = Get-CSharpTestShape -Text $text
+            $shape = Get-CSharpTestShape -Text $text -GeneratedDependenciesKnown $projectGenerationKnown
             if ($shape.ParseError) { $failure = "cannot parse test source $file ($($shape.ParseError))"; break }
             if ($shape.Hazard) { $failure = "test source $file $($shape.Hazard), whose consumers cannot be found by name"; break }
+            $priorShape = $null
+            if ($file -ieq $normalized -and $null -ne $ReadPriorFile) {
+                $priorText = & $ReadPriorFile $file
+                if ($null -ne $priorText) {
+                    $priorShape = Get-CSharpTestShape -Text $priorText -GeneratedDependenciesKnown $projectGenerationKnown
+                    if ($priorShape.ParseError -or $priorShape.Hazard) {
+                        $failure = "prior test source $file cannot be routed: $($priorShape.ParseError) $($priorShape.Hazard)"
+                        break
+                    }
+                }
+            }
 
             foreach ($test in $shape.Tests) {
                 [void] $candidates.Add([pscustomobject]@{ Fqn = $test.Fqn; PrefixOnly = $test.PrefixOnly; AnySuffix = $test.AnySuffix; Categories = $shape.Categories })
@@ -1331,13 +1386,24 @@ function Get-TestFileRoutes {
 
             $names = @($shape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } |
                 ForEach-Object { $_.Name } | Sort-Object -Unique)
-            if ($names.Count -eq 0) { continue }
-            $generated = @(& $FindBuildTimeReferences $names)
+            $collectionNames = @($shape.Collections)
+            if ($null -ne $priorShape) {
+                $names = @(@($names) + @($priorShape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } | ForEach-Object Name) | Sort-Object -Unique)
+                $collectionNames = @(@($collectionNames) + @($priorShape.Collections) | Sort-Object -Unique)
+            }
+            $dependencyNames = @($names) + @($collectionNames)
+            if ($dependencyNames.Count -eq 0) { continue }
+            $generated = @(& $FindBuildTimeReferences $dependencyNames)
             if ($generated.Count -gt 0) {
                 $failure = "test source $file declares $($generated -join ', '), which a source generator references, so tests generated at build time may depend on it"
                 break
             }
-            foreach ($referrer in @(& $FindReferrers $names $projectDirectory)) {
+            $consumerPaths = @(if ($names.Count -gt 0) { & $FindReferrers $names $projectDirectory })
+            if ($collectionNames.Count -gt 0) {
+                if ($null -eq $FindCollectionReferrers) { $failure = 'collection consumer discovery is unavailable'; break }
+                $consumerPaths += @(& $FindCollectionReferrers $collectionNames $projectDirectory)
+            }
+            foreach ($referrer in $consumerPaths) {
                 $referrerPath = ([string] $referrer).Replace('\', '/')
                 if ($referrerPath -ieq $file) { continue }
                 if ($file -ieq $normalized) { $ownReferrers++ }
@@ -1409,6 +1475,68 @@ function Find-GitReferrers {
     return @($output | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
 }
 
+function Test-ReviewedGeneratedDependencyInputs {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Entries)
+    if ($Entries.Count -eq 0) { return $false }
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($Entries -join "`n"))
+    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    return $digest -ceq '94E8E69A0BEC88675F29D574F3995708276B937D054AB444DFBC5DBF03BEBC37'
+}
+
+function Test-ReviewedGeneratedDependencies {
+    # Reviewed emitter contract, NOT an exemption for a particular base/collection:
+    # TestScaffoldGenerator's GetBaseClassName and algorithm switch return literal
+    # base names; remaining emitters spell their base/collection dependencies directly.
+    # Find-GitBuildTimeReferences therefore detects every generated dependency for
+    # this exact generator/build-input revision. Other generators augment existing
+    # declarations, not independent xUnit descendants. Never assume this stays true
+    # after generator or analyzer/project configuration changes: fail closed then.
+    $generatorTree = & git rev-parse HEAD:src/AiDotNet.Generators 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $entries = @("generator-tree:$generatorTree") + @(& git -c core.quotepath=false ls-tree -r HEAD | Where-Object {
+        $_ -match '\t(src/AiDotNet.Generators/|.*\.(csproj|props|targets)$|global\.json$)'
+    })
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return Test-ReviewedGeneratedDependencyInputs -Entries $entries
+}
+
+function Test-CSharpCollectionConsumer {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text,
+        [Parameter(Mandatory)] [string[]] $Names)
+    $code = ConvertTo-CodeOnlyCSharp $Text
+    $uses = @([regex]::Matches($code, '\bCollection(?:Attribute)?\b'))
+    foreach ($use in $uses) {
+        # A constant, nameof, alias or escaped/computed name may equal any requested
+        # collection. Include its file rather than guessing the expression's value.
+        $literal = [regex]::Match($Text.Substring($use.Index), '^Collection(?:Attribute)?\s*\(\s*"(?<name>[A-Za-z0-9_. -]+)"\s*\)')
+        if (-not $literal.Success -or $literal.Groups['name'].Value -in $Names) { return $true }
+    }
+    return $false
+}
+
+function Find-GitCollectionReferrers {
+    param([Parameter(Mandatory)] [string[]] $Names, [Parameter(Mandatory)] [string] $Directory)
+    # Cache source, not answers: multiple collection definitions can share the index.
+    if (-not (Get-Variable CollectionSourceIndex -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:CollectionSourceIndex = @{}
+    }
+    if (-not $script:CollectionSourceIndex.ContainsKey($Directory)) {
+        $paths = @(& git -c core.quotepath=false grep -l -w -E 'Collection(Attribute)?' HEAD -- ":(glob)$Directory**/*.cs" 2>$null)
+        if ($LASTEXITCODE -gt 1) { throw 'Cannot enumerate collection consumers.' }
+        $index = @{}
+        foreach ($path in $paths) {
+            $file = ([string] $path) -replace '^HEAD:', ''
+            $text = Get-GitFileText -Path $file -Revisions @('HEAD')
+            if ($null -eq $text) { throw "Cannot read collection consumer $file" }
+            $index[$file] = $text
+        }
+        $script:CollectionSourceIndex[$Directory] = $index
+    }
+    foreach ($entry in $script:CollectionSourceIndex[$Directory].GetEnumerator()) {
+        if (Test-CSharpCollectionConsumer -Text $entry.Value -Names $Names) { $entry.Key }
+    }
+}
+
 function Find-GitBuildTimeReferences {
     <#
         Which of Names build-time code mentions. One search per name keeps the answer exact; the
@@ -1420,11 +1548,25 @@ function Find-GitBuildTimeReferences {
     if ($directories.Count -eq 0) { throw 'no build-time directories are configured' }
     $found = [System.Collections.Generic.List[string]]::new()
     foreach ($name in $Names) {
-        $arguments = @('-c', 'core.quotepath=false', 'grep', '-q', '-w', '-F', '-e', $name, 'HEAD', '--')
+        $arguments = @('-c', 'core.quotepath=false', 'grep', '-l', '-i', '-w', '-F', '-e', $name, 'HEAD', '--')
         $arguments += $directories
-        & git @arguments 2>$null
-        if ($LASTEXITCODE -eq 0) { [void] $found.Add($name) }
-        elseif ($LASTEXITCODE -gt 1) { throw "git grep for build-time references failed with exit code $LASTEXITCODE" }
+        $paths = @(& git @arguments 2>$null)
+        if ($LASTEXITCODE -gt 1) { throw "git grep for build-time references failed with exit code $LASTEXITCODE" }
+        if (-not (Get-Variable GeneratorSourceIndex -Scope Script -ErrorAction SilentlyContinue)) { $script:GeneratorSourceIndex = @{} }
+        foreach ($path in $paths) {
+            $file = ([string] $path) -replace '^HEAD:', ''
+            if (-not $script:GeneratorSourceIndex.ContainsKey($file)) {
+                $source = Get-GitFileText -Path $file -Revisions @('HEAD')
+                if ($null -eq $source) { throw "Cannot read generator $file" }
+                # Emitted C# resides in strings, which MUST remain searchable.
+                # Comments mentioning a regression test are not dependencies.
+                $script:GeneratorSourceIndex[$file] = ConvertTo-CodeOnlyCSharp -Text $source -PreserveStrings
+            }
+            if ($script:GeneratorSourceIndex[$file] -match ('(?<!\w)' + [regex]::Escape($name) + '(?!\w)')) {
+                $found.Add($name)
+                break
+            }
+        }
     }
     return @($found)
 }
@@ -1492,6 +1634,20 @@ if ($SelfTest) {
     Assert-True ($r.Shards -contains 'Alpha') 'a change on Alpha lines must select Alpha'
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change outside Beta lines must not select Beta'
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'always-run shards must always be selected'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tools/TestImpact/Select-Shards.ps1' = @(1, 3); 'src/Covered.cs' = @(12, 14) } `
+        -ReviewedControlPaths @('tools/TestImpact/Select-Shards.ps1') -RequiredShards @('Beta')
+    Assert-True (-not $r.Escalate -and ($r.Shards -join ',') -ceq 'Alpha,Beta,HeavyNoCoverage') `
+        'Reviewed policy impact lost either runtime coverage or explicitly affected workloads.'
+    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/test-shards.yml' = @(1, 3) } `
+        -ReviewedControlPaths @('.github/test-shards.yml') -RequiredShards @('Beta')
+    Assert-True (-not $r.Escalate -and $r.RequiresValidation -and ($r.Shards -join ',') -ceq 'Beta,HeavyNoCoverage') `
+        'Manifest-only changes did not run the changed shard and mandatory workloads.'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tools/TestImpact/Select-Shards.ps1' = @(1, 3) } `
+        -ReviewedControlPaths @('tools/TestImpact/Select-Shards.ps1')
+    Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+        'Tooling-only changes unnecessarily required model execution.'
+    Assert-Throws { Select-ImpactedShards -Map $map -Changed @{ '.github/test-shards.yml' = @(1, 3) } -RequiredShards @('Unknown') } `
+        'A required workload absent from the map was silently dropped.'
 
     # An unexecuted range in a mapped file routes to every shard that executes the file. Before this
     # it escalated, and #2100's field declarations and between-method insertions - lines coverage
@@ -1516,6 +1672,9 @@ if ($SelfTest) {
         @{ Path = '.github/scripts/analyze-test-results.ps1'; Why = 'CI analysis scripts must escalate' },
         @{ Path = '.github/actions/local/action.yml'; Why = 'local actions must escalate' },
         @{ Path = 'tools/TestImpact/Select-Shards.ps1'; Why = 'impact tooling must escalate' },
+        @{ Path = 'tools/TestImpact/New-CiValidationCertificate.ps1'; Why = 'certificate policy must escalate' },
+        @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
+        @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
         @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
@@ -1524,6 +1683,28 @@ if ($SelfTest) {
         $r = Select-ImpactedShards -Map $map -Changed @{ $change.Path = @(1, 2) }
         Assert-True $r.Escalate $change.Why
         Assert-True $r.RequiresValidation "$($change.Why) and require validation"
+    }
+
+    foreach ($transportPath in @($script:IndependentToolPaths) + @(
+        'TOOLS/TESTIMPACT/RECEIVE-REQUIREDARTIFACT.PS1',
+        'tools\TestImpact\Test-RequiredArtifactResume.ps1'
+    )) {
+        $r = Select-ImpactedShards -Map $map -Changed @{ $transportPath = @(1, 2) }
+        Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+            "independently tested tooling launched runtime shards: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'src/Covered.cs' = @(12, 14)
+        }
+        Assert-True (-not $r.Escalate -and $r.RequiresValidation -and
+            ($r.Shards -join ',') -ceq 'Alpha,HeavyNoCoverage') `
+            "transport change widened or suppressed mapped runtime coverage: $transportPath"
+        $r = Select-ImpactedShards -Map $map -Changed @{
+            $transportPath = @(1, 2)
+            'tools/TestImpact/Select-Shards.ps1' = @(1, 2)
+        }
+        Assert-True ($r.Escalate -and $r.RequiresValidation) `
+            "independent tooling hid a genuine selection-policy change: $transportPath"
     }
 
     # The exact counterexample that exposed the original defect: two GitHub-hosted documentation
@@ -1716,6 +1897,21 @@ if ($SelfTest) {
     function New-Candidate([string] $Fqn, [bool] $PrefixOnly = $false, $Categories = @(), [bool] $AnySuffix = $false) {
         [pscustomobject]@{ Fqn = $Fqn; PrefixOnly = $PrefixOnly; AnySuffix = $AnySuffix; Categories = $Categories }
     }
+    # Exercise the shipping catch-all filter, not a hand-copied approximation. Both
+    # namespace spellings exist in this project; a full run cannot repair an omitted route.
+    $manifestText = Get-Content (Join-Path $PSScriptRoot '../../.github/test-shards.yml') -Raw
+    $remaining = [regex]::Match($manifestText,
+        '(?m)^  - name: Unit - 13 Remaining[^\r\n]*\r?\n(?:    [^\r\n]*\r?\n)*?    filter: >-\r?\n(?<filter>(?:      [^\r\n]*\r?\n)+)')
+    Assert-True $remaining.Success 'Shipping remaining-unit filter was not found.'
+    $remainingFilter = ConvertTo-TestFilter $remaining.Groups['filter'].Value
+    foreach ($root in @('AiDotNet.Tests', 'AiDotNetTests')) {
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.DistributedTraining.DistributedTrainingValidationTests.ShardingConfiguration_Constructor_ThrowsOnNullBackend")) -eq $script:FilterTrue) `
+            "Remaining-unit filter omits the distributed tests under $root."
+        Assert-True ((Test-TestFilter $remainingFilter (New-Candidate "$root.UnitTests.Diffusion.Models.DDPMModelTests.Test")) -eq $script:FilterFalse) `
+            "Remaining-unit filter duplicates partitioned diffusion tests under $root."
+    }
+    Assert-True ((Test-TestFilter $remainingFilter (New-Candidate 'AiDotNet.Tests.IntegrationTests.DistributedTraining.Test')) -eq $script:FilterFalse) `
+        'Remaining-unit filter captured integration tests.'
     $f = ConvertTo-TestFilter "Category!=GPU&Category!=Stress& `n (FullyQualifiedName~UnitTests.Alpha|`n FullyQualifiedName~UnitTests.Beta)"
     Assert-True ((Test-TestFilter $f (New-Candidate 'X.UnitTests.Beta.C.M')) -eq $script:FilterTrue) `
         'a folded multi-line filter did not match its second alternative'
@@ -1877,6 +2073,59 @@ class Current { }
     $wide = Get-TestFileRoutes -Paths @('tests/P/Shared/Base.cs') -Manifest $manifest -ReadFile $read `
         -FindReferrers $find -FindBuildTimeReferences $findGenerated -MaximumClosure 1
     Assert-True (-not $wide['tests/P/Shared/Base.cs'].Routable) 'a closure wider than the limit was routed'
+
+    # Reviewed generator inputs bound the name-based graph, without allowing known
+    # generated bases or collections through. Unknown build inputs still fail closed.
+    $files['tests/P/Beta/Inherited.cs'] = 'namespace P.Beta; public class Inherited : ShapeBase { }'
+    $referrers['ShapeBase'] = @('tests/P/Beta/Inherited.cs')
+    $files['tests/P/Shared/Collection.cs'] = 'namespace P.Shared; [Xunit.CollectionDefinition("Shared")] public class Fixture { }'
+    $files['tests/P/Alpha/Consumer.cs'] = 'namespace P.Alpha; [Collection("Shared")] public class Consumer { [Fact] public void Test() { } }'
+    $files['tests/P/Beta/ConstantConsumer.cs'] = 'namespace P.Beta; [Collection(Names.Shared)] public class ConstantConsumer { [Fact] public void Test() { } }'
+    $collections = { param($names, $directory) @($files.Keys | Where-Object {
+        $_.StartsWith($directory) -and (Test-CSharpCollectionConsumer -Text $files[$_] -Names $names)
+    }) }
+    $routingArgs = @{ Manifest = $manifest; ReadFile = $read; FindReferrers = $find;
+        FindBuildTimeReferences = $findGenerated; FindCollectionReferrers = $collections;
+        GeneratedDependenciesKnown = $true; GeneratedDependencyProjects = @('tests/P/') }
+    $bounded = Get-TestFileRoutes -Paths @('tests/P/Shared/Abstract.cs', 'tests/P/Shared/Collection.cs', 'tests/P/Shared/GenBase.cs') @routingArgs
+    Assert-True ($bounded['tests/P/Shared/Abstract.cs'].Routable -and
+        ($bounded['tests/P/Shared/Abstract.cs'].Shards -join ',') -eq 'Beta') 'reviewed source-only abstract descendants were not routed'
+    Assert-True ($bounded['tests/P/Shared/Collection.cs'].Routable -and
+        ($bounded['tests/P/Shared/Collection.cs'].Shards -join ',') -eq 'Alpha,Beta') 'literal or unresolved collection consumer was omitted'
+    Assert-True (-not $bounded['tests/P/Shared/GenBase.cs'].Routable) 'known generated base escaped the fallback'
+    $generatorNames += 'Shared'
+    $generatedCollection = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $generatedCollection['tests/P/Shared/Collection.cs'].Routable) 'generated collection consumers were omitted'
+    $generatorNames = @('LayerHarness')
+    $routingArgs.GeneratedDependenciesKnown = $false
+    $unknown = Get-TestFileRoutes -Paths @('tests/P/Shared/Abstract.cs', 'tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $unknown['tests/P/Shared/Abstract.cs'].Routable -and -not $unknown['tests/P/Shared/Collection.cs'].Routable) 'unknown generator contract escaped the fallback'
+    $routingArgs.GeneratedDependenciesKnown = $true
+    $routingArgs.FindCollectionReferrers = $null
+    $missingDiscovery = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $missingDiscovery['tests/P/Shared/Collection.cs'].Routable) 'missing collection discovery silently skipped tests'
+    $shape = Get-CSharpTestShape -Text '[CollectionDefinition(Name)] public class Fixture { }' -GeneratedDependenciesKnown $true
+    Assert-True ([bool] $shape.Hazard) 'unresolved collection definition was guessed'
+    $shape = Get-CSharpTestShape -Text '[CollectionDefinition(nameof(N.Fixture), DisableParallelization = true)] public class Fixture { }' -GeneratedDependenciesKnown $true
+    Assert-True (-not $shape.Hazard -and ($shape.Collections -join ',') -eq 'Fixture') 'nameof collection definition was not resolved'
+    Assert-True (-not (Test-CSharpCollectionConsumer -Text '[Collection("Different")] class T { }' -Names @('Shared'))) 'different literal collection was included'
+    Assert-True (Test-CSharpCollectionConsumer -Text '[Collection("shared")] class T { }' -Names @('Shared')) 'case-variant collection was unsafely excluded'
+    Assert-True (Test-CSharpCollectionConsumer -Text '[Collection("Sha" + "red")] class T { }' -Names @('Shared')) 'computed collection name was excluded'
+    Assert-True (Test-CSharpCollectionConsumer -Text 'using Alias = Xunit.CollectionAttribute; [Alias("Shared")] class T { }' -Names @('Shared')) 'aliased collection consumer was excluded'
+    Assert-True (-not (Test-CSharpCollectionConsumer -Text '// [Collection("Shared")]' -Names @('Shared'))) 'comment was treated as a collection consumer'
+    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @())) 'empty generator evidence was accepted'
+    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @('changed generator'))) 'changed generator evidence was accepted'
+    $emitter = ConvertTo-CodeOnlyCSharp -Text '// FakeBase appears only in a comment
+var source = "class Test : RealBase { } // string contents survive"; /* AnotherFakeBase */' -PreserveStrings
+    Assert-True ($emitter -notmatch 'FakeBase' -and $emitter -match 'RealBase' -and $emitter -match 'string contents survive') 'generator comment filtering removed emitted dependencies or retained comments'
+    $files['tests/P/Shared/Collection.cs'] = 'namespace P.Shared; [CollectionDefinition("Renamed")] public class Fixture { }'
+    $files['tests/P/Alpha/Consumer.cs'] = 'namespace P.Alpha; [Collection("Shared")] public class Consumer { [Fact] public void Test() { } }'
+    $files['tests/P/Beta/ConstantConsumer.cs'] = 'namespace P.Beta; [Collection("Renamed")] public class ConstantConsumer { [Fact] public void Test() { } }'
+    $routingArgs.FindCollectionReferrers = $collections
+    $routingArgs.ReadPriorFile = { param($path) if ($path -eq 'tests/P/Shared/Collection.cs') { 'namespace P.Shared; [CollectionDefinition("Shared")] public class Fixture { }' } }
+    $renamed = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True ($renamed['tests/P/Shared/Collection.cs'].Routable -and
+        ($renamed['tests/P/Shared/Collection.cs'].Shards -join ',') -eq 'Alpha,Beta') 'collection rename omitted old or new consumers'
 
     # ---- Carrying a change's ranges back to the map's numbering. -------------------------------
     # Hand-checked cases first. map -> base: line 4 replaced (4 -> 4), 2 lines inserted after 7,
@@ -2114,11 +2363,17 @@ if ($ClassifyOnly) {
             $reason = 'changed-path-set-empty'
         }
         else {
+            $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
+            if (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1") {
+                . "$PSScriptRoot/CiPolicyImpact.ps1"
+                $reviewed = Get-ReviewedCiPolicyImpact -BaseSha $BaseSha -Paths $changedFiles
+            }
             $requiresValidation = [bool] @(
                 $changedFiles | Where-Object {
+                    $_ -cnotin $reviewed.Paths -and
                     (Get-ChangedPathImpact -Path ([string] $_)) -ne [ChangedPathImpact]::NonRuntime
                 }
-            ).Count
+            ).Count -or $reviewed.Shards.Count -gt 0
             $reason = $(if ($requiresValidation) { 'runtime-or-unknown' } else { 'non-runtime-only' })
         }
     }
@@ -2155,6 +2410,20 @@ if (-not (Test-Path -LiteralPath $MapFile)) {
 $map = $null
 try {
     $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+    if ($ShardManifestFile) {
+        $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+        if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+            # Keep certified ordinary routing usable during the 116 -> 161 workload rollout.
+            # New auxiliary jobs may only be ADDED as mandatory; no indexed coverage is invented.
+            Assert-ShardMap -Map $map -Expected @(@($map.knownShards) + @($map.alwaysRun))
+            . "$PSScriptRoot/CiWorkloadKinds.ps1"
+            $extension = Complete-CiMapWorkloads -Map $map -Manifest $manifest
+            $map = $extension.Map
+            if ($extension.Added.Count -gt 0) {
+                Write-Host "Retaining $($extension.Added.Count) unmapped auxiliary workloads; ordinary shard routing remains selective."
+            }
+        }
+    }
     Assert-ShardMap -Map $map -Expected $ExpectedShards
 }
 catch {
@@ -2228,13 +2497,48 @@ try {
         $revisions = @('HEAD', $BaseSha, $mapSha)
         $testRoutes = Get-TestFileRoutes -Paths $testPaths -Manifest $manifest `
             -ReadFile { param($path) Get-GitFileText -Path $path -Revisions $revisions } `
+            -ReadPriorFile { param($path) Get-GitFileText -Path $path -Revisions @($BaseSha, $mapSha) } `
             -FindReferrers { param($names, $directory) Find-GitReferrers -Names $names -Directory $directory } `
-            -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names }
+            -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names } `
+            -FindCollectionReferrers { param($names, $directory) Find-GitCollectionReferrers -Names $names -Directory $directory } `
+            -GeneratedDependenciesKnown (Test-ReviewedGeneratedDependencies) `
+            -GeneratedDependencyProjects @('tests/AiDotNet.Tests/')
     }
 
+    $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
+    if ($BaseSha -and (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1")) {
+        try {
+            . "$PSScriptRoot/CiPolicyImpact.ps1"
+            $reviewed = Get-ReviewedCiPolicyImpact -BaseSha $BaseSha -Paths $currentPaths
+            Write-Host "CI policy review: $($reviewed.Paths.Count) control paths handled; $($reviewed.Shards.Count) execution workloads required."
+        }
+        catch { Write-Warning "CI execution impact is unproven; retaining full-validation controls: $($_.Exception.Message)" }
+    }
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
-        -AuditUnchangedMap:$AuditUnchangedMap
+        -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards
+
+    if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
+        @($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+        . "$PSScriptRoot/CiWorkloadKinds.ps1"
+        . "$PSScriptRoot/AuxiliaryInventory.ps1"
+        $auxiliary = @($manifest | Where-Object { (Get-CiWorkloadKind $_) -ne [CiWorkloadKind]::Tests })
+        $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
+        if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+            if ($DeltaFromTree) {
+                # Imported ordinal-window results refer to the old catalog. Refuse imports
+                # rather than overwrite newly rerun results under the same window names.
+                $selection.Escalate = $true
+                $selection.Reasons = @($selection.Reasons) + @('auxiliary inventory changed; delta imports are unsafe')
+            }
+            else {
+                $selection.Shards = @(@($selection.Shards) + @($auxiliary.name) | Sort-Object -Unique)
+                $selection.Routes = @($selection.Routes) + @($auxiliary | ForEach-Object {
+                    "$($_.name) <= reflection inventory changed or could not be established"
+                })
+            }
+        }
+    }
 
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'

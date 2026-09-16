@@ -84,7 +84,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_ThrowsOnZeroMicroBatchSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -98,7 +98,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_ThrowsOnNegativeMicroBatchSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -112,7 +112,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_AcceptsMinimumMicroBatchSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -128,7 +128,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_AcceptsLargeMicroBatchSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -148,7 +148,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_ThrowsOnZeroPipelineParallelSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -163,7 +163,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_ThrowsOnNegativePipelineParallelSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -178,7 +178,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_ThrowsOnZeroTensorParallelSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -193,7 +193,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_ThrowsOnNegativeTensorParallelSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -208,7 +208,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_AcceptsMinimumValidSizes()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -224,7 +224,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_ThrowsWhenSizesDontMatchWorldSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -240,7 +240,7 @@ public class DistributedTrainingValidationTests
     public async Task HybridShardedModel_Constructor_AcceptsMatchingWorldSize()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -651,7 +651,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_AcceptsCheckpointingWithNoneStrategy()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var checkpointConfig = new ActivationCheckpointConfig
@@ -672,7 +672,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_Constructor_ThrowsOnCheckpointingWithSelectiveStrategy()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var checkpointConfig = new ActivationCheckpointConfig
@@ -701,7 +701,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_GetModelMetadata_IncludesScheduleInfo()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -720,7 +720,7 @@ public class DistributedTrainingValidationTests
     public async Task PipelineParallelModel_DefaultSchedule_IsGPipe()
     {
         var model = CreateMockModel();
-        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: IsolatedEnvironment());
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
 
@@ -734,6 +734,18 @@ public class DistributedTrainingValidationTests
     }
 
     #endregion
+
+    /// <summary>
+    /// A fresh in-memory environment for one test's backend.
+    /// </summary>
+    /// <remarks>
+    /// In-memory backends that share an environment id are ranks of ONE simulated job, and the environment
+    /// rejects a second active rank 0 or a different world size. Every backend these tests initialize used the
+    /// process-wide "default" id, so a backend left active by one test (an assertion failing before Shutdown, or
+    /// a class in another collection running concurrently) failed unrelated tests with "Rank 0 is already active"
+    /// or "already configured for world size 1, not 2".
+    /// </remarks>
+    private static string IsolatedEnvironment() => Guid.NewGuid().ToString("N");
 
     /// <summary>
     /// Creates a simple mock model for testing purposes.

@@ -42,6 +42,7 @@ public class ConsoleDashboard : ITrainingDashboard
     private readonly ConcurrentDictionary<string, List<HistogramDataPoint>> _histograms = new();
     private readonly object _renderLock = new();
     private Timer? _renderTimer;
+    private object _renderGeneration = new();
     private bool _isRunning;
     private bool _disposed;
     private int _lastRenderHeight;
@@ -53,7 +54,7 @@ public class ConsoleDashboard : ITrainingDashboard
     public string LogDirectory { get; }
 
     /// <inheritdoc />
-    public bool IsRunning => _isRunning;
+    public bool IsRunning { get { lock (_renderLock) return _isRunning; } }
 
     /// <summary>
     /// Gets or sets the chart width in characters.
@@ -100,23 +101,40 @@ public class ConsoleDashboard : ITrainingDashboard
     /// <inheritdoc />
     public void Start()
     {
-        if (_isRunning) return;
-
-        _isRunning = true;
-        _renderTimer = new Timer(_ => Render(), null, 0, RefreshIntervalMs);
+        lock (_renderLock)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ConsoleDashboard));
+            if (_isRunning) return;
+            var generation = new object();
+            // Publish running state only after timer construction succeeds.
+            _renderTimer = new Timer(_ => RenderTick(generation), null, 0, RefreshIntervalMs);
+            _renderGeneration = generation;
+            _isRunning = true;
+        }
     }
 
     /// <inheritdoc />
     public void Stop()
     {
-        if (!_isRunning) return;
+        lock (_renderLock)
+        {
+            if (!_isRunning) return;
+            _isRunning = false;
+            _renderTimer?.Dispose();
+            _renderTimer = null;
+            // Existing renders finish before this lock is acquired. Queued
+            // callbacks cannot render after Stop, even if Start creates a new timer.
+            Render();
+        }
+    }
 
-        _isRunning = false;
-        _renderTimer?.Dispose();
-        _renderTimer = null;
-
-        // Final render
-        Render();
+    private void RenderTick(object generation)
+    {
+        lock (_renderLock)
+        {
+            if (!_isRunning || _disposed || !ReferenceEquals(generation, _renderGeneration)) return;
+            Render();
+        }
     }
 
     /// <inheritdoc />
@@ -290,7 +308,7 @@ public class ConsoleDashboard : ITrainingDashboard
         sb.AppendLine(new string('=', 50));
         sb.AppendLine();
 
-        foreach (var kvp in _scalars.OrderBy(k => k.Key))
+        foreach (var kvp in GetScalarData().OrderBy(k => k.Key))
         {
             if (kvp.Value.Count == 0) continue;
 
@@ -315,7 +333,7 @@ public class ConsoleDashboard : ITrainingDashboard
         var sb = new StringBuilder();
         sb.AppendLine("metric,step,value,wall_time");
 
-        foreach (var kvp in _scalars)
+        foreach (var kvp in GetScalarData())
         {
             foreach (var point in kvp.Value)
             {
@@ -329,18 +347,18 @@ public class ConsoleDashboard : ITrainingDashboard
     /// <inheritdoc />
     public Dictionary<string, List<ScalarDataPoint>> GetScalarData()
     {
-        return _scalars.ToDictionary(
+        return _scalars.ToArray().ToDictionary(
             kvp => kvp.Key,
-            kvp => kvp.Value.ToList()
+            kvp => DashboardSeriesSnapshot.Copy(kvp.Value)
         );
     }
 
     /// <inheritdoc />
     public Dictionary<string, List<HistogramDataPoint>> GetHistogramData()
     {
-        return _histograms.ToDictionary(
+        return _histograms.ToArray().ToDictionary(
             kvp => kvp.Key,
-            kvp => kvp.Value.ToList()
+            kvp => DashboardSeriesSnapshot.Copy(kvp.Value)
         );
     }
 
@@ -359,10 +377,9 @@ public class ConsoleDashboard : ITrainingDashboard
 
     private void Render()
     {
-        if (!_isRunning && _scalars.Count == 0) return;
-
         lock (_renderLock)
         {
+            if (!_isRunning && _scalars.IsEmpty) return;
             var sb = new StringBuilder();
 
             // Header
@@ -372,20 +389,21 @@ public class ConsoleDashboard : ITrainingDashboard
             sb.AppendLine(new string('-', ChartWidth + 20));
 
             // Display metrics
-            var metricsToShow = _scalars
+            var metricsToShow = _scalars.ToArray()
                 .OrderBy(k => k.Key)
                 .Take(MaxMetricsDisplay)
+                .Select(kvp => (kvp.Key, Snapshot: CaptureScalarSummary(kvp.Value, ChartWidth)))
+                .Where(metric => metric.Snapshot.HasValue)
+                .Select(metric => (metric.Key, Value: metric.Snapshot.GetValueOrDefault()))
                 .ToList();
 
             foreach (var kvp in metricsToShow)
             {
-                if (kvp.Value.Count == 0) continue;
-
-                var latest = kvp.Value.Last();
-                var data = kvp.Value.TakeLast(ChartWidth).Select(p => p.Value).ToArray();
+                var latest = kvp.Value;
+                var data = latest.Tail;
 
                 sb.AppendLine();
-                sb.AppendLine($"  {kvp.Key}: {latest.Value:F6} (step {latest.Step})");
+                sb.AppendLine($"  {kvp.Key}: {latest.Current:F6} (step {latest.Step})");
 
                 // Write current buffer, then render sparkline directly to console with colors
                 Console.Write(sb.ToString());
@@ -402,11 +420,9 @@ public class ConsoleDashboard : ITrainingDashboard
 
                 foreach (var kvp in metricsToShow)
                 {
-                    if (kvp.Value.Count == 0) continue;
-
-                    var current = kvp.Value.Last().Value;
-                    var min = kvp.Value.Min(p => p.Value);
-                    var max = kvp.Value.Max(p => p.Value);
+                    var current = kvp.Value.Current;
+                    var min = kvp.Value.Min;
+                    var max = kvp.Value.Max;
 
                     sb.AppendLine($"  {Truncate(kvp.Key, 20),-20} {current,12:F6} {min,12:F6} {max,12:F6}");
                 }
@@ -438,6 +454,21 @@ public class ConsoleDashboard : ITrainingDashboard
             }
 
             Console.Write(sb.ToString());
+        }
+    }
+
+    private static (long Step, double Current, double Min, double Max, double[] Tail)? CaptureScalarSummary(
+        List<ScalarDataPoint> series, int width)
+    {
+        lock (series)
+        {
+            if (series.Count == 0) return null;
+            var latest = series[series.Count - 1];
+            // Allocate only the visible tail, not the entire training history.
+            var count = Math.Min(series.Count, Math.Max(0, width));
+            var tail = new double[count];
+            for (int i = 0; i < count; i++) tail[i] = series[series.Count - count + i].Value;
+            return (latest.Step, latest.Value, series.Min(p => p.Value), series.Max(p => p.Value), tail);
         }
     }
 
@@ -556,9 +587,11 @@ public class ConsoleDashboard : ITrainingDashboard
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-
-        Stop();
+        lock (_renderLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+        }
     }
 }

@@ -2588,7 +2588,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Track training metrics
         var episodeRewards = new List<T>();
-        var episodeLengths = new List<int>();
         var losses = new List<T>();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         int totalStepsAcrossEpisodes = 0;
@@ -2710,7 +2709,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             episodeRewards.Add(episodeReward);
-            episodeLengths.Add(steps);
 
             // Calculate metrics for this episode
             var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
