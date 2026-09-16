@@ -1,7 +1,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
-internal enum OpenDependencyKind { ExternalCall, VirtualDispatch, IndirectCall, NativeCode, UnresolvedLocalCall }
+internal enum OpenDependencyKind { ExternalCall, VirtualDispatch, IndirectCall, NativeCode, UnresolvedLocalCall, ExternalField, UnresolvedLocalField }
 internal sealed record OpenDependency(OpenDependencyKind Kind, string Target);
 internal sealed record MethodDependencyNode(string Key, string Name, string[] LocalCalls,
     string[] StaticFields, OpenDependency[] OpenDependencies);
@@ -22,17 +22,29 @@ internal static class DependencyGraph
             var local = new HashSet<string>(StringComparer.Ordinal);
             var fields = new HashSet<string>(StringComparer.Ordinal);
             var open = new HashSet<OpenDependency>();
+            // Type initialization can execute without an explicit IL call.
+            AddTypeInitializer(type, local, inputHash);
             if (method.IsPInvokeImpl) open.Add(new(OpenDependencyKind.NativeCode, method.FullName));
             if (method.HasBody)
             foreach (Instruction instruction in method.Body.Instructions)
             {
                 if (instruction.OpCode.Code == Code.Calli)
                     open.Add(new(OpenDependencyKind.IndirectCall, method.FullName));
-                if (instruction.Operand is FieldReference field && field.DeclaringType.Scope == assembly.MainModule)
+                if (instruction.Operand is FieldReference field)
                 {
-                    FieldDefinition definition = field.Resolve();
-                    // readonly object references may still refer to mutable shared state.
-                    if (definition.IsStatic && !definition.IsLiteral) fields.Add(definition.FullName);
+                    if (field.DeclaringType.Scope != assembly.MainModule)
+                        open.Add(new(OpenDependencyKind.ExternalField, field.FullName));
+                    else
+                    {
+                        FieldDefinition? definition = field.Resolve();
+                        if (definition is null) open.Add(new(OpenDependencyKind.UnresolvedLocalField, field.FullName));
+                        else if (definition.IsStatic && !definition.IsLiteral)
+                        {
+                            // readonly references may refer to mutable shared state.
+                            fields.Add(definition.FullName);
+                            AddTypeInitializer(definition.DeclaringType, local, inputHash);
+                        }
+                    }
                 }
                 if (instruction.Operand is not MethodReference call) continue;
                 if (call.DeclaringType.Scope != assembly.MainModule)
@@ -67,6 +79,12 @@ internal static class DependencyGraph
     }
 
     private static string Key(MethodDefinition method, string inputHash) => $"{inputHash}:{method.MetadataToken.ToInt32():X8}";
+
+    private static void AddTypeInitializer(TypeDefinition type, HashSet<string> calls, string hash)
+    {
+        foreach (MethodDefinition initializer in type.Methods.Where(method => method.IsConstructor && method.IsStatic && method.HasBody))
+            calls.Add(Key(initializer, hash));
+    }
 
     private static IEnumerable<TypeDefinition> Types(IEnumerable<TypeDefinition> roots)
     {

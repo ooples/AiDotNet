@@ -146,6 +146,13 @@ try {
     $protocolCases = @($protocolTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
     Check ($protocolCases.Count -eq 15 -and @($protocolCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Protocol checks did not execute the complete expected case set.'
+    dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=DependencySelection' `
+        "/ResultsDirectory:$(Join-Path $root 'dependency-selection')" '/Logger:trx;LogFileName=results.trx' | Out-Host
+    Check ($LASTEXITCODE -eq 0) 'Dependency selection tests failed.'
+    [xml] $selectionTrx = Get-Content -LiteralPath (Join-Path $root 'dependency-selection/results.trx') -Raw
+    $selectionCases = @($selectionTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    Check ($selectionCases.Count -eq 17 -and @($selectionCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+        'Dependency selection checks did not execute the complete expected case set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
     $env:ATTRIBUTION_WORKER_DLL = Join-Path $workerOriginal 'AttributionWorker.dll'
@@ -182,6 +189,13 @@ try {
     $leftNode = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'Operations::Left\(' })
     Check ($potential.Count -eq 1 -and $leftNode.Count -eq 1 -and $leftNode[0].Key -cin $potential[0].LocalCalls) `
         'Static graph lost the dependency in an unexecuted branch.'
+    $initializer = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'StaticDependencyProbe::\.cctor\(' })
+    $readStatic = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'StaticDependencyProbe::Read\(' })
+    Check ($initializer.Count -eq 1 -and $readStatic.Count -eq 1 -and $initializer[0].Key -cin $readStatic[0].LocalCalls `
+        -and $readStatic[0].StaticFields.Count -eq 1) 'Implicit initializer or shared static field dependency disappeared.'
+    $externalField = @($mapData.DependencyGraph.Methods | Where-Object { $_.Name -match 'StaticDependencyProbe::ExternalField\(' })
+    Check ($externalField.Count -eq 1 -and @($externalField[0].OpenDependencies | Where-Object { $_.Target -match 'System.DateTime::MinValue$' }).Count -eq 1) `
+        'Unresolved external field was incorrectly classified as complete.'
     $potentialOwner = @($reports.Hits | Where-Object { $_.Owner -ceq 'PrototypeTests:PrototypeTests.MethodTests.PotentialCaller' })
     Check ($potentialOwner.Count -eq 1 -and $leftNode[0].Key -cnotin $potentialOwner[0].Methods) `
         'Untaken-branch control unexpectedly executed Left.'
@@ -294,7 +308,7 @@ try {
             nanosecondsPerCall = $measurement.NanosecondsPerCall; medianNanoseconds = $samples[3] }
     }
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; protocolCases = $protocolCases.Count; selectionCases = $selectionCases.Count; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

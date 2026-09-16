@@ -54,7 +54,7 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
 
 - Build: **zero warnings and errors**.
 - Positive execution: **11/11 cases passed**, both plain and instrumented.
-- **11 source-backed methods** and **45 test task call sites** instrumented; overlapping test scopes
+- Source-backed methods and test task call sites instrumented; overlapping test scopes
   observed. A rendezvous requires real overlap between the two parallel tests.
 - Async/Task.Run and overlapping Left/Right tests received their expected
   dependencies without receiving the other test's exclusive dependency.
@@ -73,6 +73,12 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
   theory rows, full-vs-partial scope, source/build/profile/run binding, immutable
   verified case lists, safe identical-plan reuse, and malformed receipt rejection.
   The protocol does not authenticate GitHub or determine dependency impact.
+- **17 conservative dependency-selection cases passed**: old/new call closure,
+  deleted calls/tests, new tests/branches, cycles, shared-state chains, fixture
+  state, unknown changes, and unresolved/virtual/reflection/external/native
+  boundaries. The IL extraction controls retain an untaken call, implicit type
+  initialization, and external fields. These are algorithm/fixture checks, not
+  authenticated production graph construction or actual narrowed execution.
 - Before/after wall time: **1.53 s plain / 2.58 s instrumented**. This is a
   single small-fixture measurement including process startup and worker output,
   not a repository benchmark or evidence of net CI savings.
