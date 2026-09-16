@@ -4,7 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
-    <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <!-- AiDotNet.Tensors 0.86.1 â€” bumped from 0.84.1 to unblock this PR (#1417).
          The dep that gated this PR's INT8 wiring shipped: Tensors PR #427
          (SgemmWithInt8RowScaledCachedB â€” per-row-scaled INT8 weight-only GEMM)

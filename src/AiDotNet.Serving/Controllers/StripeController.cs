@@ -1,3 +1,4 @@
+using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Validation;
 using Microsoft.AspNetCore.Authorization;
@@ -84,7 +85,7 @@ public sealed class StripeController : ControllerBase
             if (!isOwner)
             {
                 _logger.LogWarning("User {UserId} attempted portal access for unowned customer {CustomerId}",
-                    userId, request.StripeCustomerId);
+                    LogSanitizer.Sanitize(userId), LogSanitizer.Sanitize(request.StripeCustomerId));
                 return StatusCode(StatusCodes.Status403Forbidden,
                     new { error = "You do not have access to this billing portal." });
             }
