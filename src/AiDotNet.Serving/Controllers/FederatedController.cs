@@ -83,7 +83,7 @@ public class FederatedController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get status for federated run {RunId}", runId);
+            _logger.LogError(ex, "Failed to get status for federated run {RunId}", LogSanitizer.Sanitize(runId));
             return BadRequest(new { error = "An unexpected error occurred while retrieving the federated run status." });
         }
     }
@@ -108,7 +108,7 @@ public class FederatedController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to join federated run {RunId}", runId);
+            _logger.LogError(ex, "Failed to join federated run {RunId}", LogSanitizer.Sanitize(runId));
             return BadRequest(new { error = "An unexpected error occurred while joining the federated run." });
         }
     }
@@ -133,7 +133,7 @@ public class FederatedController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get parameters for federated run {RunId}", runId);
+            _logger.LogError(ex, "Failed to get parameters for federated run {RunId}", LogSanitizer.Sanitize(runId));
             return BadRequest(new { error = "An unexpected error occurred while retrieving federated run parameters." });
         }
     }
@@ -176,12 +176,12 @@ public class FederatedController : ControllerBase
         }
         catch (FileNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Federated run artifact for {RunId} not found", runId);
+            _logger.LogWarning(ex, "Federated run artifact for {RunId} not found", LogSanitizer.Sanitize(runId));
             return NotFound(new { error = "Federated run artifact not found." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to download federated run artifact for {RunId}", runId);
+            _logger.LogError(ex, "Failed to download federated run artifact for {RunId}", LogSanitizer.Sanitize(runId));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An unexpected error occurred while downloading the run artifact." });
         }
     }
@@ -231,12 +231,12 @@ public class FederatedController : ControllerBase
         }
         catch (FileNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Federated run artifact for {RunId} not found", runId);
+            _logger.LogWarning(ex, "Federated run artifact for {RunId} not found", LogSanitizer.Sanitize(runId));
             return NotFound(new { error = "Federated run artifact not found." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to release federated run artifact key for {RunId}", runId);
+            _logger.LogError(ex, "Failed to release federated run artifact key for {RunId}", LogSanitizer.Sanitize(runId));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An unexpected error occurred while releasing the run artifact key." });
         }
     }
@@ -261,7 +261,7 @@ public class FederatedController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to submit update for federated run {RunId}", runId);
+            _logger.LogError(ex, "Failed to submit update for federated run {RunId}", LogSanitizer.Sanitize(runId));
             return BadRequest(new { error = "An unexpected error occurred while submitting the update." });
         }
     }
@@ -281,7 +281,7 @@ public class FederatedController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to aggregate round for federated run {RunId}", runId);
+            _logger.LogError(ex, "Failed to aggregate round for federated run {RunId}", LogSanitizer.Sanitize(runId));
             return BadRequest(new { error = "An unexpected error occurred while aggregating the round." });
         }
     }
