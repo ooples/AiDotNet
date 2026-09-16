@@ -620,10 +620,11 @@ public static class LayerCloning
             //
             // Deliberately only after every tier above has already declined, and only for keys that
             // were not saved: a layer that reconstructs today takes the identical path it took
-            // before, so this can add successes but cannot change an existing one.
+            // before, so this can add successes but cannot change an existing one. The shapes are
+            // copied so a factory cannot mutate the source layer's own arrays.
             var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
-            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = source.GetInputShape();
-            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = source.GetOutputShape();
+            if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = (int[])source.GetInputShape().Clone();
+            if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = (int[])source.GetOutputShape().Clone();
 
             if (!LayerFactoryRegistry<T>.TryCreate(
                     type,

@@ -97,8 +97,8 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
         double w = Math.Min(wPlus, wMinus);
 
         // For n >= 10, use normal approximation
-        double mean = nr * (nr + 1) / 4.0;
-        double std = Math.Sqrt(nr * (nr + 1) * (2 * nr + 1) / 24.0);
+        double mean = (double)nr * (nr + 1) / 4.0;
+        double std = Math.Sqrt((double)nr * (nr + 1) * (2.0 * nr + 1) / 24.0);
 
         // Continuity correction
         double z = (w - mean + 0.5) / std;
@@ -107,7 +107,7 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
         double pValue = 2 * NormalCdf(-Math.Abs(z));
 
         // Effect size: rank-biserial correlation
-        double effectSize = (wPlus - wMinus) / (nr * (nr + 1) / 2.0);
+        double effectSize = (wPlus - wMinus) / ((double)nr * (nr + 1) / 2.0);
 
         return new StatisticalTestResult<T>
         {
