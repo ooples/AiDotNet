@@ -735,6 +735,37 @@ public class AdvancedActivationFunctionsTests
 
     #region GumbelSoftmax Activation Tests
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void GumbelSoftmaxActivation_InvalidTemperature_Throws(double temperature)
+    {
+        var error = Assert.Throws<System.ArgumentOutOfRangeException>(
+            () => new GumbelSoftmaxActivation<double>(temperature, seed: 42));
+        Assert.Equal("temperature", error.ParamName);
+    }
+
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public void GumbelSoftmaxActivation_ValidTemperature_ProducesNormalizedProbabilities(double temperature)
+    {
+        var activation = new GumbelSoftmaxActivation<double>(temperature, seed: 42);
+        var result = activation.Activate(new Vector<double>(new[] { 1.0, 2.0, 3.0 }));
+        double sum = 0;
+        for (int index = 0; index < result.Length; index++)
+        {
+            Assert.False(double.IsNaN(result[index]) || double.IsInfinity(result[index]));
+            Assert.InRange(result[index], 0.0, 1.0);
+            sum += result[index];
+        }
+        Assert.InRange(sum, 1.0 - Tolerance, 1.0 + Tolerance);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_VectorOutput_AllPositive()
     {
