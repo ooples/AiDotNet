@@ -11,7 +11,6 @@ public sealed class SharedFixture : IDisposable
     public void Dispose() => Assert.Equal(47, Operations.Cleanup());
 }
 
-[Boundary]
 public sealed class MethodTests : IClassFixture<SharedFixture>
 {
     public MethodTests(SharedFixture fixture) => ArgumentNullException.ThrowIfNull(fixture);
@@ -49,7 +48,6 @@ internal static class ParallelRendezvous
     }
 }
 
-[Boundary]
 public sealed class ParallelLeftTests
 {
     [Fact, Trait("Scenario", "Positive")]
@@ -60,7 +58,6 @@ public sealed class ParallelLeftTests
     }
 }
 
-[Boundary]
 public sealed class ParallelRightTests
 {
     [Fact, Trait("Scenario", "Positive")]

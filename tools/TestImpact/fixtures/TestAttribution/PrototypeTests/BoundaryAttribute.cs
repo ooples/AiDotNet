@@ -2,6 +2,8 @@ using System.Reflection;
 using AttributionRuntime;
 using Xunit.Sdk;
 
+[assembly: PrototypeTests.Boundary]
+
 namespace PrototypeTests;
 
 // Attribute state is deliberately empty: xUnit may reuse attributes across cases.

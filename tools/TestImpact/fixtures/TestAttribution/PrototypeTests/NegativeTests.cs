@@ -3,7 +3,6 @@ using Xunit;
 
 namespace PrototypeTests;
 
-[Boundary]
 public sealed class LateTests : IAsyncLifetime
 {
     private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -14,6 +13,8 @@ public sealed class LateTests : IAsyncLifetime
     [Fact, Trait("Scenario", "Late")]
     public void LateBackground()
     {
+        // Prime the deduplication cache; a repeated late hit must still be detected.
+        Assert.Equal(61, CodePaths.Late());
         background = Task.Run(async () =>
         {
             await release.Task;
@@ -30,7 +31,6 @@ public sealed class LateTests : IAsyncLifetime
     }
 }
 
-[Boundary]
 public sealed class FailingTests
 {
     [Fact, Trait("Scenario", "Failure")]
@@ -38,5 +38,15 @@ public sealed class FailingTests
     {
         Assert.Equal(12, Operations.Left(1));
         throw new InvalidOperationException("Deliberate test failure: attribution alone is not validation success.");
+    }
+}
+
+public sealed class DetachedTaskTests
+{
+    [Fact, Trait("Scenario", "DetachedTask")]
+    public void NeverHitsCoveredCode()
+    {
+        var never = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = Task.Run(async () => await never.Task);
     }
 }

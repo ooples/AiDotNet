@@ -11,4 +11,7 @@ public static class CodePaths
     public static int WorkerOnly(int value) => value * 2;
     public static int Unowned() => 59;
     public static int Late() => 61;
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static int HotPath(int value) => value ^ 37;
 }

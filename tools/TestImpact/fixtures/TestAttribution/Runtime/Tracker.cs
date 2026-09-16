@@ -1,15 +1,17 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AttributionRuntime;
 
-public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker }
+public enum AttributionFault { LateHit, UnclosedScope, InvalidBoundary, IncompleteWorker, UnjoinedTask }
 public enum AttributionProcessKind { TestHost, Worker }
+public enum HitCollectionMode { Serialized, Cached }
 public sealed record WorkerTicket(string Run, string Token, string Owner, bool Completed);
 public sealed record MethodHits(string Owner, string[] Methods);
 public sealed record AttributionReport(int Schema, string Run, string Token,
-    AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes,
+    AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes, HitCollectionMode CollectionMode,
     MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers);
 
 // Prototype only: unknown-context hits apply to the entire test-host execution group.
@@ -20,7 +22,9 @@ public static class Tracker
     private sealed class Scope(string owner)
     {
         public string Owner { get; } = owner;
-        public bool Closed { get; set; }
+        public bool Closed;
+        public ConcurrentDictionary<string, byte> Recorded { get; } = new(StringComparer.Ordinal);
+        public HashSet<Task> Tasks { get; } = new(ReferenceEqualityComparer.Instance);
     }
 
     private static readonly object Gate = new();
@@ -30,12 +34,22 @@ public static class Tracker
     private static readonly HashSet<Scope> Open = new();
     private static readonly HashSet<AttributionFault> Faults = new();
     private static readonly List<WorkerTicket> Workers = new();
+    private static readonly HashSet<Task> GroupTasks = new(ReferenceEqualityComparer.Instance);
     private static readonly string? DirectoryPath = OptionalEnvironment("ATTRIBUTION_OUTPUT");
     private static readonly string Run = OptionalEnvironment("ATTRIBUTION_RUN") ?? "";
     private static readonly string? WorkerOwner = OptionalEnvironment("ATTRIBUTION_OWNER");
     private static readonly string Token = OptionalEnvironment("ATTRIBUTION_TOKEN") ?? Guid.NewGuid().ToString("N");
     private static readonly AttributionProcessKind Kind = WorkerOwner is null ? AttributionProcessKind.TestHost : AttributionProcessKind.Worker;
     private static int peakScopes;
+    private static readonly HitCollectionMode CollectionMode = ReadCollectionMode();
+
+    private static HitCollectionMode ReadCollectionMode()
+    {
+        string? value = OptionalEnvironment("ATTRIBUTION_HIT_MODE");
+        if (value is null) return HitCollectionMode.Cached;
+        return Enum.TryParse(value, out HitCollectionMode mode) && Enum.IsDefined(mode)
+            ? mode : throw new InvalidOperationException("Invalid hit collection mode.");
+    }
 
     private static string? OptionalEnvironment(string name)
     {
@@ -82,7 +96,8 @@ public static class Tracker
                 Faults.Add(AttributionFault.InvalidBoundary);
                 throw new InvalidOperationException("Attribution boundary does not match its owner.");
             }
-            scope.Closed = true;
+            Volatile.Write(ref scope.Closed, true);
+            if (scope.Tasks.Any(task => !task.IsCompleted)) Faults.Add(AttributionFault.UnjoinedTask);
             if (Workers.Any(worker => worker.Owner == owner && !worker.Completed))
                 Faults.Add(AttributionFault.IncompleteWorker);
             Open.Remove(scope);
@@ -91,12 +106,28 @@ public static class Tracker
         }
     }
 
-    public static void Hit(string method)
+    public static void ObserveTask(Task? task)
     {
-        if (DirectoryPath is null) return;
+        if (DirectoryPath is null || task is null || task.IsCompleted) return;
         lock (Gate)
         {
             Scope? scope = Current.Value;
+            if (scope is null) GroupTasks.Add(task);
+            else if (scope.Closed) Faults.Add(AttributionFault.LateHit);
+            else scope.Tasks.Add(task);
+        }
+    }
+
+    public static void Hit(string method)
+    {
+        if (DirectoryPath is null) return;
+        Scope? scope = Current.Value;
+        // Only already-published hits may bypass the global lock. Check closure
+        // before the cache, so repeated hits from detached tasks still poison evidence.
+        if (CollectionMode == HitCollectionMode.Cached && scope is not null &&
+            !Volatile.Read(ref scope.Closed) && scope.Recorded.ContainsKey(method)) return;
+        lock (Gate)
+        {
             string owner = scope?.Owner ?? SharedOwner;
             if (scope?.Closed == true)
             {
@@ -106,6 +137,7 @@ public static class Tracker
             if (!Hits.TryGetValue(owner, out HashSet<string>? methods))
                 Hits.Add(owner, methods = new(StringComparer.Ordinal));
             methods.Add(method);
+            if (scope is not null && !scope.Closed) scope.Recorded.TryAdd(method, 0);
         }
     }
 
@@ -155,8 +187,9 @@ public static class Tracker
         lock (Gate)
         {
             if (Open.Count != 0) Faults.Add(AttributionFault.UnclosedScope);
+            if (GroupTasks.Any(task => !task.IsCompleted)) Faults.Add(AttributionFault.UnjoinedTask);
             var report = new AttributionReport(1, Run, Token, Kind, Environment.ProcessId,
-                WorkerOwner, peakScopes,
+                WorkerOwner, peakScopes, CollectionMode,
                 Hits.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => new MethodHits(pair.Key, pair.Value.Order(StringComparer.Ordinal).ToArray())).ToArray(),
                 Completed.Order(StringComparer.Ordinal).ToArray(), Faults.Order().ToArray(), Workers.ToArray());

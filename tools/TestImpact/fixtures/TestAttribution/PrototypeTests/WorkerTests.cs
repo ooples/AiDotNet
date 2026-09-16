@@ -4,7 +4,6 @@ using Xunit;
 
 namespace PrototypeTests;
 
-[Boundary]
 public sealed class WorkerTests
 {
     [Fact, Trait("Scenario", "Positive")]

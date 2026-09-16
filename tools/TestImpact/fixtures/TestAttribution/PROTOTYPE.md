@@ -26,7 +26,7 @@ rejections passed. It is not a production CI validation certificate.
   assembly SHA-256 and metadata token. Maps record binary/PDB hashes and source
   spans. These are conservative method dependencies, **not executed-line or
   branch coverage**. Signed and already instrumented assemblies are rejected.
-- xUnit v2 Before/After boundaries carry ownership through AsyncLocal. Theory
+- Assembly-wide xUnit v2 Before/After boundaries carry ownership through AsyncLocal. Theory
   rows share a method identity, but the harness independently checks that both
   rows executed. No state is stored on reusable attribute instances.
 - Shared fixture and suppressed-context hits belong to the entire execution
@@ -34,6 +34,9 @@ rejections passed. It is not a production CI validation certificate.
 - Explicit worker registration passes a unique token/run/owner through that
   child's environment. Parent completion and a matching completed child report
   are both required. Nested workers are unsupported by the prototype validator.
+- Task-returning call sites register the original task without wrapping it.
+  An unfinished observed task at test closure poisons the report even if it has
+  never executed covered code. This does not cover arbitrary timers or threads.
 - Closed-scope late hits, unclosed scopes and incomplete workers poison the
   report. Reports publish with a pending-file/rename protocol at process exit;
   pending, missing, conflicting or invalid evidence cannot satisfy the harness.
@@ -44,20 +47,25 @@ Windows, .NET SDK **10.0.401**, 2026-09-16:
 
 - Build: **zero warnings and errors**.
 - Positive execution: **7/7 cases passed**, both plain and instrumented.
-- **9 source-backed methods** instrumented; **4 simultaneous test scopes**
+- **10 source-backed methods** and **33 task call sites** instrumented; overlapping test scopes
   observed. A rendezvous requires real overlap between the two parallel tests.
 - Async/Task.Run and overlapping Left/Right tests received their expected
   dependencies without receiving the other test's exclusive dependency.
 - Shared setup/cleanup and suppressed-context work appeared in the execution
   group. Child-only `WorkerOnly` execution appeared under its owning test.
-- **14 negative checks rejected**: late work, missing worker, unclosed worker,
+- **15 negative checks rejected**: late work, detached task, missing worker, unclosed worker,
   unjoined worker, failing test, wrong run, stale binary, missing test, missing
   artifact, pending artifact, malformed artifact, unknown method, skipped case,
   and mismatched worker owner. Artifact cases mutate copies of real output.
-- Before/after wall time: **1.509 s plain / 2.352 s instrumented**. This is a
+- Before/after wall time: **1.79 s plain / 2.57 s instrumented**. This is a
   single small-fixture measurement including process startup and worker output,
   not a repository benchmark or evidence of net CI savings.
 - Original binary SHA-256 unchanged after the run.
+- Hot-call measurement (seven samples of 131,072 calls, identical independently
+  checked checksum): median **1.62 ns plain / 157.03 ns serialized collector /
+  75.49 ns cached collector**. Repeated published hits avoid the global lock,
+  but closure is checked before cache lookup. The late-hit test primes this
+  cache before closing its test. This is not a representative model benchmark.
 
 Adversarial review added the explicit parent/worker completion requirement;
 child completion alone did not establish that its parent test joined it. It
@@ -67,20 +75,22 @@ for execution contexts that cannot safely identify an individual owner.
 ## Limitations / remaining production gates
 
 - This is not a VSTest-packaged collector or automatic test inventory adapter;
-  fixture test classes opt in through an attribute and workers explicitly join.
-  Arbitrary unregistered workers and arbitrary background tasks that never hit
-  instrumented code are not detected. Late hits are tested only when executed
+  the fixture assembly opts in once and workers explicitly join.
+  Unregistered workers, timers, threads and tasks created inside uninstrumented
+  dependencies are not generally detected. Late hits are tested only when executed
   before report publication. These limitations block production enablement.
 - Source spans are local PDB paths. Repository normalization, source-content
   verification, generated-source policies, dependency closure, native/GPU code,
   other target frameworks/platforms, and full assembly coverage are not proven.
-- The runtime uses a lock on every recorded hit. Hot-path overhead, memory use,
+- The runtime uses a lock on first hits and unowned hits; repeated scoped hits
+  use a concurrent cache. Hot-path overhead, memory use,
   large-method inventories and report size require representative measurement
   and likely optimization before rollout. No production performance claim.
 - Report checks establish local fixture consistency, not trusted GitHub
   provenance, artifact authenticity, or hardened validation of hostile JSON.
 - No selective production filters, complete-baseline publishing, PR/post-merge
-  reuse, compatibility migration, or live repository canary has been enabled.
+  reuse, or compatibility migration has been enabled. The dedicated Linux
+  collector canary uploads raw evidence; its result must be checked separately.
 - Safeguard-removal mutation testing and process-crash/cancellation testing are
   still needed; corrupt-artifact tests are not substitutes for those checks.
 

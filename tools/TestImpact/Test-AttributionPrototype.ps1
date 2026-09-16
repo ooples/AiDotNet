@@ -1,6 +1,6 @@
 <# Private-copy prototype; never changes production filters, maps or certificates. #>
 [CmdletBinding()]
-param([switch] $NoBuild)
+param([switch] $NoBuild, [string] $EvidenceDirectory)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -85,10 +85,12 @@ function Assert-Evidence {
 
 $fixture = Join-Path $PSScriptRoot 'fixtures/TestAttribution'
 $project = Join-Path $fixture 'PrototypeTests/PrototypeTests.csproj'
-$root = Join-Path ([IO.Path]::GetTempPath()) "attribution-prototype-$([guid]::NewGuid().ToString('N'))"
+$root = if ($EvidenceDirectory) { [IO.Path]::GetFullPath($EvidenceDirectory) }
+    else { Join-Path ([IO.Path]::GetTempPath()) "attribution-prototype-$([guid]::NewGuid().ToString('N'))" }
+Check (-not (Test-Path -LiteralPath $root)) 'Evidence directory must be new; existing evidence cannot be overwritten.'
 [void] (New-Item -ItemType Directory -Path $root)
 $prior = @{}
-foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER', 'ATTRIBUTION_TOKEN', 'ATTRIBUTION_WORKER_DLL')) {
+foreach ($name in @('ATTRIBUTION_OUTPUT', 'ATTRIBUTION_RUN', 'ATTRIBUTION_OWNER', 'ATTRIBUTION_TOKEN', 'ATTRIBUTION_WORKER_DLL', 'ATTRIBUTION_HIT_MODE')) {
     $prior[$name] = [Environment]::GetEnvironmentVariable($name)
     [Environment]::SetEnvironmentVariable($name, $null)
 }
@@ -146,6 +148,11 @@ try {
     dotnet $instrumenter $sourceAssembly $instrumented
     Check ($LASTEXITCODE -eq 0) 'Instrumentation failed.'
     $map = $instrumented + '.map.json'
+    $taskAssembly = Join-Path $root 'PrototypeTests.dll'
+    dotnet $instrumenter (Join-Path $original 'PrototypeTests.dll') $taskAssembly TaskBoundaries
+    Check ($LASTEXITCODE -eq 0) 'Task boundary instrumentation failed.'
+    Copy-Item -LiteralPath $taskAssembly -Destination (Join-Path $hostCopy 'PrototypeTests.dll')
+    Copy-Item -LiteralPath ([IO.Path]::ChangeExtension($taskAssembly, '.pdb')) -Destination (Join-Path $hostCopy 'PrototypeTests.pdb')
     foreach ($destination in @($hostCopy, $workerCopy)) {
         Copy-Item -LiteralPath $instrumented -Destination (Join-Path $destination 'AttributionSubject.dll')
         Copy-Item -LiteralPath ([IO.Path]::ChangeExtension($instrumented, '.pdb')) -Destination (Join-Path $destination 'AttributionSubject.pdb')
@@ -180,6 +187,7 @@ try {
         @('missing-worker', 'MissingWorker', 'PrototypeTests.WorkerTests.Missing', [PrototypeRejection]::MissingWorker, 0),
         @('unclosed-worker', 'UnclosedWorker', 'PrototypeTests.WorkerTests.Unclosed', [PrototypeRejection]::Faulted, 0),
         @('unjoined-worker', 'UnjoinedWorker', 'PrototypeTests.WorkerTests.Unjoined', [PrototypeRejection]::Faulted, 0),
+        @('detached-task', 'DetachedTask', 'PrototypeTests.DetachedTaskTests.NeverHitsCoveredCode', [PrototypeRejection]::Faulted, 0),
         @('test-failure', 'Failure', 'PrototypeTests.FailingTests.FailsAfterCoverage', [PrototypeRejection]::Results, 1))) {
         $negative = Invoke-PrototypeRun $case[0] $case[1] $hostCopy $true $case[4]
         Expect-Rejected $case[0] $case[3] { Assert-Evidence $negative.directory $negative.run @($case[2]) $instrumented $map }
@@ -225,8 +233,23 @@ try {
         Expect-Rejected $mutation $expectedReason { Assert-Evidence $mutated $collected.run $positive $instrumented $map }
     }
     Check ((Get-FileHash -LiteralPath $sourceAssembly).Hash -ceq $originalHash) 'Original build output was modified.'
+    $benchmarks = @()
+    foreach ($mode in @('Plain', 'Serialized', 'Cached')) {
+        $env:ATTRIBUTION_OUTPUT = if ($mode -ceq 'Plain') { $null } else { Join-Path $root "benchmark-$mode" }
+        $env:ATTRIBUTION_OWNER = 'benchmark'
+        $env:ATTRIBUTION_TOKEN = [guid]::NewGuid().ToString('N')
+        $env:ATTRIBUTION_RUN = [guid]::NewGuid().ToString('N')
+        $env:ATTRIBUTION_HIT_MODE = if ($mode -ceq 'Plain') { $null } else { $mode }
+        $executable = Join-Path $(if ($mode -ceq 'Plain') { $workerOriginal } else { $workerCopy }) 'AttributionWorker.dll'
+        $measurement = & dotnet $executable Benchmark | ConvertFrom-Json
+        Check ($LASTEXITCODE -eq 0) "Benchmark $mode failed."
+        Check ($measurement.Count -eq 131072 -and $measurement.Checksum -eq 8589869056) "Benchmark $mode checksum mismatch."
+        $samples = @($measurement.NanosecondsPerCall | Sort-Object)
+        $benchmarks += [pscustomobject]@{ mode = $mode; callsPerSample = $measurement.Count; checksum = $measurement.Checksum;
+            nanosecondsPerCall = $measurement.NanosecondsPerCall; medianNanoseconds = $samples[3] }
+    }
     [ordered]@{ schemaVersion = 1; sdkVersion = $sdkVersion; productionSelectionEnabled = $false; runs = $runs.ToArray(); rejectedCases = $rejections.ToArray();
-        peakScopes = $hostReport.PeakScopes; limitations = @('Prototype method-level attribution, not branch coverage.',
+        peakScopes = $hostReport.PeakScopes; benchmarks = $benchmarks; limitations = @('Prototype method-level attribution, not branch coverage.',
             'Unknown context applies to the entire execution group.', 'No production selector, trust certificate, or live workflow proof.') } |
         ConvertTo-Json -Depth 6 | Set-Content (Join-Path $root 'proof.json') -Encoding utf8
     Write-Host "Prototype checks passed. Production selection remains disabled. Evidence: $root"

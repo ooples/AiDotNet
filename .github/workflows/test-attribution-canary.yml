@@ -1,0 +1,43 @@
+name: Test attribution canary
+
+on:
+  pull_request:
+    paths:
+      - 'tools/TestImpact/fixtures/TestAttribution/**'
+      - 'tools/TestImpact/Test-AttributionPrototype.ps1'
+      - '.github/workflows/test-attribution-canary.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attribution-canary-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  collector-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build fixture and verify attribution, negative paths, and overhead
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Test-AttributionPrototype.ps1 -EvidenceDirectory "$env:RUNNER_TEMP/attribution-proof"
+      - name: Preserve actual execution evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: attribution-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/attribution-proof/proof.json
+            ${{ runner.temp }}/attribution-proof/*.map.json
+            ${{ runner.temp }}/attribution-proof/*/results.trx
+            ${{ runner.temp }}/attribution-proof/*/attribution/*.json
