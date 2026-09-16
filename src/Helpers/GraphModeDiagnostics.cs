@@ -16,8 +16,6 @@ internal static class GraphModeDiagnostics
         Tensor<float> target,
         Action traceAction)
     {
-        var paramSet = new HashSet<object>(parameters.Select(p => (object)p));
-        paramSet.Add(input);
         var sb = new StringBuilder();
 
         using var scope = GraphMode.Enable();

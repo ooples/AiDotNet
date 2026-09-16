@@ -112,10 +112,10 @@ public class MMDDomainAdapter<T> : IDomainAdapter<T>
         T sourceTargetSum = ComputeKernelSum(sourceData, targetData);
 
         // MMD^2 = E[k(x,x')] + E[k(y,y')] - 2*E[k(x,y)]
-        T mmd2 = _numOps.Divide(sourceSourceSum, _numOps.FromDouble(m * m));
-        mmd2 = _numOps.Add(mmd2, _numOps.Divide(targetTargetSum, _numOps.FromDouble(n * n)));
+        T mmd2 = _numOps.Divide(sourceSourceSum, _numOps.FromDouble((double)m * m));
+        mmd2 = _numOps.Add(mmd2, _numOps.Divide(targetTargetSum, _numOps.FromDouble((double)n * n)));
         mmd2 = _numOps.Subtract(mmd2, _numOps.Multiply(_numOps.FromDouble(2.0),
-            _numOps.Divide(sourceTargetSum, _numOps.FromDouble(m * n))));
+            _numOps.Divide(sourceTargetSum, _numOps.FromDouble((double)m * n))));
 
         // Return sqrt(MMD^2)
         T maxValue = MathHelper.Max(mmd2, _numOps.Zero);

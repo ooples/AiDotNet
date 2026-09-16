@@ -118,7 +118,6 @@ public class OutOfDistributionSplitter<T> : DataSplitterBase<T>
 
         // OOD samples go to test, others can go to either based on testSize
         int oodCount = (int)((1 - _oodPercentile) * nSamples);
-        var oodIndices = new HashSet<int>(sortedIndices.Take(oodCount));
 
         var testIndices = new List<int>();
         var trainIndices = new List<int>();

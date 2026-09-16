@@ -751,13 +751,11 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     {
         int n = y.Length;
         var smoothedState = new List<Vector<T>>();
-        var smoothedCovariance = new List<Matrix<T>>();
 
         Vector<T> nextSmoothedState = _filteredState[n - 1];
         Matrix<T> nextSmoothedCovariance = _filteredCovariance[n - 1];
 
         smoothedState.Add(nextSmoothedState);
-        smoothedCovariance.Add(nextSmoothedCovariance);
 
         for (int t = n - 2; t >= 0; t--)
         {
@@ -772,7 +770,6 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
             Matrix<T> smoothedCovarianceT = filteredCovariance + smoother * (nextSmoothedCovariance - predictedCovariance) * smoother.Transpose();
 
             smoothedState.Insert(0, smoothedStateT);
-            smoothedCovariance.Insert(0, smoothedCovarianceT);
 
             nextSmoothedState = smoothedStateT;
             nextSmoothedCovariance = smoothedCovarianceT;
