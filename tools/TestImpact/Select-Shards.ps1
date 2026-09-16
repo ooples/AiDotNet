@@ -1048,18 +1048,18 @@ function ConvertTo-CodeOnlyCSharp {
         offsets and line numbers survive), leaving only code. Brace matching and declaration
         matching then cannot be fooled by '{' in a string or 'class X' in a comment.
     #>
-    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [switch] $PreserveStrings)
 
     $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
-    $builder = [System.Text.StringBuilder]::new($Text.Length)
-    $last = 0
-    foreach ($match in [regex]::Matches($Text, $pattern)) {
-        [void] $builder.Append($Text, $last, $match.Index - $last)
-        [void] $builder.Append(($match.Value -replace '[^\r\n]', ' '))
-        $last = $match.Index + $match.Length
-    }
-    [void] $builder.Append($Text, $last, $Text.Length - $last)
-    return $builder.ToString()
+    # A managed replacement avoids repeatedly logging/Stringifying an ever-growing
+    # StringBuilder under PowerShell member-invocation logging (quadratic on generators).
+    return [regex]::Replace($Text, $pattern, [System.Text.RegularExpressions.MatchEvaluator] {
+        param($match)
+        if ($PreserveStrings -and -not ($match.Value.StartsWith('//') -or $match.Value.StartsWith('/*'))) {
+            return $match.Value
+        }
+        return ($match.Value -replace '[^\r\n]', ' ')
+    })
 }
 
 function Get-CSharpTestShape {
@@ -1068,7 +1068,8 @@ function Get-CSharpTestShape {
         name, the Category traits the file can carry, and the top-level types other files could
         reference. Returns ParseError instead of guessing when the braces do not balance.
     #>
-    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text,
+        [bool] $GeneratedDependenciesKnown = $false)
 
     $code = ConvertTo-CodeOnlyCSharp -Text $Text
     $shape = [pscustomobject]@{
@@ -1077,6 +1078,7 @@ function Get-CSharpTestShape {
         Categories     = $null
         Hazard         = $null
         ParseError     = $null
+        Collections    = [System.Collections.Generic.List[string]]::new()
     }
 
     # Brace pairs by position.
@@ -1252,15 +1254,27 @@ function Get-CSharpTestShape {
         'declares global usings'               = '(?m)^\s*global\s+using\b'
         'declares assembly-level attributes'   = '\[\s*assembly\s*:'
         'declares a module initializer'        = '\bModuleInitializer\b'
-        'declares an xUnit collection definition' = '\bCollectionDefinition\b'
     }
     foreach ($hazard in $hazards.Keys) {
         if ($code -match $hazards[$hazard]) { $shape.Hazard = $hazard; break }
     }
+    # Use code-only offsets so examples in comments/string literals are not attributes.
+    $definitions = @([regex]::Matches($code, '\bCollectionDefinition(?:Attribute)?\b'))
+    foreach ($definition in $definitions) {
+        $tail = $Text.Substring($definition.Index)
+        $literal = [regex]::Match($tail, '^CollectionDefinition(?:Attribute)?\s*\(\s*"(?<name>[A-Za-z0-9_. -]+)"\s*(?:,\s*DisableParallelization\s*=\s*(?:true|false)\s*)?\)')
+        $nameof = [regex]::Match($tail, '^CollectionDefinition(?:Attribute)?\s*\(\s*nameof\(\s*(?:[\w.]+\.)?(?<name>[A-Za-z_]\w*)\s*\)\s*(?:,\s*DisableParallelization\s*=\s*(?:true|false)\s*)?\)')
+        if ($literal.Success) { $shape.Collections.Add($literal.Groups['name'].Value) }
+        elseif ($nameof.Success) { $shape.Collections.Add($nameof.Groups['name'].Value) }
+        else { $shape.Hazard = 'declares an unresolved xUnit collection definition' }
+    }
+    if ($shape.Collections.Count -gt 0 -and -not $GeneratedDependenciesKnown) {
+        $shape.Hazard = 'declares an xUnit collection definition without reviewed generated dependencies'
+    }
     # An abstract class is a base by construction, and the scaffold generator derives test classes
     # from bases whose names it can compose at build time. Those derived classes are not in the
     # tree, so reference search cannot find them.
-    if (-not $shape.Hazard -and @($shape.Types | Where-Object { $_.IsAbstract }).Count -gt 0) {
+    if (-not $GeneratedDependenciesKnown -and -not $shape.Hazard -and @($shape.Types | Where-Object { $_.IsAbstract }).Count -gt 0) {
         $shape.Hazard = 'declares an abstract class, which build-time generated test classes may derive from'
     }
     return $shape
@@ -1311,8 +1325,12 @@ function Get-TestFileRoutes {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Manifest,
         [Parameter(Mandatory)] [scriptblock] $ReadFile,
+        [scriptblock] $ReadPriorFile,
         [Parameter(Mandatory)] [scriptblock] $FindReferrers,
         [Parameter(Mandatory)] [scriptblock] $FindBuildTimeReferences,
+        [scriptblock] $FindCollectionReferrers,
+        [bool] $GeneratedDependenciesKnown = $false,
+        [string[]] $GeneratedDependencyProjects = @(),
         [int] $MaximumClosure = 200
     )
 
@@ -1331,6 +1349,7 @@ function Get-TestFileRoutes {
             continue
         }
         $projectShards = @($Manifest | Where-Object { (Get-ShardProjectDirectory -Shard $_) -ieq $projectDirectory })
+        $projectGenerationKnown = $GeneratedDependenciesKnown -and $projectDirectory -cin $GeneratedDependencyProjects
 
         $visited = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $queue = [System.Collections.Generic.Queue[string]]::new()
@@ -1345,9 +1364,20 @@ function Get-TestFileRoutes {
             $file = $queue.Dequeue()
             $text = & $ReadFile $file
             if ($null -eq $text) { $failure = "cannot read test source $file"; break }
-            $shape = Get-CSharpTestShape -Text $text
+            $shape = Get-CSharpTestShape -Text $text -GeneratedDependenciesKnown $projectGenerationKnown
             if ($shape.ParseError) { $failure = "cannot parse test source $file ($($shape.ParseError))"; break }
             if ($shape.Hazard) { $failure = "test source $file $($shape.Hazard), whose consumers cannot be found by name"; break }
+            $priorShape = $null
+            if ($file -ieq $normalized -and $null -ne $ReadPriorFile) {
+                $priorText = & $ReadPriorFile $file
+                if ($null -ne $priorText) {
+                    $priorShape = Get-CSharpTestShape -Text $priorText -GeneratedDependenciesKnown $projectGenerationKnown
+                    if ($priorShape.ParseError -or $priorShape.Hazard) {
+                        $failure = "prior test source $file cannot be routed: $($priorShape.ParseError) $($priorShape.Hazard)"
+                        break
+                    }
+                }
+            }
 
             foreach ($test in $shape.Tests) {
                 [void] $candidates.Add([pscustomobject]@{ Fqn = $test.Fqn; PrefixOnly = $test.PrefixOnly; AnySuffix = $test.AnySuffix; Categories = $shape.Categories })
@@ -1356,13 +1386,24 @@ function Get-TestFileRoutes {
 
             $names = @($shape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } |
                 ForEach-Object { $_.Name } | Sort-Object -Unique)
-            if ($names.Count -eq 0) { continue }
-            $generated = @(& $FindBuildTimeReferences $names)
+            $collectionNames = @($shape.Collections)
+            if ($null -ne $priorShape) {
+                $names = @(@($names) + @($priorShape.Types | Where-Object { $null -eq $_.Parent -and -not $_.FileLocal } | ForEach-Object Name) | Sort-Object -Unique)
+                $collectionNames = @(@($collectionNames) + @($priorShape.Collections) | Sort-Object -Unique)
+            }
+            $dependencyNames = @($names) + @($collectionNames)
+            if ($dependencyNames.Count -eq 0) { continue }
+            $generated = @(& $FindBuildTimeReferences $dependencyNames)
             if ($generated.Count -gt 0) {
                 $failure = "test source $file declares $($generated -join ', '), which a source generator references, so tests generated at build time may depend on it"
                 break
             }
-            foreach ($referrer in @(& $FindReferrers $names $projectDirectory)) {
+            $consumerPaths = @(if ($names.Count -gt 0) { & $FindReferrers $names $projectDirectory })
+            if ($collectionNames.Count -gt 0) {
+                if ($null -eq $FindCollectionReferrers) { $failure = 'collection consumer discovery is unavailable'; break }
+                $consumerPaths += @(& $FindCollectionReferrers $collectionNames $projectDirectory)
+            }
+            foreach ($referrer in $consumerPaths) {
                 $referrerPath = ([string] $referrer).Replace('\', '/')
                 if ($referrerPath -ieq $file) { continue }
                 if ($file -ieq $normalized) { $ownReferrers++ }
@@ -1434,6 +1475,68 @@ function Find-GitReferrers {
     return @($output | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
 }
 
+function Test-ReviewedGeneratedDependencyInputs {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Entries)
+    if ($Entries.Count -eq 0) { return $false }
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($Entries -join "`n"))
+    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    return $digest -ceq '94E8E69A0BEC88675F29D574F3995708276B937D054AB444DFBC5DBF03BEBC37'
+}
+
+function Test-ReviewedGeneratedDependencies {
+    # Reviewed emitter contract, NOT an exemption for a particular base/collection:
+    # TestScaffoldGenerator's GetBaseClassName and algorithm switch return literal
+    # base names; remaining emitters spell their base/collection dependencies directly.
+    # Find-GitBuildTimeReferences therefore detects every generated dependency for
+    # this exact generator/build-input revision. Other generators augment existing
+    # declarations, not independent xUnit descendants. Never assume this stays true
+    # after generator or analyzer/project configuration changes: fail closed then.
+    $generatorTree = & git rev-parse HEAD:src/AiDotNet.Generators 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $entries = @("generator-tree:$generatorTree") + @(& git -c core.quotepath=false ls-tree -r HEAD | Where-Object {
+        $_ -match '\t(src/AiDotNet.Generators/|.*\.(csproj|props|targets)$|global\.json$)'
+    })
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return Test-ReviewedGeneratedDependencyInputs -Entries $entries
+}
+
+function Test-CSharpCollectionConsumer {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text,
+        [Parameter(Mandatory)] [string[]] $Names)
+    $code = ConvertTo-CodeOnlyCSharp $Text
+    $uses = @([regex]::Matches($code, '\bCollection(?:Attribute)?\b'))
+    foreach ($use in $uses) {
+        # A constant, nameof, alias or escaped/computed name may equal any requested
+        # collection. Include its file rather than guessing the expression's value.
+        $literal = [regex]::Match($Text.Substring($use.Index), '^Collection(?:Attribute)?\s*\(\s*"(?<name>[A-Za-z0-9_. -]+)"\s*\)')
+        if (-not $literal.Success -or $literal.Groups['name'].Value -in $Names) { return $true }
+    }
+    return $false
+}
+
+function Find-GitCollectionReferrers {
+    param([Parameter(Mandatory)] [string[]] $Names, [Parameter(Mandatory)] [string] $Directory)
+    # Cache source, not answers: multiple collection definitions can share the index.
+    if (-not (Get-Variable CollectionSourceIndex -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:CollectionSourceIndex = @{}
+    }
+    if (-not $script:CollectionSourceIndex.ContainsKey($Directory)) {
+        $paths = @(& git -c core.quotepath=false grep -l -w -E 'Collection(Attribute)?' HEAD -- ":(glob)$Directory**/*.cs" 2>$null)
+        if ($LASTEXITCODE -gt 1) { throw 'Cannot enumerate collection consumers.' }
+        $index = @{}
+        foreach ($path in $paths) {
+            $file = ([string] $path) -replace '^HEAD:', ''
+            $text = Get-GitFileText -Path $file -Revisions @('HEAD')
+            if ($null -eq $text) { throw "Cannot read collection consumer $file" }
+            $index[$file] = $text
+        }
+        $script:CollectionSourceIndex[$Directory] = $index
+    }
+    foreach ($entry in $script:CollectionSourceIndex[$Directory].GetEnumerator()) {
+        if (Test-CSharpCollectionConsumer -Text $entry.Value -Names $Names) { $entry.Key }
+    }
+}
+
 function Find-GitBuildTimeReferences {
     <#
         Which of Names build-time code mentions. One search per name keeps the answer exact; the
@@ -1445,11 +1548,25 @@ function Find-GitBuildTimeReferences {
     if ($directories.Count -eq 0) { throw 'no build-time directories are configured' }
     $found = [System.Collections.Generic.List[string]]::new()
     foreach ($name in $Names) {
-        $arguments = @('-c', 'core.quotepath=false', 'grep', '-q', '-w', '-F', '-e', $name, 'HEAD', '--')
+        $arguments = @('-c', 'core.quotepath=false', 'grep', '-l', '-i', '-w', '-F', '-e', $name, 'HEAD', '--')
         $arguments += $directories
-        & git @arguments 2>$null
-        if ($LASTEXITCODE -eq 0) { [void] $found.Add($name) }
-        elseif ($LASTEXITCODE -gt 1) { throw "git grep for build-time references failed with exit code $LASTEXITCODE" }
+        $paths = @(& git @arguments 2>$null)
+        if ($LASTEXITCODE -gt 1) { throw "git grep for build-time references failed with exit code $LASTEXITCODE" }
+        if (-not (Get-Variable GeneratorSourceIndex -Scope Script -ErrorAction SilentlyContinue)) { $script:GeneratorSourceIndex = @{} }
+        foreach ($path in $paths) {
+            $file = ([string] $path) -replace '^HEAD:', ''
+            if (-not $script:GeneratorSourceIndex.ContainsKey($file)) {
+                $source = Get-GitFileText -Path $file -Revisions @('HEAD')
+                if ($null -eq $source) { throw "Cannot read generator $file" }
+                # Emitted C# resides in strings, which MUST remain searchable.
+                # Comments mentioning a regression test are not dependencies.
+                $script:GeneratorSourceIndex[$file] = ConvertTo-CodeOnlyCSharp -Text $source -PreserveStrings
+            }
+            if ($script:GeneratorSourceIndex[$file] -match ('(?<!\w)' + [regex]::Escape($name) + '(?!\w)')) {
+                $found.Add($name)
+                break
+            }
+        }
     }
     return @($found)
 }
@@ -1957,6 +2074,59 @@ class Current { }
         -FindReferrers $find -FindBuildTimeReferences $findGenerated -MaximumClosure 1
     Assert-True (-not $wide['tests/P/Shared/Base.cs'].Routable) 'a closure wider than the limit was routed'
 
+    # Reviewed generator inputs bound the name-based graph, without allowing known
+    # generated bases or collections through. Unknown build inputs still fail closed.
+    $files['tests/P/Beta/Inherited.cs'] = 'namespace P.Beta; public class Inherited : ShapeBase { }'
+    $referrers['ShapeBase'] = @('tests/P/Beta/Inherited.cs')
+    $files['tests/P/Shared/Collection.cs'] = 'namespace P.Shared; [Xunit.CollectionDefinition("Shared")] public class Fixture { }'
+    $files['tests/P/Alpha/Consumer.cs'] = 'namespace P.Alpha; [Collection("Shared")] public class Consumer { [Fact] public void Test() { } }'
+    $files['tests/P/Beta/ConstantConsumer.cs'] = 'namespace P.Beta; [Collection(Names.Shared)] public class ConstantConsumer { [Fact] public void Test() { } }'
+    $collections = { param($names, $directory) @($files.Keys | Where-Object {
+        $_.StartsWith($directory) -and (Test-CSharpCollectionConsumer -Text $files[$_] -Names $names)
+    }) }
+    $routingArgs = @{ Manifest = $manifest; ReadFile = $read; FindReferrers = $find;
+        FindBuildTimeReferences = $findGenerated; FindCollectionReferrers = $collections;
+        GeneratedDependenciesKnown = $true; GeneratedDependencyProjects = @('tests/P/') }
+    $bounded = Get-TestFileRoutes -Paths @('tests/P/Shared/Abstract.cs', 'tests/P/Shared/Collection.cs', 'tests/P/Shared/GenBase.cs') @routingArgs
+    Assert-True ($bounded['tests/P/Shared/Abstract.cs'].Routable -and
+        ($bounded['tests/P/Shared/Abstract.cs'].Shards -join ',') -eq 'Beta') 'reviewed source-only abstract descendants were not routed'
+    Assert-True ($bounded['tests/P/Shared/Collection.cs'].Routable -and
+        ($bounded['tests/P/Shared/Collection.cs'].Shards -join ',') -eq 'Alpha,Beta') 'literal or unresolved collection consumer was omitted'
+    Assert-True (-not $bounded['tests/P/Shared/GenBase.cs'].Routable) 'known generated base escaped the fallback'
+    $generatorNames += 'Shared'
+    $generatedCollection = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $generatedCollection['tests/P/Shared/Collection.cs'].Routable) 'generated collection consumers were omitted'
+    $generatorNames = @('LayerHarness')
+    $routingArgs.GeneratedDependenciesKnown = $false
+    $unknown = Get-TestFileRoutes -Paths @('tests/P/Shared/Abstract.cs', 'tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $unknown['tests/P/Shared/Abstract.cs'].Routable -and -not $unknown['tests/P/Shared/Collection.cs'].Routable) 'unknown generator contract escaped the fallback'
+    $routingArgs.GeneratedDependenciesKnown = $true
+    $routingArgs.FindCollectionReferrers = $null
+    $missingDiscovery = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True (-not $missingDiscovery['tests/P/Shared/Collection.cs'].Routable) 'missing collection discovery silently skipped tests'
+    $shape = Get-CSharpTestShape -Text '[CollectionDefinition(Name)] public class Fixture { }' -GeneratedDependenciesKnown $true
+    Assert-True ([bool] $shape.Hazard) 'unresolved collection definition was guessed'
+    $shape = Get-CSharpTestShape -Text '[CollectionDefinition(nameof(N.Fixture), DisableParallelization = true)] public class Fixture { }' -GeneratedDependenciesKnown $true
+    Assert-True (-not $shape.Hazard -and ($shape.Collections -join ',') -eq 'Fixture') 'nameof collection definition was not resolved'
+    Assert-True (-not (Test-CSharpCollectionConsumer -Text '[Collection("Different")] class T { }' -Names @('Shared'))) 'different literal collection was included'
+    Assert-True (Test-CSharpCollectionConsumer -Text '[Collection("shared")] class T { }' -Names @('Shared')) 'case-variant collection was unsafely excluded'
+    Assert-True (Test-CSharpCollectionConsumer -Text '[Collection("Sha" + "red")] class T { }' -Names @('Shared')) 'computed collection name was excluded'
+    Assert-True (Test-CSharpCollectionConsumer -Text 'using Alias = Xunit.CollectionAttribute; [Alias("Shared")] class T { }' -Names @('Shared')) 'aliased collection consumer was excluded'
+    Assert-True (-not (Test-CSharpCollectionConsumer -Text '// [Collection("Shared")]' -Names @('Shared'))) 'comment was treated as a collection consumer'
+    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @())) 'empty generator evidence was accepted'
+    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @('changed generator'))) 'changed generator evidence was accepted'
+    $emitter = ConvertTo-CodeOnlyCSharp -Text '// FakeBase appears only in a comment
+var source = "class Test : RealBase { } // string contents survive"; /* AnotherFakeBase */' -PreserveStrings
+    Assert-True ($emitter -notmatch 'FakeBase' -and $emitter -match 'RealBase' -and $emitter -match 'string contents survive') 'generator comment filtering removed emitted dependencies or retained comments'
+    $files['tests/P/Shared/Collection.cs'] = 'namespace P.Shared; [CollectionDefinition("Renamed")] public class Fixture { }'
+    $files['tests/P/Alpha/Consumer.cs'] = 'namespace P.Alpha; [Collection("Shared")] public class Consumer { [Fact] public void Test() { } }'
+    $files['tests/P/Beta/ConstantConsumer.cs'] = 'namespace P.Beta; [Collection("Renamed")] public class ConstantConsumer { [Fact] public void Test() { } }'
+    $routingArgs.FindCollectionReferrers = $collections
+    $routingArgs.ReadPriorFile = { param($path) if ($path -eq 'tests/P/Shared/Collection.cs') { 'namespace P.Shared; [CollectionDefinition("Shared")] public class Fixture { }' } }
+    $renamed = Get-TestFileRoutes -Paths @('tests/P/Shared/Collection.cs') @routingArgs
+    Assert-True ($renamed['tests/P/Shared/Collection.cs'].Routable -and
+        ($renamed['tests/P/Shared/Collection.cs'].Shards -join ',') -eq 'Alpha,Beta') 'collection rename omitted old or new consumers'
+
     # ---- Carrying a change's ranges back to the map's numbering. -------------------------------
     # Hand-checked cases first. map -> base: line 4 replaced (4 -> 4), 2 lines inserted after 7,
     # line 12 deleted.
@@ -2327,8 +2497,12 @@ try {
         $revisions = @('HEAD', $BaseSha, $mapSha)
         $testRoutes = Get-TestFileRoutes -Paths $testPaths -Manifest $manifest `
             -ReadFile { param($path) Get-GitFileText -Path $path -Revisions $revisions } `
+            -ReadPriorFile { param($path) Get-GitFileText -Path $path -Revisions @($BaseSha, $mapSha) } `
             -FindReferrers { param($names, $directory) Find-GitReferrers -Names $names -Directory $directory } `
-            -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names }
+            -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names } `
+            -FindCollectionReferrers { param($names, $directory) Find-GitCollectionReferrers -Names $names -Directory $directory } `
+            -GeneratedDependenciesKnown (Test-ReviewedGeneratedDependencies) `
+            -GeneratedDependencyProjects @('tests/AiDotNet.Tests/')
     }
 
     $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
