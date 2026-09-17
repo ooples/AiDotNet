@@ -3146,6 +3146,55 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         Assert.True(anyChanged,
             "No parameters changed after training — gradients may all be zero.");
+
+        // ACTUALLY INSPECT THE GRADIENTS. Everything above this point compares PARAMETERS before and
+        // after a step — the identical check Training_ShouldChangeParameters performs — so despite its
+        // name this invariant never looked at a gradient, and the suite carried two movement tests and
+        // no gradient test. Parameter movement cannot distinguish "the gradient was right" from "some
+        // other term moved the weights": SAC's actor keeps moving on its entropy term alone while the
+        // Q term is detached from the tape.
+        //
+        // Deliberately narrow, because the gradient surface is known to manufacture zeros: most of the
+        // ~170 layer overrides of GetParameterGradients predate the autodiff tape and return a freshly
+        // allocated zero vector, so "every gradient is non-zero" would false-fail broadly and honestly
+        // tell us nothing. Asserting finiteness and not-uniformly-zero is what the surface can support.
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> gradientSource) return;
+
+        Vector<T> gradients;
+        try
+        {
+            gradients = gradientSource.GetParameterGradients();
+        }
+        catch (System.NotSupportedException)
+        {
+            // A streaming step that deliberately did not retain its full gradient set. Not a defect.
+            return;
+        }
+
+        if (gradients.Length == 0) return;
+
+        bool anyNonZero = false;
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            double g = ConvertToDouble(gradients[i]);
+            if (double.IsNaN(g) || double.IsInfinity(g))
+            {
+                Assert.False(double.IsNaN(g),
+                    $"Gradient[{i}] is NaN after training — the backward pass is producing garbage, "
+                    + "which the parameter scan above cannot see when the optimizer clips or skips it.");
+                Assert.False(double.IsInfinity(g),
+                    $"Gradient[{i}] is Infinity after training — gradient explosion in the backward pass.");
+            }
+
+            if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
+        }
+
+        Assert.True(anyNonZero,
+            $"Every one of the {gradients.Length} published gradients is exactly zero after training, "
+            + "yet parameters changed — so whatever moved them did not come from this loss. That is the "
+            + "signature of a severed tape: a term read through Predict (which runs inside a "
+            + "NoGradScope) or a tensor rebuilt element by element contributes no gradient, while an "
+            + "optimizer with momentum or weight decay still perturbs the weights.");
     }
 
     // =====================================================

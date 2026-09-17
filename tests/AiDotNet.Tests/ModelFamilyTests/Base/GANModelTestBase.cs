@@ -38,6 +38,79 @@ public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
     }
 
     // =====================================================
+    // GAN INVARIANT: every adversarial component must train
+    // The inherited Training_ShouldChangeParameters asserts only that AT LEAST ONE parameter
+    // somewhere in the model moved. A GAN holds two networks, so a live discriminator satisfies that
+    // on its own while the generator receives no gradient whatsoever — and a dead generator is
+    // precisely the defect that existential form cannot see.
+    //
+    // That is not hypothetical. ConditionalGAN's generator step read the discriminator through
+    // Predict, which runs inside a NoGradScope, so the adversarial term was a detached constant and
+    // the generator trained on nothing. Both Training_ShouldChangeParameters and
+    // GradientFlow_ShouldBeNonZeroAndFinite stayed green throughout, because the discriminator
+    // trains for real. (The same pair DID catch the mirror-image bug when it was the discriminator
+    // that was dead — see the #1224 Cluster F note on TrainDiscriminatorOnBatch — which is exactly
+    // the asymmetry an existential check produces.)
+    //
+    // So assert both halves move, and name the half that did not.
+    // =====================================================
+    [SkippableFact(Timeout = 120000)]
+    public async Task EveryAdversarialComponent_ShouldChangeDuringTraining()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+
+        Skip.If(network is not GenerativeAdversarialNetwork<T>,
+            "This fixture's model is not a GenerativeAdversarialNetwork, so it exposes no separate "
+            + "generator and discriminator to check independently.");
+        if (TrainingInvariantsNotApplicable(network)) return;
+
+        var gan = (GenerativeAdversarialNetwork<T>)network;
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+
+        var generatorBefore = SnapshotComponent(gan.Generator);
+        var discriminatorBefore = SnapshotComponent(gan.Discriminator);
+
+        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
+        for (int i = 0; i < iterations; i++) network.Train(input, target);
+
+        Assert.True(ComponentChanged(generatorBefore, gan.Generator),
+            $"The GENERATOR's parameters did not change after {iterations} training step(s). The "
+            + "model-level invariant can still pass here, because the discriminator trains — which is "
+            + "why this per-component check exists. Look for the generator's loss reading the "
+            + "discriminator through Predict (a NoGradScope detaches it), or for a tensor rebuilt "
+            + "element by element between them, which severs the tape just as effectively.");
+        Assert.True(ComponentChanged(discriminatorBefore, gan.Discriminator),
+            $"The DISCRIMINATOR's parameters did not change after {iterations} training step(s).");
+    }
+
+    /// <summary>Captures one component's parameters as doubles, independently of the whole model.</summary>
+    private static double[] SnapshotComponent(NeuralNetworkBase<T> component)
+    {
+        var parameters = component.GetParameters();
+        var snapshot = new double[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+            snapshot[i] = System.Convert.ToDouble(parameters[i]);
+        return snapshot;
+    }
+
+    /// <summary>
+    /// True when a component's parameters differ from its snapshot. A length change counts: a model
+    /// that materializes lazy parameters during training has changed them.
+    /// </summary>
+    private static bool ComponentChanged(double[] before, NeuralNetworkBase<T> component)
+    {
+        var after = component.GetParameters();
+        if (before.Length != after.Length) return true;
+        for (int i = 0; i < before.Length; i++)
+            if (System.Math.Abs(before[i] - System.Convert.ToDouble(after[i])) > 1e-15) return true;
+        return false;
+    }
+
+    // =====================================================
     // GAN INVARIANT: Mode Diversity
     // Different latent inputs should produce different outputs.
     // A GAN that produces the same output regardless of input has
