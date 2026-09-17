@@ -125,6 +125,36 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
     }
 
+    /// <summary>
+    /// Transitions collected since the last policy update.
+    /// </summary>
+    public int PendingRolloutLength => _policyRuntime.Pending.Count;
+
+    /// <summary>
+    /// Environment steps collected before each update, from
+    /// <see cref="FinancialA2CAgentOptions{T}.NSteps"/> (its own definition: "number of steps between
+    /// updates"). Falls back to the batch size when the options object carries no A2C section.
+    /// </summary>
+    private int StepsPerUpdate => TradingOptions is FinancialA2CAgentOptions<T> a2cOptions
+        ? Math.Max(1, a2cOptions.NSteps)
+        : Math.Max(1, TradingOptions.BatchSize);
+
+    /// <summary>
+    /// Number of interleaved environment streams in the rollout, from
+    /// <see cref="FinancialA2CAgentOptions{T}.NumEnvironments"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With more than one environment the caller stores transitions round-robin, so the rollout holds
+    /// <c>NumEnvironments</c> interleaved streams and transition <c>t</c> belongs to stream
+    /// <c>t % NumEnvironments</c>. The n-step return must chain along a STREAM, not along the interleaved
+    /// list, or each step would bootstrap from an unrelated environment's next state.
+    /// </para>
+    /// </remarks>
+    private int EnvironmentCount => TradingOptions is FinancialA2CAgentOptions<T> a2cOptions
+        ? Math.Max(1, a2cOptions.NumEnvironments)
+        : 1;
+
     #endregion
 
     #region Action Selection
@@ -262,24 +292,36 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override T Train()
     {
+        // A supervised one-shot Train(state, target) call bypasses the on-policy rollout gate and trains on
+        // whatever has been collected so far; autonomous stepping waits for a full rollout.
         SynchronizePolicyStorage();
-        int pendingCount = _policyRuntime.Pending.Count;
-        if (pendingCount == 0 || !SupervisedUpdateRequested && pendingCount < TradingOptions.BatchSize)
-            return NumOps.Zero;
-        if (!_initialWarmupComplete && IsInWarmup(pendingCount)) return NumOps.Zero;
+        int n = _policyRuntime.Pending.Count;
+        if (n == 0) return NumOps.Zero;
 
-        // No random sampling, replacement or old-policy leftovers. Consume before the first
-        // forward/update: a partially failed critic/actor update must never retry this behavior.
+        // TradingAgentOptions.WarmupSteps governs the FIRST update only; batch readiness governs every
+        // update after it.
+        if (!_initialWarmupComplete && IsInWarmup(n)) return NumOps.Zero;
+
+        // On-policy gate: learn from the rollout just collected, once it is a full NSteps long, or the
+        // episode ended and at least a batch has accumulated. A terminal step closes a short rollout
+        // early (it cannot grow further), but does not force an update on a sub-batch rollout.
         var batch = _policyRuntime.Pending.ToArray();
+        bool episodeClosed = batch[n - 1].Done;
+        if (!SupervisedUpdateRequested && n < StepsPerUpdate && !(episodeClosed && n >= TradingOptions.BatchSize))
+        {
+            return NumOps.Zero;
+        }
+
+        // The rollout IS the batch, in collection order — no sampling, so no stale off-policy data.
+        // Consume before the first forward/update: a partially failed critic/actor update must never
+        // retry this behavior.
         _initialWarmupComplete = true;
         InvalidatePolicy();
-        int n = batch.Length;
 
         // Batched advantage-actor-critic update: one batched forward/backward for the critic and
         // the actor instead of one autograd tape per experience (the per-sample loop dominated RL
         // training time — see profiling). Standard mini-batch update.
         int stateDim = batch[0].State.Length;
-        var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
 
         var statesData = new T[n * stateDim];
         var nextStatesData = new T[n * stateDim];
@@ -296,17 +338,35 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
         var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
-        // One-step advantage A(s,a) = r + gamma * V(s') - V(s), evaluated with the critic BEFORE this
-        // step's critic update (the standard A2C ordering) and treated as a constant for the actor.
+        // n-step returns along each environment stream, bootstrapped from the critic at the end of the
+        // rollout:  G_t = r_t + gamma*r_{t+1} + ... + gamma^k * V(s_end),  A_t = G_t - V(s_t).
+        // The critic is evaluated BEFORE this step's update (the standard A2C ordering) and the advantage
+        // is a constant as far as the actor is concerned. With NumEnvironments > 1 the rollout interleaves
+        // that many streams, so the recursion walks each stream separately — chaining along the
+        // interleaved list would bootstrap every step from a DIFFERENT environment's next state.
         var vCurrent = _critic.Predict(states).ToVector();
         var vNext = _critic.Predict(nextStates).ToVector();
+        double gammaValue = Convert.ToDouble(TradingOptions.DiscountFactor);
         var targetData = new T[n];
         var advantageData = new T[n];
-        for (int i = 0; i < n; i++)
+        int streams = EnvironmentCount;
+        for (int stream = 0; stream < streams && stream < n; stream++)
         {
-            var bootstrap = batch[i].Done ? NumOps.Zero : NumOps.Multiply(gamma, vNext[i]);
-            targetData[i] = NumOps.Add(batch[i].Reward, bootstrap);
-            advantageData[i] = NumOps.Subtract(targetData[i], vCurrent[i]);
+            int last = -1;
+            for (int i = stream; i < n; i += streams)
+            {
+                last = i;
+            }
+
+            // Bootstrap the tail of an unfinished stream with V(s'); a terminal step bootstraps nothing.
+            double running = batch[last].Done ? 0.0 : NumOps.ToDouble(vNext[last]);
+            for (int i = last; i >= stream; i -= streams)
+            {
+                double reward = NumOps.ToDouble(batch[i].Reward);
+                running = batch[i].Done ? reward : reward + (gammaValue * running);
+                targetData[i] = NumOps.FromDouble(running);
+                advantageData[i] = NumOps.FromDouble(running - NumOps.ToDouble(vCurrent[i]));
+            }
         }
 
         var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
@@ -342,6 +402,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         T loss = NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
         LossHistory.Add(loss);
+
         return loss;
     }
 

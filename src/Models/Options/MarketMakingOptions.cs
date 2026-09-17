@@ -53,14 +53,33 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     }
 
     /// <summary>
-    /// The maximum inventory size the agent can hold.
+    /// Maximum absolute inventory, as an OVERRIDE of the environment's own limit.
     /// </summary>
-    public int MaxInventory { get; set; } = 100;
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>maxInventory</c> constructor argument binds. When set, it REPLACES that value once the environment
+    /// receives these options through <c>TradingEnvironment.ApplyAgentOverrides</c>. Exactly one limit is
+    /// ever in force.
+    /// </para>
+    /// </remarks>
+    public int? MaxInventory { get; set; }
 
     /// <summary>
-    /// Penalty coefficient for holding inventory (encourages neutral position).
+    /// Penalty coefficient per unit of held inventory, as an OVERRIDE of the environment's own penalty.
     /// </summary>
-    public double InventoryPenalty { get; set; } = 0.01;
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>inventoryPenalty</c> constructor argument binds. When set, it REPLACES that value — it is never
+    /// added on top of it, so the penalty cannot be charged twice.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Holding a big long or short position while making markets is risky, so the
+    /// reward is docked in proportion to inventory. This is how strongly that applies.
+    /// </para>
+    /// </remarks>
+    public double? InventoryPenalty { get; set; }
 
     /// <summary>
     /// The base spread around the mid-price.
@@ -73,10 +92,10 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     public override void Validate()
     {
         base.Validate();
-        if (MaxInventory < 1)
-            throw new ArgumentException("MaxInventory must be at least 1.", nameof(MaxInventory));
-        if (InventoryPenalty < 0)
-            throw new ArgumentException("InventoryPenalty must be non-negative.", nameof(InventoryPenalty));
+        if (MaxInventory is int maxInventory && maxInventory < 1)
+            throw new ArgumentException("MaxInventory must be at least 1 when set.", nameof(MaxInventory));
+        if (InventoryPenalty is double inventoryPenalty && (inventoryPenalty < 0 || double.IsNaN(inventoryPenalty)))
+            throw new ArgumentException("InventoryPenalty must be non-negative when set.", nameof(InventoryPenalty));
         if (BaseSpread < 0)
             throw new ArgumentException("BaseSpread must be non-negative.", nameof(BaseSpread));
     }
