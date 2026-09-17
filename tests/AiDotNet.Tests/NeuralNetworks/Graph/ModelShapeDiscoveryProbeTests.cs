@@ -139,10 +139,15 @@ public class ModelShapeDiscoveryProbeTests
     ];
 
     [Trait("Category", "Sweep")]
-    [Fact(Timeout = 1800000)]
+    [SkippableFact(Timeout = 1800000)]
     public async Task ProbingAModelYieldsAShapeRelationThatReproducesWhatPredictReturned()
     {
         await Task.Yield();
+
+        // Same reason as the shape-law sweep: no worker means every candidate skips and the probed
+        // count reaches the assertion at zero, reporting a broken harness rather than a missing one.
+        Skip.IfNot(ModelShapeConformanceProcess.IsWorkerAvailable(out string? workerReason),
+            $"shape-discovery sweep cannot run: {workerReason}");
 
         var candidates = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && t.IsGenericTypeDefinition

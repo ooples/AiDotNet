@@ -173,6 +173,33 @@ internal static class ModelShapeConformanceProcess
 #endif
     }
 
+    /// <summary>
+    /// True when the isolated sweep can actually run here. When it cannot, <paramref name="reason"/>
+    /// carries the same text <see cref="ObserveAsync"/> would have reported as its status.
+    /// </summary>
+    /// <remarks>
+    /// Both sweeps treat any non-"observed" status as a per-model skip, so an unavailable worker
+    /// would skip every model, leave the probed count at zero and trip the harness assertions with
+    /// "the harness is broken" -- which points at the wrong thing. Callers ask first and skip the
+    /// test instead, keeping those counts meaningful everywhere the worker does exist.
+    /// </remarks>
+    internal static bool IsWorkerAvailable(out string? reason)
+    {
+#if NET10_0_OR_GREATER
+        if (FindWorker() is null)
+        {
+            reason = "worker-missing (AiDotNet.ParameterSweepWorker is not built beside the tests)";
+            return false;
+        }
+
+        reason = null;
+        return true;
+#else
+        reason = "worker-unavailable (the isolated shape sweep is supported on net10.0 and later)";
+        return false;
+#endif
+    }
+
 #if NET10_0_OR_GREATER
     private static string? FindWorker()
     {
