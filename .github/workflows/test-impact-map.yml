@@ -68,10 +68,8 @@ jobs:
           # Treat workflow_dispatch input as data, never shell source.
           INPUT_RUN_ID: ${{ inputs.run_id }}
         run: |
-          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name]')
-          expected_sorted=$(printf '%s' "$expected" | jq -c 'sort')
-          expected_count=$(printf '%s' "$expected" | jq 'length')
-          if [ "$expected_count" -eq 0 ]; then
+          current_names=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name] | sort')
+          if [ "$(printf '%s' "$current_names" | jq 'length')" -eq 0 ]; then
             echo "::error::.github/test-shards.yml yielded no shards"
             exit 1
           fi
@@ -118,9 +116,26 @@ jobs:
               echo "run $candidate has an invalid coverage-everywhere marker"
               return 1
             fi
+            # The run is judged against the manifest committed at ITS commit, not today's. The map is
+            # the truth at that commit; Select-Shards runs every shard added or redefined since and
+            # drops retired ones, so a manifest edit on master no longer discards a whole night.
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "run $candidate tested $sha, which is not in this checkout"
+              return 1
+            fi
+            if ! run_manifest=$(git show "${sha}:.github/test-shards.yml" 2>/dev/null | yq -o=json -I=0 '.shard'); then
+              echo "run $candidate has no readable shard manifest at $sha"
+              return 1
+            fi
+            expected_sorted=$(printf '%s' "$run_manifest" | jq -c '[.[].name] | sort')
+            expected_count=$(printf '%s' "$expected_sorted" | jq 'length')
+            if [ "$expected_count" -eq 0 ]; then
+              echo "run $candidate has an empty shard manifest at $sha"
+              return 1
+            fi
             marker_names=$(jq -c '.shardNames | sort' "$marker")
             if [ "$marker_names" != "$expected_sorted" ]; then
-              echo "run $candidate used a different shard manifest - skipping stale coverage"
+              echo "run $candidate marker does not match the shard manifest at its own commit"
               return 1
             fi
 
@@ -168,7 +183,8 @@ jobs:
             fi
             valid_sha="$sha"
             valid_map_run_id="$map_run_id"
-            echo "run $candidate has the exact $expected_count-shard completed matrix"
+            drift=$(jq -n --argjson run "$expected_sorted" --argjson now "$current_names" '{added: ($now - $run | length), retired: ($run - $now | length)}')
+            echo "run $candidate has the exact $expected_count-shard completed matrix of its commit (manifest drift since: $drift)"
             return 0
           }
 
@@ -280,7 +296,9 @@ jobs:
         if: steps.source.outputs.found == 'true'
         shell: pwsh
         run: |
-          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          # The source commit's manifest: the map's shard universe must equal the audited run's.
+          $all = @(git show '${{ steps.source.outputs.sha }}:.github/test-shards.yml' | yq -o=json -I=0 '.shard' | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $all.Count -eq 0) { throw 'could not read the source commit shard manifest' }
           # Entries that declare mustCover stay always-run unless their digest reached that code (see the
           # MODEL-INVENTORY section of test-shards.yml): their subject runs in a child worker process.
           $requirements = Join-Path $env:RUNNER_TEMP 'shard-coverage-requirements.json'
