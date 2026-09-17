@@ -67,14 +67,8 @@ public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public Mamba2LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int stateDimension = 64,
-        int numHeads = 8,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        Mamba2Options? options = null)
+        Mamba2Options? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Mamba-2's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateMamba2Layers), so the loss must be cross-entropy-with-logits (fused
@@ -86,13 +80,14 @@ public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Mamba2Options();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _numHeads = numHeads;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _numHeads = _options.NumHeads;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

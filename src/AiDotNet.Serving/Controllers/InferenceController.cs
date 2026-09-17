@@ -1,3 +1,4 @@
+using AiDotNet.Serving.Security;
 using System.Diagnostics;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
@@ -72,7 +73,7 @@ public class InferenceController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received prediction request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received prediction request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             if (request.Features == null || request.Features.Length == 0)
@@ -88,7 +89,7 @@ public class InferenceController : ControllerBase
                 if (!string.IsNullOrEmpty(adapterId))
                 {
                     effectiveModelName = $"{modelName}__{adapterId}";
-                    _logger.LogDebug("Routing to model variant '{VariantName}' via adapter header", effectiveModelName);
+                    _logger.LogDebug("Routing to model variant '{VariantName}' via adapter header", LogSanitizer.Sanitize(effectiveModelName));
                 }
             }
 
@@ -96,7 +97,7 @@ public class InferenceController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(effectiveModelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", effectiveModelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(effectiveModelName));
                 return NotFound(new { error = $"Model '{effectiveModelName}' not found" });
             }
 
@@ -105,7 +106,7 @@ public class InferenceController : ControllerBase
             {
                 _logger.LogWarning(
                     "Request batch size {BatchSize} exceeds maximum {MaxSize} for model '{ModelName}' with batching disabled",
-                    request.Features.Length, MaxBatchSizeWhenBatchingDisabled, effectiveModelName);
+                    request.Features.Length, MaxBatchSizeWhenBatchingDisabled, LogSanitizer.Sanitize(effectiveModelName));
                 return StatusCode(StatusCodes.Status413PayloadTooLarge, new
                 {
                     error = $"Request batch size {request.Features.Length} exceeds maximum allowed ({MaxBatchSizeWhenBatchingDisabled}) when batching is disabled. Reduce the batch size or enable batching."
@@ -189,23 +190,23 @@ public class InferenceController : ControllerBase
 
             _logger.LogInformation(
                 "Prediction completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
-                effectiveModelName, sw.ElapsedMilliseconds, batchSize);
+                LogSanitizer.Sanitize(effectiveModelName), sw.ElapsedMilliseconds, batchSize);
 
             return Ok(response);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Invalid operation during prediction for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Invalid operation during prediction for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Model operation error." });
         }
         catch (NotSupportedException ex)
         {
-            _logger.LogError(ex, "Unsupported operation for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unsupported operation for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unsupported operation." });
         }
         catch (ArgumentException ex)
         {
-            _logger.LogError(ex, "Invalid argument during prediction for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Invalid argument during prediction for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             if (ex.Message.Contains("maximum allowed when batching is disabled", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status413PayloadTooLarge, new
@@ -218,7 +219,7 @@ public class InferenceController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during prediction for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during prediction for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An unexpected error occurred during prediction." });
         }
     }
@@ -340,7 +341,7 @@ public class InferenceController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received text generation request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received text generation request for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
 
             // Validate request
             var validationError = request.Validate();
@@ -357,7 +358,7 @@ public class InferenceController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(modelName));
                 return NotFound(new SpeculativeDecodingResponse
                 {
                     Error = $"Model '{modelName}' not found",
@@ -381,19 +382,19 @@ public class InferenceController : ControllerBase
                 // The model loaded successfully but cannot generate text (e.g. it is a
                 // regression/classification model, not a token-to-logits language model).
                 _logger.LogWarning(
-                    "Text generation unavailable for model '{ModelName}': {Error}", modelName, response.Error);
+                    "Text generation unavailable for model '{ModelName}': {Error}", LogSanitizer.Sanitize(modelName), LogSanitizer.Sanitize(response.Error));
                 return BadRequest(response);
             }
 
             _logger.LogInformation(
                 "Text generation completed for model '{ModelName}' in {ElapsedMs}ms ({NumGenerated} tokens generated)",
-                modelName, sw.ElapsedMilliseconds, response.NumGenerated);
+                LogSanitizer.Sanitize(modelName), sw.ElapsedMilliseconds, response.NumGenerated);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during text generation for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during text generation for model '{ModelName}'", LogSanitizer.Sanitize(modelName));
             sw.Stop();
             return StatusCode(500, new SpeculativeDecodingResponse
             {
@@ -436,7 +437,7 @@ public class InferenceController : ControllerBase
 
         try
         {
-            _logger.LogDebug("Received LoRA fine-tuning request for model '{ModelName}'", request.ModelName);
+            _logger.LogDebug("Received LoRA fine-tuning request for model '{ModelName}'", LogSanitizer.Sanitize(request.ModelName));
 
             // Validate request
             var validationError = request.Validate();
@@ -455,7 +456,7 @@ public class InferenceController : ControllerBase
             var modelInfo = _modelRepository.GetModelInfo(request.ModelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", request.ModelName);
+                _logger.LogWarning("Model '{ModelName}' not found", LogSanitizer.Sanitize(request.ModelName));
                 return NotFound(new LoRAFineTuneResponse
                 {
                     Success = false,
@@ -493,7 +494,7 @@ public class InferenceController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during LoRA fine-tuning for model '{ModelName}'", request.ModelName);
+            _logger.LogError(ex, "Unexpected error during LoRA fine-tuning for model '{ModelName}'", LogSanitizer.Sanitize(request.ModelName));
             sw.Stop();
             return StatusCode(500, new LoRAFineTuneResponse
             {

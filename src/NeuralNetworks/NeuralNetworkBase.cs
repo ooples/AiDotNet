@@ -2833,19 +2833,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // model class's forward BEFORE the input hits Layers[0] — e.g. NeRF's positional
         // encoding turns [N, 3] positions into [N, 60] before Layers[0] sees them, and
         // Layers[0] only resolves its DenseLayer input width on that real forward. Drive
-        // one full forward now (SetTrainingMode(false) so batchnorm/dropout stay inference)
-        // to trigger those inside-forward resolutions. The output is discarded; only the
-        // side-effect of materializing lazy layer shapes matters here.
-        bool previousTrainingMode = IsTrainingMode;
-        try
-        {
-            SetTrainingMode(false);
-            _ = ForwardWithMemory(sampleInput);
-        }
-        finally
-        {
-            SetTrainingMode(previousTrainingMode);
-        }
+        // one full forward now to trigger those inside-forward resolutions. The output is
+        // discarded; only the side-effect of materializing lazy layer shapes matters here.
+        //
+        // The forward has to be the model's own inference entry point, not the bare layer loop.
+        // A model may reshape its input before Layers[0] in PredictCore rather than in
+        // ForwardWithMemory: MusicSourceSeparator turns a [B, samples] waveform into the
+        // [B, 1, samples] its first Conv1D needs there, so feeding the caller's sample straight to
+        // the layers threw "Conv1DLayer requires rank-3 input" - from the very method the
+        // SetParameters error tells a user to call. Predict also owns the eval-mode transition
+        // (and restores the prior mode), so batchnorm/dropout stay in inference here.
+        _ = Predict(sampleInput);
     }
 
     /// <summary>
@@ -2907,6 +2905,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Monotonically increasing version counter, incremented when layers are added/removed.
     /// Used by TapeTrainingStep caching to detect structural changes.
     /// </summary>
+    /// <remarks>
+    /// Scratch, not model state: it is a cache key for THIS instance's layer list, meaningless on any
+    /// other. Persisted by default, it made every copy differ from its original, because restoring a
+    /// model rebuilds its layer list and so advances its own counter - a clone's bytes could never
+    /// match the model it was cloned from.
+    /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _layerStructureVersion;
 
     /// <summary>
@@ -5319,11 +5324,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// the very thing in question and assuming it is what went wrong last time. Reporting only; the
     /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
     /// </para>
+    /// <para>
+    /// Scratch, not model state: these are per-instance report counters. Persisted, they made a clone
+    /// serialize differently from its source, because the clone re-walks its shapes and records its
+    /// own tallies.
+    /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedBatched;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedPerSample;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDeclined;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDisagreedBoth;
+    [AiDotNet.Attributes.Scratch]
     private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
@@ -12054,6 +12069,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// follows. Reset at the top of every <see cref="TrainWithTape"/>
     /// call so a prior step's bail-out can't leak into this one.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private string? _pendingFusedMissReason;
 
     /// <summary>
@@ -12072,6 +12088,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// after the first warning. <see cref="Configuration.TrainingDiagnosticsConfig"/>
     /// at PerStep still gives per-step detail for those who want it.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private bool _loggedFusedFallback;
 
     /// <summary>
@@ -15361,6 +15378,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        // A copy is state-identical to its source, INCLUDING its training mode. Every path below
+        // restores through the layer deserializer, which deliberately leaves a restored model in
+        // inference mode (right for a model loaded from bytes, wrong for a clone). Before training
+        // mode became serialized state (#1789) that difference was invisible; after it, a training
+        // network's copy serialized to different bytes than its original, and a clone taken mid-
+        // training silently switched dropout and batch statistics off. Deserialize itself is
+        // unchanged: loading a model still starts it in inference mode.
+        var copy = DeepCopyRestoredInInferenceMode();
+        if (copy is NeuralNetworkBase<T> network && network.IsTrainingMode != IsTrainingMode)
+        {
+            network.SetTrainingMode(IsTrainingMode);
+        }
+
+        return copy;
+    }
+
+    private IFullModel<T, Tensor<T>, Tensor<T>> DeepCopyRestoredInInferenceMode()
     {
 
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.

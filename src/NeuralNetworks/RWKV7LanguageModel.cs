@@ -71,14 +71,8 @@ public partial class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public RWKV7LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 65536,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 4,
-        double ffnMultiplier = 3.5,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        RWKV7Options? options = null)
+        RWKV7Options? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // RWKV-7's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateRWKV7Layers), so the loss must be cross-entropy-with-logits (fused
@@ -93,20 +87,25 @@ public partial class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
             // normally, matching healthy sibling RWKV4.
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
-        if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
-        if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
-        if (numLayers <= 0) throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
-        if (numHeads <= 0) throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
-        if (modelDimension % numHeads != 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by number of heads ({numHeads}).", nameof(modelDimension));
-
         _options = options ?? new RWKV7Options();
+        _options.Validate();
+
+        // Head-splitting requires an exact division, so this is checked after Validate() has
+        // established both values are positive.
+        if (_options.ModelDimension % _options.NumHeads != 0)
+        {
+            throw new ArgumentException(
+                $"Model dimension ({_options.ModelDimension}) must be divisible by number of heads ({_options.NumHeads}).",
+                nameof(options));
+        }
+
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _ffnMultiplier = ffnMultiplier;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _ffnMultiplier = _options.FfnMultiplier;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

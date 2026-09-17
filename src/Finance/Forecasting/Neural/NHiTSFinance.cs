@@ -549,7 +549,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Tape-aware average pooling. Trims the last-axis length to a
     /// multiple of <paramref name="kernelSize"/> via
-    /// <see cref="IEngine.TensorSliceAxis"/>, reshapes to pull out the
+    /// <see cref="IEngine.TensorNarrow"/>, reshapes to pull out the
     /// kernel dimension, and <see cref="IEngine.ReduceMean"/>s along
     /// it. Equivalent math to <see cref="ApplyPooling"/> — which uses
     /// <c>.Data.Span</c> loops and severs the gradient tape.
@@ -562,27 +562,22 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int pooledLen = Math.Max(1, seqLen / kernelSize);
-        int keptLen = pooledLen * kernelSize;
+        // Same windows as ApplyPooling: when the sequence is shorter than the kernel, the single
+        // window averages the whole (shorter) sequence.
+        int windowLen = seqLen < kernelSize ? seqLen : kernelSize;
+        int keptLen = pooledLen * windowLen;
 
         var working = input;
         if (keptLen != seqLen)
         {
-            // Trim the trailing (seqLen % kernelSize) elements so the
-            // reshape splits cleanly. SliceAxis keeps the tape
-            // connected through the trim.
-            var slices = new List<Tensor<T>>();
-            for (int i = 0; i < keptLen; i++)
-                slices.Add(Engine.TensorSliceAxis(working, axis: 1, index: i));
-            // Re-stack into [batchSize, keptLen]. Using Reshape on a
-            // concatenated row would also work; staying with a loop of
-            // slices keeps the tape graph explicit.
-            throw new NotSupportedException(
-                $"N-HiTS tape pooling: seqLen ({seqLen}) must be a multiple of kernelSize ({kernelSize}). " +
-                "Pad the input upstream or configure _poolingKernelSizes so pooledLen*kernelSize covers the full window.");
+            // Trim the trailing (seqLen % kernelSize) elements so the reshape splits cleanly,
+            // exactly as ApplyPooling ignores the incomplete trailing window. TensorNarrow is
+            // tape-recorded, so the gradient scatters back to the kept positions.
+            working = Engine.TensorNarrow(working, 1, 0, keptLen);
         }
 
-        // Reshape [batch, seqLen] → [batch, pooledLen, kernelSize], mean over axis 2.
-        var reshaped = Engine.Reshape(working, new[] { batchSize, pooledLen, kernelSize });
+        // Reshape [batch, keptLen] → [batch, pooledLen, windowLen], mean over axis 2.
+        var reshaped = Engine.Reshape(working, new[] { batchSize, pooledLen, windowLen });
         var pooled = Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
         return pooled;
     }
