@@ -73,10 +73,16 @@ public class ModelFamilyLawTests
     ];
 
     [Trait("Category", "Sweep")]
-    [Fact(Timeout = 1800000)]
+    [SkippableFact(Timeout = 1800000)]
     public async Task DoTheMembersOfAFamilyShareOneShapeLaw()
     {
         await Task.Yield();
+
+        // Every model is observed in the worker child process, so without it each one skips, the
+        // family count stays zero and the assertion below blames the harness. Say what is actually
+        // missing instead.
+        Skip.IfNot(ModelShapeConformanceProcess.IsWorkerAvailable(out string? workerReason),
+            $"shape-law sweep cannot run: {workerReason}");
 
         var asm = typeof(NeuralNetworkBase<>).Assembly;
 
