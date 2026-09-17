@@ -2279,33 +2279,43 @@ jobs:
       - select-shards
     env:
       EFFECTIVE_REQUIRES_VALIDATION: ${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}
+      # The instrumented analysis runs only on the scheduled and dispatched full runs. On pull
+      # requests, merge groups and pushes it never finished (timeouts and lost runners, 2026-09)
+      # while blocking every merge, so those events report success without analysing, and CI Gate
+      # treats this job as advisory. Default-branch quality comes from the nightly run.
+      SONAR_ANALYZE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && ((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || 'false' }}
 
     steps:
-      - name: Report non-runtime validation
-        if: ${{ !fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
-        run: echo 'Non-runtime-only change; the required SonarCloud check succeeds without analysis.'
+      - name: Report skipped analysis
+        if: ${{ !fromJSON(env.SONAR_ANALYZE) }}
+        run: |
+          if [ "$EFFECTIVE_REQUIRES_VALIDATION" = 'true' ]; then
+            echo "SonarCloud analysis runs on the nightly full run, not on '${{ github.event_name }}' events."
+          else
+            echo 'Non-runtime-only change; the SonarCloud check succeeds without analysis.'
+          fi
 
       - name: Set up JDK 17
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
         with:
           java-version: 17
           distribution: 'zulu'
 
       - name: Checkout code
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           fetch-depth: 0
 
       - name: Setup .NET 10.0
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -2314,7 +2324,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Cache SonarCloud packages
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.sonar/cache
@@ -2322,7 +2332,7 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache SonarCloud scanner
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         id: cache-sonar-scanner
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
@@ -2331,14 +2341,14 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
         shell: pwsh
         run: |
           New-Item -Path ${{ runner.temp }}/scanner -ItemType Directory -Force
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
       - name: Download current-run coverage artifacts
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.reuse != 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse != 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ github.sha }}-*
@@ -2346,7 +2356,7 @@ jobs:
           merge-multiple: true
 
       - name: Download certified coverage artifacts
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.reuse == 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse == 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           github-token: ${{ github.token }}
@@ -2357,7 +2367,7 @@ jobs:
           merge-multiple: true
 
       - name: Download pull-request coverage for delta import
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           github-token: ${{ github.token }}
@@ -2368,7 +2378,7 @@ jobs:
           merge-multiple: false
 
       - name: Import pull-request coverage
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         shell: pwsh
         env:
           IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
@@ -2379,14 +2389,14 @@ jobs:
             -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
 
       - name: Restore dependencies
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: dotnet restore
 
       - name: Begin SonarCloud analysis
         # For very large PRs (e.g., repo-wide formatting), Sonar's "new code" metrics are
         # dominated by line churn and can fail the quality gate (e.g., new coverage) despite
         # no semantic changes. Skip PR-mode analysis in that case.
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2422,7 +2432,7 @@ jobs:
           & "${{ runner.temp }}/scanner/dotnet-sonarscanner" begin @params
 
       - name: Build source generator first
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
       - name: Build (Release)
@@ -2443,7 +2453,7 @@ jobs:
         # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
         # instrumentation only increases the need to avoid large csc processes competing inside
         # the 16-GB runner.
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         shell: pwsh
         run: |
           $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
@@ -2472,7 +2482,7 @@ jobs:
           }
 
       - name: End SonarCloud analysis
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         shell: pwsh
