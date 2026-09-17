@@ -44,13 +44,22 @@ public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
     // on its own while the generator receives no gradient whatsoever — and a dead generator is
     // precisely the defect that existential form cannot see.
     //
-    // That is not hypothetical. ConditionalGAN's generator step read the discriminator through
-    // Predict, which runs inside a NoGradScope, so the adversarial term was a detached constant and
-    // the generator trained on nothing. Both Training_ShouldChangeParameters and
-    // GradientFlow_ShouldBeNonZeroAndFinite stayed green throughout, because the discriminator
-    // trains for real. (The same pair DID catch the mirror-image bug when it was the discriminator
-    // that was dead — see the #1224 Cluster F note on TrainDiscriminatorOnBatch — which is exactly
-    // the asymmetry an existential check produces.)
+    // LIMIT OF THIS CHECK, measured rather than argued: it does NOT catch a generator whose
+    // objective is off the tape. Run against ConditionalGAN's unfixed generator step -- which read
+    // the discriminator through Predict (a NoGradScope) AND rebuilt the image/condition tensor
+    // element by element -- this test PASSES, in 65 ms. The generator's weights receive no gradient
+    // whatsoever there, yet registered non-gradient state (running statistics, target copies) still
+    // moves the parameter vector, so "did this component change" is satisfied with no learning at all.
+    //
+    // For that defect class the real question is reachability: did the objective actually REACH the
+    // parameters. See ConditionalGanGeneratorGradientPathTests, which reports 0 of 6 generator
+    // tensors on the unfixed code and 6 of 6 once the chain is intact.
+    //
+    // What this test does still buy is a component that never moves at all -- never registered,
+    // never stepped, optimizer never applied -- which the existential form hides behind its sibling.
+    // (That existential pair DID catch the mirror-image bug when it was the DISCRIMINATOR that was
+    // dead — see the #1224 Cluster F note on TrainDiscriminatorOnBatch — which is exactly the
+    // asymmetry an existential check produces.)
     //
     // So assert both halves move, and name the half that did not.
     // =====================================================

@@ -610,6 +610,16 @@ public abstract class ReinforcementLearningTestBase<T>
         //
         // This drives the real loop instead: store experiences, then Train() until the agent's own
         // warmup/batch gate opens, and compare each registered component against itself.
+        //
+        // LIMIT, measured rather than argued: this does NOT catch a detached critic read. It passes
+        // identically on the defective and on the repaired SAC actor update -- 3 s either way --
+        // because the actor's entropy term carries real gradient and moves its weights every step
+        // while the Q term contributes none. For that defect the question is reachability: did the
+        // objective actually REACH the parameters. See SacActorCriticReachabilityTests, which
+        // reports 0 of 12 critic tensors before the fix and passes after.
+        //
+        // What this test does buy is a component that never moves at all, which the existential
+        // "did anything change" form hides behind whichever sibling network does train.
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
