@@ -121,7 +121,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
                     hsic += HKxH[i, j] * HKyH[j, i];
-            hsic /= ((n - 1) * (n - 1));
+            hsic /= ((double)(n - 1) * (n - 1));
 
             _hsicScores[feat] = Math.Max(0, hsic);
         }

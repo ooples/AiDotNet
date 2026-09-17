@@ -71,6 +71,13 @@ public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput,
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
+    /// <inheritdoc/>
+    protected override void InvalidateLayoutState()
+    {
+        base.InvalidateLayoutState();
+        _computedGradients = null;
+    }
+
     /// <summary>
     /// Creates a new FSDP model wrapping an existing model.
     /// </summary>
@@ -116,7 +123,7 @@ public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput,
 
         // Compute TRUE gradients using the model's gradient computation
         // This calls the model's backpropagation without updating parameters
-        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        _computedGradients = ComputeGradientsForCurrentLayout(input, expectedOutput);
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
@@ -186,6 +193,7 @@ public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput,
     /// </remarks>
     public override void SynchronizeGradients()
     {
+        EnsureShardingInitialized();
         if (_computedGradients == null)
         {
             throw new InvalidOperationException(

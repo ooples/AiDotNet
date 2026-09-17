@@ -8,12 +8,11 @@ param(
     [Parameter(Mandatory)] [ValidateSet('None', 'Validation', 'Complete')] [string] $ReuseScope,
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
+    [string] $RequiresTests = 'true',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
     [string] $TestsResult = 'skipped',
-    [string] $ParameterSweepResult = 'skipped',
-    [string] $ModelShapeResult = 'skipped',
     [string] $RegressionAnalysisResult = 'skipped',
     [string] $VerdictEnforced = 'false',
     [string] $AggregateAnalysisResult = 'skipped',
@@ -88,6 +87,7 @@ function Add-RequiredSuccess {
 $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
+$requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 
 $source = ConvertTo-CiJobConclusion $SourceResult 'SourceResult'
@@ -95,8 +95,6 @@ $select = ConvertTo-CiJobConclusion $SelectResult 'SelectResult'
 $build = ConvertTo-CiJobConclusion $BuildResult 'BuildResult'
 $buildCompat = ConvertTo-CiJobConclusion $BuildCompatResult 'BuildCompatResult'
 $tests = ConvertTo-CiJobConclusion $TestsResult 'TestsResult'
-$parameterSweep = ConvertTo-CiJobConclusion $ParameterSweepResult 'ParameterSweepResult'
-$modelShape = ConvertTo-CiJobConclusion $ModelShapeResult 'ModelShapeResult'
 $regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'RegressionAnalysisResult'
 $aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'AggregateAnalysisResult'
 $sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'SizeCheckResult'
@@ -116,12 +114,10 @@ if ($gateStage -eq [CiGateStage]::Validation) {
     if ($requiresRuntimeValidation) {
         Add-RequiredSuccess $requirements 'build' $build
         Add-RequiredSuccess $requirements 'build-compat' $buildCompat
-        Add-RequiredSuccess $requirements 'parameter-enumeration-sweep' $parameterSweep
-        Add-RequiredSuccess $requirements 'model-shape-conformance-windows' $modelShape
         Add-RequiredSuccess $requirements 'test-regression-analysis' $regression
         Add-RequiredSuccess $requirements 'ci-test-analysis' $aggregate
         Add-RequiredSuccess $requirements 'size-check' $sizeCheck
-        if (-not $verdictIsEnforced) {
+        if (-not $verdictIsEnforced -and ($requiresTestsNow -or $tests -ne [CiJobConclusion]::Skipped)) {
             Add-RequiredSuccess $requirements 'test-net10-sharded' $tests
         }
     }

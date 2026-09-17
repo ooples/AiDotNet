@@ -96,7 +96,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             rowMeans[i] /= n;
         }
         for (int j = 0; j < n; j++) colMeans[j] /= n;
-        totalMean /= (n * n);
+        totalMean /= ((double)n * n);
 
         var Kc = new double[n, n];
         for (int i = 0; i < n; i++)
@@ -123,7 +123,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         sensitivity += Math.Abs(eigenvectors[i, k] * eigenvectors[i2, k] * diff * diff);
                     }
                 }
-                _featureImportances[j] += sensitivity / (n * n);
+                _featureImportances[j] += sensitivity / ((double)n * n);
             }
         }
 

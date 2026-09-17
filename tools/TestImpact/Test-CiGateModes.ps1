@@ -16,13 +16,12 @@ function Invoke-GateCase {
         [string] $Stage = 'Complete',
         [string] $ReuseScope = 'None',
         [string] $RequiresValidation = 'true',
+        [string] $RequiresTests = 'true',
         [string] $Source = 'success',
         [string] $Select = 'success',
         [string] $Build = 'success',
         [string] $BuildCompat = 'success',
         [string] $Tests = 'success',
-        [string] $ParameterSweep = 'success',
-        [string] $ModelShape = 'success',
         [string] $Regression = 'success',
         [string] $Verdict = 'true',
         [string] $Aggregate = 'success',
@@ -36,8 +35,8 @@ function Invoke-GateCase {
 
     & $Gate -Stage $Stage -ReuseScope $ReuseScope -SourceResult $Source `
         -RequiresValidation $RequiresValidation -SelectResult $Select `
+        -RequiresTests $RequiresTests `
         -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
-        -ParameterSweepResult $ParameterSweep -ModelShapeResult $ModelShape `
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
         -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
         -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
@@ -49,6 +48,16 @@ function Invoke-GateCase {
 
 # Validation evidence is independent of quality jobs.
 Invoke-GateCase -Name validation_runtime_success -Stage Validation -ExpectedExit 0
+Invoke-GateCase -Name validation_selective_auxiliary_skip -Stage Validation -ExpectedExit 0
+# The parameter-enumeration sweep and the model-shape conformance windows used to be bespoke jobs
+# the gate required by name. They are shards now, so a missing or failed one is caught where every
+# other shard is: Import-PullRequestShardArtifacts reports a listed shard with no artifact, and
+# New-ShardMapCertificate refuses outcomes that do not cover the map's shard universe. Both land on
+# test-regression-analysis, which this gate still requires to succeed.
+Invoke-GateCase -Name validation_auxiliary_only -Stage Validation `
+    -RequiresTests false -Tests skipped -Verdict false -ExpectedExit 0
+Invoke-GateCase -Name validation_required_tests_missing -Stage Validation `
+    -Tests skipped -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_ignores_quality_failure -Stage Validation `
     -CodeQL failure -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name validation_known_test_failure -Stage Validation `
@@ -57,7 +66,7 @@ Invoke-GateCase -Name validation_unenforced_test_failure -Stage Validation `
     -Tests failure -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_build_failure -Stage Validation -Build failure -ExpectedExit 1
 Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidation false `
-    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
 
 # No reuse requires both current validation and current quality.
@@ -85,6 +94,11 @@ Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresV
     -Promotion skipped -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
     -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
+
+Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped `
+    -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
+    -ValidationGate skipped -ExpectedExit 1
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI Gate mode proof FAILED:'

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Changes
 
+* Sequence language-model dimensions now belong on their model-specific options objects. In particular, `FalconMambaLanguageModel<T>` takes `FalconMambaOptions` as its second constructor argument, before `ILossFunction<T>`. Replace positional calls such as `new FalconMambaLanguageModel<float>(architecture, loss)` with `new FalconMambaLanguageModel<float>(architecture, lossFunction: loss)`, and move scalar dimensions into `options: new FalconMambaOptions { ... }`.
 * `TOTEMOptions<T>.CommitmentWeight` was removed from the forecasting configuration. TOTEM forecasting now consumes a separately trained, frozen tokenizer/codebook; configure commitment loss in that tokenizer-pretraining workflow rather than on the forecasting model.
 * `QuantileRegressionOptions<T>.LearningRate` was removed because quantile regression now uses an exact linear-program solver rather than gradient descent; there is no learning-rate replacement. `QuantileRegressionOptions<T>.MaxIterations` moved to `SolverOptions.MaxIterations`, alongside the other simplex controls.
 * `NeuralNetworkRegressionOptions<T, TInput, TOutput>.Optimizer` was replaced by `OptimizerFactory`. The factory receives the model it will optimize and creates one optimizer per model, preventing clones from sharing mutable optimizer state.
