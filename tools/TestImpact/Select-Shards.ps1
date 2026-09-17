@@ -2471,14 +2471,14 @@ try {
     if ($ShardManifestFile) {
         $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
         if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
-            # Keep certified ordinary routing usable during the 116 -> 161 workload rollout.
-            # New auxiliary jobs may only be ADDED as mandatory; no indexed coverage is invented.
+            # Keep certified routing usable while the manifest grows. Workloads the map has not
+            # measured are ADDED as mandatory; no indexed coverage is invented for them.
             Assert-ShardMap -Map $map -Expected @(@($map.knownShards) + @($map.alwaysRun))
             . "$PSScriptRoot/CiWorkloadKinds.ps1"
             $extension = Complete-CiMapWorkloads -Map $map -Manifest $manifest
             $map = $extension.Map
             if ($extension.Added.Count -gt 0) {
-                Write-Host "Retaining $($extension.Added.Count) unmapped auxiliary workloads; ordinary shard routing remains selective."
+                Write-Host "$($extension.Added.Count) workload(s) are not in the coverage map yet and will run until a map includes them: $($extension.Added -join ', ')"
             }
         }
     }

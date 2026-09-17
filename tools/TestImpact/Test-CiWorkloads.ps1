@@ -39,10 +39,20 @@ Assert-True ($legacyMap.alwaysRun.Count -eq 0 -and $extension.Map.knownShards[0]
     'Legacy extension mutated its source or invented indexed coverage.'
 $complete = Complete-CiMapWorkloads -Map $extension.Map -Manifest $all
 Assert-True ($complete.Added.Count -eq 0) 'A complete map was extended twice.'
+$newOrdinary = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($all + [pscustomobject]@{ name = 'New ordinary' })
+Assert-True (($newOrdinary.Added -join ',') -ceq 'Count,Shape,New ordinary' -and
+    ($newOrdinary.Map.alwaysRun -join ',') -ceq 'Count,Shape,New ordinary') `
+    'A new ordinary shard the map has not measured was not made mandatory.'
+Assert-True (($newOrdinary.Map.knownShards -join ',') -ceq 'Ordinary') `
+    'A new ordinary shard was given indexed coverage it never measured.'
 $rejected = $false
-try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($all + [pscustomobject]@{ name = 'New ordinary' }) }
+try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($normal, [pscustomobject]@{ name = 'Bad'; workload = 'tests' }) }
 catch { $rejected = $true }
-Assert-True $rejected 'Legacy compatibility concealed a missing ordinary shard.'
+Assert-True $rejected 'A new workload with a malformed kind was accepted.'
+$rejected = $false
+try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($sweep) }
+catch { $rejected = $true }
+Assert-True $rejected 'A map shard the manifest no longer has was accepted.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($normal, $sweep) -RequiresValidation $true -Escalated $false
 Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 2) 'A valid mixed selection widened.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -RequiresValidation $true -Escalated $false

@@ -75,11 +75,14 @@ function Complete-CiMapWorkloads {
     $added = [Collections.Generic.List[string]]::new()
     foreach ($workload in $Manifest) {
         if (-not $current.Add([string] $workload.name)) { throw 'Duplicate workload in the manifest.' }
-        $kind = Get-CiWorkloadKind $workload
+        # Validates the kind even for mapped workloads, so a misspelling cannot slip through.
+        $null = Get-CiWorkloadKind $workload
         if ($existing.Contains([string] $workload.name)) { continue }
-        if ($kind -eq [CiWorkloadKind]::Tests) {
-            throw "The map is missing ordinary workload '$($workload.name)'; auxiliary rollout cannot repair that."
-        }
+        # A workload the map has never measured runs on every selection until a map includes it.
+        # Throwing here instead sent EVERY pull request to the full matrix from the moment any
+        # ordinary shard was added until a new map was certified - and certification replays
+        # through this same function, so the map could not catch up either (116 -> 209 shards,
+        # 2026-09-15..17, zero reduced PRs).
         $added.Add([string] $workload.name)
     }
     foreach ($name in $existing) {
