@@ -239,8 +239,10 @@ public abstract partial class AlignedTextToMelModelBase<T> : AudioNeuralNetworkB
             if (includeOutput) outputs.Add(new OutputBucket(group.Value.ToArray(), predictedMel, predictedLogs));
         }
 
-        melLoss = Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(1.0 / (totalFrames * _melChannels)));
-        priorLoss = Engine.TensorMultiplyScalar(priorLoss, NumOps.FromDouble(0.5 / (totalFrames * _melChannels)));
+        // Widen before multiplying: the product is formed in the integer domain otherwise, and only the
+        // result is cast, so the division would inherit whatever that product truncated to.
+        melLoss = Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(1.0 / ((double)totalFrames * _melChannels)));
+        priorLoss = Engine.TensorMultiplyScalar(priorLoss, NumOps.FromDouble(0.5 / ((double)totalFrames * _melChannels)));
         durationLoss = Engine.TensorMultiplyScalar(durationLoss, NumOps.FromDouble(1.0 / totalTokens));
         var total = Engine.TensorAdd(Engine.TensorAdd(melLoss, priorLoss), durationLoss);
         var output = includeOutput ? AssembleOutput(outputs, durations, batch.MelLengths.ToArray(), tokens.Shape[1]) : null;
