@@ -85,15 +85,22 @@ function Complete-CiMapWorkloads {
         # 2026-09-15..17, zero reduced PRs).
         $added.Add([string] $workload.name)
     }
-    foreach ($name in $existing) {
-        if (-not $current.Contains($name)) { throw "The source map contains an obsolete workload '$name'." }
-    }
+    # A workload the manifest no longer has is retired. An always-run entry carries no coverage and
+    # is simply dropped. An indexed one keeps its place, because the file index addresses shards by
+    # position; Select-Shards escalates any change that reaches it, since nothing records where its
+    # tests went.
+    $retired = @($existing | Where-Object { -not $current.Contains($_) } | Sort-Object)
     $completed = $Map.PSObject.Copy()
-    $completed.alwaysRun = @($Map.alwaysRun) + $added.ToArray()
+    $completed.alwaysRun = @(@($Map.alwaysRun) | Where-Object { $current.Contains([string] $_) }) + $added.ToArray()
     # This is a conservative in-memory extension, not newly measured coverage and not
     # a certificate for a larger historical run. The original artifact is untouched.
     if ($added.Count -gt 0) {
         $completed | Add-Member -NotePropertyName requiredWorkloadExtension -NotePropertyValue $added.ToArray() -Force
     }
-    return [pscustomobject]@{ Map = $completed; Added = $added.ToArray() }
+    return [pscustomobject]@{
+        Map = $completed
+        Added = $added.ToArray()
+        Retired = $retired
+        RetiredIndexed = @($retired | Where-Object { $_ -cin @($Map.knownShards) })
+    }
 }

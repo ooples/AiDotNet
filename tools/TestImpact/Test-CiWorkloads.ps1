@@ -49,10 +49,14 @@ $rejected = $false
 try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($normal, [pscustomobject]@{ name = 'Bad'; workload = 'tests' }) }
 catch { $rejected = $true }
 Assert-True $rejected 'A new workload with a malformed kind was accepted.'
-$rejected = $false
-try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($sweep) }
-catch { $rejected = $true }
-Assert-True $rejected 'A map shard the manifest no longer has was accepted.'
+$retiring = [pscustomobject]@{ knownShards = @('Ordinary', 'Gone'); alwaysRun = @('Count', 'Dropped'); files = [pscustomobject]@{} }
+$retired = Complete-CiMapWorkloads -Map $retiring -Manifest $all
+Assert-True (($retired.Retired -join ',') -ceq 'Dropped,Gone' -and ($retired.RetiredIndexed -join ',') -ceq 'Gone') `
+    'Retired workloads were not reported, or an always-run one was reported as indexed.'
+Assert-True (($retired.Map.alwaysRun -join ',') -ceq 'Count,Shape') `
+    'A retired always-run workload was kept, or a new one was not made mandatory.'
+Assert-True (($retired.Map.knownShards -join ',') -ceq 'Ordinary,Gone') `
+    'A retired indexed workload lost its position, which would misattribute every later file index entry.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($normal, $sweep) -RequiresValidation $true -Escalated $false
 Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 2) 'A valid mixed selection widened.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -RequiresValidation $true -Escalated $false
