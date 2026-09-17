@@ -13,14 +13,18 @@ public enum RuntimeCpuLogging { MayInvokeCallbacks, Suppressed }
 public enum RuntimeGpuStartupPolicy { Unknown, AutoDetectionPermitted, Disabled }
 public enum RuntimeGpuDiagnosticsPolicy { Unknown, NoDumpRequested, DumpRequested }
 public enum RuntimeLicenseStartupPolicy { Unknown, DefaultTestLicense, ExistingLicenseKey }
+public enum RuntimeCpuParallelismPolicy { Unknown, DefaultSingleThread, OverridePresent }
+public enum RuntimeCpuResetOutcome { Unknown, Completed }
 public sealed record RuntimeCpuResetInput(RuntimeCpuEntryMode Mode, RuntimeCpuLogging Logging);
 public sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals,
     RuntimeGpuStartupPolicy GpuStartup = RuntimeGpuStartupPolicy.Unknown,
     RuntimeGpuDiagnosticsPolicy GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.Unknown,
-    RuntimeLicenseStartupPolicy LicenseStartup = RuntimeLicenseStartupPolicy.Unknown);
+    RuntimeLicenseStartupPolicy LicenseStartup = RuntimeLicenseStartupPolicy.Unknown,
+    RuntimeCpuParallelismPolicy CpuParallelism = RuntimeCpuParallelismPolicy.Unknown);
 public sealed record RuntimeCpuCompletion(RuntimeCpuMode Mode, int MaxDegreeOfParallelism);
 public sealed record RuntimeInitializationBinding(RuntimeInitializationStatus Status, RuntimeEnvironmentBinding? Inputs,
-    RuntimeCpuCompletion? Completion = null, RuntimeCpuResetInput? ResetInput = null);
+    RuntimeCpuCompletion? Completion = null, RuntimeCpuResetInput? ResetInput = null,
+    RuntimeCpuResetOutcome ResetOutcome = RuntimeCpuResetOutcome.Unknown);
 public sealed record RuntimeContractProfile(RuntimeEnvironmentBinding Effective, RuntimeInitializationBinding Initialization);
 
 public static class RuntimeProfileEvidence
@@ -45,10 +49,12 @@ public static class RuntimeProfileEvidence
                 throw new JsonException("Missing runtime contract profile.");
             RuntimeContractProfile result = contracts.Deserialize<RuntimeContractProfile>(options)
                 ?? throw new JsonException("Null runtime contract profile.");
-            if (result.Initialization is null || !Enum.IsDefined(result.Initialization.Status) || !Valid(result.Effective) ||
+            if (result.Initialization is null || !Enum.IsDefined(result.Initialization.Status) || !Enum.IsDefined(result.Initialization.ResetOutcome) || !Valid(result.Effective) ||
                 (result.Initialization.Status == RuntimeInitializationStatus.Recorded && result.Initialization.Inputs is null) ||
                 (result.Initialization.Status == RuntimeInitializationStatus.Missing &&
-                    (result.Initialization.Inputs is not null || result.Initialization.Completion is not null || result.Initialization.ResetInput is not null)) ||
+                    (result.Initialization.Inputs is not null || result.Initialization.Completion is not null || result.Initialization.ResetInput is not null ||
+                     result.Initialization.ResetOutcome != RuntimeCpuResetOutcome.Unknown)) ||
+                (result.Initialization.ResetOutcome == RuntimeCpuResetOutcome.Completed && result.Initialization.ResetInput is null) ||
                 (result.Initialization.Inputs is not null && !Valid(result.Initialization.Inputs)) ||
                 (result.Initialization.Completion is RuntimeCpuCompletion completion && !Enum.IsDefined(completion.Mode)) ||
                 (result.Initialization.ResetInput is RuntimeCpuResetInput reset && (!Enum.IsDefined(reset.Mode) || !Enum.IsDefined(reset.Logging))))
@@ -76,8 +82,11 @@ public static class RuntimeProfileEvidence
             ResetInput: { Mode: RuntimeCpuEntryMode.PlainCpu, Logging: RuntimeCpuLogging.Suppressed }
         };
 
+    public static bool HasObservedSuccessfulCpuReset(RuntimeContractProfile? profile) => HasObservedCpuResetPreconditions(profile) &&
+        profile?.Initialization.ResetOutcome == RuntimeCpuResetOutcome.Completed;
+
     private static bool Valid(RuntimeEnvironmentBinding? value) => value is not null && value.Schema == 1 &&
         Enum.IsDefined(value.ObserverSignals) && Enum.IsDefined(value.GpuStartup) && Enum.IsDefined(value.GpuDiagnostics) &&
-        Enum.IsDefined(value.LicenseStartup) && value.Fingerprint is { Length: 64 } &&
+        Enum.IsDefined(value.LicenseStartup) && Enum.IsDefined(value.CpuParallelism) && value.Fingerprint is { Length: 64 } &&
         value.Fingerprint.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }

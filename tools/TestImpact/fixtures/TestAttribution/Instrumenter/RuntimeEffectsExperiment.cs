@@ -167,6 +167,12 @@ internal static class RuntimeEffectsExperiment
         var cryptoInitializers = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id].DeclaringType).Distinct()
             .Select(type => new { Type = type.FullName, Assessment = LicenseSupportInitializerReader.Read(type) })
             .Where(item => item.Assessment.Contract != LicenseSupportInitializerContract.Unresolved).ToArray();
+        var signers = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id])
+            .Select(method => new { Method = DependencyGraph.Stable(method), Assessment = SignedLicenseReader.Read(method) })
+            .Where(item => item.Assessment.Contract != SignedLicenseContract.Unresolved).ToArray();
+        var keyOverrides = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id])
+            .Select(method => new { Method = DependencyGraph.Stable(method), Shape = BuildKeyOverrideReader.ReadShape(method) })
+            .Where(item => item.Shape is not null).ToArray();
         // Recheck after ALL readers, including constructor and async-body
         // contracts. No lazily evaluated reader may run after this boundary.
         // This still is not a provenance or reuse certificate.
@@ -179,6 +185,7 @@ internal static class RuntimeEffectsExperiment
             AsyncBodies = asyncBodies,
             OwnedBodies = ownedBodies, PrivateInitializers = privateInitializers, WorkloadBodies = workloadBodies,
             CryptoInitializers = cryptoInitializers,
+            SignedLicenses = signers, BuildKeyOverrides = keyOverrides,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

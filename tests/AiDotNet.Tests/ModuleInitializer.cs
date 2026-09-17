@@ -115,6 +115,9 @@ internal static class TestModuleInitializer
                     ? AiDotNet.TestImpact.RuntimeCpuLogging.Suppressed : AiDotNet.TestImpact.RuntimeCpuLogging.MayInvokeCallbacks));
 #endif
             AiDotNetEngine.ResetToCpu();
+#if AIDOTNET_TEST_ATTRIBUTION
+            AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuResetCompletion();
+#endif
         }
         catch
         {

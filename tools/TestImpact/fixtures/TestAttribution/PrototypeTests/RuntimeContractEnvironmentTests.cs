@@ -9,6 +9,19 @@ namespace PrototypeTests;
 public sealed class RuntimeContractEnvironmentTests
 {
     [Theory]
+    [InlineData(null, RuntimeCpuParallelismPolicy.DefaultSingleThread)]
+    [InlineData("", RuntimeCpuParallelismPolicy.DefaultSingleThread)]
+    [InlineData(" \t", RuntimeCpuParallelismPolicy.DefaultSingleThread)]
+    [InlineData("1", RuntimeCpuParallelismPolicy.OverridePresent)]
+    [InlineData("invalid", RuntimeCpuParallelismPolicy.OverridePresent)]
+    [InlineData("0", RuntimeCpuParallelismPolicy.OverridePresent)]
+    public void DefaultStartupDoesNotAssumeCultureDependentParsingIsSafe(string? input, RuntimeCpuParallelismPolicy expected)
+    {
+        var observed = RuntimeContractEnvironment.Capture(name => name == "AIDOTNET_TEST_CPU_MDOP" ? input : null, false);
+        Assert.Equal(expected, observed.CpuParallelism);
+    }
+
+    [Theory]
     [InlineData(null, RuntimeLicenseStartupPolicy.DefaultTestLicense)]
     [InlineData("", RuntimeLicenseStartupPolicy.DefaultTestLicense)]
     [InlineData(" \t", RuntimeLicenseStartupPolicy.DefaultTestLicense)]
@@ -25,6 +38,7 @@ public sealed class RuntimeContractEnvironmentTests
     {
         var legacy = new RuntimeEnvironmentBinding(1, new string('a', 64), RuntimeObserverSignals.NoneReported);
         Assert.Equal(RuntimeLicenseStartupPolicy.Unknown, legacy.LicenseStartup);
+        Assert.Equal(RuntimeCpuParallelismPolicy.Unknown, legacy.CpuParallelism);
     }
 
     [Theory]

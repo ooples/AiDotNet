@@ -46,6 +46,8 @@ internal static class RuntimeContractEnvironment
             string.IsNullOrEmpty(values["AIDOTNET_GPU_DIAGNOSTICS_DUMP"])
                 ? RuntimeGpuDiagnosticsPolicy.NoDumpRequested : RuntimeGpuDiagnosticsPolicy.DumpRequested,
             string.IsNullOrWhiteSpace(values["AIDOTNET_LICENSE_KEY"])
-                ? RuntimeLicenseStartupPolicy.DefaultTestLicense : RuntimeLicenseStartupPolicy.ExistingLicenseKey);
+                ? RuntimeLicenseStartupPolicy.DefaultTestLicense : RuntimeLicenseStartupPolicy.ExistingLicenseKey,
+            string.IsNullOrWhiteSpace(values["AIDOTNET_TEST_CPU_MDOP"])
+                ? RuntimeCpuParallelismPolicy.DefaultSingleThread : RuntimeCpuParallelismPolicy.OverridePresent);
     }
 }
