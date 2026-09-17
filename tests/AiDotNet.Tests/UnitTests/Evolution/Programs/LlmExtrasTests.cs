@@ -139,7 +139,9 @@ public sealed class LlmExtrasTests
     [Fact]
     public void TheProcessClientRefusesSettingsThatCannotProduceARunnableCommand()
     {
-        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(null!));
+#pragma warning disable CS8625 // Exercise the public null guard without a null-forgiving operator.
+        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(null));
+#pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() =>
             new ProcessChatClient<double>(new ProcessChatClientOptions { FileName = "  " }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -354,12 +356,12 @@ public sealed class LlmExtrasTests
             0, new AiDotNet.Evolution.EvolutionCanonicalGenome<AiDotNet.Evolution.Programs.ProgramGenome>(genome, genome.Id),
             lineage);
         var evaluation = new AiDotNet.Evolution.EvolutionEvaluation(
-            0, genome.Id, AiDotNet.Enums.EvolutionEvaluationStatus.Completed, 0.5,
-            AiDotNet.Enums.EvolutionOptimizationDirection.Maximize,
+            0, genome.Id, AiDotNet.Evolution.EvolutionEvaluationStatus.Completed, 0.5,
+            AiDotNet.Evolution.EvolutionOptimizationDirection.Maximize,
             new Dictionary<string, double>(StringComparer.Ordinal) { ["x"] = 0.5 },
             Array.Empty<double>(), Array.Empty<double>(),
             new AiDotNet.Evolution.EvolutionEvaluationCost(TimeSpan.Zero, 1, 1), lineage,
-            AiDotNet.Enums.EvolutionCacheStatus.Miss, Array.Empty<AiDotNet.Evolution.EvolutionDiagnostic>(),
+            AiDotNet.Evolution.EvolutionCacheStatus.Miss, Array.Empty<AiDotNet.Evolution.EvolutionDiagnostic>(),
             "task-v1", "evaluator-v1", "config-v1");
         var entry = new AiDotNet.Evolution.EvolutionArchiveEntry<AiDotNet.Evolution.Programs.ProgramGenome>(
             new AiDotNet.Evolution.EvolutionCellKey(new[] { 1 }), candidate, evaluation);
@@ -380,9 +382,9 @@ public sealed class LlmExtrasTests
         new AiDotNet.Evolution.Programs.DelegateProgramFitnessEvaluator((_, _, _) =>
             new ValueTask<AiDotNet.Evolution.EvolutionTaskResult>(
                 new AiDotNet.Evolution.EvolutionTaskResult(
-                    AiDotNet.Enums.EvolutionEvaluationStatus.Completed,
+                    AiDotNet.Evolution.EvolutionEvaluationStatus.Completed,
                     quality,
-                    AiDotNet.Enums.EvolutionOptimizationDirection.Maximize,
+                    AiDotNet.Evolution.EvolutionOptimizationDirection.Maximize,
                     new Dictionary<string, double>(StringComparer.Ordinal) { ["passRate"] = quality },
                     costUnits: 3)));
 

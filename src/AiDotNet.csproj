@@ -41,13 +41,17 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-		<WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083;AIDN087;AIDN088;AIDN090;AIDN096;AIDN097</WarningsNotAsErrors>
+		<!-- NU5104: AiDotNet.Evolution ships only prereleases (0.1.0-preview.*), so a stable
+		     AiDotNet pack necessarily carries a prerelease dependency until it has a stable release. -->
+		<WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;NU5104;AIDN083;AIDN087;AIDN088;AIDN090;AIDN096;AIDN097</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-		<WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083;AIDN087;AIDN088;AIDN090;AIDN096;AIDN097</WarningsNotAsErrors>
+		<!-- NU5104: AiDotNet.Evolution ships only prereleases (0.1.0-preview.*), so a stable
+		     AiDotNet pack necessarily carries a prerelease dependency until it has a stable release. -->
+		<WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;NU5104;AIDN083;AIDN087;AIDN088;AIDN090;AIDN096;AIDN097</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -271,6 +275,17 @@
 	</ItemGroup>
 	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
 	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	</ItemGroup>
+
+	<!-- Generic quality-diversity engine extracted to the AiDotNet.Evolution package. -->
+	<PropertyGroup>
+	  <EvolutionProjectPath Condition="'$(EvolutionProjectPath)' == ''">$(MSBuildThisFileDirectory)..\..\AiDotNet.Evolution\src\AiDotNet.Evolution\AiDotNet.Evolution.csproj</EvolutionProjectPath>
+	</PropertyGroup>
+	<ItemGroup Condition="'$(UseLocalEvolution)' != 'true'">
+	  <PackageReference Include="AiDotNet.Evolution" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(UseLocalEvolution)' == 'true'">
+	  <ProjectReference Include="$(EvolutionProjectPath)" />
 	</ItemGroup>
 
 	<!--

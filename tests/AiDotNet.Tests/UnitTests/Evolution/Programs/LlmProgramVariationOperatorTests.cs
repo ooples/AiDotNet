@@ -95,11 +95,14 @@ public sealed class LlmProgramVariationOperatorTests
 
         var operatorUnderTest = new LlmProgramVariationOperator<double>(client);
         var parent = new ProgramGenome(ParentSource, ProgramLanguage.Python);
+        EvolutionVariationContext<ProgramGenome> context = Context(parent);
 
-        ProgramGenome child = await operatorUnderTest.ProposeAsync(Context(parent));
+        ProgramGenome child = await operatorUnderTest.ProposeAsync(context);
 
         Assert.Equal(parent.Id, child.Id);
-        Assert.Same(parent, child);
+        Assert.Equal(parent, child);
+        Assert.NotSame(parent, child);
+        Assert.Same(context.Parent.Candidate.CanonicalGenome.Genome, child);
         Assert.Equal(3, client.Calls);
     }
 
