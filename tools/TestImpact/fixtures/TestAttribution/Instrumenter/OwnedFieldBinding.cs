@@ -28,6 +28,10 @@ internal static class OwnedFieldBinding
 
     internal static bool SameType(TypeReference left, TypeReference right)
     {
+        if (left is ArrayType array)
+            return right is ArrayType otherArray && array.IsVector == otherArray.IsVector && array.Rank == otherArray.Rank &&
+                array.Dimensions.Select((dimension, index) => dimension.LowerBound == otherArray.Dimensions[index].LowerBound &&
+                    dimension.UpperBound == otherArray.Dimensions[index].UpperBound).All(equal => equal) && SameType(array.ElementType, otherArray.ElementType);
         if (left is GenericParameter first)
             return right is GenericParameter second && first.Type == second.Type && first.Position == second.Position &&
                 first.Owner is TypeReference firstOwner && second.Owner is TypeReference secondOwner &&
