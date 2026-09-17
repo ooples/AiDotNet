@@ -16,7 +16,8 @@ internal static class ReviewedRuntimeContracts
             reference.FullName, "", "", [], []);
         // Names select a candidate only. Actual loaded bytes, module identity,
         // signature, and the reviewed implementation below establish the match.
-        if (reference.FullName is not ("System.Void Xunit.Assert::True(System.Boolean,System.String)" or
+        if (reference.FullName is not ("System.Void Xunit.Assert::True(System.Boolean)" or "System.Void Xunit.Assert::False(System.Boolean)" or
+            "System.Void Xunit.Assert::True(System.Boolean,System.String)" or
             "System.Void Xunit.Assert::False(System.Boolean,System.String)")) return Unknown();
         try
         {
@@ -24,7 +25,10 @@ internal static class ReviewedRuntimeContracts
             if (definition is null || definition.Module.Assembly.Name.FullName !=
                 "xunit.assert, Version=2.9.3.0, Culture=neutral, PublicKeyToken=8d05b1bb7a6fdb6c" ||
                 definition.Module.Assembly.Modules.Count != 1 || !definition.IsStatic ||
-                definition.HasGenericParameters || reference.HasThis || reference.HasGenericParameters ||
+                definition.HasGenericParameters || reference.HasThis || reference.ExplicitThis || reference.HasGenericParameters ||
+                reference.CallingConvention != MethodCallingConvention.Default || !RuntimeType(reference.ReturnType, "System.Void") ||
+                !RuntimeType(reference.Parameters[0].ParameterType, "System.Boolean") ||
+                reference.Parameters.Count == 2 && !RuntimeType(reference.Parameters[1].ParameterType, "System.String") ||
                 definition.FullName != reference.FullName) return Unknown();
             string path = definition.Module.FileName;
             if (string.IsNullOrEmpty(path) || HasLinkedComponent(path)) return Unknown();
@@ -55,7 +59,8 @@ internal static class ReviewedRuntimeContracts
             if (nullable is null || !IsReviewedNullableImplementation(nullable)) return Unknown();
             if (Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))) != hash) return Unknown();
             if (Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(runtime))) != runtimeHash) return Unknown();
-            // Reviewed IL: bool is copied into Nullable<bool>; the passing branch
+            // Both bool overloads copy into Nullable<bool>; the one-argument
+            // overload supplies null for the message. The passing branch
             // only reads HasValue/GetValueOrDefault and returns. The failing
             // branch constructs and throws TrueException/FalseException. That
             // branch can invoke process-wide first-chance handlers, so passing
@@ -103,6 +108,11 @@ internal static class ReviewedRuntimeContracts
             flag.FieldType.MetadataType == MetadataType.Boolean && Field(hasValue.Body.Instructions[1]) == flag &&
             Field(getValue.Body.Instructions[1]) == value;
     }
+
+    private static bool RuntimeType(TypeReference reference, string name) => reference is not TypeSpecification && reference.FullName == name &&
+        reference.Resolve() is TypeDefinition definition && definition.FullName == name &&
+        string.Equals(Path.GetFullPath(definition.Module.FileName), Path.GetFullPath(typeof(object).Assembly.Location),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private static bool HasLinkedComponent(string path)
     {

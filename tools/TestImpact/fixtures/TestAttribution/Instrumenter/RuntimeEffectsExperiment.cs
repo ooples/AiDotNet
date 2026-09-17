@@ -143,6 +143,26 @@ internal static class RuntimeEffectsExperiment
                 .Select(site => new { Caller = DependencyGraph.Stable(method), Assessment = ConstructorCallReader.Read(method, site.index) }))
             .Where(item => item.Assessment is not null).ToArray();
         var asyncBodies = owners.Select(owner => new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(tests, owner))).ToArray();
+        var ownedBodies = owners.Select(owner =>
+        {
+            MethodDefinition[] entries = sourceMethods.Values.Where(method =>
+                method.Module.Assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name == owner).ToArray();
+            CustomAttribute[] markers = entries.Length == 1 ? entries[0].CustomAttributes.Where(attribute =>
+                attribute.AttributeType.FullName == "System.Runtime.CompilerServices.AsyncStateMachineAttribute").ToArray() : [];
+            MethodDefinition[] bodies = markers.Length == 1 && markers[0].ConstructorArguments.Count == 1 &&
+                markers[0].ConstructorArguments[0].Value is TypeReference state && state.Resolve() is TypeDefinition machine
+                ? machine.Methods.Where(method => method.Name == "MoveNext").ToArray() : [];
+            OwnedConfigurationBodyShape? shape = bodies.Length == 1 ? OwnedConfigurationBodyReader.ReadShape(entries[0], bodies[0]) : null;
+            NullBackendBodyShape? nullShape = bodies.Length == 1 ? NullBackendBodyReader.ReadShape(entries[0], bodies[0]) : null;
+            return new { Owner = owner, Recognized = shape is not null, Backend = shape?.Backend,
+                NullBackend = nullShape,
+                Configurations = shape?.Configurations.Select(allocation => ConfigurationConstructorReader.Read(allocation.Constructor, true, allocation.LearningRate)).ToArray() ?? [],
+                Assertions = shape?.Assertions ?? [], AccessedFields = shape?.AccessedFields ?? [] };
+        }).ToArray();
+        var privateInitializers = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id])
+            .Where(method => method.IsConstructor && !method.IsStatic).Select(method => method.DeclaringType).Distinct()
+            .Select(owner => new { Type = owner.FullName, Assessment = PrivateMapInitializerReader.Read(owner) })
+            .Where(item => item.Assessment.Contract != PrivateMapInitializerContract.Unresolved).ToArray();
         // Recheck after ALL readers, including constructor and async-body
         // contracts. No lazily evaluated reader may run after this boundary.
         // This still is not a provenance or reuse certificate.
@@ -153,6 +173,7 @@ internal static class RuntimeEffectsExperiment
             LockedInitializations = lockedInitializations,
             ConstructorInputs = constructedInputs,
             AsyncBodies = asyncBodies,
+            OwnedBodies = ownedBodies, PrivateInitializers = privateInitializers,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

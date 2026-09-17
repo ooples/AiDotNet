@@ -9,6 +9,29 @@ public sealed class ReviewedRuntimeContractTests
 {
     public enum BinaryMutation { Implementation, Identity, Missing, NonAssembly }
     public enum RuntimeMutation { ExtraInstruction, StaticField, WrongGetter, WrongReturn, WrongParameter, Handler, Initializer }
+    public enum SignatureMutation { ExplicitReceiver, VariableArguments, ForeignBoolean }
+
+    [Theory]
+    [InlineData(SignatureMutation.ExplicitReceiver)]
+    [InlineData(SignatureMutation.VariableArguments)]
+    [InlineData(SignatureMutation.ForeignBoolean)]
+    public void SameNamedSignaturesCannotChangeTheRuntimeContract(SignatureMutation mutation)
+    {
+        using var resolver = Resolver();
+        using var assembly = Read(typeof(Assert).Assembly.Location, resolver);
+        MethodDefinition method = BooleanAssertion(assembly, true, false);
+        switch (mutation)
+        {
+            case SignatureMutation.ExplicitReceiver: method.ExplicitThis = true; break;
+            case SignatureMutation.VariableArguments: method.CallingConvention = MethodCallingConvention.VarArg; break;
+            case SignatureMutation.ForeignBoolean:
+                var impostor = new TypeDefinition("System", "Boolean", TypeAttributes.Public, assembly.MainModule.TypeSystem.Object);
+                assembly.MainModule.Types.Add(impostor);
+                method.Parameters[0].ParameterType = impostor;
+                break;
+        }
+        AssertUnknown(ReviewedRuntimeContracts.Assess(method));
+    }
 
     [Fact]
     public void AssertionTypeInitializationIsNotHiddenByTheLeafContract()
@@ -64,13 +87,15 @@ public sealed class ReviewedRuntimeContractTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ReviewedBooleanAssertionsRemainConditional(bool assertion)
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public void ReviewedBooleanAssertionsRemainConditional(bool assertion, bool message)
     {
         using var resolver = Resolver();
         using var assembly = Read(typeof(Assert).Assembly.Location, resolver);
-        MethodDefinition method = BooleanAssertion(assembly, assertion);
+        MethodDefinition method = BooleanAssertion(assembly, assertion, message);
         RuntimeContractAssessment result = ReviewedRuntimeContracts.Assess(method);
         Assert.Equal(RuntimeContractStatus.ReviewedConditional, result.Status);
         Assert.Equal(RuntimeContractId.XunitBooleanAssertion293, result.Contract);
@@ -86,9 +111,8 @@ public sealed class ReviewedRuntimeContractTests
     }
 
     [Theory]
-    [InlineData("System.Void Xunit.Assert::True(System.Boolean)")]
     [InlineData("System.Void Xunit.Assert::True(System.Nullable`1<System.Boolean>,System.String)")]
-    [InlineData("System.Void Xunit.Assert::False(System.Boolean)")]
+    [InlineData("System.Void Xunit.Assert::False(System.Nullable`1<System.Boolean>,System.String)")]
     public void UnreviewedOverloadsDoNotInheritAContract(string signature)
     {
         using var resolver = Resolver();
@@ -159,7 +183,7 @@ public sealed class ReviewedRuntimeContractTests
     private static AssemblyDefinition Read(string path, IAssemblyResolver resolver) => AssemblyDefinition.ReadAssembly(path,
         new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
 
-    private static MethodDefinition BooleanAssertion(AssemblyDefinition assembly, bool assertion) =>
+    private static MethodDefinition BooleanAssertion(AssemblyDefinition assembly, bool assertion, bool message = true) =>
         assembly.MainModule.Types.Single(type => type.FullName == "Xunit.Assert").Methods.Single(method =>
-            method.FullName == $"System.Void Xunit.Assert::{(assertion ? "True" : "False")}(System.Boolean,System.String)");
+            method.FullName == $"System.Void Xunit.Assert::{(assertion ? "True" : "False")}(System.Boolean{(message ? ",System.String" : "")})");
 }

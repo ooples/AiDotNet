@@ -221,7 +221,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runtime-effects experimental controls failed.'
     [xml] $effectsTrx = Get-Content -LiteralPath (Join-Path $root 'runtime-effects/results.trx') -Raw
     $effectsCases = @($effectsTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($effectsCases.Count -eq 362 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($effectsCases.Count -eq 413 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runtime-effects controls did not execute the complete expected set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host

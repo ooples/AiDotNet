@@ -10,17 +10,23 @@ internal static class OwnedFieldBinding
         if (instruction.Operand is not FieldReference reference || reference.Resolve() is not FieldDefinition field ||
             field.DeclaringType != owner || !SameType(reference.FieldType, field.FieldType)) return null;
         if (reference is FieldDefinition) return field;
-        if (!owner.HasGenericParameters)
-            return reference.DeclaringType is not TypeSpecification && reference.DeclaringType.Resolve() == owner ? field : null;
-        if (reference.DeclaringType is not GenericInstanceType context || context.ElementType.Resolve() != owner ||
-            context.GenericArguments.Count != owner.GenericParameters.Count) return null;
-        for (int index = 0; index < context.GenericArguments.Count; index++)
-            if (context.GenericArguments[index] is not GenericParameter parameter || parameter.Type != GenericParameterType.Type ||
-                parameter.Position != index || parameter.Owner is not TypeReference declared || declared.Resolve() != owner) return null;
-        return field;
+        return SelfType(reference.DeclaringType, owner) ? field : null;
     }
 
-    private static bool SameType(TypeReference left, TypeReference right)
+    internal static bool SelfType(TypeReference reference, TypeDefinition owner)
+    {
+        if (reference is TypeDefinition) return reference == owner;
+        if (!owner.HasGenericParameters)
+            return reference is not TypeSpecification && reference.Resolve() == owner;
+        if (reference is not GenericInstanceType context || context.ElementType.Resolve() != owner ||
+            context.GenericArguments.Count != owner.GenericParameters.Count) return false;
+        for (int index = 0; index < context.GenericArguments.Count; index++)
+            if (context.GenericArguments[index] is not GenericParameter parameter || parameter.Type != GenericParameterType.Type ||
+                parameter.Position != index || parameter.Owner is not TypeReference declared || declared.Resolve() != owner) return false;
+        return true;
+    }
+
+    internal static bool SameType(TypeReference left, TypeReference right)
     {
         if (left is GenericParameter first)
             return right is GenericParameter second && first.Type == second.Type && first.Position == second.Position &&
