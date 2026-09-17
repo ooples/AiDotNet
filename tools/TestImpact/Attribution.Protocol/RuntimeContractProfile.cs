@@ -12,10 +12,12 @@ public enum RuntimeCpuEntryMode { Other, PlainCpu, Missing, DerivedCpu }
 public enum RuntimeCpuLogging { MayInvokeCallbacks, Suppressed }
 public enum RuntimeGpuStartupPolicy { Unknown, AutoDetectionPermitted, Disabled }
 public enum RuntimeGpuDiagnosticsPolicy { Unknown, NoDumpRequested, DumpRequested }
+public enum RuntimeLicenseStartupPolicy { Unknown, DefaultTestLicense, ExistingLicenseKey }
 public sealed record RuntimeCpuResetInput(RuntimeCpuEntryMode Mode, RuntimeCpuLogging Logging);
 public sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals,
     RuntimeGpuStartupPolicy GpuStartup = RuntimeGpuStartupPolicy.Unknown,
-    RuntimeGpuDiagnosticsPolicy GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.Unknown);
+    RuntimeGpuDiagnosticsPolicy GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.Unknown,
+    RuntimeLicenseStartupPolicy LicenseStartup = RuntimeLicenseStartupPolicy.Unknown);
 public sealed record RuntimeCpuCompletion(RuntimeCpuMode Mode, int MaxDegreeOfParallelism);
 public sealed record RuntimeInitializationBinding(RuntimeInitializationStatus Status, RuntimeEnvironmentBinding? Inputs,
     RuntimeCpuCompletion? Completion = null, RuntimeCpuResetInput? ResetInput = null);
@@ -75,6 +77,7 @@ public static class RuntimeProfileEvidence
         };
 
     private static bool Valid(RuntimeEnvironmentBinding? value) => value is not null && value.Schema == 1 &&
-        Enum.IsDefined(value.ObserverSignals) && Enum.IsDefined(value.GpuStartup) && Enum.IsDefined(value.GpuDiagnostics) && value.Fingerprint is { Length: 64 } &&
+        Enum.IsDefined(value.ObserverSignals) && Enum.IsDefined(value.GpuStartup) && Enum.IsDefined(value.GpuDiagnostics) &&
+        Enum.IsDefined(value.LicenseStartup) && value.Fingerprint is { Length: 64 } &&
         value.Fingerprint.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }

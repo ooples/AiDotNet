@@ -9,6 +9,25 @@ namespace PrototypeTests;
 public sealed class RuntimeContractEnvironmentTests
 {
     [Theory]
+    [InlineData(null, RuntimeLicenseStartupPolicy.DefaultTestLicense)]
+    [InlineData("", RuntimeLicenseStartupPolicy.DefaultTestLicense)]
+    [InlineData(" \t", RuntimeLicenseStartupPolicy.DefaultTestLicense)]
+    [InlineData("private-license-value", RuntimeLicenseStartupPolicy.ExistingLicenseKey)]
+    public void LicenseStartupBranchIsBoundWithoutPublishingTheKey(string? key, RuntimeLicenseStartupPolicy expected)
+    {
+        var observed = RuntimeContractEnvironment.Capture(name => name == "AIDOTNET_LICENSE_KEY" ? key : null, false);
+        Assert.Equal(expected, observed.LicenseStartup);
+        Assert.DoesNotContain("private-license-value", JsonSerializer.Serialize(observed));
+    }
+
+    [Fact]
+    public void LegacyEnvironmentBindingDoesNotAssumeTheDefaultLicenseBranch()
+    {
+        var legacy = new RuntimeEnvironmentBinding(1, new string('a', 64), RuntimeObserverSignals.NoneReported);
+        Assert.Equal(RuntimeLicenseStartupPolicy.Unknown, legacy.LicenseStartup);
+    }
+
+    [Theory]
     [InlineData(null, RuntimeGpuDiagnosticsPolicy.NoDumpRequested)]
     [InlineData("", RuntimeGpuDiagnosticsPolicy.NoDumpRequested)]
     [InlineData("diagnostics.json", RuntimeGpuDiagnosticsPolicy.DumpRequested)]

@@ -44,6 +44,8 @@ internal static class RuntimeContractEnvironment
             string.IsNullOrEmpty(values["AIDOTNET_DISABLE_GPU"])
                 ? RuntimeGpuStartupPolicy.AutoDetectionPermitted : RuntimeGpuStartupPolicy.Disabled,
             string.IsNullOrEmpty(values["AIDOTNET_GPU_DIAGNOSTICS_DUMP"])
-                ? RuntimeGpuDiagnosticsPolicy.NoDumpRequested : RuntimeGpuDiagnosticsPolicy.DumpRequested);
+                ? RuntimeGpuDiagnosticsPolicy.NoDumpRequested : RuntimeGpuDiagnosticsPolicy.DumpRequested,
+            string.IsNullOrWhiteSpace(values["AIDOTNET_LICENSE_KEY"])
+                ? RuntimeLicenseStartupPolicy.DefaultTestLicense : RuntimeLicenseStartupPolicy.ExistingLicenseKey);
     }
 }
