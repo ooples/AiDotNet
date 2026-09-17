@@ -148,7 +148,7 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         int c = _compressedDim, d = _latentDim;
         _encoderParams = new Vector<T>((2 * d) * (2 * c) + 2 * d);
-        double encoderScale = 1.0 / Math.Sqrt(2 * c);
+        double encoderScale = 1.0 / Math.Sqrt(2.0 * c);
         for (int i = 0; i < (2 * d) * (2 * c); i++)
             _encoderParams[i] = NumOps.FromDouble(SampleNormal() * encoderScale);
 
