@@ -200,7 +200,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
     [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
     $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($runnerCases.Count -eq 87 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($runnerCases.Count -eq 106 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runner binding checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=ReuseProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'reuse-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
@@ -221,7 +221,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runtime-effects experimental controls failed.'
     [xml] $effectsTrx = Get-Content -LiteralPath (Join-Path $root 'runtime-effects/results.trx') -Raw
     $effectsCases = @($effectsTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($effectsCases.Count -eq 220 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($effectsCases.Count -eq 339 -and @($effectsCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runtime-effects controls did not execute the complete expected set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=WorkflowProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'workflow-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host

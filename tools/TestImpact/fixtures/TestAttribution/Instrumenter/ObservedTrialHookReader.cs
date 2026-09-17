@@ -5,7 +5,9 @@ using Mono.Cecil;
 internal enum ObservedTrialHookProof { Unresolved, ReviewedHookAndCompletedScope }
 internal sealed record ObservedTrialHookAssessment(string Owner, ObservedTrialHookProof Proof, string Slot,
     TrialHookRequirement[] Requirements);
-internal sealed record ObservedLifecycleReview(OwnerCompletionObservation[] Owners, ObservedTrialHookAssessment[] Hooks);
+internal sealed record OwnerBodyWindow(string Owner, YieldBodyWindow Frame,
+    OwnerConcurrencyContract Concurrency = OwnerConcurrencyContract.Unresolved);
+internal sealed record ObservedLifecycleReview(OwnerCompletionObservation[] Owners, ObservedTrialHookAssessment[] Hooks, OwnerBodyWindow[] Bodies);
 
 // Joins the actual lifecycle roots with verified owner/scope observations.
 // Body isolation and execution-context requirements are NOT discharged here;
@@ -20,10 +22,10 @@ internal static class ObservedTrialHookReader
     {
         ObservedTrialHookAssessment Unknown(string owner) => new(owner, ObservedTrialHookProof.Unresolved, "", []);
         ObservedLifecycleReview UnknownAll() => new(owners.Select(owner => new OwnerCompletionObservation(owner, OwnerCompletionProof.Unresolved)).ToArray(),
-            owners.Select(Unknown).ToArray());
+            owners.Select(Unknown).ToArray(), owners.Select(owner => new OwnerBodyWindow(owner, new(YieldBodyContract.Unresolved, 0, 0))).ToArray());
         try
         {
-            if (owners.Length == 0) return new([], []);
+            if (owners.Length == 0) return new([], [], []);
             if (owners.Any(string.IsNullOrWhiteSpace) || owners.Distinct(StringComparer.Ordinal).Count() != owners.Length ||
                 Path.GetFileName(assemblyFile) != assemblyFile || Path.GetExtension(assemblyFile) != ".dll") return UnknownAll();
             OwnerCompletionObservation[] reviewedOwners = ReviewedOwnerCompletion.ReadAll(bundle, assemblyFile, owners, observed);
@@ -42,6 +44,19 @@ internal static class ObservedTrialHookReader
             var scopes = observed.TrialScopes.ToLookup(scope => scope.Owner, StringComparer.Ordinal);
             var checkedHooks = new Dictionary<MethodDefinition, TrialHookAssessment>();
             var result = new List<ObservedTrialHookAssessment>();
+            var classConcurrency = new Dictionary<string, OwnerConcurrencyContract>(StringComparer.Ordinal);
+            var bodies = owners.Select(owner =>
+            {
+                if (completion[owner] != OwnerCompletionProof.ReviewedStandardTaskObserved)
+                    return new OwnerBodyWindow(owner, new(YieldBodyContract.Unresolved, 0, 0));
+                string classId = owner[..owner.LastIndexOf('.')];
+                if (!classConcurrency.TryGetValue(classId, out OwnerConcurrencyContract concurrency))
+                {
+                    concurrency = SerializedOwnerReader.Read(assembly, owner);
+                    classConcurrency.Add(classId, concurrency);
+                }
+                return new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(assembly, owner), concurrency);
+            }).ToArray();
             foreach (string owner in owners)
             {
                 SourceTestLifecycle[] matched = tests[owner].ToArray();
@@ -64,7 +79,7 @@ internal static class ObservedTrialHookReader
                         hook.Requirements.Where(requirement => requirement != TrialHookRequirement.ObservedOwner).ToArray())
                     : Unknown(owner));
             }
-            return RunnerBinding.HashBundle(bundle) == observed.Execution.Context.BuildFingerprint ? new(reviewedOwners, result.ToArray()) : UnknownAll();
+            return RunnerBinding.HashBundle(bundle) == observed.Execution.Context.BuildFingerprint ? new(reviewedOwners, result.ToArray(), bodies) : UnknownAll();
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
             BadImageFormatException or AssemblyResolutionException or ResolutionException or InvalidOperationException)

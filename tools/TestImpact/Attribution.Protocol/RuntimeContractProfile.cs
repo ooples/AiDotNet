@@ -10,8 +10,12 @@ public enum RuntimeInitializationStatus { Missing, Recorded, Conflicting }
 public enum RuntimeCpuMode { Cpu, Other }
 public enum RuntimeCpuEntryMode { Other, PlainCpu, Missing, DerivedCpu }
 public enum RuntimeCpuLogging { MayInvokeCallbacks, Suppressed }
+public enum RuntimeGpuStartupPolicy { Unknown, AutoDetectionPermitted, Disabled }
+public enum RuntimeGpuDiagnosticsPolicy { Unknown, NoDumpRequested, DumpRequested }
 public sealed record RuntimeCpuResetInput(RuntimeCpuEntryMode Mode, RuntimeCpuLogging Logging);
-public sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals);
+public sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals,
+    RuntimeGpuStartupPolicy GpuStartup = RuntimeGpuStartupPolicy.Unknown,
+    RuntimeGpuDiagnosticsPolicy GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.Unknown);
 public sealed record RuntimeCpuCompletion(RuntimeCpuMode Mode, int MaxDegreeOfParallelism);
 public sealed record RuntimeInitializationBinding(RuntimeInitializationStatus Status, RuntimeEnvironmentBinding? Inputs,
     RuntimeCpuCompletion? Completion = null, RuntimeCpuResetInput? ResetInput = null);
@@ -64,9 +68,13 @@ public static class RuntimeProfileEvidence
     // proof of the reset's effects. Static/lifetime contracts must separately
     // rule out concurrent mutation. Legacy/missing entries inherit no fact.
     public static bool HasObservedCpuResetPreconditions(RuntimeContractProfile? profile) => HasObservedCpuStartup(profile) &&
-        profile?.Initialization.ResetInput is { Mode: RuntimeCpuEntryMode.PlainCpu, Logging: RuntimeCpuLogging.Suppressed };
+        profile?.Initialization is
+        {
+            Inputs: { GpuStartup: RuntimeGpuStartupPolicy.Disabled, GpuDiagnostics: RuntimeGpuDiagnosticsPolicy.NoDumpRequested },
+            ResetInput: { Mode: RuntimeCpuEntryMode.PlainCpu, Logging: RuntimeCpuLogging.Suppressed }
+        };
 
     private static bool Valid(RuntimeEnvironmentBinding? value) => value is not null && value.Schema == 1 &&
-        Enum.IsDefined(value.ObserverSignals) && value.Fingerprint is { Length: 64 } &&
+        Enum.IsDefined(value.ObserverSignals) && Enum.IsDefined(value.GpuStartup) && Enum.IsDefined(value.GpuDiagnostics) && value.Fingerprint is { Length: 64 } &&
         value.Fingerprint.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }

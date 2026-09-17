@@ -8,13 +8,14 @@ namespace PrototypeTests;
 public sealed class CpuResetObservationTests
 {
     public enum MissingProof { MissingEntry, OtherEngine, Logging, BeforeStartup, AfterCompletion, Duplicate,
-        InvalidEngine, InvalidLogging, MissingCompletion, Observers, MissingEngine, DerivedEngine }
+        InvalidEngine, InvalidLogging, MissingCompletion, Observers, MissingEngine, DerivedEngine, AutoDetection, UnknownStartup,
+        DumpRequested, UnknownDiagnostics }
 
     [Fact]
     public void ResetEntryIsRetainedAlongsideSuccessfulCompletion()
     {
         var ledger = new RuntimeInitializationLedger();
-        RuntimeEnvironmentBinding inputs = RuntimeContractEnvironment.Capture(_ => null, false);
+        RuntimeEnvironmentBinding inputs = RuntimeContractEnvironment.Capture(name => name == "AIDOTNET_DISABLE_GPU" ? "1" : null, false);
         ledger.Record(inputs);
         var entry = new RuntimeCpuResetInput(RuntimeCpuEntryMode.PlainCpu, RuntimeCpuLogging.Suppressed);
         ledger.RecordReset(entry);
@@ -38,10 +39,18 @@ public sealed class CpuResetObservationTests
     [InlineData(MissingProof.Observers)]
     [InlineData(MissingProof.MissingEngine)]
     [InlineData(MissingProof.DerivedEngine)]
+    [InlineData(MissingProof.AutoDetection)]
+    [InlineData(MissingProof.UnknownStartup)]
+    [InlineData(MissingProof.DumpRequested)]
+    [InlineData(MissingProof.UnknownDiagnostics)]
     public void CpuAtExitDoesNotEstablishResetEntryConditions(MissingProof missing)
     {
         var ledger = new RuntimeInitializationLedger();
-        RuntimeEnvironmentBinding inputs = RuntimeContractEnvironment.Capture(_ => null, missing == MissingProof.Observers);
+        RuntimeEnvironmentBinding inputs = RuntimeContractEnvironment.Capture(
+            name => name == "AIDOTNET_DISABLE_GPU" && missing != MissingProof.AutoDetection ? "1" : null, missing == MissingProof.Observers);
+        if (missing == MissingProof.UnknownStartup) inputs = inputs with { GpuStartup = RuntimeGpuStartupPolicy.Unknown };
+        if (missing == MissingProof.DumpRequested) inputs = inputs with { GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.DumpRequested };
+        if (missing == MissingProof.UnknownDiagnostics) inputs = inputs with { GpuDiagnostics = RuntimeGpuDiagnosticsPolicy.Unknown };
         RuntimeCpuResetInput entry = new(missing == MissingProof.OtherEngine ? RuntimeCpuEntryMode.Other :
             missing == MissingProof.MissingEngine ? RuntimeCpuEntryMode.Missing : missing == MissingProof.DerivedEngine ? RuntimeCpuEntryMode.DerivedCpu :
             missing == MissingProof.InvalidEngine ? (RuntimeCpuEntryMode)99 : RuntimeCpuEntryMode.PlainCpu,

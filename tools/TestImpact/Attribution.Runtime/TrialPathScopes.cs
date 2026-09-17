@@ -6,7 +6,8 @@ namespace AttributionRuntime;
 public enum TrialScopeState { Open, Complete, Rejected }
 public enum TrialScopeLedgerState { Recorded, Invalid }
 public sealed record TrialScopeObservation(string Owner, string PathHash, string RootHash, string PreviousHash, string PreviousPathHash,
-    TrialScopeState State);
+    TrialScopeState State, ExceptionObserverState ObserversBefore = ExceptionObserverState.Unknown,
+    ExceptionObserverState ObserversAfter = ExceptionObserverState.Unknown);
 public sealed record TrialScopeReport(TrialScopeLedgerState State, TrialScopeObservation[] Scopes);
 
 internal enum TrialPathState { Absent, Present, Unavailable }
@@ -23,7 +24,8 @@ internal sealed class TrialPathScopes
 
     internal void Invalidate() => state = TrialScopeLedgerState.Invalid;
 
-    internal void Begin(string owner, TrialPathSample sample, string previousHash, string activeHash, string? previousPathHash = null)
+    internal void Begin(string owner, TrialPathSample sample, string previousHash, string activeHash, string? previousPathHash = null,
+        ExceptionObserverState observers = ExceptionObserverState.Unknown)
     {
         if (string.IsNullOrWhiteSpace(owner) || scopes.ContainsKey(owner)) { Invalidate(); return; }
         previousPathHash ??= previousHash;
@@ -35,15 +37,15 @@ internal sealed class TrialPathScopes
             scopes[other] = scopes[other] with { State = TrialScopeState.Rejected };
         }
         scopes.Add(owner, new(owner, sample.PathHash, sample.RootHash, previousHash, previousPathHash,
-            accepted ? TrialScopeState.Open : TrialScopeState.Rejected));
+            accepted ? TrialScopeState.Open : TrialScopeState.Rejected, observers));
     }
 
-    internal void End(string owner, TrialPathSample sample, string restoredHash)
+    internal void End(string owner, TrialPathSample sample, string restoredHash, ExceptionObserverState observers = ExceptionObserverState.Unknown)
     {
         if (!scopes.TryGetValue(owner, out TrialScopeObservation? observation)) { Invalidate(); return; }
         bool accepted = observation.State == TrialScopeState.Open && sample.State == TrialPathState.Absent &&
             sample.PathHash == observation.PathHash && sample.RootHash == observation.RootHash && restoredHash == observation.PreviousHash;
-        scopes[owner] = observation with { State = accepted ? TrialScopeState.Complete : TrialScopeState.Rejected };
+        scopes[owner] = observation with { State = accepted ? TrialScopeState.Complete : TrialScopeState.Rejected, ObserversAfter = observers };
     }
 
     internal TrialScopeReport Snapshot() => new(state, scopes.Values.OrderBy(scope => scope.Owner, StringComparer.Ordinal).ToArray());

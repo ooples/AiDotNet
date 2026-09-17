@@ -137,7 +137,20 @@ internal static class RuntimeEffectsExperiment
         if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
             !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
             throw new InvalidDataException("Experiment inputs changed during analysis.");
+        HashSet<string> workloadCalls = Reachable(LifecycleRoots(lifecycle, owners));
+        var lockedInitializations = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id])
+            .Where(method => method.IsConstructor && !method.IsStatic)
+            .Select(method => new { Method = DependencyGraph.Stable(method), Assessment = LockedInitializationReader.Read(method) })
+            .Where(item => item.Assessment.Contract != LockedInitializationContract.Unresolved).ToArray();
+        var constructedInputs = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id]).Where(method => method.HasBody)
+            .SelectMany(method => method.Body.Instructions.Select((instruction, index) => (instruction, index))
+                .Where(site => site.instruction.OpCode.Code == Code.Newobj)
+                .Select(site => new { Caller = DependencyGraph.Stable(method), Assessment = ConstructorCallReader.Read(method, site.index) }))
+            .Where(item => item.Assessment is not null).ToArray();
         return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect, ScopedLifecycleContracts = scopeContracts, TrialHookContracts = hookContracts,
+            LockedInitializations = lockedInitializations,
+            ConstructorInputs = constructedInputs,
+            AsyncBodies = owners.Select(owner => new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(tests, owner))).ToArray(),
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

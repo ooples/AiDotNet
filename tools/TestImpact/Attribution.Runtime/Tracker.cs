@@ -357,8 +357,9 @@ public static class Tracker
             RevokePublishedReport();
             Scope? scope = Current.Value;
             if (scope is null || scope.Closed) { TrialScopes.Invalidate(); return; }
+            ExceptionObserverState observers = ExceptionObserverProbe.Capture();
             TrialScopes.Begin(scope.Owner, TrialPathScopes.Inspect(path), TrialPathScopes.ValueHash(previousPath),
-                TrialPathScopes.PathHash(activePath), TrialPathScopes.PathHash(previousPath));
+                TrialPathScopes.PathHash(activePath), TrialPathScopes.PathHash(previousPath), observers);
         }
     }
 
@@ -370,7 +371,8 @@ public static class Tracker
             RevokePublishedReport();
             Scope? scope = Current.Value;
             if (scope is null || scope.Closed) { TrialScopes.Invalidate(); return; }
-            TrialScopes.End(scope.Owner, TrialPathScopes.Inspect(path), TrialPathScopes.ValueHash(restoredPath));
+            ExceptionObserverState observers = ExceptionObserverProbe.Capture();
+            TrialScopes.End(scope.Owner, TrialPathScopes.Inspect(path), TrialPathScopes.ValueHash(restoredPath), observers);
         }
     }
 

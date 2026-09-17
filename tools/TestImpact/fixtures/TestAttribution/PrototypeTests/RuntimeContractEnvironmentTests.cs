@@ -8,6 +8,34 @@ namespace PrototypeTests;
 [Trait("Scenario", "RunnerProtocol")]
 public sealed class RuntimeContractEnvironmentTests
 {
+    [Theory]
+    [InlineData(null, RuntimeGpuDiagnosticsPolicy.NoDumpRequested)]
+    [InlineData("", RuntimeGpuDiagnosticsPolicy.NoDumpRequested)]
+    [InlineData("diagnostics.json", RuntimeGpuDiagnosticsPolicy.DumpRequested)]
+    [InlineData(" ", RuntimeGpuDiagnosticsPolicy.DumpRequested)]
+    public void CpuOptOutDoesNotHideDiagnosticsTimerInput(string? path, RuntimeGpuDiagnosticsPolicy expected)
+    {
+        var observed = RuntimeContractEnvironment.Capture(name => name switch
+        {
+            "AIDOTNET_DISABLE_GPU" => "1",
+            "AIDOTNET_GPU_DIAGNOSTICS_DUMP" => path,
+            _ => null
+        }, false);
+        Assert.Equal(RuntimeGpuStartupPolicy.Disabled, observed.GpuStartup);
+        Assert.Equal(expected, observed.GpuDiagnostics);
+    }
+
+    [Theory]
+    [InlineData(null, RuntimeGpuStartupPolicy.AutoDetectionPermitted)]
+    [InlineData("", RuntimeGpuStartupPolicy.AutoDetectionPermitted)]
+    [InlineData("1", RuntimeGpuStartupPolicy.Disabled)]
+    [InlineData("0", RuntimeGpuStartupPolicy.Disabled)]
+    public void GpuStartupObservationUsesThePinnedModulesNonemptyOptOut(string? value, RuntimeGpuStartupPolicy expected)
+    {
+        var observed = RuntimeContractEnvironment.Capture(name => name == "AIDOTNET_DISABLE_GPU" ? value : null, false);
+        Assert.Equal(expected, observed.GpuStartup);
+    }
+
     [Fact]
     public void MissingStartupObservationIsNotInferredFromEffectiveSettings()
     {
@@ -51,6 +79,9 @@ public sealed class RuntimeContractEnvironmentTests
     [InlineData("AIDOTNET_QUIET")]
     [InlineData("AIDOTNET_DISABLE_GPU")]
     [InlineData("AIDOTNET_VERBOSE_INIT")]
+    [InlineData("AIDOTNET_GPU_KERNEL_DIAGNOSTICS")]
+    [InlineData("AIDOTNET_GPU_SYNC_LAUNCHES")]
+    [InlineData("AIDOTNET_GPU_DIAGNOSTICS_DUMP")]
     [InlineData("AIDOTNET_CACHEDB_MAXM")]
     [InlineData("AIDOTNET_ONEDNN_GEMM")]
     [InlineData("AIDOTNET_JIT_GEMM")]

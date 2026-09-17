@@ -78,11 +78,11 @@ switch (command)
         VerifiedExecution result = observed.Execution;
         var lifecycle = args.Length == 12 ? ObservedTrialHookReader.Review(args[10], args[11],
             result.Cases.Select(item => item.MethodId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), observed)
-            : new ObservedLifecycleReview([], []);
+            : new ObservedLifecycleReview([], [], []);
         RunnerBinding.WriteNew(args[9], new { result.Scope, result.PlanHash, result.InventoryHash, result.Context,
             result.Workload, result.Origin, result.Cases, result.CanReplaceFullBaseline,
             observed.StandardCases, observed.RuntimeProfile, observed.TrialScopes, OwnerCompletion = lifecycle.Owners,
-            TrialHooks = lifecycle.Hooks, AuthenticatedWorkflowOrigin = false });
+            TrialHooks = lifecycle.Hooks, AsyncBodies = lifecycle.Bodies, AuthenticatedWorkflowOrigin = false });
         break;
     }
 }

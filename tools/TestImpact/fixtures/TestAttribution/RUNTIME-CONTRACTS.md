@@ -183,3 +183,31 @@ rejection controls in `attribution-hook-reset-final-20260916`. Reusing the valid
 real execution outputs, the final hook reader verified all five bindings in
 9.34 seconds (`attribution-real-runtime-inputs-20260916-v9/verified-final.json`).
 The real test-only build completed with zero errors and 4,013 existing warnings.
+
+### Runtime-effect boundary checks (September 17)
+
+The CPU profile now distinguishes GPU opt-out from diagnostics-dump opt-out.
+The pinned Tensors module initializes diagnostics before honoring GPU opt-out;
+a configured dump can still create a timer, exit callbacks and a file. The real
+CPU-only negative control produced that file and rejected the previous plan.
+
+Verified lifecycle output now retains the canonical single-yield body window,
+fixture-free nonparallel collection metadata, and first-chance-observer samples
+at both trial boundaries. Unsupported runtime layouts remain unknown. Samples
+do not establish absence throughout the body or exclude arbitrary host workers.
+
+The locked-initialization reader recognizes a private constant insert-if-absent
+tail. The prefix/callsite readers derive rank, world size and nonempty-key facts
+from actual IL, record the base-constructor obligation, and retain map lifetime,
+initialization, observer and external-access requirements. GUID formatting proves
+nonempty string shape, not uniqueness or RNG purity. All four real backend call
+sites matched; the null-backend test correctly supplies no constructor proof.
+
+Local evidence: `attribution-contracts-final-20260917` passed the 556-case harness
+and 33 rejection controls. The subsequent constructor-prefix/callsite batch passed
+445 focused runtime/runner cases. `attribution-real-runtime-inputs-20260917-v11`
+executed 5/5 real tests, verified all five body/collection/hook bindings and sampled
+no first-chance handlers at either boundary. Changed startup, logging and diagnostics
+inputs rejected the old plan. These are component results: normal real-workload
+selective reuse, complete body/shared-initializer closure and updated live CI
+acceptance remain unfinished; production selection is still disabled.

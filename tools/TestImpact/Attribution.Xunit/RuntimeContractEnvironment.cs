@@ -11,6 +11,7 @@ internal static class RuntimeContractEnvironment
     private static readonly string[] Names =
     [
         "AIDOTNET_TEST_CPU_MDOP", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "AIDOTNET_QUIET", "AIDOTNET_DISABLE_GPU", "AIDOTNET_VERBOSE_INIT",
+        "AIDOTNET_GPU_KERNEL_DIAGNOSTICS", "AIDOTNET_GPU_SYNC_LAUNCHES", "AIDOTNET_GPU_DIAGNOSTICS_DUMP",
         "AIDOTNET_CACHEDB_MAXM", "AIDOTNET_ONEDNN_GEMM", "AIDOTNET_JIT_GEMM", "AIDOTNET_LAYERNORM_FUSED_FS64",
         "AIDOTNET_LN_FUSED_MAXBATCH", "AIDOTNET_LN_PARALLEL_MINWORK", "AIDOTNET_LN_PARALLEL_MINROWS",
         "AIDOTNET_LSTM_PARALLEL_MINROWS", "AIDOTNET_LSTM_PARALLEL", "AIDOTNET_COOP_POOL",
@@ -39,6 +40,10 @@ internal static class RuntimeContractEnvironment
             Schema = 1, DebuggerAttached = debuggerAttached,
             Inputs = values.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToArray()
         })));
-        return new(1, fingerprint, observers ? RuntimeObserverSignals.Present : RuntimeObserverSignals.NoneReported);
+        return new(1, fingerprint, observers ? RuntimeObserverSignals.Present : RuntimeObserverSignals.NoneReported,
+            string.IsNullOrEmpty(values["AIDOTNET_DISABLE_GPU"])
+                ? RuntimeGpuStartupPolicy.AutoDetectionPermitted : RuntimeGpuStartupPolicy.Disabled,
+            string.IsNullOrEmpty(values["AIDOTNET_GPU_DIAGNOSTICS_DUMP"])
+                ? RuntimeGpuDiagnosticsPolicy.NoDumpRequested : RuntimeGpuDiagnosticsPolicy.DumpRequested);
     }
 }

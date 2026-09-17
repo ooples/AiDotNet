@@ -13,6 +13,7 @@ internal static class TrialScopeEvidence
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
         if (!Enum.IsDefined(report.State) || report.Scopes is null || report.Scopes.Any(scope => scope is null ||
             string.IsNullOrWhiteSpace(scope.Owner) || !owners.ContainsKey(scope.Owner) || !Enum.IsDefined(scope.State) ||
+            !Enum.IsDefined(scope.ObserversBefore) || !Enum.IsDefined(scope.ObserversAfter) ||
             !Hash(scope.PathHash) || !Hash(scope.PreviousHash) || !Hash(scope.PreviousPathHash) ||
             !(Hash(scope.RootHash) || scope.State == TrialScopeState.Rejected && scope.RootHash == "")) ||
             report.Scopes.Select(scope => scope.Owner).Distinct(StringComparer.Ordinal).Count() != report.Scopes.Length)

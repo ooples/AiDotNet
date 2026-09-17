@@ -11,9 +11,11 @@ namespace PrototypeTests;
 public sealed class RuntimeProfileEvidenceTests
 {
     public enum Startup { Missing, NoCompletion, Conflicting, OtherEngine, InvalidDop, InitialObserver, EffectiveObserver, MissingInputs }
-    public enum Malformed { Hash, Schema, Status, NumericEnum, Duplicate, UnknownMember, ResetMode, ResetLogging, ResetWithoutStartup }
+    public enum Malformed { Hash, Schema, Status, NumericEnum, Duplicate, UnknownMember, ResetMode, ResetLogging, ResetWithoutStartup, GpuStartup, NumericGpuStartup,
+        GpuDiagnostics, NumericGpuDiagnostics }
     private static RuntimeContractProfile Profile() => new(new(1, new('a', 64), RuntimeObserverSignals.NoneReported),
-        new(RuntimeInitializationStatus.Recorded, new(1, new('b', 64), RuntimeObserverSignals.NoneReported), new(RuntimeCpuMode.Cpu, 1),
+        new(RuntimeInitializationStatus.Recorded, new(1, new('b', 64), RuntimeObserverSignals.NoneReported, RuntimeGpuStartupPolicy.Disabled,
+            RuntimeGpuDiagnosticsPolicy.NoDumpRequested), new(RuntimeCpuMode.Cpu, 1),
             new(RuntimeCpuEntryMode.PlainCpu, RuntimeCpuLogging.Suppressed)));
     private static DiscoveryManifest Manifest(string profile) => new(1, "work",
         new(new('a', 40), new('b', 64), Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(profile)))),
@@ -95,6 +97,10 @@ public sealed class RuntimeProfileEvidenceTests
     [InlineData(Malformed.ResetMode)]
     [InlineData(Malformed.ResetLogging)]
     [InlineData(Malformed.ResetWithoutStartup)]
+    [InlineData(Malformed.GpuStartup)]
+    [InlineData(Malformed.NumericGpuStartup)]
+    [InlineData(Malformed.GpuDiagnostics)]
+    [InlineData(Malformed.NumericGpuDiagnostics)]
     public void ProfileClaimsMustBeWellFormedAndMatchTheExecutedHash(Malformed mutation)
     {
         string original = Json(Profile());
@@ -107,6 +113,10 @@ public sealed class RuntimeProfileEvidenceTests
             case Malformed.Schema: effective["Schema"] = 9; break;
             case Malformed.Status: initialization["Status"] = "ApprovedByCaller"; break;
             case Malformed.NumericEnum: initialization["Status"] = 1; break;
+            case Malformed.GpuStartup: effective["GpuStartup"] = "TrustedGpu"; break;
+            case Malformed.NumericGpuStartup: effective["GpuStartup"] = 2; break;
+            case Malformed.GpuDiagnostics: effective["GpuDiagnostics"] = "ApprovedDump"; break;
+            case Malformed.NumericGpuDiagnostics: effective["GpuDiagnostics"] = 1; break;
             case Malformed.UnknownMember: contract["TrustMe"] = true; break;
             case Malformed.ResetMode:
                 initialization["ResetInput"] = new JsonObject { ["Mode"] = "TrustedGpu", ["Logging"] = "Suppressed" }; break;

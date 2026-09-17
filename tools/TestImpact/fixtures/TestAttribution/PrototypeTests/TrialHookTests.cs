@@ -24,9 +24,13 @@ public sealed class TrialHookTests
         string bundle = Path.GetDirectoryName(typeof(TrialHookTests).Assembly.Location) ?? throw new InvalidOperationException("Missing bundle");
         using var evidence = new ObservedOwnerTests.Evidence([new("one", HookedOwner)], RunnerBinding.HashBundle(bundle));
         evidence.Report = evidence.Report with { TrialScopes = ScopeReport(HookedOwner) };
-        ObservedTrialHookAssessment result = Assert.Single(ObservedTrialHookReader.ReadAll(bundle, "PrototypeTests.dll", [HookedOwner], evidence.Verify()));
+        ObservedLifecycleReview review = ObservedTrialHookReader.Review(bundle, "PrototypeTests.dll", [HookedOwner], evidence.Verify());
+        ObservedTrialHookAssessment result = Assert.Single(review.Hooks);
         bool supported = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(object).Assembly.Location))) == ReviewedOwnerCompletion.RuntimeHash;
         Assert.Equal(supported ? ObservedTrialHookProof.ReviewedHookAndCompletedScope : ObservedTrialHookProof.Unresolved, result.Proof);
+        OwnerBodyWindow body = Assert.Single(review.Bodies);
+        Assert.Equal(HookedOwner, body.Owner);
+        Assert.Equal(supported ? YieldBodyContract.SingleYieldTaskBody : YieldBodyContract.Unresolved, body.Frame.Contract);
         if (supported)
         {
             Assert.DoesNotContain(TrialHookRequirement.ObservedOwner, result.Requirements);
@@ -59,10 +63,13 @@ public sealed class TrialHookTests
         { Case = evidence.Report.Cases[0].Case with { Kind = DiscoveredCaseKind.DeferredOrCustom } };
         string[] requested = mutation == ObservationMutation.DuplicateOwners ? [owner, owner]
             : [mutation == ObservationMutation.MissingOwner ? owner + "Missing" : owner];
-        var result = ObservedTrialHookReader.ReadAll(bundle, mutation == ObservationMutation.WrongAssembly ? "missing.dll" : "PrototypeTests.dll",
+        var review = ObservedTrialHookReader.Review(bundle, mutation == ObservationMutation.WrongAssembly ? "missing.dll" : "PrototypeTests.dll",
             requested, evidence.Verify());
+        var result = review.Hooks;
         Assert.Equal(requested.Length, result.Length);
         Assert.All(result, item => Assert.Equal(ObservedTrialHookProof.Unresolved, item.Proof));
+        if (mutation is ObservationMutation.CustomCase or ObservationMutation.MissingOwner or ObservationMutation.StaleBundle or ObservationMutation.DuplicateOwners or ObservationMutation.WrongAssembly)
+            Assert.All(review.Bodies, item => Assert.Equal(YieldBodyContract.Unresolved, item.Frame.Contract));
     }
 
     private static TrialScopeReport ScopeReport(string owner) => new(TrialScopeLedgerState.Recorded,

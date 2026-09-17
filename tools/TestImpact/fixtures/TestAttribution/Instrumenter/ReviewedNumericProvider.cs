@@ -4,13 +4,16 @@ using Mono.Cecil;
 internal enum NumericProviderContract { Unresolved, TensorsDoubleCache }
 internal enum NumericProviderRequirement { SharedInitialization, SuccessfulOwner, NoExternalCacheMutation }
 internal sealed record NumericProviderAssessment(NumericProviderContract Contract, string Method,
-    string PackageHash, string RuntimeHash, NumericProviderRequirement[] Requirements);
+    string PackageHash, string RuntimeHash, NumericProviderRequirement[] Requirements,
+    RuntimeCacheInitializationAssessment? CacheInitialization = null);
 
 // Review of one concrete successful cache path, not of MathHelper as a whole.
 // In these bytes CreateNumericOperations<double> takes its first type branch,
 // allocates DoubleOperations (object constructor only), and caches the result.
 // DoubleOperations.FromDouble returns its scalar argument without conversion.
-// MathHelper's own dictionary initializer is deliberately NOT discharged here.
+// The helper's private dictionary allocation is checked separately. Package
+// module initialization, exceptional observers and external mutation still need
+// the shared-initialization/lifetime proof; an allocation summary is not purity.
 internal static class ReviewedNumericProvider
 {
     internal const string PackageHash = "eb681ae60f23b03cf08e0bf3ab70a372673927acd87a428c74536d424846d5e7";
@@ -36,7 +39,8 @@ internal static class ReviewedNumericProvider
                 Hash(definition.Module.FileName) != PackageHash) return Unknown();
             // Re-read the pinned file. A mutable/synthetic Cecil definition must
             // not obtain a contract merely by pointing at a trusted filename.
-            using var pinned = AssemblyDefinition.ReadAssembly(definition.Module.FileName);
+            using var pinned = AssemblyDefinition.ReadAssembly(definition.Module.FileName,
+                new ReaderParameters { AssemblyResolver = definition.Module.AssemblyResolver });
             MethodDefinition? bound = pinned.MainModule.LookupToken(definition.MetadataToken) as MethodDefinition;
             if (bound is null || bound.FullName != definition.FullName ||
                 !HasProviderSignature(bound) || instance.ElementMethod.ReturnType.Resolve() is not TypeDefinition operations ||
@@ -48,7 +52,7 @@ internal static class ReviewedNumericProvider
             return new(NumericProviderContract.TensorsDoubleCache, call.FullName, PackageHash,
                 ReviewedOwnerCompletion.RuntimeHash,
                 [NumericProviderRequirement.SharedInitialization, NumericProviderRequirement.SuccessfulOwner,
-                 NumericProviderRequirement.NoExternalCacheMutation]);
+                 NumericProviderRequirement.NoExternalCacheMutation], RuntimeCacheInitializationReader.Read(bound.DeclaringType));
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
             BadImageFormatException or AssemblyResolutionException or ResolutionException or InvalidOperationException)
