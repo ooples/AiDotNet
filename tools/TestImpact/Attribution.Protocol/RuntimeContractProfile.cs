@@ -8,10 +8,13 @@ namespace AiDotNet.TestImpact;
 public enum RuntimeObserverSignals { NoneReported, Present }
 public enum RuntimeInitializationStatus { Missing, Recorded, Conflicting }
 public enum RuntimeCpuMode { Cpu, Other }
+public enum RuntimeCpuEntryMode { Other, PlainCpu, Missing, DerivedCpu }
+public enum RuntimeCpuLogging { MayInvokeCallbacks, Suppressed }
+public sealed record RuntimeCpuResetInput(RuntimeCpuEntryMode Mode, RuntimeCpuLogging Logging);
 public sealed record RuntimeEnvironmentBinding(int Schema, string Fingerprint, RuntimeObserverSignals ObserverSignals);
 public sealed record RuntimeCpuCompletion(RuntimeCpuMode Mode, int MaxDegreeOfParallelism);
 public sealed record RuntimeInitializationBinding(RuntimeInitializationStatus Status, RuntimeEnvironmentBinding? Inputs,
-    RuntimeCpuCompletion? Completion = null);
+    RuntimeCpuCompletion? Completion = null, RuntimeCpuResetInput? ResetInput = null);
 public sealed record RuntimeContractProfile(RuntimeEnvironmentBinding Effective, RuntimeInitializationBinding Initialization);
 
 public static class RuntimeProfileEvidence
@@ -39,9 +42,10 @@ public static class RuntimeProfileEvidence
             if (result.Initialization is null || !Enum.IsDefined(result.Initialization.Status) || !Valid(result.Effective) ||
                 (result.Initialization.Status == RuntimeInitializationStatus.Recorded && result.Initialization.Inputs is null) ||
                 (result.Initialization.Status == RuntimeInitializationStatus.Missing &&
-                    (result.Initialization.Inputs is not null || result.Initialization.Completion is not null)) ||
+                    (result.Initialization.Inputs is not null || result.Initialization.Completion is not null || result.Initialization.ResetInput is not null)) ||
                 (result.Initialization.Inputs is not null && !Valid(result.Initialization.Inputs)) ||
-                (result.Initialization.Completion is RuntimeCpuCompletion completion && !Enum.IsDefined(completion.Mode)))
+                (result.Initialization.Completion is RuntimeCpuCompletion completion && !Enum.IsDefined(completion.Mode)) ||
+                (result.Initialization.ResetInput is RuntimeCpuResetInput reset && (!Enum.IsDefined(reset.Mode) || !Enum.IsDefined(reset.Logging))))
                 throw new JsonException("Invalid runtime contract observation.");
             return result;
         }
@@ -55,6 +59,12 @@ public static class RuntimeProfileEvidence
             Inputs.ObserverSignals: RuntimeObserverSignals.NoneReported,
             Completion: { Mode: RuntimeCpuMode.Cpu, MaxDegreeOfParallelism: > 0 } }
     } && Valid(profile.Effective) && Valid(profile.Initialization.Inputs);
+
+    // Observed entry conditions, not an atomic engine/environment snapshot or
+    // proof of the reset's effects. Static/lifetime contracts must separately
+    // rule out concurrent mutation. Legacy/missing entries inherit no fact.
+    public static bool HasObservedCpuResetPreconditions(RuntimeContractProfile? profile) => HasObservedCpuStartup(profile) &&
+        profile?.Initialization.ResetInput is { Mode: RuntimeCpuEntryMode.PlainCpu, Logging: RuntimeCpuLogging.Suppressed };
 
     private static bool Valid(RuntimeEnvironmentBinding? value) => value is not null && value.Schema == 1 &&
         Enum.IsDefined(value.ObserverSignals) && value.Fingerprint is { Length: 64 } &&

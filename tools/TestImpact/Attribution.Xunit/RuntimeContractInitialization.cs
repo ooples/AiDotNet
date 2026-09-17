@@ -7,6 +7,7 @@ public static class RuntimeContractInitialization
     private static readonly RuntimeInitializationLedger Cpu = new();
 
     public static void RecordCpuStartup() => Cpu.Record(RuntimeContractEnvironment.Capture());
+    public static void RecordCpuResetInput(RuntimeCpuResetInput input) => Cpu.RecordReset(input);
     public static void RecordCpuCompletion(bool cpuActive, int maxDegreeOfParallelism) =>
         Cpu.Complete(new(cpuActive ? RuntimeCpuMode.Cpu : RuntimeCpuMode.Other, maxDegreeOfParallelism));
 
@@ -31,6 +32,18 @@ internal sealed class RuntimeInitializationLedger
     }
 
     internal RuntimeInitializationBinding Snapshot { get { lock (gate) return binding; } }
+
+    internal void RecordReset(RuntimeCpuResetInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        lock (gate)
+        {
+            if (binding.Status != RuntimeInitializationStatus.Recorded || binding.ResetInput is not null || binding.Completion is not null ||
+                !Enum.IsDefined(input.Mode) || !Enum.IsDefined(input.Logging))
+                binding = binding with { Status = RuntimeInitializationStatus.Conflicting };
+            else binding = binding with { ResetInput = input };
+        }
+    }
 
     internal void Complete(RuntimeCpuCompletion completion)
     {

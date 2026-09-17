@@ -58,7 +58,12 @@ internal static class RuntimeEffectsExperiment
                 calls.Add(ids[node.Key], node.LocalCalls.Select(call => ids.TryGetValue(call, out string? id) ? id : call).ToArray());
         }
         SourceLifecycleMap lifecycle = XunitLifecycleReader.Read(tests).Map;
-        MethodDefinition[] lifecycleCalls = LifecycleRoots(lifecycle, owners).Where(sourceMethods.ContainsKey).Select(root => sourceMethods[root])
+        string[] lifecycleRoots = LifecycleRoots(lifecycle, owners);
+        MethodDefinition[] rootedMethods = lifecycleRoots.Where(sourceMethods.ContainsKey).Select(root => sourceMethods[root]).ToArray();
+        TrialHookAssessment[] hookContracts = rootedMethods.Where(method => method.Name == "Before")
+            .SelectMany(beforeHook => rootedMethods.Where(method => method.Name == "After" && method.DeclaringType == beforeHook.DeclaringType)
+                .Select(afterHook => TrialHookReader.Read(beforeHook, afterHook))).ToArray();
+        MethodDefinition[] lifecycleCalls = rootedMethods
             .Where(method => method.HasBody).SelectMany(method => method.Body.Instructions)
             .Where(instruction => instruction.OpCode.Code is Code.Call or Code.Callvirt)
             .Select(instruction => instruction.Operand).OfType<MethodReference>()
@@ -132,7 +137,7 @@ internal static class RuntimeEffectsExperiment
         if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
             !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
             throw new InvalidDataException("Experiment inputs changed during analysis.");
-        return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect, ScopedLifecycleContracts = scopeContracts,
+        return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect, ScopedLifecycleContracts = scopeContracts, TrialHookContracts = hookContracts,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

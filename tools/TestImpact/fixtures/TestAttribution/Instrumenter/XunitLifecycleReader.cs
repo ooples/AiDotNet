@@ -11,9 +11,22 @@ internal sealed record XunitLifecycleResult(SourceLifecycleMap Map, SourceMethod
 // framework enforces deferred discovery; custom discoverers remain open.
 internal static class XunitLifecycleReader
 {
-    internal static XunitLifecycleResult Read(AssemblyDefinition assembly)
+    internal static XunitLifecycleResult Read(AssemblyDefinition assembly) => ReadCore(assembly, null);
+
+    // Observation binding needs only these owners. Do not expose the partial
+    // group graph as a source-impact snapshot: source mapping still uses Read.
+    internal static SourceTestLifecycle[] ReadObservedOwners(AssemblyDefinition assembly, string[] owners)
+    {
+        if (owners.Length == 0 || owners.Any(owner => string.IsNullOrWhiteSpace(owner) || owner.LastIndexOf('.') < 1) ||
+            owners.Distinct(StringComparer.Ordinal).Count() != owners.Length)
+            throw new InvalidDataException("Expected an exact nonempty observed-owner inventory.");
+        return ReadCore(assembly, owners.ToHashSet(StringComparer.Ordinal)).Map.Tests;
+    }
+
+    private static XunitLifecycleResult ReadCore(AssemblyDefinition assembly, HashSet<string>? requested)
     {
         TypeDefinition[] types = AllTypes(assembly.MainModule.Types).ToArray();
+        HashSet<string>? requestedClasses = requested?.Select(owner => owner[..owner.LastIndexOf('.')]).ToHashSet(StringComparer.Ordinal);
         var groups = new HashSet<string>(StringComparer.Ordinal);
         var assemblyCallbacks = new HashSet<string>(StringComparer.Ordinal);
         var tests = new List<SourceTestLifecycle>();
@@ -48,13 +61,15 @@ internal static class XunitLifecycleReader
 
         foreach (TypeDefinition type in types.Where(type => !type.IsAbstract && !type.IsInterface))
         {
+            string classIdentity = assembly.Name.Name + ":" + type.FullName.Replace('/', '+');
+            if (requestedClasses is not null && !requestedClasses.Contains(classIdentity)) continue;
             TypeDefinition[] hierarchy = Hierarchy(type).ToArray();
             MethodDefinition[] facts = hierarchy.SelectMany(owner => owner.Methods)
-                .Where(method => method.CustomAttributes.Any(attribute => Derives(attribute.AttributeType, "Xunit.FactAttribute"))).ToArray();
+                .Where(method => (requested is null || requested.Contains(classIdentity + "." + method.Name)) &&
+                    method.CustomAttributes.Any(attribute => Derives(attribute.AttributeType, "Xunit.FactAttribute"))).ToArray();
             if (facts.Length == 0) continue;
             var lifetime = new HashSet<string>(StringComparer.Ordinal);
             AddLifetime(type, lifetime);
-            string classIdentity = assembly.Name.Name + ":" + type.FullName.Replace('/', '+');
             bool classComplete = !type.HasGenericParameters;
             foreach (TypeDefinition owner in hierarchy)
             {

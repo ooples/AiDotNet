@@ -151,3 +151,35 @@ runner set passed 241/241. Real-assembly revalidation is pending: at about
 21:12 Eastern the active worktree's production and test bin/obj directories
 disappeared between consecutive reads, after the earlier real-slice proof.
 Those earlier results are retained, but do not validate the newer profile bytes.
+
+The recovered real assembly now verifies five completed owner/scope bindings
+against the actual Before/After hook. The hook reader checks construction,
+save/restore and observation ordering, scope clearing, and the exact cleanup
+paths/filter. Altered cleanup regions, foreign generic-parameter owners, missing
+or custom owner observations, and replaced bundles retain unresolved contracts.
+Observation inspection visits only requested classes; full source mapping still
+includes the complete lifecycle graph. Body file/slot isolation and owner-context
+flow remain requirements, not conclusions drawn from boundary samples.
+
+CPU reset entry is now recorded separately from completion. The real AMD host
+reported a derived CPU entry: the pinned Tensors GPU engine inherits CpuEngine,
+and its module initializer can auto-detect GPU before the test initializer.
+Consequently neither `is CpuEngine` nor a CPU result establishes a callback-free
+reset. The opt-in completion observation now requires the exact CPU type. Missing
+and derived entry states remain ineligible. GPU opt-out, verbose initialization,
+and the reviewed CPU initializer inputs join the environment digest; production
+GPU behavior is unchanged.
+
+With explicit CPU-only and quiet host inputs, the refreshed real slice passed
+5/5 and verified five completed trial hooks. Changing pre-normalization thread
+settings or logging mode rejected the original plan. The unconfigured host's
+derived entry did not satisfy the CPU precondition. These are local component
+controls, not normal changed-source selection, a reuse certificate, or live CI
+proof. Shared initializer/cache effects, body isolation, normal-selector
+composition, and real changed-source/live acceptance remain unfinished.
+
+Final verification of this batch passed 441 protocol/control cases and all 33
+rejection controls in `attribution-hook-reset-final-20260916`. Reusing the valid
+real execution outputs, the final hook reader verified all five bindings in
+9.34 seconds (`attribution-real-runtime-inputs-20260916-v9/verified-final.json`).
+The real test-only build completed with zero errors and 4,013 existing warnings.

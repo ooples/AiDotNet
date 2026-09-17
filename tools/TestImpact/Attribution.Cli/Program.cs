@@ -76,11 +76,13 @@ switch (command)
             int.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture));
         VerifiedObservedExecution observed = LocalEvidenceReader.VerifyObserved(Read<DiscoveryManifest>(args[1]), new(args[2], args[3], args[4], args[5], origin));
         VerifiedExecution result = observed.Execution;
-        var ownerCompletion = args.Length == 12 ? ReviewedOwnerCompletion.ReadAll(args[10], args[11],
-            result.Cases.Select(item => item.MethodId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), observed) : [];
+        var lifecycle = args.Length == 12 ? ObservedTrialHookReader.Review(args[10], args[11],
+            result.Cases.Select(item => item.MethodId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), observed)
+            : new ObservedLifecycleReview([], []);
         RunnerBinding.WriteNew(args[9], new { result.Scope, result.PlanHash, result.InventoryHash, result.Context,
             result.Workload, result.Origin, result.Cases, result.CanReplaceFullBaseline,
-            observed.StandardCases, observed.RuntimeProfile, observed.TrialScopes, OwnerCompletion = ownerCompletion, AuthenticatedWorkflowOrigin = false });
+            observed.StandardCases, observed.RuntimeProfile, observed.TrialScopes, OwnerCompletion = lifecycle.Owners,
+            TrialHooks = lifecycle.Hooks, AuthenticatedWorkflowOrigin = false });
         break;
     }
 }

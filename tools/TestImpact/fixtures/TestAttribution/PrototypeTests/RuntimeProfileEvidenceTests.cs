@@ -11,9 +11,10 @@ namespace PrototypeTests;
 public sealed class RuntimeProfileEvidenceTests
 {
     public enum Startup { Missing, NoCompletion, Conflicting, OtherEngine, InvalidDop, InitialObserver, EffectiveObserver, MissingInputs }
-    public enum Malformed { Hash, Schema, Status, NumericEnum, Duplicate, UnknownMember }
+    public enum Malformed { Hash, Schema, Status, NumericEnum, Duplicate, UnknownMember, ResetMode, ResetLogging, ResetWithoutStartup }
     private static RuntimeContractProfile Profile() => new(new(1, new('a', 64), RuntimeObserverSignals.NoneReported),
-        new(RuntimeInitializationStatus.Recorded, new(1, new('b', 64), RuntimeObserverSignals.NoneReported), new(RuntimeCpuMode.Cpu, 1)));
+        new(RuntimeInitializationStatus.Recorded, new(1, new('b', 64), RuntimeObserverSignals.NoneReported), new(RuntimeCpuMode.Cpu, 1),
+            new(RuntimeCpuEntryMode.PlainCpu, RuntimeCpuLogging.Suppressed)));
     private static DiscoveryManifest Manifest(string profile) => new(1, "work",
         new(new('a', 40), new('b', 64), Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(profile)))),
         [new("case", "Owner")], profile);
@@ -26,6 +27,7 @@ public sealed class RuntimeProfileEvidenceTests
         RuntimeContractProfile? actual = RuntimeProfileEvidence.Read(Manifest(Json(expected)));
         Assert.Equal(expected, actual);
         Assert.True(RuntimeProfileEvidence.HasObservedCpuStartup(actual));
+        Assert.True(RuntimeProfileEvidence.HasObservedCpuResetPreconditions(actual));
     }
 
     [Fact]
@@ -90,6 +92,9 @@ public sealed class RuntimeProfileEvidenceTests
     [InlineData(Malformed.NumericEnum)]
     [InlineData(Malformed.Duplicate)]
     [InlineData(Malformed.UnknownMember)]
+    [InlineData(Malformed.ResetMode)]
+    [InlineData(Malformed.ResetLogging)]
+    [InlineData(Malformed.ResetWithoutStartup)]
     public void ProfileClaimsMustBeWellFormedAndMatchTheExecutedHash(Malformed mutation)
     {
         string original = Json(Profile());
@@ -103,6 +108,12 @@ public sealed class RuntimeProfileEvidenceTests
             case Malformed.Status: initialization["Status"] = "ApprovedByCaller"; break;
             case Malformed.NumericEnum: initialization["Status"] = 1; break;
             case Malformed.UnknownMember: contract["TrustMe"] = true; break;
+            case Malformed.ResetMode:
+                initialization["ResetInput"] = new JsonObject { ["Mode"] = "TrustedGpu", ["Logging"] = "Suppressed" }; break;
+            case Malformed.ResetLogging:
+                initialization["ResetInput"] = new JsonObject { ["Mode"] = "PlainCpu", ["Logging"] = 1 }; break;
+            case Malformed.ResetWithoutStartup:
+                initialization["Status"] = "Missing"; initialization["Inputs"] = null; initialization["Completion"] = null; break;
         }
         string json = mutation == Malformed.Duplicate ? original.Replace("\"RuntimeContracts\":", "\"RuntimeContracts\":null,\"RuntimeContracts\":", StringComparison.Ordinal) : document.ToJsonString();
         DiscoveryManifest manifest = Manifest(json);
