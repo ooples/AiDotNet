@@ -29,11 +29,11 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         Guard.NotNullOrWhiteSpace(correctness.VersionHash);
         Guard.NotNullOrWhiteSpace(fitness.Id);
         Guard.NotNullOrWhiteSpace(fitness.VersionHash);
-        _correctness = correctness;
-        _fitness = fitness;
+        _correctness = new VersionPinnedProgramFitnessEvaluator(correctness);
+        _fitness = new VersionPinnedProgramFitnessEvaluator(fitness);
         VersionHash = EvolutionHash.Combine(new[]
         {
-            "correctness-gated-program-v3-measurement-origin", correctness.Id, correctness.VersionHash, fitness.Id, fitness.VersionHash
+            "correctness-gated-program-v4-fresh-pinned", _correctness.Id, _correctness.VersionHash, _fitness.Id, _fitness.VersionHash
         });
     }
 
@@ -58,8 +58,7 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         EvolutionTaskResult? validation = await _correctness.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
         if (validation is null) throw new InvalidOperationException("Correctness evaluation returned no result or resource receipt.");
         if (validation.Status != EvolutionEvaluationStatus.Completed) return validation;
-        if (validation.Direction != EvolutionOptimizationDirection.Maximize || validation.Quality != 1 ||
-            validation.ConstraintViolations.Any(value => value > 0))
+        if (!PassesCorrectness(validation))
             return Copy(validation, EvolutionEvaluationStatus.Rejected, validation.CostUnits);
         cancellationToken.ThrowIfCancellationRequested();
         EvolutionTaskResult? fitness = await _fitness.EvaluateAsync(candidate, context, cancellationToken).ConfigureAwait(false);
@@ -70,7 +69,12 @@ internal sealed class CorrectnessGatedProgramFitnessEvaluator : IProgramFitnessE
         return Copy(fitness, status, validation.CostUnits + fitness.CostUnits);
     }
 
-    private static EvolutionTaskResult Copy(EvolutionTaskResult result, EvolutionEvaluationStatus status, double cost)
+    internal static bool PassesCorrectness(EvolutionTaskResult result) => result.Status == EvolutionEvaluationStatus.Completed &&
+        result.Direction == EvolutionOptimizationDirection.Maximize && result.Quality == 1 &&
+        result.ConstraintViolations.All(value => value == 0) &&
+        result.MeasurementOrigin is not { Kind: not EvolutionMeasurementOriginKind.Measured };
+
+    internal static EvolutionTaskResult Copy(EvolutionTaskResult result, EvolutionEvaluationStatus status, double cost)
     {
         var copy = new EvolutionTaskResult(status, status == EvolutionEvaluationStatus.Completed ? result.Quality : null, result.Direction,
             result.Descriptors, result.Objectives, result.ConstraintViolations, cost, result.Diagnostics, result.Metrics, result.Artifacts);

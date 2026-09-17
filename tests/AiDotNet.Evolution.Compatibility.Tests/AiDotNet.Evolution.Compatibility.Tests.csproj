@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net471</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Reuse the existing test-only friend identity in this independently hosted subset. -->
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Evolution/ProgramEvolutionPreflightTests.cs" Link="ProgramEvolutionPreflightTests.cs" />
+    <Compile Include="../AiDotNet.Evolve.Cli.Tests/CorrectnessCachePolicyTests.cs" Link="CorrectnessCachePolicyTests.cs" />
+  </ItemGroup>
+</Project>

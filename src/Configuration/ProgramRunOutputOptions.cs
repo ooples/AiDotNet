@@ -85,6 +85,10 @@ public sealed class ProgramRunOutputOptions
     /// </remarks>
     public long MaxRetainedPrograms { get; set; }
 
+    /// <summary>Gets or sets the number of recent write receipts kept in memory, from 1 to 65,536; default 1,024.</summary>
+    /// <remarks>Older receipts are counted as dropped; this does not delete any files.</remarks>
+    public int MaxRetainedRecords { get; set; } = 1024;
+
     /// <summary>Creates an independent copy so a running writer is unaffected by later mutation.</summary>
     /// <returns>A new instance carrying the same settings.</returns>
     public ProgramRunOutputOptions Clone() => new()
@@ -100,7 +104,8 @@ public sealed class ProgramRunOutputOptions
         RunId = RunId,
         ProgramsDirectoryName = ProgramsDirectoryName,
         WriteEveryProgram = WriteEveryProgram,
-        MaxRetainedPrograms = MaxRetainedPrograms
+        MaxRetainedPrograms = MaxRetainedPrograms,
+        MaxRetainedRecords = MaxRetainedRecords
     };
 
     /// <summary>Rejects names that are not usable file-system names and sizes that cannot be enforced.</summary>
@@ -114,6 +119,8 @@ public sealed class ProgramRunOutputOptions
         RequireName(ProgramFileNameStem, nameof(ProgramFileNameStem));
         RequireName(InfoFileName, nameof(InfoFileName));
         RequireName(ProgramsDirectoryName, nameof(ProgramsDirectoryName));
+        if (MaxRetainedRecords < 1 || MaxRetainedRecords > 65536)
+            throw new ArgumentOutOfRangeException(nameof(MaxRetainedRecords), "Value must be between 1 and 65,536.");
         if (MaxRetainedPrograms < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxRetainedPrograms), MaxRetainedPrograms,
