@@ -110,7 +110,10 @@ public class PixelToSequenceDocumentTests
     {
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
-        Assert.Equal(expectedShape, output.Shape);
+        // Shape is a TensorShape, which only converts to ReadOnlySpan<int> implicitly. That
+        // satisfied Assert.Equal's overloads on net10.0 but not on net8.0/net471, so materialize
+        // it the way the rest of the suite does.
+        Assert.Equal(expectedShape, output.Shape.ToArray());
     }
 
     #region Donut Tests
