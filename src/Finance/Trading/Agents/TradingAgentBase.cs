@@ -831,8 +831,11 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// </remarks>
     protected T ScaleReward(T reward)
     {
+        // Scaling unconditionally rather than short-circuiting an exactly-1.0 scale: RewardScale is
+        // validated positive and finite, and multiplying by one is an identity, so the guard only
+        // traded a negligible multiply for an exact floating-point comparison.
         double scale = TradingOptions.RewardScale;
-        return scale == 1.0 ? reward : NumOps.Multiply(reward, NumOps.FromDouble(scale));
+        return NumOps.Multiply(reward, NumOps.FromDouble(scale));
     }
 
     #endregion

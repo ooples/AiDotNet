@@ -455,8 +455,8 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
         int stateActionDim = stateDim + actionDim;
         var logStds = CurrentLogStandardDeviations();
@@ -502,7 +502,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
+        using var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
         var targetQ1 = _targetCritic1.Predict(nextStateActions).ToVector();
         var targetQ2 = _targetCritic2.Predict(nextStateActions).ToVector();
 
@@ -527,8 +527,8 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
-        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        using var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
+        using var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
 
         // ---- 2. Train BOTH critics on the same target ----
         // They differ only by their independent initialization, which is exactly what makes min(Q1, Q2)
@@ -593,7 +593,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var actorTargets = new Tensor<T>([n, actorWidth], new Vector<T>(actorTargetData));
+        using var actorTargets = new Tensor<T>([n, actorWidth], new Vector<T>(actorTargetData));
         _actor.Train(states, actorTargets);
         T actorLoss = _actor.GetLastLoss();
 
@@ -667,8 +667,10 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
                 }
             }
 
-            var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
-            var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
+            // Released per direction rather than at method exit: the loop runs actionDim times and each
+            // iteration allocates two [n, stateActionDim] buffers that nothing reads after its passes.
+            using var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
+            using var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
             var plusQ1 = _critic1.Predict(plus).ToVector();
             var plusQ2 = _critic2.Predict(plus).ToVector();
             var minusQ1 = _critic1.Predict(minus).ToVector();

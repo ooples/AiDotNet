@@ -358,8 +358,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
         var nextActions = _targetPolicyNetwork.Predict(nextStates).ToVector();
         var nextStateActionsData = new T[n * stateActionDim];
@@ -379,7 +379,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
+        using var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
         var nextQ = _targetCritic.Predict(nextStateActions).ToVector();
 
         var targetData = new T[n];
@@ -389,8 +389,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             targetData[i] = NumOps.Add(batch[i].Reward, NumOps.FromDouble(bootstrap));
         }
 
-        var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
-        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        using var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
+        using var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
 
         _critic.Train(stateActions, targets);
         T criticLoss = _critic.GetLastLoss();
@@ -414,7 +414,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var policyTargets = new Tensor<T>([n, actionDim], new Vector<T>(policyTargetData));
+        using var policyTargets = new Tensor<T>([n, actionDim], new Vector<T>(policyTargetData));
         _policyNetwork.Train(states, policyTargets);
         T policyLoss = _policyNetwork.GetLastLoss();
 
@@ -464,8 +464,12 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
                 }
             }
 
-            var plusQ = _critic.Predict(new Tensor<T>([n, stateActionDim], new Vector<T>(plusData))).ToVector();
-            var minusQ = _critic.Predict(new Tensor<T>([n, stateActionDim], new Vector<T>(minusData))).ToVector();
+            // Released per direction rather than at method exit: the loop runs actionDim times and each
+            // iteration allocates two [n, stateActionDim] buffers that nothing reads after its pass.
+            using var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
+            using var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
+            var plusQ = _critic.Predict(plus).ToVector();
+            var minusQ = _critic.Predict(minus).ToVector();
             for (int i = 0; i < n; i++)
             {
                 gradients[(i * actionDim) + dimension] =
