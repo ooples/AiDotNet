@@ -27,10 +27,14 @@ jobs:
       matrix:
         # current: the SonarCloud job's steps as they are.
         # freed-disk: the same after the disk cleanup the CodeQL job already performs.
-        variant: [current, freed-disk]
+        # src-only: shipped projects only, to see whether test/benchmark projects are the cost.
+        # Run 35242849920: both jobs were shut down by the host (exit 143) while the FIRST project,
+        # AiDotNetBenchmarkTests, was still building after 47 and 65 minutes; the watchdog never fired
+        # and the artifact upload was skipped, so samples are now also printed into the log.
+        variant: [current, freed-disk, src-only]
     steps:
       - name: Free runner disk space
-        if: matrix.variant == 'freed-disk'
+        if: matrix.variant != 'current'
         run: |
           sudo rm -rf /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/PyPy \
             /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/go /usr/share/swift /usr/share/miniconda \
@@ -102,7 +106,10 @@ jobs:
               root=$(df -m --output=avail / | tail -1 | tr -d ' ')
               temp=$(df -m --output=avail "$RUNNER_TEMP" | tail -1 | tr -d ' ')
               sonar=$( (du -sm .sonarqube 2>/dev/null || true) | cut -f1)
-              echo "$(date -u +%FT%TZ),$used,$avail,$swap,$root,$temp,${sonar:-0}" >> "$samples"
+              line="$(date -u +%FT%TZ),$used,$avail,$swap,$root,$temp,${sonar:-0}"
+              echo "$line" >> "$samples"
+              tick=$(( ${tick:-0} + 1 ))
+              if [ $(( tick % 6 )) -eq 1 ]; then echo "sample $line"; fi
               # Stop the build, not the runner: a lost runner loses every log and artifact.
               if [ "$avail" -lt 600 ] || [ "$root" -lt 1500 ] || [ "$temp" -lt 1500 ]; then
                 echo "watchdog: stopping the build (mem_available=${avail}MB root=${root}MB temp=${temp}MB)" | tee probe/watchdog.txt
@@ -117,7 +124,13 @@ jobs:
           sampler=$!
 
           echo 'project,start_utc,end_utc,seconds,exit' > probe/projects.csv
-          dotnet sln AiDotNet.sln list | tail -n +3 | tr -d '\r' | sed 's#\\#/#g' | sed '/^\s*$/d' > probe/project-list.txt
+          dotnet sln AiDotNet.sln list | tail -n +3 | tr -d '\r' | sed 's#\\#/#g' | sed '/^\s*$/d' > probe/all-projects.txt
+          # The core library first, so its cost is measured on its own.
+          { grep -x 'src/AiDotNet.csproj' probe/all-projects.txt; grep -vx 'src/AiDotNet.csproj' probe/all-projects.txt; } > probe/project-list.txt
+          if [ '${{ matrix.variant }}' = 'src-only' ]; then
+            grep '^src/' probe/project-list.txt > probe/src-list.txt; mv probe/src-list.txt probe/project-list.txt
+          fi
+          echo 'build order:'; cat probe/project-list.txt
           overall=0
           while read -r project; do
             if [ -f probe/watchdog.txt ]; then break; fi
