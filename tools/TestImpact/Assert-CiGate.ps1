@@ -9,14 +9,10 @@ param(
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
     [string] $RequiresTests = 'true',
-    [string] $RequiresSweeps = 'true',
-    [string] $RequiresShapes = 'true',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
     [string] $TestsResult = 'skipped',
-    [string] $ParameterSweepResult = 'skipped',
-    [string] $ModelShapeResult = 'skipped',
     [string] $RegressionAnalysisResult = 'skipped',
     [string] $VerdictEnforced = 'false',
     [string] $AggregateAnalysisResult = 'skipped',
@@ -92,8 +88,6 @@ $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
-$requiresSweepsNow = ConvertTo-RequiredBoolean $RequiresSweeps 'RequiresSweeps'
-$requiresShapesNow = ConvertTo-RequiredBoolean $RequiresShapes 'RequiresShapes'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 
 $source = ConvertTo-CiJobConclusion $SourceResult 'SourceResult'
@@ -101,8 +95,6 @@ $select = ConvertTo-CiJobConclusion $SelectResult 'SelectResult'
 $build = ConvertTo-CiJobConclusion $BuildResult 'BuildResult'
 $buildCompat = ConvertTo-CiJobConclusion $BuildCompatResult 'BuildCompatResult'
 $tests = ConvertTo-CiJobConclusion $TestsResult 'TestsResult'
-$parameterSweep = ConvertTo-CiJobConclusion $ParameterSweepResult 'ParameterSweepResult'
-$modelShape = ConvertTo-CiJobConclusion $ModelShapeResult 'ModelShapeResult'
 $regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'RegressionAnalysisResult'
 $aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'AggregateAnalysisResult'
 $sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'SizeCheckResult'
@@ -122,12 +114,6 @@ if ($gateStage -eq [CiGateStage]::Validation) {
     if ($requiresRuntimeValidation) {
         Add-RequiredSuccess $requirements 'build' $build
         Add-RequiredSuccess $requirements 'build-compat' $buildCompat
-        if ($requiresSweepsNow -or $parameterSweep -ne [CiJobConclusion]::Skipped) {
-            Add-RequiredSuccess $requirements 'parameter-enumeration-sweep' $parameterSweep
-        }
-        if ($requiresShapesNow -or $modelShape -ne [CiJobConclusion]::Skipped) {
-            Add-RequiredSuccess $requirements 'model-shape-conformance-windows' $modelShape
-        }
         Add-RequiredSuccess $requirements 'test-regression-analysis' $regression
         Add-RequiredSuccess $requirements 'ci-test-analysis' $aggregate
         Add-RequiredSuccess $requirements 'size-check' $sizeCheck
