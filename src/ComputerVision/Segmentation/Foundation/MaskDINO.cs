@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -356,7 +356,7 @@ public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
                 { "DecoderDim", _decoderDim }, { "UseNativeMode", _useNativeMode },
                 { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

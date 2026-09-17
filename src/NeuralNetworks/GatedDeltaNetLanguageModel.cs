@@ -163,7 +163,7 @@ public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBas
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -351,7 +351,7 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

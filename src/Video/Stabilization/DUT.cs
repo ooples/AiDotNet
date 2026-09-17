@@ -163,7 +163,7 @@ public partial class DUT<T> : VideoStabilizationBase<T>
                 { "NumResBlocks", _options.NumResBlocks },
                 { "TemporalWindowSize", _options.TemporalWindowSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -682,7 +682,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "layer_count", Layers.Count },
                 { "ctc_positions", _options.OutputCharacterPositions }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

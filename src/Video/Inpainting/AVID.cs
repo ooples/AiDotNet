@@ -197,7 +197,7 @@ public partial class AVID<T> : VideoInpaintingBase<T>
                 { "NumResBlocks", _options.NumResBlocks },
                 { "NumHeads", _options.NumHeads }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

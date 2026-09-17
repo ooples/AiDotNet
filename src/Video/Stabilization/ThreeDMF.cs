@@ -162,7 +162,7 @@ public partial class ThreeDMF<T> : VideoStabilizationBase<T>
                 { "NumMotionIters", _options.NumMotionIters },
                 { "NumResBlocks", _options.NumResBlocks }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -210,7 +210,7 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

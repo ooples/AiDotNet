@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -1197,7 +1197,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
                 { "ParameterCount", ParameterCount },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

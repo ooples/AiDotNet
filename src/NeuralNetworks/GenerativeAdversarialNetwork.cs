@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
@@ -1820,7 +1820,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
                 { "DiscriminatorArchitecture", Discriminator.GetModelMetadata() },
                 { "OptimizationType", "Adam" }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -368,7 +368,7 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

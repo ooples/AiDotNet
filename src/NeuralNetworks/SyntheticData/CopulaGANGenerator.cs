@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1501,7 +1501,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

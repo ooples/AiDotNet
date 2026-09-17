@@ -431,7 +431,7 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
                 { "OutputSize", _outputSize },
                 { "RadialBasisFunction", _radialBasisFunction.GetType().Name }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

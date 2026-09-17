@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -582,7 +582,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         {
             { "ModelName", "DIFRINT" }, { "NumFeatures", _numFeatures }, { "NumIterations", _numIterations }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

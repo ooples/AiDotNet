@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -338,7 +338,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>
             { "NumLayers", Layers.Count },
             { "EncoderLayerEnd", _encoderLayerEnd }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     /// <summary>

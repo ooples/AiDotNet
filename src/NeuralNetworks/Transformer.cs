@@ -1059,7 +1059,7 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
                 { "LossFunction", LossFunction.GetType().Name },
                 { "Optimizer", _optimizer.GetType().Name }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

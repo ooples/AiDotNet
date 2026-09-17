@@ -186,7 +186,7 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
                 { "NumShifts", _options.NumShifts },
                 { "ShiftRadius", _options.ShiftRadius }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -162,7 +162,7 @@ public partial class PWStableNet<T> : VideoStabilizationBase<T>
                 { "GridSize", _options.GridSize },
                 { "NumResBlocks", _options.NumResBlocks }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

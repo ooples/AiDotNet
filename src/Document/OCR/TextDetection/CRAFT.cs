@@ -447,7 +447,7 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "character_detection", true },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

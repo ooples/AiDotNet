@@ -1136,7 +1136,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 { "DenoiserLayerCount", Layers.Count },
                 { "DenoiserLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

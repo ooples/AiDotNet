@@ -397,7 +397,7 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
             { "ModelName", "ByteTrack" }, { "NumClasses", _numClasses },
             { "HighThreshold", _highThreshold }, { "LowThreshold", _lowThreshold }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

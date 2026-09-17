@@ -274,7 +274,7 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
                 { "TemporalWindowSize", _options.TemporalWindowSize },
                 { "ExpansionFactor", _options.ExpansionFactor }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -585,7 +585,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

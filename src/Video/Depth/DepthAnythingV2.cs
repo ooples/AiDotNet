@@ -644,7 +644,7 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

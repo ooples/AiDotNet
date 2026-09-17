@@ -794,7 +794,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
                 { "DecoderLayerCount", _decoderLayers.Count },
                 { "EncoderLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

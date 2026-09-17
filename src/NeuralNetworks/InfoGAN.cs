@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -934,7 +934,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "LatentCodeSize", _latentCodeSize },
                 { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

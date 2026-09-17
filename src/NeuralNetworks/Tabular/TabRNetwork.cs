@@ -222,7 +222,7 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

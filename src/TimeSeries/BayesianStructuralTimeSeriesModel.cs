@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -1317,7 +1317,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
                 { "RidgeParameter", bstsOptions.RidgeParameter },
                 { "RegressionDecompositionType", bstsOptions.RegressionDecompositionType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
         return metadata;
     }

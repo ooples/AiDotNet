@@ -335,7 +335,7 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

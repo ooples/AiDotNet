@@ -582,7 +582,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
                 { "NumWeightLayers", _configuration.NumWeightLayers },
                 { "ZeroInitResidual", _configuration.ZeroInitResidual }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

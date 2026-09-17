@@ -1244,7 +1244,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
                 { "VocabularySize", _vocabularySize },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

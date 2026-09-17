@@ -423,7 +423,7 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1567,7 +1567,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
                 { "ParameterCount", ParameterCount },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

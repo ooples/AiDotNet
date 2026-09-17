@@ -181,7 +181,7 @@ public partial class HawkLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

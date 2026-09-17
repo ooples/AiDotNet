@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -350,7 +350,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
             { "Variant", _variant.ToString() },
             { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

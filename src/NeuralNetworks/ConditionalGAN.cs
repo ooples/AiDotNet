@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -876,7 +876,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumConditionClasses", _numConditionClasses }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

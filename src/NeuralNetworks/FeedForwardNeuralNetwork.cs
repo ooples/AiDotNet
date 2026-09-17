@@ -500,7 +500,7 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

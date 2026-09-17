@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -336,7 +336,7 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.

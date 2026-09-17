@@ -380,7 +380,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

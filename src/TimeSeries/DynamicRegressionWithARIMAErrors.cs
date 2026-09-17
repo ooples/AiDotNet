@@ -1602,7 +1602,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
                 { "DecompositionType", options.DecompositionType },
                 { "Regularization", options.Regularization?.GetType().Name ?? "None" }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

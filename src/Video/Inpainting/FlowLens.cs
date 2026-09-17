@@ -204,7 +204,7 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
                 { "NumLevels", _options.NumLevels },
                 { "NumResBlocks", _options.NumResBlocks }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

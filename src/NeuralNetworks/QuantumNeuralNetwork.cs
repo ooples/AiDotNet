@@ -316,7 +316,7 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
                 { "NumberOfQubits", _numQubits }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

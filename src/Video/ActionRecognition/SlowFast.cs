@@ -685,7 +685,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
             { "Alpha", _alpha },
             { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
     /// <summary>

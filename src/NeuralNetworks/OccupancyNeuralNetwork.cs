@@ -587,7 +587,7 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TotalParameters", ParameterCount },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -164,7 +164,7 @@ public partial class GaVS<T> : VideoStabilizationBase<T>
                 { "GazeHiddenDim", _options.GazeHiddenDim },
                 { "SmoothingWindow", _options.SmoothingWindow }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -340,7 +340,7 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

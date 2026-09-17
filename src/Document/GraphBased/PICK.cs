@@ -429,7 +429,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
                 { "num_entity_types", _numEntityTypes },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

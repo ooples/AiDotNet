@@ -760,7 +760,7 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 { "UseSeasonal", EsOptions.UseSeasonal },
                 { "SeasonalPeriod", EsOptions.SeasonalPeriod }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

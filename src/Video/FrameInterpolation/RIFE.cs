@@ -944,7 +944,7 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

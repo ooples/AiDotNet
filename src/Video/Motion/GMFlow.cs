@@ -670,7 +670,7 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
             { "InputWidth", _width },
             { "NumTransformerLayers", _numTransformerLayers }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
 

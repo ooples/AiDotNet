@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -1175,7 +1175,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
             { "NumLayers", _numLayers },
             { "GuidanceScale", _guidanceScale }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
 

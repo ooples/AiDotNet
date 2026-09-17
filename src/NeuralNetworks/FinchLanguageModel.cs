@@ -146,7 +146,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

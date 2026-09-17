@@ -826,7 +826,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
                 { "EncoderLayers", Layers.Take(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() },
                 { "DecoderLayers", Layers.Skip(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -797,7 +797,7 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
             { "InputHeight", _height },
             { "InputWidth", _width }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
 
