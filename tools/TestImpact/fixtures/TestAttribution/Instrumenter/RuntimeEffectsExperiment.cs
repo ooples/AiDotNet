@@ -132,11 +132,6 @@ internal static class RuntimeEffectsExperiment
             }
             return new { Owner = owner, Calls = uses.ToArray(), MissingCallsiteProof = uses.Count == 0 };
         }).ToArray();
-        // Recheck immutable inputs after reading; this is an experiment, not a
-        // provenance or reuse certificate, even if every control later passes.
-        if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
-            !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
-            throw new InvalidDataException("Experiment inputs changed during analysis.");
         HashSet<string> workloadCalls = Reachable(LifecycleRoots(lifecycle, owners));
         var lockedInitializations = workloadCalls.Where(sourceMethods.ContainsKey).Select(id => sourceMethods[id])
             .Where(method => method.IsConstructor && !method.IsStatic)
@@ -147,10 +142,17 @@ internal static class RuntimeEffectsExperiment
                 .Where(site => site.instruction.OpCode.Code == Code.Newobj)
                 .Select(site => new { Caller = DependencyGraph.Stable(method), Assessment = ConstructorCallReader.Read(method, site.index) }))
             .Where(item => item.Assessment is not null).ToArray();
+        var asyncBodies = owners.Select(owner => new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(tests, owner))).ToArray();
+        // Recheck after ALL readers, including constructor and async-body
+        // contracts. No lazily evaluated reader may run after this boundary.
+        // This still is not a provenance or reuse certificate.
+        if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
+            !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
+            throw new InvalidDataException("Experiment inputs changed during analysis.");
         return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect, ScopedLifecycleContracts = scopeContracts, TrialHookContracts = hookContracts,
             LockedInitializations = lockedInitializations,
             ConstructorInputs = constructedInputs,
-            AsyncBodies = owners.Select(owner => new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(tests, owner))).ToArray(),
+            AsyncBodies = asyncBodies,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

@@ -11,7 +11,7 @@ public sealed class SerializedOwnerReaderTests
     public enum Mutation { MissingMembership, DuplicateMembership, UnknownDefinition, DuplicateDefinition, ParallelAllowed,
         MissingParallelFlag, ExtraSetting, ClassFixture, CollectionFixture, MutableState, StaticInitializer, ConstructorCode,
         InheritedClass, MissingMethod, ForeignAssembly, WrongBooleanType, ConstructorArgument,
-        MembershipProperty, MembershipField, Finalizer, AssemblyOrderer, DuplicateBehavior, CustomCollectionFactory }
+        MembershipProperty, MembershipField, Finalizer, AssemblyOrderer, DuplicateBehavior, CustomCollectionFactory, CaseOnlyDefinitionCollision }
 
     [Fact]
     public void FixtureFreeSerialCollectionIsBoundToTheReviewedMetadata()
@@ -46,6 +46,7 @@ public sealed class SerializedOwnerReaderTests
     [InlineData(Mutation.AssemblyOrderer)]
     [InlineData(Mutation.DuplicateBehavior)]
     [InlineData(Mutation.CustomCollectionFactory)]
+    [InlineData(Mutation.CaseOnlyDefinitionCollision)]
     public void ChangedLifecycleDoesNotInheritSerialIsolation(Mutation mutation)
     {
         using var fixture = new Fixture();
@@ -72,6 +73,15 @@ public sealed class SerializedOwnerReaderTests
             case Mutation.ForeignAssembly: owner = "foreign:" + owner; break;
             case Mutation.WrongBooleanType: declaration.Properties[0] = new("DisableParallelization", new(fixture.Assembly.MainModule.TypeSystem.String, true)); break;
             case Mutation.ConstructorArgument: membership.Constructor.Parameters[0].ParameterType = fixture.Assembly.MainModule.TypeSystem.Object; break;
+            case Mutation.CaseOnlyDefinitionCollision:
+                var collision = new TypeDefinition("Fixtures", "ConflictingCollection", TypeAttributes.Public, fixture.Assembly.MainModule.ImportReference(typeof(object)));
+                var conflicting = new CustomAttribute(declaration.Constructor);
+                conflicting.ConstructorArguments.Add(new(fixture.Assembly.MainModule.TypeSystem.String,
+                    ((string)declaration.ConstructorArguments[0].Value).ToLowerInvariant()));
+                conflicting.Properties.Add(new("DisableParallelization", new(fixture.Assembly.MainModule.TypeSystem.Boolean, false)));
+                collision.CustomAttributes.Add(conflicting);
+                fixture.Assembly.MainModule.Types.Insert(1, collision);
+                break;
             case Mutation.MembershipProperty: membership.Properties.Add(new("Unknown", new(fixture.Assembly.MainModule.TypeSystem.Boolean, true))); break;
             case Mutation.MembershipField: membership.Fields.Add(new("Unknown", new(fixture.Assembly.MainModule.TypeSystem.Boolean, true))); break;
             case Mutation.Finalizer: fixture.Type.Methods.Add(new("Finalize", MethodAttributes.Family | MethodAttributes.Virtual, fixture.Assembly.MainModule.TypeSystem.Void)); break;

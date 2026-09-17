@@ -222,3 +222,16 @@ Foreign parameter owners, wrong inheritance edges, added effects and substituted
 closed field owners are rejection controls. The follow-up focused set passed
 467/467; all four real constructor sites verified the numeric-base contract in
 `attribution-real-constructor-inputs-final-20260917.jsonl`.
+
+The combined no-build harness then passed 601 cases and all 33 rejection controls
+in `attribution-all-contracts-final-20260917`. A subsequent pinned-xUnit IL review
+found case-insensitive grouping of collection definitions followed by a
+case-sensitive lookup. The concurrency reader rejects case-only definition
+collisions rather than choosing the apparently matching spelling. The runtime
+experiment's final bundle recheck also now follows every contract reader,
+including constructor inputs and async-body windows.
+The final focused set passed 468/468 and the corrected verifier retained all
+five real collection bindings (`v11/verified-final.json`). The composed real
+mutation experiment reported four constructor/numeric-base bindings and 2/5
+diagnostic candidates, while correctly retaining `CanAuthorizeReuse=false` and
+`RequiresFullControl=true`; this is not a normal-selector acceptance result.

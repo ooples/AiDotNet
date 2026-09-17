@@ -38,9 +38,13 @@ internal static class SerializedOwnerReader
                 return OwnerConcurrencyContract.Unresolved;
             var definitions = Types(assembly.MainModule.Types).SelectMany(candidate => candidate.CustomAttributes
                 .Where(attribute => attribute.AttributeType.FullName == "Xunit.CollectionDefinitionAttribute" &&
-                    attribute.ConstructorArguments.Count == 1 && attribute.ConstructorArguments[0].Value is string value && value == name)
+                    attribute.ConstructorArguments.Count == 1 && attribute.ConstructorArguments[0].Value is string value &&
+                    string.Equals(value, name, StringComparison.OrdinalIgnoreCase))
                 .Select(attribute => (Type: candidate, Attribute: attribute))).ToArray();
             if (definitions.Length != 1) return OwnerConcurrencyContract.Unresolved;
+            // The pinned xUnit factory groups definitions ignoring case, then
+            // retains the first group's spelling in a case-sensitive lookup.
+            // A case-only collision can therefore hide the intended definition.
             var definition = definitions[0];
             if (definition.Type.HasInterfaces || definition.Type.HasGenericParameters || definition.Type.BaseType is null ||
                 !RuntimeType(definition.Type.BaseType, "System.Object") ||
