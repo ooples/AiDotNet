@@ -143,6 +143,7 @@ internal static class RuntimeEffectsExperiment
                 .Select(site => new { Caller = DependencyGraph.Stable(method), Assessment = ConstructorCallReader.Read(method, site.index) }))
             .Where(item => item.Assessment is not null).ToArray();
         var asyncBodies = owners.Select(owner => new OwnerBodyWindow(owner, YieldBodyReader.ReadOwner(tests, owner))).ToArray();
+        WorkloadBodyReview workloadBodies = WorkloadBodyReader.Read(tests, owners);
         var ownedBodies = owners.Select(owner =>
         {
             MethodDefinition[] entries = sourceMethods.Values.Where(method =>
@@ -173,7 +174,7 @@ internal static class RuntimeEffectsExperiment
             LockedInitializations = lockedInitializations,
             ConstructorInputs = constructedInputs,
             AsyncBodies = asyncBodies,
-            OwnedBodies = ownedBodies, PrivateInitializers = privateInitializers,
+            OwnedBodies = ownedBodies, PrivateInitializers = privateInitializers, WorkloadBodies = workloadBodies,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
     }

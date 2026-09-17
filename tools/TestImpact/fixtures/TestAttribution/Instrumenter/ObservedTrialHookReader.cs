@@ -7,7 +7,8 @@ internal sealed record ObservedTrialHookAssessment(string Owner, ObservedTrialHo
     TrialHookRequirement[] Requirements);
 internal sealed record OwnerBodyWindow(string Owner, YieldBodyWindow Frame,
     OwnerConcurrencyContract Concurrency = OwnerConcurrencyContract.Unresolved);
-internal sealed record ObservedLifecycleReview(OwnerCompletionObservation[] Owners, ObservedTrialHookAssessment[] Hooks, OwnerBodyWindow[] Bodies);
+internal sealed record ObservedLifecycleReview(OwnerCompletionObservation[] Owners, ObservedTrialHookAssessment[] Hooks, OwnerBodyWindow[] Bodies,
+    WorkloadBodyReview? BodyEffects = null);
 
 // Joins the actual lifecycle roots with verified owner/scope observations.
 // Body isolation and execution-context requirements are NOT discharged here;
@@ -79,7 +80,8 @@ internal static class ObservedTrialHookReader
                         hook.Requirements.Where(requirement => requirement != TrialHookRequirement.ObservedOwner).ToArray())
                     : Unknown(owner));
             }
-            return RunnerBinding.HashBundle(bundle) == observed.Execution.Context.BuildFingerprint ? new(reviewedOwners, result.ToArray(), bodies) : UnknownAll();
+            WorkloadBodyReview effects = WorkloadBodyReader.Read(assembly, owners);
+            return RunnerBinding.HashBundle(bundle) == observed.Execution.Context.BuildFingerprint ? new(reviewedOwners, result.ToArray(), bodies, effects) : UnknownAll();
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
             BadImageFormatException or AssemblyResolutionException or ResolutionException or InvalidOperationException)
