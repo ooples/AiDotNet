@@ -95,3 +95,26 @@ requiring identical DLL **and** PDB hashes rather than normalizing a mismatch.
 The combined local harness passed 283 protocol/control tests, 33 rejection
 controls, and both forced-build comparisons; the refreshed real slice passed
 5/5 with owner/CPU observations and startup-input rejection intact.
+
+The numeric assessment now binds the concrete `double` call to the reviewed
+Tensors binary (`eb681ae60f23b03cf08e0bf3ab70a372673927acd87a428c74536d424846d5e7`)
+and runtime. Generic arguments are matched by their owning definition, kind,
+and position, not parameter display names. Float, open/foreign parameters,
+malformed signatures, and missing/replaced package bytes remain unresolved.
+The shared MathHelper initializer and possible external cache mutation are
+still explicit requirements; this does not declare the generic provider pure.
+
+The scope reader verifies the actual save/set/restore implementation of the
+string AsyncLocal override, including its private readonly saved value and
+callback-free slot construction. Changed slots, extra behavior, synchronization,
+internal-call flags, and altered disposal are rejected. Correct lifetime,
+execution-context flow, and file isolation remain separate requirements.
+Inspection is bounded to discovered workload owners plus shared group roots.
+Both assessments are included in the real-bundle experiment, which still
+reports `CanAuthorizeReuse=false`; neither closes a normal selector boundary.
+
+The combined local harness passed 321 protocol/control cases and 33 rejection
+controls, including forced build-binding and real small-fixture source changes.
+The existing AiDotNet before/after bundles yielded two numeric assessments and
+one scope assessment across the five-owner workload. This is component evidence;
+normal AiDotNet changed-source selection/reuse and live verification are pending.

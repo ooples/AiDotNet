@@ -58,6 +58,16 @@ internal static class RuntimeEffectsExperiment
                 calls.Add(ids[node.Key], node.LocalCalls.Select(call => ids.TryGetValue(call, out string? id) ? id : call).ToArray());
         }
         SourceLifecycleMap lifecycle = XunitLifecycleReader.Read(tests).Map;
+        MethodDefinition[] lifecycleCalls = LifecycleRoots(lifecycle, owners).Where(sourceMethods.ContainsKey).Select(root => sourceMethods[root])
+            .Where(method => method.HasBody).SelectMany(method => method.Body.Instructions)
+            .Where(instruction => instruction.OpCode.Code is Code.Call or Code.Callvirt)
+            .Select(instruction => instruction.Operand).OfType<MethodReference>()
+            .Where(method => method.ReturnType.FullName is "System.String" or "System.IDisposable")
+            .Select(method => method.Resolve()).Where(method => method is not null).ToArray();
+        AsyncLocalScopeAssessment[] scopeContracts = lifecycleCalls.Where(method => method.ReturnType.FullName == "System.IDisposable")
+            .SelectMany(factory => lifecycleCalls.Where(method => method.ReturnType.FullName == "System.String")
+                .Select(getter => ScopedAsyncLocalReader.Read(factory, getter)))
+            .Where(contract => contract.Contract != AsyncLocalScopeContract.Unresolved).DistinctBy(contract => contract.Slot).ToArray();
         HashSet<string> Reachable(IEnumerable<string> roots)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -99,10 +109,21 @@ internal static class RuntimeEffectsExperiment
                 MethodDefinition[] entries = sourceMethods.Values.Where(method =>
                     method.Module.Assembly.Name.Name + ":" + method.DeclaringType.FullName.Replace('/', '+') + "." + method.Name == owner).ToArray();
                 AsyncOwnerBinding ownerBinding = entries.Length == 1 ? AsyncOwnerReader.Read(entries[0], caller) : AsyncOwnerBinding.Unresolved;
+                // Keep the actual closed factory call. Using the generic method
+                // definition here would erase double (or incorrectly bless T).
+                MethodDefinition contextualFactory = target.Resolve() ?? throw new InvalidDataException("Unresolved factory call context.");
+                NumericProviderAssessment[] providers = contextualFactory.Body.Instructions
+                    .Where(item => item.OpCode.Code == Code.Newobj).Select(item => item.Operand).OfType<MethodReference>()
+                    .Where(constructor => constructor.DeclaringType.GetElementType().FullName == newMethod.DeclaringType.FullName)
+                    .Select(constructor => constructor.Resolve()).Where(constructor => constructor is not null && constructor.HasBody)
+                    .SelectMany(constructor => constructor.Body.Instructions)
+                    .Where(item => item.OpCode.Code == Code.Call).Select(item => item.Operand).OfType<MethodReference>()
+                    .Where(provider => provider.Name == "GetNumericOperations")
+                    .Select(provider => ReviewedNumericProvider.Read(provider, target)).ToArray();
                 uses.Add(new { Caller = DependencyGraph.Stable(caller), Use = OwnedReturnUseReader.Read(caller, index),
                     ReviewedUse = OwnedReturnUseReader.Read(caller, index, entries.Length == 1 ? entries[0] : null), OwnerTaskBinding = ownerBinding,
                     FactoryPath = OwnedFactoryCallReader.Read(caller, oldMethod, newMethod),
-                    ReviewedContracts = contracts, FailureExits = failureExits, RequirementsProven = false });
+                    ReviewedContracts = contracts, NumericProviders = providers, FailureExits = failureExits, RequirementsProven = false });
             }
             return new { Owner = owner, Calls = uses.ToArray(), MissingCallsiteProof = uses.Count == 0 };
         }).ToArray();
@@ -111,9 +132,20 @@ internal static class RuntimeEffectsExperiment
         if (!oldFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(before).OrderBy(pair => pair.Key)) ||
             !newFiles.OrderBy(pair => pair.Key).SequenceEqual(Files(after).OrderBy(pair => pair.Key)))
             throw new InvalidDataException("Experiment inputs changed during analysis.");
-        return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect,
+        return new { ChangedMethod = changedMethod, Before = oldEffect, After = newEffect, ScopedLifecycleContracts = scopeContracts,
             Candidates = candidates, ConsumerUses = consumerUses, DiscoveredMethods = owners.Length, RequiresFullControl = true,
             ProductionSelectionEnabled = false, CanAuthorizeReuse = false };
+    }
+
+    internal static string[] LifecycleRoots(SourceLifecycleMap lifecycle, string[] owners)
+    {
+        var requested = owners.ToHashSet(StringComparer.Ordinal);
+        if (requested.Count == 0 || requested.Count != owners.Length || owners.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidDataException("Expected an exact nonempty owner inventory.");
+        var tests = lifecycle.Tests.Where(test => requested.Contains(test.Owner)).ToArray();
+        if (tests.Length != requested.Count || tests.Select(test => test.Owner).Distinct(StringComparer.Ordinal).Count() != requested.Count)
+            throw new InvalidDataException("Lifecycle roots do not cover the requested owners exactly.");
+        return lifecycle.GroupRoots.Concat(tests.SelectMany(test => test.Roots)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     }
 
     private static DefaultAssemblyResolver Resolver(string directory)
