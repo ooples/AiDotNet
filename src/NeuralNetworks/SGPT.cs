@@ -100,27 +100,22 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public SGPT(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 50257,
-            [ModelDimensionRole(ModelDimensionRole.AttentionDimension)] int embeddingDimension = 768,
-            int maxSequenceLength = 1024,
-            int numLayers = 12,
-            [ModelDimensionRole(ModelDimensionRole.AttentionHeadCount)] int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            SGPTOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        SGPTOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        [ModelDimensionRole(ModelDimensionRole.AttentionDimension)] int embeddingDimension = 768,
+        [ModelDimensionRole(ModelDimensionRole.AttentionHeadCount)] int numHeads = 12,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
-            _options = options ?? new SGPTOptions();
+        _options = options ?? new SGPTOptions();
+        _options.Validate();
             Options = _options;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
             _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _feedForwardDim = _options.FeedForwardDim;
 
             InitializeLayersCore(false);
         }

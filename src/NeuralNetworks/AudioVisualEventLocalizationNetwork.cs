@@ -166,30 +166,26 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     /// </summary>
     public AudioVisualEventLocalizationNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
-        double temporalResolution = DEFAULT_TEMPORAL_RESOLUTION,
-        int numEncoderLayers = 6,
+        AudioVisualEventLocalizationOptions? options = null,
         IEnumerable<string>? eventCategories = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null,
-        AudioVisualEventLocalizationOptions? options = null,
-        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<T>.PaperFullyConnectedWidth,
-        int audioEmbeddingSize = VGGishAudioEmbedding<T>.PaperEmbeddingSize)
+        int? seed = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualEventLocalizationOptions();
+        _options.Validate();
         Options = _options;
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _embeddingDimension = embeddingDimension;
-        _temporalResolution = temporalResolution;
-        _numEncoderLayers = numEncoderLayers;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _temporalResolution = _options.TemporalResolution;
+        _numEncoderLayers = _options.NumEncoderLayers;
         // Published VGGish widths by default. Exposed because the published network is ~67M
         // parameters, which is right for fidelity and wrong for a fixture; a caller can shrink it
         // without a second implementation existing.
-        _audioEmbeddingFullyConnectedWidth = audioEmbeddingFullyConnectedWidth;
-        _audioEmbeddingSize = audioEmbeddingSize;
+        _audioEmbeddingFullyConnectedWidth = _options.AudioEmbeddingFullyConnectedWidth;
+        _audioEmbeddingSize = _options.AudioEmbeddingSize;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -444,7 +440,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         int frames = mel.Shape[mel.Shape.Length - 2];
         int mels = mel.Shape[mel.Shape.Length - 1];
-        int patchFrames = VGGishAudioEmbedding<T>.PaperPatchFrames;
+        int patchFrames = VGGishAudioEmbedding<double>.PaperPatchFrames;
         int segments = Math.Max(1, frames / patchFrames);
 
         var melSpan = mel.Data.Span;

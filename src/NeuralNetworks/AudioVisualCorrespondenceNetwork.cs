@@ -182,24 +182,21 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     /// <param name="lossFunction">Loss function for training.</param>
     public AudioVisualCorrespondenceNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
-        int audioSampleRate = DEFAULT_SAMPLE_RATE,
-        double videoFrameRate = DEFAULT_FRAME_RATE,
-        int numEncoderLayers = 6,
+        AudioVisualCorrespondenceOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        AudioVisualCorrespondenceOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualCorrespondenceOptions();
+        _options.Validate();
         Options = _options;
 
-        _embeddingDimension = embeddingDimension;
-        _audioSampleRate = audioSampleRate;
-        _audioFrontEnd = CreateAudioFrontEnd(audioSampleRate);
-        _videoFrameRate = videoFrameRate;
-        _numEncoderLayers = numEncoderLayers;
-        _hiddenDim = embeddingDimension * 4;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _audioSampleRate = _options.AudioSampleRate;
+        _audioFrontEnd = CreateAudioFrontEnd(_options.AudioSampleRate);
+        _videoFrameRate = _options.VideoFrameRate;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _hiddenDim = _options.EmbeddingDimension * 4;
 
         // Paper-faithful learning rate. Arandjelovic & Zisserman 2017
         // "Look, Listen and Learn" (arXiv 1705.08168) §4: SGD with momentum
