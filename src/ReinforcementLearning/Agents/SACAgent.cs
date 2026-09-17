@@ -444,9 +444,16 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 var noise = new Tensor<T>([batchCount, actionSize]);
                 for (int i = 0; i < noise.Length; i++)
                     noise[i] = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
-                var sampledActions = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
+                var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
 
-                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, sampledActions);
+                // SampleAction squashes with tanh, so the replay buffer holds squashed actions and the
+                // critics were trained on them. Handing the RAW Gaussian sample to the critics here queried
+                // Q off the distribution it learned, and scored it with the wrong density: a squashed policy
+                // needs the change-of-variables correction, log pi = log N(u) - sum_i log(1 - tanh^2(u_i))
+                // (Haarnoja et al. 2018, Appendix C). This agent's tanh is unscaled, hence scale 1.
+                var sampledActions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
+                var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
+                    Engine, means, logStds, preSquash, 1.0);
 
                 // Build [state | action] with engine ops. Filling a fresh tensor element by element detaches
                 // it from the tape, so the critics below would have been handed a constant no matter how
