@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using System;
+using System.Reflection;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -380,12 +381,64 @@ public abstract class ReinforcementLearningTestBase<T>
     }
 
     /// <summary>
-    /// Steps of the real reinforcement-learning loop this invariant may run before giving up. It has
-    /// to clear the agent's own warmup gate: SAC, for one, returns immediately from Train() until
-    /// WarmupSteps (10000 by default) have elapsed AND the replay buffer can fill a batch, so a small
-    /// budget would measure an agent that never trained at all.
+    /// Steps of the real reinforcement-learning loop this invariant may run before giving up, once the
+    /// agent's own warmup gate has been lowered.
     /// </summary>
-    protected virtual int RealLoopStepBudget => 14000;
+    /// <remarks>
+    /// This was 14000 purely to outlast SAC's shipped WarmupSteps of 10000. Running that many steps at
+    /// a production batch of 256 -- twice over, for the two reward directions -- exhausted the test
+    /// host, and the ~49 RL agents that have no warmup gate at all paid the same cost for nothing.
+    /// Lowering the gate first makes a few hundred steps sufficient, so the loop is reachable rather
+    /// than merely long.
+    /// </remarks>
+    protected virtual int RealLoopStepBudget => 800;
+
+    /// <summary>
+    /// Lowers an agent's own warmup / batch gate so the real training loop is reachable within
+    /// <see cref="RealLoopStepBudget"/>, and reports whether anything was lowered.
+    /// </summary>
+    /// <remarks>
+    /// Five agents -- SAC, DDPG, DQN, DoubleDQN and DuelingDQN -- return immediately from Train()
+    /// until WarmupSteps have elapsed AND the replay buffer can fill a batch. At their shipped
+    /// defaults that is 10000 steps at a batch of 256, which no unit test can afford.
+    ///
+    /// Each of those agents overrides GetOptions() to hand back its OWN live options instance rather
+    /// than the base class's copy, and re-reads it on every Train() call, so lowering the values here
+    /// genuinely opens the gate. This changes only how far the fixture must step to reach the update,
+    /// never what the update computes, and leaves production defaults untouched.
+    ///
+    /// Agents without these properties are unaffected -- they have no warmup gate to begin with.
+    /// </remarks>
+    private static bool LowerTrainingGates(IFullModel<T, Vector<T>, Vector<T>> model)
+    {
+        if (model is not IConfigurableModel<T> configurable) return false;
+
+        var options = configurable.GetOptions();
+        if (options is null) return false;
+
+        bool loweredWarmup = TryLowerInt(options, "WarmupSteps", 2);
+        bool loweredBatch = TryLowerInt(options, "BatchSize", 8);
+        return loweredWarmup || loweredBatch;
+    }
+
+    /// <summary>
+    /// Sets a public settable int property when it exists and currently holds a LARGER value. Only
+    /// ever lowers, so an agent that already ships a small gate keeps its own setting.
+    /// </summary>
+    private static bool TryLowerInt(object target, string propertyName, int value)
+    {
+        var property = target.GetType().GetProperty(
+            propertyName, BindingFlags.Instance | BindingFlags.Public);
+
+        if (property is null || !property.CanWrite || property.PropertyType != typeof(int))
+            return false;
+
+        if (property.GetValue(target) is not int current || current <= value)
+            return false;
+
+        property.SetValue(target, value);
+        return true;
+    }
 
     [SkippableFact(Timeout = 300000)]
     public async Task Policy_ShouldFollowTheReward()
@@ -484,6 +537,10 @@ public abstract class ReinforcementLearningTestBase<T>
         using var model = CreateModel();
         if (model is not IRLAgent<T> agent) return (null, 0);
 
+        // Open the agent's own warmup/batch gate first, or the budget below measures an agent that
+        // never trained. At shipped defaults this loop ran 10000 steps at a batch of 256, twice.
+        LowerTrainingGates(model);
+
         var parameterized = (IParameterizable<T, Vector<T>, Vector<T>>)model;
         var before = parameterized.GetParameters();
         var snapshot = new double[before.Length];
@@ -561,6 +618,7 @@ public abstract class ReinforcementLearningTestBase<T>
         Skip.If(model is not IRLAgent<T>, "This fixture's model is not an IRLAgent, so the real "
             + "store-then-train loop cannot be driven through it.");
         var agent = (IRLAgent<T>)model;
+        LowerTrainingGates(model);
 
         var before = ComponentSnapshot(agent);
         Skip.If(before.Count < 2,
