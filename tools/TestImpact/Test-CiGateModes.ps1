@@ -69,17 +69,24 @@ Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidati
     -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
 
-# No reuse requires both current validation and current quality.
+# No reuse requires current validation and current CodeQL.
 Invoke-GateCase -Name complete_current_success -ExpectedExit 0
 Invoke-GateCase -Name complete_current_validation_failure -ValidationGate failure -ExpectedExit 1
 Invoke-GateCase -Name complete_current_codeql_failure -CodeQL failure -ExpectedExit 1
-Invoke-GateCase -Name complete_current_sonar_failure -Sonar failure -ExpectedExit 1
+Invoke-GateCase -Name complete_current_codeql_cancelled -CodeQL cancelled -ExpectedExit 1
+# SonarCloud is advisory: no Sonar outcome may block, and none may stand in for a required job.
+foreach ($sonarOutcome in 'failure', 'cancelled', 'timed_out', 'skipped') {
+    Invoke-GateCase -Name "complete_current_sonar_$sonarOutcome" -Sonar $sonarOutcome -ExpectedExit 0
+}
+Invoke-GateCase -Name complete_current_sonar_success_does_not_cover_codeql -CodeQL failure -ExpectedExit 1
 
-# Validation-only reuse skips the matrix but still requires quality and runtime promotion.
+# Validation-only reuse skips the matrix but still requires CodeQL and runtime promotion.
 Invoke-GateCase -Name partial_reuse_success -ReuseScope Validation -Promotion success `
     -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name partial_reuse_quality_failure -ReuseScope Validation -Promotion success `
-    -ValidationGate skipped -Sonar failure -ExpectedExit 1
+    -ValidationGate skipped -CodeQL failure -ExpectedExit 1
+Invoke-GateCase -Name partial_reuse_sonar_failure_is_advisory -ReuseScope Validation -Promotion success `
+    -ValidationGate skipped -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name partial_reuse_missing_promotion -ReuseScope Validation -Promotion skipped `
     -ValidationGate skipped -ExpectedExit 1
 Invoke-GateCase -Name partial_non_runtime_reuse -ReuseScope Validation -RequiresValidation false `
