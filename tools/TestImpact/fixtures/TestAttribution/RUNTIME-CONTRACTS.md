@@ -235,3 +235,34 @@ five real collection bindings (`v11/verified-final.json`). The composed real
 mutation experiment reported four constructor/numeric-base bindings and 2/5
 diagnostic candidates, while correctly retaining `CanAuthorizeReuse=false` and
 `RequiresFullControl=true`; this is not a normal-selector acceptance result.
+
+### Default startup branch (2026-09-17)
+
+The signing reader checks the entire fresh-HMAC method, including branch targets,
+runtime identity and disposal. The key-override reader checks the locked copy and
+its gate initializer. The startup-flow reader evaluates the observed default
+license/default-MDOP branch, but deliberately returns targets needing independent
+authentication, not a reuse certificate. An overridden MDOP is not treated as the
+default: parsing it can reach a culture provider. CPU-reset completion is recorded
+immediately after the call; a swallowed reset exception cannot borrow that marker.
+
+`attribution-startup-batch-final-20260917/contracts.trx`: 690/690 focused cases.
+The actual net10.0 project built with zero errors. A fresh five-case execution in
+`attribution-real-startup-20260917-v13/verified.json` verified all five standard
+owners, collection and hook bindings, with `ResetOutcome=Completed` and both
+default-input policies. Neither this run nor shape recognition proves selective
+reuse. An earlier local discovery attempt used an invalid hit-mode label and was
+rejected; it is not evidence of test execution.
+
+The complete `attribution-startup-full-harness-20260917` harness also passed,
+including build identity, planned execution, rejection controls and both source
+selection fixtures (1/3 selected, 3/3 configuration fallback). Those fixture
+results are not a substitute for changed-code selective reuse on real AiDotNet.
+
+The actual module entry has a second call to `TestAssemblyDeterminismInit.Init`.
+It reaches `BlasProvider.SetDeterministicMode(true)`, whose type initializer starts
+the background BLAS thread and whose native-availability probe can dispatch a
+native GEMM. Therefore completing `TestModuleInitializer.InitializeCpuMode` does
+not establish absence of startup workers. Native-library provenance, dispatch
+completion and later worker access must be covered before this path can authorize
+reuse; the five passing tests do not discharge those obligations.
