@@ -78,12 +78,18 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The actor head is deterministic (one output per action dimension — the architecture contract callers
-    /// already build against), so the policy's spread lives here instead: pi(.|s) = N(mu(s), diag(exp(logStd)^2)),
-    /// a state-independent diagonal Gaussian. This is the same state-independent log-std used by the reference
-    /// PPO/SAC implementations in OpenAI Baselines, and it is what makes the entropy term real: without a
-    /// learned spread the policy entropy is a constant and <see cref="TradingAgentOptions{T}.AutoTuneAlpha"/>
-    /// could only push alpha monotonically to zero or infinity.
+    /// Used by <see cref="SacActorHead.StateIndependentLogStd"/> only. That head emits one output per action
+    /// dimension (the architecture contract callers already build against), so the policy's spread lives here
+    /// instead: pi(.|s) = N(mu(s), diag(exp(logStd)^2)) before squashing, a state-independent diagonal
+    /// Gaussian. This is the same state-independent log-std used by the reference PPO/SAC implementations in
+    /// OpenAI Baselines, and it is what makes the entropy term real: without a learned spread the policy
+    /// entropy is a constant and <see cref="TradingAgentOptions{T}.AutoTuneAlpha"/> could only push alpha
+    /// monotonically to zero or infinity.
+    /// </para>
+    /// <para>
+    /// <see cref="SacActorHead.StateConditionedGaussian"/> does NOT use this field: that head is the paper's,
+    /// emitting <c>2 * ActionSize</c> outputs whose second half is a per-state log standard deviation, so its
+    /// spread is read from the actor output and trained with the rest of the actor.
     /// </para>
     /// </remarks>
     private Vector<T> _logStd;
@@ -187,7 +193,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <summary>
     /// Current entropy temperature alpha (<c>exp(logAlpha)</c>).
     /// </summary>
-    public double CurrentAlpha => Math.Exp(NumOps.ToDouble(_logAlpha));
+    internal double CurrentAlpha => Math.Exp(NumOps.ToDouble(_logAlpha));
 
     /// <summary>
     /// Current per-dimension policy standard deviations, <c>exp(logStd)</c>.
@@ -196,12 +202,12 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// For <see cref="SacActorHead.StateConditionedGaussian"/> the spread depends on the state, so this
     /// returns the state-independent fallback only; use <see cref="PolicyStandardDeviationsFor"/> instead.
     /// </remarks>
-    public double[] CurrentPolicyStandardDeviations => CurrentLogStandardDeviations()
+    internal double[] CurrentPolicyStandardDeviations => CurrentLogStandardDeviations()
         .Select(Math.Exp)
         .ToArray();
 
     /// <summary>Which head this agent was built with.</summary>
-    public SacActorHead ActorHead => _actorHead;
+    internal SacActorHead ActorHead => _actorHead;
 
     private bool UsesStateConditionedHead => _actorHead == SacActorHead.StateConditionedGaussian;
 
@@ -212,7 +218,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <remarks>
     /// With the state-independent head this returns the same vector for every state, by construction.
     /// </remarks>
-    public double[] PolicyStandardDeviationsFor(Vector<T> state)
+    internal double[] PolicyStandardDeviationsFor(Vector<T> state)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (!UsesStateConditionedHead)
@@ -255,7 +261,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// separately meaningful, and their agreement is the diagnostic that says the pair is genuinely
     /// independent rather than two references to one network.
     /// </remarks>
-    public (T Q1, T Q2) EvaluateCritics(Vector<T> state, Vector<T> action)
+    internal (T Q1, T Q2) EvaluateCritics(Vector<T> state, Vector<T> action)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (action is null) throw new ArgumentNullException(nameof(action));
@@ -289,13 +295,25 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     private NeuralNetworkArchitecture<T> IndependentlyInitialisedCritic(
         NeuralNetworkArchitecture<T> criticArchitecture, int ordinal)
     {
-        if (TradingOptions.Seed is int seed)
+        // Save and restore the ambient scope around the clone. Reseeding it here is deliberate, but leaving
+        // it reseeded is not: the sequence would stay armed with THIS agent's critic seed, and the next
+        // model built on this thread whose layers arrive as constructor arguments (they are evaluated
+        // before its own constructor resets the scope) would silently initialize from it.
+        var previousScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        try
         {
-            int distinctSeed = unchecked((int)(((uint)seed * 2246822519u) ^ ((uint)(ordinal + 1) * 3266489917u)));
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(distinctSeed);
-        }
+            if (TradingOptions.Seed is int seed)
+            {
+                int distinctSeed = unchecked((int)(((uint)seed * 2246822519u) ^ ((uint)(ordinal + 1) * 3266489917u)));
+                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(distinctSeed);
+            }
 
-        return criticArchitecture.CloneForModelConstruction();
+            return criticArchitecture.CloneForModelConstruction();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(previousScope);
+        }
     }
 
     /// <summary>Clamped log standard deviations, as plain doubles.</summary>
@@ -316,6 +334,41 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         for (int i = 0; i < state.Length; i++) combined[i] = state[i];
         for (int i = 0; i < action.Length; i++) combined[state.Length + i] = action[i];
         return combined;
+    }
+
+    /// <summary>
+    /// The paper's bounded action <c>a = MaxPositionSize * tanh(u)</c> (Haarnoja et al. 2018, Eq. 20).
+    /// </summary>
+    /// <remarks>
+    /// Squashing rather than clipping is what keeps the position inside the configured limit while leaving
+    /// a usable gradient everywhere: a clipped action is flat outside the limit and stops training there.
+    /// </remarks>
+    private Vector<T> SquashToPositionLimit(Vector<T> preSquash, double maxPosition)
+    {
+        var bounded = new Vector<T>(preSquash.Length);
+        for (int i = 0; i < preSquash.Length; i++)
+        {
+            bounded[i] = NumOps.FromDouble(maxPosition * Math.Tanh(NumOps.ToDouble(preSquash[i])));
+        }
+
+        return bounded;
+    }
+
+    /// <summary>
+    /// Scalar counterpart of <see cref="PolicyDistributionHelper{T}.ComputeSquashedGaussianLogProb"/>, used
+    /// on the no-gradient TD-target path where the values are plain doubles.
+    /// </summary>
+    private double SquashedGaussianLogProbability(
+        Vector<T> preSquash, Vector<T> mean, IReadOnlyList<double> logStds, double maxPosition)
+    {
+        double total = GaussianLogProbability(preSquash, mean, logStds);
+        for (int j = 0; j < preSquash.Length; j++)
+        {
+            double squashed = Math.Tanh(NumOps.ToDouble(preSquash[j]));
+            total -= Math.Log(Math.Max(1.0 - (squashed * squashed), 1e-12));
+        }
+
+        return total - (preSquash.Length * Math.Log(maxPosition));
     }
 
     #endregion
@@ -356,16 +409,24 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// The actor has a single deterministic head (one output per action dimension, no log-std head), so
-    /// there is no policy Gaussian to reparameterize. Training-mode exploration therefore adds independent
-    /// zero-mean Gaussian noise, <c>a = mu(s) + 0.1 * eps, eps ~ N(0, I)</c>, drawn from the agent's seeded
-    /// random stream. The previous noise was <c>U[0, 0.1)</c> — mean +0.05 and never negative — which biased
-    /// every exploratory position long and, because the actor is regressed onto the actions it took, pushed
-    /// the policy's output upward on every update.
+    /// The policy is a squashed diagonal Gaussian (Haarnoja et al. 2018, Appendix C). Training draws
+    /// <c>u = mu(s) + sigma(s) * eps, eps ~ N(0, I)</c> from the agent's seeded random stream and returns
+    /// <c>a = MaxPositionSize * tanh(u)</c>; evaluation returns <c>MaxPositionSize * tanh(mu(s))</c>. Sampling
+    /// before the squash is what bounds every action by the configured position limit — an unsquashed sample
+    /// could exceed it whenever the mean approached the boundary.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> While training, the agent jitters its chosen position sizes a little in both
-    /// directions so it can discover better ones; at evaluation time it uses the actor's output as-is.
+    /// Where <c>sigma(s)</c> comes from depends on the head:
+    /// <see cref="SacActorHead.StateIndependentLogStd"/> reads the learned state-independent spread, which
+    /// merely STARTS at 0.1 and is trained thereafter, while
+    /// <see cref="SacActorHead.StateConditionedGaussian"/> reads it from the actor's own output for that
+    /// state. The earlier noise was <c>U[0, 0.1)</c> — mean +0.05 and never negative — which biased every
+    /// exploratory position long.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> While training, the agent jitters its chosen position sizes in both directions
+    /// so it can discover better ones, then squeezes the result into the allowed position range; at
+    /// evaluation time it uses the actor's own output, squeezed the same way.
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -380,9 +441,11 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             mean[i] = output[i];
         }
 
+        double maxPosition = Convert.ToDouble(TradingOptions.MaxPositionSize);
+
         if (!training)
         {
-            return mean;
+            return SquashToPositionLimit(mean, maxPosition);
         }
 
         double[] standardDeviations;
@@ -400,7 +463,12 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             standardDeviations = CurrentPolicyStandardDeviations;
         }
 
-        return AddGaussianExplorationNoise(mean, standardDeviations);
+        // Reparameterized draw in the PRE-SQUASH space, then bounded: u = mu(s) + sigma(s) * eps and
+        // a = MaxPositionSize * tanh(u). Sampling before the squash is what keeps every exploratory
+        // position inside the configured limit no matter where the mean sits — the unsquashed sample
+        // could land outside it whenever the mean approached the boundary.
+        var preSquash = AddGaussianExplorationNoise(mean, standardDeviations);
+        return SquashToPositionLimit(preSquash, maxPosition);
     }
 
     #endregion
@@ -462,6 +530,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         var logStds = CurrentLogStandardDeviations();
         double alpha = CurrentAlpha;
         double gamma = Convert.ToDouble(TradingOptions.DiscountFactor);
+        double maxPositionValue = Convert.ToDouble(TradingOptions.MaxPositionSize);
 
         // ---- 1. Soft TD target (no gradients: the target critics are not trained) ----
         //   a' ~ pi(.|s') = N(mu(s'), diag(exp(logStd)^2))
@@ -482,15 +551,20 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
                 : logStds;
 
             var nextMean = new Vector<T>(actionDim);
-            var nextAction = new Vector<T>(actionDim);
+            var nextPreSquash = new Vector<T>(actionDim);
             for (int j = 0; j < actionDim; j++)
             {
                 nextMean[j] = nextOutputs[row + j];
                 double noise = Math.Exp(rowLogStds[j]) * NextStandardNormal();
-                nextAction[j] = NumOps.Add(nextMean[j], NumOps.FromDouble(noise));
+                nextPreSquash[j] = NumOps.Add(nextMean[j], NumOps.FromDouble(noise));
             }
 
-            nextLogProbs[i] = GaussianLogProbability(nextAction, nextMean, rowLogStds);
+            // The bootstrap has to use the SAME bounded action the policy would really take, and the
+            // density of THAT action rather than of the unsquashed Gaussian — otherwise the entropy term
+            // is measured against a distribution the agent never samples from.
+            var nextAction = SquashToPositionLimit(nextPreSquash, maxPositionValue);
+            nextLogProbs[i] = SquashedGaussianLogProbability(
+                nextPreSquash, nextMean, rowLogStds, maxPositionValue);
             for (int j = 0; j < stateDim; j++)
             {
                 nextStateActionsData[(i * stateActionDim) + j] = batch[i].NextState[j];
@@ -538,74 +612,88 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         _critic2.Train(stateActions, targets);
         T critic2Loss = _critic2.GetLastLoss();
 
-        // ---- 3. Actor update: ascend min(Q1, Q2) at a = mu(s) ----
-        // The deterministic policy gradient is grad_theta J = E[ grad_a Q(s,a)|a=mu(s) * grad_theta mu(s) ].
-        // grad_a Q is estimated by central differences over the ONLINE critics (the library's DDPG agent
-        // uses the same construction), turned into a regression target a + step * grad_a Q, and realised
-        // through the actor's own MSE step, which supplies grad_theta mu by backpropagation.
-        var actorOutputs = _actor.Predict(states).ToVector();
-        var means = new Vector<T>(n * actionDim);
+        // ---- 3. Actor update: the reparameterized SAC objective, differentiated on the tape ----
+        //   J(theta) = E[ alpha * log pi(a|s) - min(Q1,Q2)(s, a) ],  a = MaxPositionSize * tanh(mu + sigma*eps)
+        // This is the paper's objective (Haarnoja et al. 2018 §4.2 with the bounded action of Appendix C)
+        // rather than a regression onto an ascended target. The critics are forwarded with
+        // ForwardForTraining, NOT Predict: Predict runs inside a NoGradScope, which would silently detach
+        // dQ/da and leave the actor ascending nothing but its own entropy. TrainWithCustomLoss collects
+        // only the ACTOR's tensors, so the critics contribute gradient to the action without being updated.
+        var explorationNoise = new T[n * actionDim];
+        for (int i = 0; i < explorationNoise.Length; i++)
+        {
+            explorationNoise[i] = NumOps.FromDouble(NextStandardNormal());
+        }
+
+        using var noiseTensor = new Tensor<T>([n, actionDim], new Vector<T>(explorationNoise));
+
+        // The state-independent spread is a field, not an actor output, so it enters the objective as a
+        // constant broadcast across the batch.
+        var sharedLogStdData = new T[n * actionDim];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < actionDim; j++)
             {
-                means[(i * actionDim) + j] = actorOutputs[(i * actorWidth) + j];
+                sharedLogStdData[(i * actionDim) + j] = NumOps.FromDouble(logStds[j]);
             }
         }
 
-        var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
+        using var sharedLogStds = new Tensor<T>([n, actionDim], new Vector<T>(sharedLogStdData));
 
-        T maxPosition = TradingOptions.MaxPositionSize;
-        T minPosition = NumOps.Negate(maxPosition);
-        var actorTargetData = new T[n * actorWidth];
-        for (int i = 0; i < n; i++)
+        bool stateConditioned = UsesStateConditionedHead;
+        var trainableActor = (NeuralNetworkBase<T>)_actor;
+
+        // The critics are held as INeuralNetwork<T>; the tape-aware forward lives on the base class, so they
+        // are narrowed once here rather than per call inside the objective.
+        var tapedCritic1 = (NeuralNetworkBase<T>)_critic1;
+        var tapedCritic2 = (NeuralNetworkBase<T>)_critic2;
+        T actorLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
         {
-            double[] rowLogStds = UsesStateConditionedHead
-                ? LogStandardDeviationsFromRow(actorOutputs, i * actorWidth, actionDim)
-                : logStds;
+            var engine = AiDotNetEngine.Current;
+            var meansTensor = engine.TensorSlice(actorOutput, [0, 0], [n, actionDim]);
+            var logStdTensor = stateConditioned
+                ? engine.TensorClamp(
+                    engine.TensorSlice(actorOutput, [0, actionDim], [n, actionDim]),
+                    NumOps.FromDouble(MinLogStandardDeviation),
+                    NumOps.FromDouble(MaxLogStandardDeviation))
+                : sharedLogStds;
 
-            for (int j = 0; j < actionDim; j++)
+            // u = mu + sigma * eps with eps FIXED for this step: the reparameterization is what lets the
+            // gradient pass through the sample instead of round it.
+            var preSquash = engine.TensorAdd(
+                meansTensor, engine.TensorMultiply(engine.TensorExp(logStdTensor), noiseTensor));
+            var boundedAction = PolicyDistributionHelper<T>.SquashAction(engine, preSquash, maxPositionValue);
+            var logPi = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
+                engine, meansTensor, logStdTensor, preSquash, maxPositionValue);
+
+            var stateAction = engine.TensorConcatenate([states, boundedAction], axis: 1);
+            var minQ = engine.TensorMin(
+                tapedCritic1.ForwardForTraining(stateAction), tapedCritic2.ForwardForTraining(stateAction));
+            var flatMinQ = engine.ReduceSum(minQ, [1], keepDims: false);
+
+            var objective = engine.TensorSubtract(
+                engine.TensorMultiplyScalar(logPi, NumOps.FromDouble(alpha)), flatMinQ);
+            return engine.ReduceMean(objective, [0], keepDims: false);
+        });
+
+        // ---- 4. Policy spread for the state-independent head ----
+        // With the paper's head the spread IS an actor output and was just trained by the objective above.
+        // The state-independent spread is a plain field the tape cannot reach, so it keeps its own ascent
+        // on the same trade-off, now measured through the squash: widening costs value in proportion to
+        // |dQ/da| * d a/d u * sigma, and buys entropy at the rate alpha.
+        if (!stateConditioned)
+        {
+            var actorOutputs = _actor.Predict(states).ToVector();
+            var means = new Vector<T>(n * actionDim);
+            for (int i = 0; i < n; i++)
             {
-                int flat = (i * actionDim) + j;
-                T ascended = NumOps.Add(
-                    means[flat],
-                    NumOps.FromDouble(ActorPolicyGradientStep * actionGradients[flat]));
-                actorTargetData[(i * actorWidth) + j] = MathHelper.Clamp<T>(ascended, minPosition, maxPosition);
-
-                if (!UsesStateConditionedHead)
+                for (int j = 0; j < actionDim; j++)
                 {
-                    continue;
+                    means[(i * actionDim) + j] = actorOutputs[(i * actorWidth) + j];
                 }
-
-                // The spread half needs a target of its own or it never receives a gradient: an MSE step
-                // only moves outputs that appear in the target. Ascend the SAME objective the
-                // state-independent spread ascends, but PER SAMPLE:
-                //   d/dlogStd_j (Q + alpha*H) = alpha - |dQ/da_j| * std_j.
-                // Where the critic barely depends on the action (a state whose value is unclear) the second
-                // term is small and the spread grows; where value depends sharply on the action it shrinks.
-                double std = Math.Exp(rowLogStds[j]);
-                double spreadGradient = alpha - (Math.Abs(actionGradients[flat]) * std);
-                double ascendedLogStd = MathPolyfill.Clamp(
-                    rowLogStds[j] + (StateConditionedSpreadStep * spreadGradient),
-                    MinLogStandardDeviation,
-                    MaxLogStandardDeviation);
-                actorTargetData[(i * actorWidth) + actionDim + j] = NumOps.FromDouble(ascendedLogStd);
             }
-        }
 
-        using var actorTargets = new Tensor<T>([n, actorWidth], new Vector<T>(actorTargetData));
-        _actor.Train(states, actorTargets);
-        T actorLoss = _actor.GetLastLoss();
-
-        // ---- 4. Policy spread: ascend Q + alpha * H over log-std ----
-        // With the reparameterization a = mu + exp(logStd) * eps,
-        //   d/dlogStd_j  E[Q] = E[ dQ/da_j * exp(logStd_j) * eps_j ]   and   d/dlogStd_j  H = 1.
-        // Estimating the first term at eps = 0 leaves the entropy term, which is the part that actually
-        // trades spread against value; alpha sets the exchange rate.
-        // Only for the state-independent head: with the paper's head the spread IS a network output and was
-        // just given its own regression target above, so writing _logStd here as well would do nothing.
-        if (!UsesStateConditionedHead)
-        {
+            var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
             UpdatePolicySpread(actionGradients, logStds, alpha, n, actionDim);
         }
 
@@ -783,6 +871,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        ValidateTransitionShape(state, action, nextState);
         var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }

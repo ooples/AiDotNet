@@ -174,4 +174,41 @@ public sealed class FinancialSacActorHeadTests
             agent.PolicyStandardDeviationsFor(clean)[0],
             12);
     }
+
+    [Theory]
+    [InlineData(SacActorHead.StateIndependentLogStd)]
+    [InlineData(SacActorHead.StateConditionedGaussian)]
+    [Trait("category", "unit")]
+    public void No_selected_action_leaves_the_configured_position_limit(SacActorHead head)
+    {
+        // The policy is a SQUASHED Gaussian (Haarnoja et al. 2018, Appendix C): a = MaxPositionSize *
+        // tanh(mu + sigma*eps). Sampling an unsquashed Gaussian and returning it directly — which is what
+        // this agent used to do — can quote a position outside the configured risk limit as soon as the
+        // mean approaches that limit, and exploration noise pushes it over. Nothing else pins that.
+        const double limit = 1.0; // TradingAgentOptions defaults MaxPositionSize to 1.0.
+        using var agent = CreateAgent(head, seed: 86);
+        var state = State(StateSize, salt: 3);
+
+        // Drive the mean hard at the boundary: only the +1 action is ever rewarded, and richly.
+        for (int i = 0; i < 64; i++)
+        {
+            agent.StoreExperience(state, Action(1.0), 5.0, state, done: true);
+        }
+
+        for (int i = 0; i < 200; i++)
+        {
+            agent.Train();
+        }
+
+        double greedy = agent.SelectAction(state, training: false)[0];
+        Assert.True(Math.Abs(greedy) <= limit,
+            $"{head}: the greedy action {greedy:F6} left the +/-{limit} position limit.");
+
+        for (int draw = 0; draw < 500; draw++)
+        {
+            double explored = agent.SelectAction(state, training: true)[0];
+            Assert.True(Math.Abs(explored) <= limit,
+                $"{head}: exploratory draw {draw} produced {explored:F6}, outside the +/-{limit} limit.");
+        }
+    }
 }

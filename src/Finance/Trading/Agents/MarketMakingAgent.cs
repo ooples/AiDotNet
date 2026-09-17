@@ -193,7 +193,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <summary>
     /// Evaluates the critic at a state-action pair — what the agent believes this quote is worth.
     /// </summary>
-    public T EvaluateCritic(Vector<T> state, Vector<T> action)
+    internal T EvaluateCritic(Vector<T> state, Vector<T> action)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (action is null) throw new ArgumentNullException(nameof(action));
@@ -522,6 +522,7 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        ValidateTransitionShape(state, action, nextState);
         var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }
@@ -547,16 +548,24 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             return null;
         }
 
-        string shapeHint = savedParameterCount == _policyNetwork.GetParameters().Length
-            ? " That is exactly the size of the policy network on its own — the shape this agent had before "
-              + "it gained a critic — so this is almost certainly a pre-critic checkpoint."
-            : string.Empty;
+        // Only a checkpoint of EXACTLY the policy's size is a pre-critic one. A current-format checkpoint
+        // saved at a different StateSize lands here too, and telling its owner it "never read the reward"
+        // describes the wrong defect entirely — it sends them to retrain when the real fix is to load it
+        // into an agent built with the options that saved it.
+        if (savedParameterCount == _policyNetwork.GetParameters().Length)
+        {
+            return " That is exactly the size of the policy network on its own — the shape this agent had "
+                + "before it gained a critic — so this is a pre-critic checkpoint. MarketMakingAgent now "
+                + "trains a Q(s,a) critic alongside a target critic and a target policy. There is no "
+                + "migration: the saved policy was trained by an update that regressed the policy onto its "
+                + "own quotes and never read the reward, so it contains no learned value information. "
+                + "Retrain the agent from scratch.";
+        }
 
-        return shapeHint
-            + " MarketMakingAgent now trains a Q(s,a) critic alongside a target critic and a target policy, "
-            + "so the saved parameter layout no longer matches. There is no migration: the saved policy was "
-            + "trained by an update that regressed the policy onto its own quotes and never read the reward, "
-            + "so it contains no learned value information. Retrain the agent from scratch.";
+        return $" The checkpoint holds {savedParameterCount} parameters but this agent has "
+            + $"{currentParameterCount}, so the saved parameter layout does not match. This is a shape "
+            + "mismatch rather than a pre-critic checkpoint: load it into an agent built with the same "
+            + "options (StateSize, ActionSize and HiddenLayers) as the one that saved it.";
     }
 
     #endregion

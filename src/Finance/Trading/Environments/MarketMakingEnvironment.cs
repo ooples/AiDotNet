@@ -114,7 +114,7 @@ public sealed class MarketMakingEnvironment<T> : TradingEnvironment<T>
     /// penalty configured on both an agent and its environment is charged once, not twice.
     /// </para>
     /// </remarks>
-    public override void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
+    internal override void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
     {
         base.ApplyAgentOverrides(options);
 

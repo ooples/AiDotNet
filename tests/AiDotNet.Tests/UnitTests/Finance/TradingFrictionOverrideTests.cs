@@ -185,10 +185,12 @@ public sealed class TradingFrictionOverrideTests
     [Trait("category", "unit")]
     public void An_incompatible_market_making_checkpoint_is_rejected_with_an_explanation()
     {
-        // A checkpoint whose parameter layout does not match the agent loading it — the position every
-        // pre-critic market-making checkpoint is now in, since the agent gained a critic and two target
-        // networks. Produced here by saving an agent of a different state width rather than by
-        // hand-assembling bytes, so the test does not depend on the serializer's private layout.
+        // A checkpoint whose parameter layout does not match the agent loading it, produced by saving an
+        // agent of a different state width rather than by hand-assembling bytes, so the test does not
+        // depend on the serializer's private layout. Note this is a SHAPE mismatch, not a pre-critic
+        // checkpoint: it is current-format and does contain a trained critic, so the explanation must not
+        // claim it was trained without reward. The pre-critic wording is reserved for a checkpoint of
+        // exactly the policy's own size.
         var savedOptions = (MarketMakingOptions<double>)Options(MarketMaking, 6, 2, seed: 3);
         using var savedAgent = (MarketMakingAgent<double>)Create(MarketMaking, savedOptions);
         byte[] checkpoint = savedAgent.Serialize();
@@ -200,9 +202,10 @@ public sealed class TradingFrictionOverrideTests
         var mismatch = Assert.Throws<InvalidDataException>(() => loadingAgent.Deserialize(checkpoint));
 
         Assert.Contains("cannot load this checkpoint", mismatch.Message);
-        Assert.Contains("critic", mismatch.Message);
-        Assert.Contains("never read the reward", mismatch.Message);
-        Assert.Contains("Retrain", mismatch.Message);
+        Assert.Contains("shape mismatch", mismatch.Message);
+        Assert.Contains("same options", mismatch.Message);
+        // The pre-critic explanation would be false here, so it must NOT appear.
+        Assert.DoesNotContain("never read the reward", mismatch.Message);
     }
 
     [Fact]

@@ -118,7 +118,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// (<see cref="FinancialDQNAgentOptions{T}.UseDoubleDQN"/>). Plain <see cref="TradingAgentOptions{T}"/>
     /// carries no such flag, so a non-DQN options object keeps the single-network maximum.
     /// </summary>
-    public bool UsesDoubleDQN =>
+    private bool UsesDoubleDQN =>
         _options is FinancialDQNAgentOptions<T> dqnOptions && dqnOptions.UseDoubleDQN;
 
     /// <summary>
@@ -129,7 +129,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// Only meaningful for a network this agent built: an architecture that arrived carrying its own layers
     /// is used exactly as given, so the option cannot silently rebuild it.
     /// </remarks>
-    public bool UsesDuelingNetwork { get; private set; }
+    internal bool UsesDuelingNetwork { get; private set; }
 
     /// <summary>
     /// Builds the Q-network's default layers, honouring
@@ -319,11 +319,15 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
-        var currentQ = _qNetwork.Predict(states).ToVector();        // [n * actionCount], row-major
-        var nextQ = _targetNetwork.Predict(nextStates).ToVector();  // [n * actionCount]
+        // Predict returns an owned tensor; ToVector copies out of it, so the tensor itself has to be
+        // released or its pooled storage is held until finalization.
+        using var currentQTensor = _qNetwork.Predict(states);
+        var currentQ = currentQTensor.ToVector();                   // [n * actionCount], row-major
+        using var nextQTensor = _targetNetwork.Predict(nextStates);
+        var nextQ = nextQTensor.ToVector();                         // [n * actionCount]
         int actionCount = currentQ.Length / n;
 
         // Double DQN (van Hasselt et al. 2016) decouples selection from evaluation: the ONLINE network
@@ -331,7 +335,12 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         // max_a' Q'(s',a') from the target alone, where the same network both picks and scores the action
         // and its own positive noise is therefore systematically selected for — the overestimation bias.
         bool doubleDqn = UsesDoubleDQN;
-        var onlineNextQ = doubleDqn ? _qNetwork.Predict(nextStates).ToVector() : null;
+        Vector<T>? onlineNextQ = null;
+        if (doubleDqn)
+        {
+            using var onlineNextQTensor = _qNetwork.Predict(nextStates);
+            onlineNextQ = onlineNextQTensor.ToVector();
+        }
 
         // Targets = current Q with the taken-action slot overwritten by the TD target.
         var expectedData = currentQ.Clone();
@@ -371,7 +380,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             expectedData[i * actionCount + GetActionIndex(exp.Action)] = target;
         }
 
-        var expected = new Tensor<T>([n, actionCount], expectedData);
+        using var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
 
         // One gradient update applied: advance the epsilon schedule.
@@ -484,6 +493,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        ValidateTransitionShape(state, action, nextState);
         var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }

@@ -44,6 +44,57 @@ public class TradingAgentOptions<T> : ModelOptions
         MaxPositionSize = numOps.FromDouble(1.0);
     }
 
+    /// <summary>
+    /// Copies every property declared on this type, so a derived copy constructor only has to copy what it
+    /// adds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each derived options type used to re-list the base properties by hand, and every one of them had
+    /// drifted: the agent-specific copy constructors between them dropped <c>SACAlpha</c>, <c>Tau</c>,
+    /// <c>AutoTuneAlpha</c>, <c>EntropyCoefficient</c>, <c>ValueCoefficient</c>, <c>GAELambda</c> and
+    /// <c>PPOClipRange</c>, and two of them copied nothing from the base at all — losing <c>StateSize</c>,
+    /// <c>ActionSize</c> and <c>Seed</c> on a copy. A hand-maintained list cannot stay correct as
+    /// properties are added, so there is now exactly one list and it lives with the properties it copies.
+    /// </para>
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    protected TradingAgentOptions(TradingAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        Seed = other.Seed;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        WarmupSteps = other.WarmupSteps;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+        EpsilonDecay = other.EpsilonDecay;
+        StateSize = other.StateSize;
+        ActionSize = other.ActionSize;
+        ContinuousActions = other.ContinuousActions;
+        HiddenLayers = other.HiddenLayers;
+        InitialCapital = other.InitialCapital;
+        TransactionCost = other.TransactionCost;
+        MaxPositionSize = other.MaxPositionSize;
+        RiskFreeRate = other.RiskFreeRate;
+        AllowShortSelling = other.AllowShortSelling;
+        UseRiskAdjustedReward = other.UseRiskAdjustedReward;
+        VariancePenalty = other.VariancePenalty;
+        RewardScale = other.RewardScale;
+        SACAlpha = other.SACAlpha;
+        AutoTuneAlpha = other.AutoTuneAlpha;
+        Tau = other.Tau;
+        EntropyCoefficient = other.EntropyCoefficient;
+        ValueCoefficient = other.ValueCoefficient;
+        GAELambda = other.GAELambda;
+        PPOClipRange = other.PPOClipRange;
+    }
+
     #region RL Parameters
 
     /// <summary>
@@ -266,6 +317,11 @@ public class TradingAgentOptions<T> : ModelOptions
     /// environment was built with; set it to run the same environment at a different cost.
     /// </para>
     /// </remarks>
+    /// <value>
+    /// A fraction of trade value, not a percentage or a currency amount: <c>0.001</c> is 0.1%. Must be
+    /// non-negative and finite when set; <c>null</c> (the default) leaves the environment's own cost in
+    /// force. Typical retail equity costs land between <c>0.0005</c> and <c>0.002</c>.
+    /// </value>
     public double? TransactionCost { get; set; }
 
     /// <summary>
@@ -411,8 +467,10 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("WarmupSteps cannot be negative.", nameof(WarmupSteps));
         if (HiddenLayers is null || Array.Exists(HiddenLayers, size => size <= 0))
             throw new ArgumentException("HiddenLayers must be non-null with positive widths.", nameof(HiddenLayers));
-        if (TransactionCost is double transactionCost && (transactionCost < 0 || double.IsNaN(transactionCost)))
-            throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
+        if (TransactionCost is double transactionCost
+            && (transactionCost < 0 || double.IsNaN(transactionCost) || double.IsInfinity(transactionCost)))
+            throw new ArgumentException(
+                "TransactionCost must be a non-negative, finite number when set.", nameof(TransactionCost));
         if (RewardScale <= 0.0 || double.IsNaN(RewardScale) || double.IsInfinity(RewardScale))
             throw new ArgumentException("RewardScale must be a positive, finite number.", nameof(RewardScale));
         if (SACAlpha < 0.0 || double.IsNaN(SACAlpha) || double.IsInfinity(SACAlpha))

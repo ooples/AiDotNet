@@ -838,6 +838,48 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         return NumOps.Multiply(reward, NumOps.FromDouble(scale));
     }
 
+    /// <summary>
+    /// Rejects a transition whose vectors do not match the configured state and action widths, before it
+    /// can reach the replay buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ReplayBuffer"/> performs no shape validation, and every batched update derives its
+    /// dimensions from the FIRST sampled experience and then indexes every other row with those
+    /// dimensions. One short vector stored today therefore surfaces much later as an out-of-range index or
+    /// a network shape error inside an unrelated training step, with nothing pointing back at the call that
+    /// stored it. Validating at the public entry point keeps the failure at its cause.
+    /// </para>
+    /// <para><b>For Beginners:</b> This checks that the numbers you hand the agent are the size it was
+    /// built for, and complains immediately if not, instead of failing confusingly much later.</para>
+    /// </remarks>
+    protected void ValidateTransitionShape(Vector<T> state, Vector<T> action, Vector<T> nextState)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (nextState is null) throw new ArgumentNullException(nameof(nextState));
+
+        if (state.Length != TradingOptions.StateSize)
+        {
+            throw new ArgumentException(
+                $"State length {state.Length} must match StateSize {TradingOptions.StateSize}.", nameof(state));
+        }
+
+        if (nextState.Length != TradingOptions.StateSize)
+        {
+            throw new ArgumentException(
+                $"NextState length {nextState.Length} must match StateSize {TradingOptions.StateSize}.",
+                nameof(nextState));
+        }
+
+        if (action.Length != TradingOptions.ActionSize)
+        {
+            throw new ArgumentException(
+                $"Action length {action.Length} must match ActionSize {TradingOptions.ActionSize}.",
+                nameof(action));
+        }
+    }
+
     #endregion
 
     #region Risk Management

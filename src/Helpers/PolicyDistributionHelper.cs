@@ -205,4 +205,72 @@ public static class PolicyDistributionHelper<T>
         var allAxes = Enumerable.Range(0, perElement.Shape.Length).ToArray();
         return engine.ReduceSum(perElement, allAxes, keepDims: false);
     }
+
+    /// <summary>
+    /// Bounded action <c>a = scale * tanh(u)</c> for a squashed Gaussian policy — tape-differentiable.
+    /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/>.</param>
+    /// <param name="preSquashActions">Pre-squash samples <c>u</c> [batchSize, actionSize].</param>
+    /// <param name="scale">Half-width of the action interval, so the result lies in <c>(-scale, scale)</c>.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> A Gaussian can return any number at all, but a real actuator (or a trading
+    /// position) has limits. Passing the sample through tanh squeezes it into a fixed range without
+    /// clipping, so the policy can still be trained by gradients everywhere.
+    /// </remarks>
+    public static Tensor<T> SquashAction(IEngine engine, Tensor<T> preSquashActions, double scale)
+    {
+        // Scaling unconditionally rather than testing scale == 1: multiplying by one is an identity, so
+        // the guard would only trade an exact floating-point comparison for a negligible multiply.
+        return engine.TensorMultiplyScalar(engine.TensorTanh(preSquashActions), NumOps.FromDouble(scale));
+    }
+
+    /// <summary>
+    /// Log-probability of a tanh-squashed (and optionally scaled) Gaussian action — the bounded-action
+    /// density from Soft Actor-Critic, Haarnoja et al. 2018, Appendix C.
+    /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/>.</param>
+    /// <param name="means">Pre-squash means <c>mu</c> [batchSize, actionSize].</param>
+    /// <param name="logStds">Pre-squash log standard deviations [batchSize, actionSize].</param>
+    /// <param name="preSquashActions">The sampled <c>u</c> the action came from [batchSize, actionSize].</param>
+    /// <param name="scale">The same half-width passed to <see cref="SquashAction"/>.</param>
+    /// <returns>Total log-probability per sample [batchSize] — tape-differentiable.</returns>
+    /// <remarks>
+    /// <para>
+    /// Squashing changes the density, so the Gaussian log-probability alone is wrong for the bounded
+    /// action. The change-of-variables correction (Eq. 20/21) is
+    /// <c>log pi(a|s) = log mu(u|s) - sum_i log(1 - tanh^2(u_i))</c>, and a constant scale divides the
+    /// density once per dimension, contributing a further <c>-D * log(scale)</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Squeezing a bell curve into a fixed range piles up probability near the
+    /// edges. This term accounts for that, so "how likely was this action" stays honest — without it the
+    /// entropy bonus is measured against the wrong distribution and the temperature drifts.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> ComputeSquashedGaussianLogProb(
+        IEngine engine, Tensor<T> means, Tensor<T> logStds, Tensor<T> preSquashActions, double scale)
+    {
+        var gaussianLogProb = ComputeGaussianLogProb(engine, means, logStds, preSquashActions);
+
+        // -sum_i log(1 - tanh^2(u_i)). The epsilon keeps a saturated tanh from producing log(0).
+        var squashed = engine.TensorTanh(preSquashActions);
+        var oneMinusSquared = engine.TensorAddScalar(
+            engine.TensorNegate(engine.TensorSquare(squashed)), NumOps.One);
+        var logJacobian = engine.TensorLog(
+            engine.TensorAddScalar(oneMinusSquared, NumOps.FromDouble(1e-6)));
+
+        var summedJacobian = logJacobian.Shape.Length > 1
+            ? engine.ReduceSum(logJacobian, [1], keepDims: false)
+            : engine.ReduceSum(
+                logJacobian, Enumerable.Range(0, logJacobian.Shape.Length).ToArray(), keepDims: false);
+
+        var corrected = engine.TensorSubtract(gaussianLogProb, summedJacobian);
+
+        int actionSize = preSquashActions.Shape.Length > 1
+            ? preSquashActions.Shape[preSquashActions.Shape.Length - 1]
+            : preSquashActions.Length;
+
+        // log(1) is 0, so an unscaled policy is unaffected and no float comparison is needed.
+        return engine.TensorAddScalar(corrected, NumOps.FromDouble(-actionSize * Math.Log(scale)));
+    }
 }

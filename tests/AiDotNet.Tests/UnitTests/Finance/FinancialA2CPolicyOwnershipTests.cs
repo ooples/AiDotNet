@@ -168,9 +168,22 @@ public sealed class FinancialA2CPolicyOwnershipTests
                 tensor.CopyFromArray(values);
                 break;
             case ExternalWrite.NetworkChunks:
+                // SetParameterChunks copies each clone into the network and does not take ownership, so
+                // the clones are this method's to release.
                 var chunks = actor.GetParameterChunks().Select(t => t.Clone()).ToArray();
-                chunks[0].SetFlat(0, chunks[0].GetFlat(0) + 0.25);
-                actor.SetParameterChunks(chunks);
+                try
+                {
+                    chunks[0].SetFlat(0, chunks[0].GetFlat(0) + 0.25);
+                    actor.SetParameterChunks(chunks);
+                }
+                finally
+                {
+                    foreach (var chunk in chunks)
+                    {
+                        chunk.Dispose();
+                    }
+                }
+
                 break;
             case ExternalWrite.NetworkParameters:
                 var parameters = actor.GetParameters();
@@ -194,7 +207,13 @@ public sealed class FinancialA2CPolicyOwnershipTests
     internal sealed class LegacyLayer : ILayer<double>, ITrainableLayer<double>, IDisposable
     {
         private readonly DenseLayer<double> _inner = new(3, (IActivationFunction<double>)new IdentityActivation<double>());
-        public LegacyLayer() => _inner.Forward(new Tensor<double>(new[] { 1, 4 }));
+        public LegacyLayer()
+        {
+            // Both the probe input and the tensor Forward returns are owned here; discarding them held
+            // their storage alive for the life of the test run.
+            using var probe = new Tensor<double>(new[] { 1, 4 });
+            using var warmup = _inner.Forward(probe);
+        }
         public int[] GetInputShape() => _inner.GetInputShape();
         public int[] GetOutputShape() => _inner.GetOutputShape();
         public LayerShape GetOutputLayerShape() => _inner.GetOutputLayerShape();

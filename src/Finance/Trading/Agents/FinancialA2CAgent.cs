@@ -27,7 +27,10 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// trade, rather than waiting for the end result. It is well-suited for fast-paced trading
 /// environments where quick adaptation is important.</para>
 /// <para>
-/// This is a one-step, on-policy categorical actor-critic. Collect actions with
+/// This is an n-step, on-policy categorical actor-critic: the critic is fit to the n-step return over the
+/// rollout (<see cref="FinancialA2CAgentOptions{T}.NSteps"/> steps, or fewer when an episode ends early),
+/// not to a one-step TD target, so raising NSteps trades variance for bias in the usual direction. Collect
+/// actions with
 /// <c>SelectAction(state, training: true)</c> and store them before changing the actor. Each update
 /// consumes the current rollout once; it never replays transitions from an older actor.
 /// Agent parameter/gradient/checkpoint updates discard pending behavior. Ordinary writes to stable
@@ -135,9 +138,18 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <see cref="FinancialA2CAgentOptions{T}.NSteps"/> (its own definition: "number of steps between
     /// updates"). Falls back to the batch size when the options object carries no A2C section.
     /// </summary>
-    private int StepsPerUpdate => TradingOptions is FinancialA2CAgentOptions<T> a2cOptions
-        ? Math.Max(1, a2cOptions.NSteps)
-        : Math.Max(1, TradingOptions.BatchSize);
+    /// <remarks>
+    /// Clamped by the pending-rollout capacity for the same reason <see cref="TradingAgentBase{T}.IsInWarmup"/>
+    /// clamps its threshold: <see cref="EnqueueTransition"/> caps the rollout at
+    /// <see cref="TradingAgentOptions{T}.ReplayBufferSize"/> and drops the oldest transition, so an NSteps
+    /// larger than that capacity could never be reached and a continuing episode would silently never
+    /// produce an update.
+    /// </remarks>
+    private int StepsPerUpdate => Math.Min(
+        TradingOptions is FinancialA2CAgentOptions<T> a2cOptions
+            ? Math.Max(1, a2cOptions.NSteps)
+            : Math.Max(1, TradingOptions.BatchSize),
+        Math.Max(1, TradingOptions.ReplayBufferSize));
 
     /// <summary>
     /// Number of interleaved environment streams in the rollout, from
@@ -185,13 +197,27 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // making a second state copy. Evaluation does not allocate a rollout snapshot.
         var selectedState = training ? state.Clone() : null;
         var logits = _actor.Predict(Tensor<T>.FromVector(selectedState ?? state)).ToVector();
-        SynchronizePolicyStorage();
+
+        // Provenance work belongs to training selections only. An evaluation selection cannot be stored
+        // (StoreExperience rejects a stamp whose Sampled is false), so stamping it only inserted an
+        // unusable entry, and the next training selection and StoreExperience both synchronize storage
+        // anyway — so skipping it here cannot miss a policy change.
+        if (training)
+        {
+            SynchronizePolicyStorage();
+        }
+
         var probabilities = SoftmaxProbabilities(logits);
 
         int actionIndex = training ? SampleCategorical(probabilities) : ArgMaxIndex(probabilities);
         var action = new Vector<T>(TradingOptions.ActionSize);
         action[actionIndex] = NumOps.One;
-        _policyRuntime.Selections.Add(action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState));
+        if (training)
+        {
+            _policyRuntime.Selections.Add(
+                action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState));
+        }
+
         return action;
     }
 
@@ -281,8 +307,10 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Consumes all pending current-policy transitions once, fits the critic to the one-step TD target
-    /// <c>r + gamma * V(s')</c>, and takes one advantage-weighted policy-gradient step on the actor's softmax
+    /// Consumes all pending current-policy transitions once, fits the critic to the n-step return
+    /// <c>G_t = r_t + gamma*r_{t+1} + ... </c> (chained backwards along each environment stream and
+    /// bootstrapped with <c>V(s')</c> at the tail of an unfinished rollout, so the advantage is
+    /// <c>G_t - V(s_t)</c>), and takes one advantage-weighted policy-gradient step on the actor's softmax
     /// policy (plus an <see cref="TradingAgentOptions{T}.EntropyCoefficient"/> entropy bonus). Returns the
     /// policy loss plus <see cref="TradingAgentOptions{T}.ValueCoefficient"/> times the critic loss.
     /// </para>
@@ -315,7 +343,14 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // The rollout IS the batch, in collection order — no sampling, so no stale off-policy data.
         // Consume before the first forward/update: a partially failed critic/actor update must never
         // retry this behavior.
-        _initialWarmupComplete = true;
+        // Only an AUTONOMOUS update retires the warmup gate. IsInWarmup returns false while a supervised
+        // Train(state, target) is in flight, so letting that path set the flag would let one explicit
+        // supervised call cancel the configured WarmupSteps for every later autonomous update.
+        if (!SupervisedUpdateRequested)
+        {
+            _initialWarmupComplete = true;
+        }
+
         InvalidatePolicy();
 
         // Batched advantage-actor-critic update: one batched forward/backward for the critic and

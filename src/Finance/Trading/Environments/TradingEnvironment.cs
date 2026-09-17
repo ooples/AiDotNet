@@ -198,7 +198,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     /// agent, they win; if you leave them alone, whatever the environment was built with applies.
     /// </para>
     /// </remarks>
-    public virtual void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
+    internal virtual void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
 
