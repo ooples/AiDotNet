@@ -31,10 +31,23 @@ jobs:
         # Run 35242849920: both jobs were shut down by the host (exit 143) while the FIRST project,
         # AiDotNetBenchmarkTests, was still building after 47 and 65 minutes; the watchdog never fired
         # and the artifact upload was skipped, so samples are now also printed into the log.
-        variant: [current, freed-disk, src-only]
+        # Run 35252231309 measured the cause: src/AiDotNet.csproj alone builds under the scanner in
+        # 19.6 min and exits 0, but peaks at 15.4 GB of the runner's 16 GB with swap full, and the
+        # watchdog then stopped the run. Disk was never short (89 GB free). These two variants test
+        # the remedies: no persistent compiler server between projects, and more swap to absorb the
+        # peak. Both build the complete project list, as the nightly job does.
+        variant: [no-compiler-server, swap-and-no-compiler-server]
     steps:
+      - name: Add swap for the instrumented build
+        if: matrix.variant == 'swap-and-no-compiler-server'
+        run: |
+          sudo fallocate -l 16G /mnt/probe-swap
+          sudo chmod 600 /mnt/probe-swap
+          sudo mkswap /mnt/probe-swap
+          sudo swapon /mnt/probe-swap
+          free -m
+
       - name: Free runner disk space
-        if: matrix.variant != 'current'
         run: |
           sudo rm -rf /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/PyPy \
             /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/go /usr/share/swift /usr/share/miniconda \
@@ -111,7 +124,8 @@ jobs:
               tick=$(( ${tick:-0} + 1 ))
               if [ $(( tick % 6 )) -eq 1 ]; then echo "sample $line"; fi
               # Stop the build, not the runner: a lost runner loses every log and artifact.
-              if [ "$avail" -lt 600 ] || [ "$root" -lt 1500 ] || [ "$temp" -lt 1500 ]; then
+              swap_free=$(free -m | awk '/^Swap:/ {print $4}')
+              if { [ "$avail" -lt 400 ] && [ "${swap_free:-0}" -lt 512 ]; } || [ "$root" -lt 1500 ] || [ "$temp" -lt 1500 ]; then
                 echo "watchdog: stopping the build (mem_available=${avail}MB root=${root}MB temp=${temp}MB)" | tee probe/watchdog.txt
                 pkill -f 'dotnet build' || true
                 pkill -f VBCSCompiler || true
@@ -127,9 +141,6 @@ jobs:
           dotnet sln AiDotNet.sln list | tail -n +3 | tr -d '\r' | sed 's#\\#/#g' | sed '/^\s*$/d' > probe/all-projects.txt
           # The core library first, so its cost is measured on its own.
           { grep -x 'src/AiDotNet.csproj' probe/all-projects.txt; grep -vx 'src/AiDotNet.csproj' probe/all-projects.txt; } > probe/project-list.txt
-          if [ '${{ matrix.variant }}' = 'src-only' ]; then
-            grep '^src/' probe/project-list.txt > probe/src-list.txt; mv probe/src-list.txt probe/project-list.txt
-          fi
           echo 'build order:'; cat probe/project-list.txt
           overall=0
           while read -r project; do
@@ -142,7 +153,9 @@ jobs:
             start=$(date -u +%s)
             echo "::group::$project"
             log="probe/$(echo "$project" | tr '/' '_').log"
-            if dotnet build "$project" -c Release --no-restore -m:2 "${args[@]}" < /dev/null > "$log" 2>&1; then code=0; else code=$?; fi
+            # No compiler server and no node reuse: each project's compiler memory is returned when
+            # the build exits, instead of being held by VBCSCompiler/MSBuild for the next one.
+            if dotnet build "$project" -c Release --no-restore -m:2 -nodeReuse:false                  -p:UseSharedCompilation=false "${args[@]}" < /dev/null > "$log" 2>&1; then code=0; else code=$?; fi
             tail -5 "$log"
             echo '::endgroup::'
             end=$(date -u +%s)
