@@ -141,3 +141,13 @@ Local verification passed the 359-case harness and 33 rejection controls, then
 reported five distinct completed scopes; changed startup inputs were rejected.
 The first harness attempt ran out of disk space; its replacement completed.
 These remain component results, not changed-source reuse or new live CI proof.
+
+The CPU review also found that the pinned Tensors `ResetToCpu` path reads
+`AIDOTNET_QUIET` and may invoke a configured logger (or console output). The
+environment digest now binds that input; the callback/output effects remain
+unresolved, not implicitly pure because CPU completion was recorded. The
+updated tools build passed with no warnings/errors and the focused runtime /
+runner set passed 241/241. Real-assembly revalidation is pending: at about
+21:12 Eastern the active worktree's production and test bin/obj directories
+disappeared between consecutive reads, after the earlier real-slice proof.
+Those earlier results are retained, but do not validate the newer profile bytes.

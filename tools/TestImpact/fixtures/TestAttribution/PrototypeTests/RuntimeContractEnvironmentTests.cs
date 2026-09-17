@@ -48,6 +48,7 @@ public sealed class RuntimeContractEnvironmentTests
     [InlineData("OMP_NUM_THREADS")]
     [InlineData("MKL_NUM_THREADS")]
     [InlineData("OPENBLAS_NUM_THREADS")]
+    [InlineData("AIDOTNET_QUIET")]
     [InlineData("AIDOTNET_LICENSE_KEY")]
     [InlineData("AIDOTNET_LICENSE_TOKEN")]
     [InlineData("AIDOTNET_LICENSE_SCOPE")]

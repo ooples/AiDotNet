@@ -200,7 +200,7 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Runner binding protocol tests failed.'
     [xml] $runnerTrx = Get-Content -LiteralPath (Join-Path $root 'runner-protocol/results.trx') -Raw
     $runnerCases = @($runnerTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($runnerCases.Count -eq 58 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    Check ($runnerCases.Count -eq 59 -and @($runnerCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Runner binding checks did not execute the expected complete set.'
     dotnet vstest (Join-Path $original 'PrototypeTests.dll') '/TestCaseFilter:Scenario=ReuseProtocol' `
         "/ResultsDirectory:$(Join-Path $root 'reuse-protocol')" '/Logger:trx;LogFileName=results.trx' | Out-Host
