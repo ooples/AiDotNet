@@ -5,7 +5,7 @@ using Mono.Cecil.Cil;
 internal enum AsyncLocalScopeContract { Unresolved, RestoresPreviousString }
 internal enum AsyncLocalScopeRequirement { Initializer, ExclusiveLifetime, NoExternalSlotMutation, OwnerContextFlow }
 internal sealed record AsyncLocalScopeAssessment(AsyncLocalScopeContract Contract, string Slot, string RuntimeHash,
-    AsyncLocalScopeRequirement[] Requirements);
+    AsyncLocalScopeRequirement[] Requirements, SlotInitializationContract Initialization = SlotInitializationContract.Unresolved);
 
 // Proves the bounded save/set/restore operation, not arbitrary AsyncLocal use
 // or file isolation. In particular, a body can still replace the slot or dispose
@@ -67,9 +67,12 @@ internal static class ScopedAsyncLocalReader
                 instructions[writes[0] - 1].Operand is not MethodReference creation || creation.Name != ".ctor" ||
                 creation.Parameters.Count != 0 || !creation.HasThis || creation.DeclaringType.FullName != local.FullName ||
                 !RuntimeMethod(creation, runtime) || Hash(runtime) != ReviewedOwnerCompletion.RuntimeHash) return Unknown();
+            SlotInitializationContract initialization = SlotInitializationReader.Read(slot.DeclaringType);
+            AsyncLocalScopeRequirement[] requirements = Enum.GetValues<AsyncLocalScopeRequirement>()
+                .Where(requirement => requirement != AsyncLocalScopeRequirement.Initializer ||
+                    initialization == SlotInitializationContract.Unresolved).ToArray();
             return new(AsyncLocalScopeContract.RestoresPreviousString, slot.Module.Assembly.Name.Name + ":" + slot.FullName,
-                ReviewedOwnerCompletion.RuntimeHash, [AsyncLocalScopeRequirement.Initializer, AsyncLocalScopeRequirement.ExclusiveLifetime,
-                    AsyncLocalScopeRequirement.NoExternalSlotMutation, AsyncLocalScopeRequirement.OwnerContextFlow]);
+                ReviewedOwnerCompletion.RuntimeHash, requirements, initialization);
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
             BadImageFormatException or AssemblyResolutionException or ResolutionException or InvalidOperationException)

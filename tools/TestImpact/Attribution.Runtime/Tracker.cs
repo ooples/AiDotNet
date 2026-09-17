@@ -19,7 +19,7 @@ public sealed record MethodHits(string Owner, string[] Methods);
 public sealed record AttributionReport(int Schema, string Run, string Token,
     AttributionProcessKind Kind, int ProcessId, string? WorkerOwner, int PeakScopes, HitCollectionMode CollectionMode,
     MethodHits[] Hits, string[] CompletedOwners, AttributionFault[] Faults, WorkerTicket[] Workers, CaseExecutionReport[] Cases,
-    ExecutionPlan? Plan);
+    ExecutionPlan? Plan, TrialScopeReport? TrialScopes = null);
 
 // Prototype only: unknown-context hits apply to the entire test-host execution group.
 // AsyncLocal identifies ownership; a shared scope object detects hits after its owner closes.
@@ -56,6 +56,7 @@ public static class Tracker
         public bool Finished;
     }
     private static readonly Dictionary<string, CaseExecution> Cases = new(StringComparer.Ordinal);
+    private static readonly TrialPathScopes TrialScopes = new();
     private static bool inventoryRegistered;
     private static ExecutionPlan? executionPlan;
     private static readonly string? DirectoryPath = OptionalEnvironment("ATTRIBUTION_OUTPUT");
@@ -348,6 +349,31 @@ public static class Tracker
         Flush();
     }
 
+    public static void TrialScopeStarted(string path, string? previousPath, string? activePath)
+    {
+        if (!IsEnabled) return;
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            Scope? scope = Current.Value;
+            if (scope is null || scope.Closed) { TrialScopes.Invalidate(); return; }
+            TrialScopes.Begin(scope.Owner, TrialPathScopes.Inspect(path), TrialPathScopes.ValueHash(previousPath),
+                TrialPathScopes.PathHash(activePath), TrialPathScopes.PathHash(previousPath));
+        }
+    }
+
+    public static void TrialScopeEnded(string? path, string? restoredPath)
+    {
+        if (!IsEnabled) return;
+        lock (Gate)
+        {
+            RevokePublishedReport();
+            Scope? scope = Current.Value;
+            if (scope is null || scope.Closed) { TrialScopes.Invalidate(); return; }
+            TrialScopes.End(scope.Owner, TrialPathScopes.Inspect(path), TrialPathScopes.ValueHash(restoredPath));
+        }
+    }
+
     private static void Flush()
     {
         if (DirectoryPath is null) return;
@@ -365,7 +391,7 @@ public static class Tracker
                     .Select(pair => new MethodHits(pair.Key, pair.Value.Select(method => method.Serialize()).Order(StringComparer.Ordinal).ToArray())).ToArray(),
                 Completed.Order(StringComparer.Ordinal).ToArray(), Faults.Order().ToArray(), Workers.ToArray(),
                 Cases.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new CaseExecutionReport(
-                    pair.Value.Descriptor, pair.Value.Finished, pair.Value.Results.ToArray())).ToArray(), executionPlan);
+                    pair.Value.Descriptor, pair.Value.Finished, pair.Value.Results.ToArray())).ToArray(), executionPlan, TrialScopes.Snapshot());
             Directory.CreateDirectory(DirectoryPath);
             string destination = Path.Combine(DirectoryPath, $"{Token}.json");
             string pending = destination + ".pending";

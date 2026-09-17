@@ -9,6 +9,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="PrototypeTests" />
     <ProjectReference Include="../Attribution.Protocol/Attribution.Protocol.csproj" />
   </ItemGroup>
 </Project>

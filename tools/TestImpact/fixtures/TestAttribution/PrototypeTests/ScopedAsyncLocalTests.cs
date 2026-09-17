@@ -12,6 +12,24 @@ public sealed class ScopedAsyncLocalTests
         SharedPrevious, WrongPrevious, ExtraDispose, NotSealed, AddedFinalizer, SwallowHandler, CallbackInitializer,
         WrongScopeInterface, ExternalScopeMethod, MutableSlot, MissingInitializer, SynchronizedFactory, SynchronizedDispose, InternalCall }
 
+    [Fact]
+    public void OtherInitializerWorkKeepsItsSeparateRequirement()
+    {
+        using var resolver = Resolver();
+        using var assembly = Read(resolver);
+        TypeDefinition type = Fixture(assembly);
+        MethodDefinition initializer = type.Methods.Single(method => method.IsConstructor && method.IsStatic);
+        initializer.Body.Instructions.Insert(0, Instruction.Create(OpCodes.Call, type.Module.ImportReference(
+            typeof(GC).GetMethod(nameof(GC.Collect), Type.EmptyTypes) ?? throw new InvalidOperationException("Missing Collect"))));
+        AsyncLocalScopeAssessment result = ScopedAsyncLocalReader.Read(type.Methods.Single(method => method.Name == "Set"),
+            type.Methods.Single(method => method.Name == "get_Current"));
+        Assert.Equal(SlotInitializationContract.Unresolved, result.Initialization);
+        if (result.Contract == AsyncLocalScopeContract.RestoresPreviousString)
+            Assert.Contains(AsyncLocalScopeRequirement.Initializer, result.Requirements);
+        else
+            Assert.Empty(result.Requirements);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -36,7 +54,9 @@ public sealed class ScopedAsyncLocalTests
             return;
         }
         Assert.Equal(AsyncLocalScopeContract.RestoresPreviousString, result.Contract);
-        Assert.Equal(Enum.GetValues<AsyncLocalScopeRequirement>(), result.Requirements);
+        Assert.Equal(SlotInitializationContract.CallbackFreeAllocations, result.Initialization);
+        Assert.Equal(Enum.GetValues<AsyncLocalScopeRequirement>().Where(requirement => requirement != AsyncLocalScopeRequirement.Initializer),
+            result.Requirements);
         Assert.Equal(ReviewedOwnerCompletion.RuntimeHash, result.RuntimeHash);
         Assert.Contains("Slot", result.Slot, StringComparison.Ordinal);
     }

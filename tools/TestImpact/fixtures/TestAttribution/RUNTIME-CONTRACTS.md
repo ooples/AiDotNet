@@ -118,3 +118,26 @@ controls, including forced build-binding and real small-fixture source changes.
 The existing AiDotNet before/after bundles yielded two numeric assessments and
 one scope assessment across the five-owner workload. This is component evidence;
 normal AiDotNet changed-source selection/reuse and live verification are pending.
+
+The opt-in shared trial hook now reports owner-bound scope boundaries. Verification
+requires absent main/tombstone paths, distinct canonical path identities, and exact
+restoration of the previous string value. Linked/foreign paths, duplicate owners or
+paths, incomplete lifetimes, custom runners, and aggregated theory rows cannot
+supply this observation. Cleanup runs after the final observation, so deleting a
+file cannot conceal its presence at the end of the test. Raw paths are not emitted.
+These observations survive local verification and authenticated workflow import;
+they do not prove absence of intermediate I/O or authorize reuse independently.
+
+The scope initializer reader separately checks private readonly slot/lock allocations
+against the reviewed runtime. Callbacks, other calls, mutable or foreign fields,
+extra control flow, and unsupported constructors retain an unresolved initializer
+requirement. The actual ModelPersistenceGuard initializer matched this check. Its
+scope contract still requires exclusive lifetime, no external slot mutation, and
+correct owner execution-context flow.
+
+Local verification passed the 359-case harness and 33 rejection controls, then
+240 focused cases after adding the 15 initializer controls (182 runtime-effect,
+58 runner-protocol cases). The updated real five-test assembly passed 5/5 and
+reported five distinct completed scopes; changed startup inputs were rejected.
+The first harness attempt ran out of disk space; its replacement completed.
+These remain component results, not changed-source reuse or new live CI proof.

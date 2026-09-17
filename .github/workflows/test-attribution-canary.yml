@@ -12,6 +12,7 @@ on:
       - 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
       - 'tests/AiDotNet.Tests/Startup.cs'
       - 'tests/AiDotNet.Tests/ModuleInitializer.cs'
+      - 'tests/AiDotNet.Tests/TestInfrastructure/IsolateTrialStateAttribute.cs'
       - 'tools/TestImpact/Test-AttributionPrototype.ps1'
       - 'tools/TestImpact/Test-AttributionBuildBinding.ps1'
       - 'tools/TestImpact/Test-PlannedAttribution.ps1'

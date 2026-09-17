@@ -80,7 +80,7 @@ public static class PlannedEvidence
         // Preserve the independently checked case kind. A generic passing receipt
         // or a custom case runner cannot prove that standard xUnit awaited a task.
         string[] standard = standardCases.Order(StringComparer.Ordinal).ToArray();
-        return new(verified, standard, runtimeProfile);
+        return new(verified, standard, runtimeProfile, TrialScopeEvidence.Read(report.TrialScopes, verified, standard));
     }
 }
 
@@ -91,17 +91,20 @@ public sealed class VerifiedObservedExecution
 {
     private readonly HashSet<string> standardCases;
 
-    internal VerifiedObservedExecution(VerifiedExecution execution, string[] standard, RuntimeContractProfile? runtimeProfile)
+    internal VerifiedObservedExecution(VerifiedExecution execution, string[] standard, RuntimeContractProfile? runtimeProfile,
+        TrialScopeObservation[]? trialScopes = null)
     {
         Execution = execution;
         standardCases = standard.ToHashSet(StringComparer.Ordinal);
         StandardCases = Array.AsReadOnly(standard.ToArray());
         RuntimeProfile = runtimeProfile;
+        TrialScopes = Array.AsReadOnly(trialScopes?.ToArray() ?? []);
     }
 
     public VerifiedExecution Execution { get; }
     public IReadOnlyList<string> StandardCases { get; }
     public RuntimeContractProfile? RuntimeProfile { get; }
+    public IReadOnlyList<TrialScopeObservation> TrialScopes { get; }
 
     public bool HasStandardOwnerCompletion(string owner)
     {

@@ -12,7 +12,7 @@ switch (command)
         VerifiedExecution imported = observed.Execution;
         RunnerBinding.WriteNew(args[3], new { imported.Scope, imported.PlanHash, imported.InventoryHash, imported.Context,
             imported.Workload, imported.Origin, imported.Cases, imported.CanReplaceFullBaseline,
-            observed.StandardCases, observed.RuntimeProfile, AuthenticatedWorkflowOrigin = true, ProductionSelectionEnabled = false });
+            observed.StandardCases, observed.RuntimeProfile, observed.TrialScopes, AuthenticatedWorkflowOrigin = true, ProductionSelectionEnabled = false });
         break;
     }
     case Command.PrepareReuse:
@@ -80,7 +80,7 @@ switch (command)
             result.Cases.Select(item => item.MethodId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(), observed) : [];
         RunnerBinding.WriteNew(args[9], new { result.Scope, result.PlanHash, result.InventoryHash, result.Context,
             result.Workload, result.Origin, result.Cases, result.CanReplaceFullBaseline,
-            observed.StandardCases, observed.RuntimeProfile, OwnerCompletion = ownerCompletion, AuthenticatedWorkflowOrigin = false });
+            observed.StandardCases, observed.RuntimeProfile, observed.TrialScopes, OwnerCompletion = ownerCompletion, AuthenticatedWorkflowOrigin = false });
         break;
     }
 }
