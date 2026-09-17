@@ -108,8 +108,11 @@ public class PixelToSequenceDocumentTests
         DocumentNeuralNetworkBase<double> model,
         params int[] expectedShape)
     {
+        // The helper is always handed a fresh factory result, so it owns it: the model's layers are
+        // disposable and nothing else holds a reference once the assertion returns.
+        using var owned = model;
         using var input = CreateSmallImage();
-        using var output = model.Predict(input);
+        using var output = owned.Predict(input);
         // Shape is a TensorShape, which only converts to ReadOnlySpan<int> implicitly. That
         // satisfied Assert.Equal's overloads on net10.0 but not on net8.0/net471, so materialize
         // it the way the rest of the suite does.
@@ -127,7 +130,8 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task Donut_GetModelMetadata_ReturnsValidData()
     {
-        Assert.Equal("Donut", CreateDonut().GetModelMetadata().Name);
+        using var model = CreateDonut();
+        Assert.Equal("Donut", model.GetModelMetadata().Name);
     }
 
     #endregion
@@ -143,7 +147,8 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task Nougat_GetModelMetadata_ReturnsValidData()
     {
-        Assert.Equal("Nougat", CreateNougat().GetModelMetadata().Name);
+        using var model = CreateNougat();
+        Assert.Equal("Nougat", model.GetModelMetadata().Name);
     }
 
     #endregion
@@ -159,7 +164,8 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
-        Assert.Equal("Pix2Struct", CreatePix2Struct().GetModelMetadata().Name);
+        using var model = CreatePix2Struct();
+        Assert.Equal("Pix2Struct", model.GetModelMetadata().Name);
     }
 
     #endregion
@@ -175,7 +181,8 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task Dessurt_GetModelMetadata_ReturnsValidData()
     {
-        Assert.Equal("Dessurt", CreateDessurt().GetModelMetadata().Name);
+        using var model = CreateDessurt();
+        Assert.Equal("Dessurt", model.GetModelMetadata().Name);
     }
 
     #endregion
@@ -191,7 +198,8 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task MATCHA_GetModelMetadata_ReturnsValidData()
     {
-        Assert.Equal("MATCHA", CreateMatcha().GetModelMetadata().Name);
+        using var model = CreateMatcha();
+        Assert.Equal("MATCHA", model.GetModelMetadata().Name);
     }
 
     #endregion
@@ -210,10 +218,19 @@ public class PixelToSequenceDocumentTests
             CreateMatcha(),
         };
 
-        foreach (var model in models)
+        try
         {
-            // Pixel-to-sequence models process raw pixels, no OCR required
-            Assert.False(model.RequiresOCR);
+            foreach (var model in models)
+            {
+                // Pixel-to-sequence models process raw pixels, no OCR required
+                Assert.False(model.RequiresOCR);
+            }
+        }
+        finally
+        {
+            // Five paper-architecture models alive at once is the peak this file exists to keep
+            // down, so release them even if an assertion throws.
+            foreach (var model in models) model.Dispose();
         }
     }
 
