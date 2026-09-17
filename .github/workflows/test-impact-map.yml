@@ -123,11 +123,15 @@ jobs:
               echo "run $candidate tested $sha, which is not in this checkout"
               return 1
             fi
-            if ! run_manifest=$(git show "${sha}:.github/test-shards.yml" 2>/dev/null | yq -o=json -I=0 '.shard'); then
-              echo "run $candidate has no readable shard manifest at $sha"
+            if ! git cat-file -e "${sha}:.github/test-shards.yml" 2>/dev/null; then
+              echo "run $candidate has no shard manifest at $sha"
               return 1
             fi
-            expected_sorted=$(printf '%s' "$run_manifest" | jq -c '[.[].name] | sort')
+            if ! run_manifest=$(git show "${sha}:.github/test-shards.yml" | yq -o=json -I=0 '.shard') ||
+               ! expected_sorted=$(printf '%s' "$run_manifest" | jq -ce 'if type == "array" then [.[].name] | sort else error("not a list") end'); then
+              echo "run $candidate has an unreadable shard manifest at $sha"
+              return 1
+            fi
             expected_count=$(printf '%s' "$expected_sorted" | jq 'length')
             if [ "$expected_count" -eq 0 ]; then
               echo "run $candidate has an empty shard manifest at $sha"
