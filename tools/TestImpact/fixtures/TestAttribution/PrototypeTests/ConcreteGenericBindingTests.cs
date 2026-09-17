@@ -9,6 +9,58 @@ public sealed class ConcreteGenericBindingTests
     public enum TypeArgument { Double, Single, Open, Array, ByReference, Pointer }
     private enum BinaryInput { Replaced, Missing, Corrupt }
 
+    public enum BaseMutation { None, ForeignParameter, WrongBase, OpenArgument, ExtraArgument, StaticCall, BaseArguments, StaticConstructor }
+
+    [Theory]
+    [InlineData(BaseMutation.None)]
+    [InlineData(BaseMutation.ForeignParameter)]
+    [InlineData(BaseMutation.WrongBase)]
+    [InlineData(BaseMutation.OpenArgument)]
+    [InlineData(BaseMutation.ExtraArgument)]
+    [InlineData(BaseMutation.StaticCall)]
+    [InlineData(BaseMutation.BaseArguments)]
+    [InlineData(BaseMutation.StaticConstructor)]
+    public void BaseContextRequiresAnExplicitMatchingInheritanceEdge(BaseMutation mutation)
+    {
+        using var module = ModuleDefinition.CreateModule("base-binding", ModuleKind.Dll);
+        TypeDefinition derived = Owner(module, "Derived"), parent = Owner(module, "Parent"), unrelated = Owner(module, "Other");
+        var scalar = new TypeDefinition("Fixtures", "Scalar", TypeAttributes.Public, module.TypeSystem.Object);
+        module.Types.Add(scalar);
+        MethodDefinition Ctor(TypeDefinition owner)
+        {
+            var constructor = new MethodDefinition(".ctor", MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName, module.TypeSystem.Void);
+            owner.Methods.Add(constructor);
+            return constructor;
+        }
+        var derivedConstructor = Ctor(derived);
+        Ctor(parent);
+        Ctor(unrelated);
+        var declared = new GenericInstanceType(parent);
+        declared.GenericArguments.Add(derived.GenericParameters[0]);
+        derived.BaseType = declared;
+        var invoked = new GenericInstanceType(parent);
+        invoked.GenericArguments.Add(derived.GenericParameters[0]);
+        var concrete = new GenericInstanceType(derived);
+        concrete.GenericArguments.Add(scalar);
+        var constructed = new MethodReference(".ctor", module.TypeSystem.Void, concrete) { HasThis = true };
+        var baseCall = new MethodReference(".ctor", module.TypeSystem.Void, invoked) { HasThis = true };
+        switch (mutation)
+        {
+            case BaseMutation.ForeignParameter: invoked.GenericArguments[0] = unrelated.GenericParameters[0]; break;
+            case BaseMutation.WrongBase:
+                var foreign = new GenericInstanceType(unrelated); foreign.GenericArguments.Add(derived.GenericParameters[0]); baseCall.DeclaringType = foreign; break;
+            case BaseMutation.OpenArgument: concrete.GenericArguments[0] = derived.GenericParameters[0]; break;
+            case BaseMutation.ExtraArgument: concrete.GenericArguments.Add(scalar); break;
+            case BaseMutation.StaticCall: baseCall.HasThis = false; break;
+            case BaseMutation.BaseArguments: baseCall.Parameters.Add(new(module.TypeSystem.Int32)); break;
+            case BaseMutation.StaticConstructor: derivedConstructor.IsStatic = true; break;
+        }
+        var result = ConcreteGenericBinding.BaseConstructor(constructed, baseCall);
+        if (mutation != BaseMutation.None) { Assert.Null(result); return; }
+        Assert.NotNull(result);
+        Assert.Same(scalar, ConcreteGenericBinding.Read(parent.GenericParameters[0], result));
+    }
+
     [Theory]
     [InlineData(TypeArgument.Double)]
     [InlineData(TypeArgument.Single)]

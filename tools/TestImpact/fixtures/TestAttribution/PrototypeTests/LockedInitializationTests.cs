@@ -10,7 +10,7 @@ public sealed class LockedInitializationTests
 {
     public enum Mutation { PublicMap, MutableMap, InstanceMap, ForeignKey, MutableKey, PublicLock, WrongMapType,
         WrongLockType, WrongContains, WrongSetter, WrongMonitor, WrongFinally, WrongLeave, WrongSkip,
-        WrongTakenLocal, InitiallyTaken, EnterTailDirectly, ThreadStaticMap, ForeignGenericParameter }
+        WrongTakenLocal, InitiallyTaken, EnterTailDirectly, ThreadStaticMap, ForeignGenericParameter, ForeignClosedMap }
 
     [Fact]
     public void ConstantInsertionRetainsEveryExternalRequirement()
@@ -45,6 +45,7 @@ public sealed class LockedInitializationTests
     [InlineData(Mutation.EnterTailDirectly)]
     [InlineData(Mutation.ThreadStaticMap)]
     [InlineData(Mutation.ForeignGenericParameter)]
+    [InlineData(Mutation.ForeignClosedMap)]
     public void SimilarLookingTailsDoNotInheritTheContract(Mutation mutation)
     {
         using var fixture = new Fixture();
@@ -76,6 +77,12 @@ public sealed class LockedInitializationTests
                 map.CustomAttributes.Add(new(fixture.Assembly.MainModule.ImportReference(typeof(ThreadStaticAttribute).GetConstructor(Type.EmptyTypes) ?? throw new InvalidOperationException()))); break;
             case Mutation.ForeignGenericParameter:
                 ((MethodReference)tail[10].Operand).Parameters[0].ParameterType = new GenericParameter("T", fixture.Method); break;
+            case Mutation.ForeignClosedMap:
+                var foreign = new GenericInstanceType(fixture.Method.DeclaringType);
+                foreign.GenericArguments.Add(fixture.Assembly.MainModule.TypeSystem.Single);
+                tail[7].Operand = new FieldReference(map.Name, map.FieldType, foreign);
+                tail[12].Operand = tail[7].Operand;
+                break;
         }
         Assert.Equal(LockedInitializationContract.Unresolved, LockedInitializationReader.Read(fixture.Method).Contract);
     }

@@ -68,7 +68,7 @@ internal static class ConstructorPrefixReader
                     }
                     case Code.Stfld:
                     {
-                        if (baseConstructor is null || instruction.Operand is not FieldReference reference || reference.Resolve() is not FieldDefinition field ||
+                        if (baseConstructor is null || OwnedFieldBinding.Read(instruction, method.DeclaringType) is not FieldDefinition field ||
                             field.DeclaringType != method.DeclaringType || field.IsStatic || !field.IsPrivate || !field.IsInitOnly || field.HasCustomAttributes ||
                             !stack.TryPop(out Value value) || !stack.TryPop(out Value receiver) || receiver.Kind != Kind.Receiver ||
                             !(value.Kind == Kind.Integer && Runtime(field.FieldType, "System.Int32") || value.Kind == Kind.Key && Runtime(field.FieldType, "System.String")) ||

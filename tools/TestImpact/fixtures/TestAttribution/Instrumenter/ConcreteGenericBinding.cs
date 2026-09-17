@@ -4,6 +4,39 @@ using Mono.Cecil;
 // runtime contract must not: T in an unrelated type/method is not the same T.
 internal static class ConcreteGenericBinding
 {
+    // An explicit one-hop base binding. This does not guess an outer generic
+    // context or equate unrelated parameters which happen to print as T.
+    internal static MethodReference? BaseConstructor(MethodReference constructed, MethodReference baseCall)
+    {
+        try
+        {
+            if (!constructed.HasThis || constructed.ExplicitThis || constructed.HasGenericParameters || constructed.Name != ".ctor" ||
+                constructed.CallingConvention != MethodCallingConvention.Default || constructed.Resolve() is not MethodDefinition derived ||
+                !derived.IsConstructor || derived.IsStatic || constructed.DeclaringType is not GenericInstanceType concrete ||
+                concrete.ElementType.Resolve() != derived.DeclaringType || concrete.GenericArguments.Count != derived.DeclaringType.GenericParameters.Count ||
+                derived.DeclaringType.BaseType is not GenericInstanceType declared ||
+                baseCall.DeclaringType is not GenericInstanceType invoked || invoked.ElementType.Resolve() != declared.ElementType.Resolve() ||
+                invoked.GenericArguments.Count != declared.GenericArguments.Count ||
+                !baseCall.HasThis || baseCall.ExplicitThis || baseCall.HasGenericParameters || baseCall.Name != ".ctor" ||
+                baseCall.Parameters.Count != 0 || baseCall.CallingConvention != MethodCallingConvention.Default ||
+                baseCall.Resolve() is not MethodDefinition target || !target.IsConstructor || target.IsStatic || target.Parameters.Count != 0 ||
+                target.DeclaringType != declared.ElementType.Resolve() || declared.GenericArguments.Count != target.DeclaringType.GenericParameters.Count)
+                return null;
+            var closed = new GenericInstanceType(declared.ElementType);
+            for (int index = 0; index < declared.GenericArguments.Count; index++)
+            {
+                TypeReference? declaredArgument = Read(declared.GenericArguments[index], constructed);
+                TypeReference? invokedArgument = Read(invoked.GenericArguments[index], constructed);
+                if (declaredArgument is null || invokedArgument is null || declaredArgument.Resolve() is not TypeDefinition resolved ||
+                    resolved != invokedArgument.Resolve()) return null;
+                closed.GenericArguments.Add(declaredArgument);
+            }
+            return new MethodReference(target.Name, target.ReturnType, closed) { HasThis = true };
+        }
+        catch (Exception error) when (error is AssemblyResolutionException or ResolutionException or ArgumentException or InvalidOperationException)
+        { return null; }
+    }
+
     internal static TypeReference? Read(TypeReference argument, MethodReference? context)
     {
         if (argument is not GenericParameter parameter)

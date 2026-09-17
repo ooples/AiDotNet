@@ -211,3 +211,14 @@ no first-chance handlers at either boundary. Changed startup, logging and diagno
 inputs rejected the old plan. These are component results: normal real-workload
 selective reuse, complete body/shared-initializer closure and updated live CI
 acceptance remain unfinished; production selection is still disabled.
+
+The backend base constructor now binds its generic argument through the actual
+inheritance edge to the reviewed `double` provider. Its structural check allows
+only the Object constructor and receiver-field initialization; provider/cache
+lifetime requirements remain explicit. Shared-field matching also preserves
+generic storage identity: `Backend<float>.Map` cannot borrow a contract for the
+current `Backend<T>.Map` just because both resolve to the same field definition.
+Foreign parameter owners, wrong inheritance edges, added effects and substituted
+closed field owners are rejection controls. The follow-up focused set passed
+467/467; all four real constructor sites verified the numeric-base contract in
+`attribution-real-constructor-inputs-final-20260917.jsonl`.

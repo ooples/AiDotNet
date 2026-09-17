@@ -3,7 +3,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 internal sealed record ConstructorCallAssessment(int Instruction, ConstructorPrefixAssessment Prefix,
-    LockedInitializationAssessment LockedTail, string KeyProvider);
+    LockedInitializationAssessment LockedTail, string KeyProvider, NumericBaseConstructorAssessment NumericBase);
 
 // Supplies input facts from actual IL operands, never hard-coded test names or
 // assumed rank/world-size defaults. The Guid contract proves string shape on
@@ -33,7 +33,7 @@ internal static class ConstructorCallReader
             bool Inside(Instruction target) => il.IndexOf(target) is int position && position > index - 3 && position <= index;
             ConstructorPrefixAssessment prefix = ConstructorPrefixReader.Read(definition, rank, worldSize, ConstructorKeyFact.NonWhitespaceString);
             return prefix.Contract == ConstructorPrefixContract.Unresolved ? null :
-                new(index, prefix, LockedInitializationReader.Read(definition), key.FullName);
+                new(index, prefix, LockedInitializationReader.Read(definition), key.FullName, NumericBaseConstructorReader.Read(constructor));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or
             BadImageFormatException or AssemblyResolutionException or ResolutionException or InvalidOperationException or InvalidCastException)

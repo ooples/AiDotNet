@@ -41,6 +41,7 @@ internal static class LockedInitializationReader
             if (handler.HandlerType != ExceptionHandlerType.Finally || handler.TryStart != tail[4] ||
                 handler.TryEnd != tail[18] || handler.HandlerStart != tail[18] || handler.HandlerEnd != tail[23] ||
                 handler.FilterStart is not null || handler.CatchType is not null) return Unknown();
+            FieldDefinition? Field(Instruction instruction) => OwnedFieldBinding.Read(instruction, method.DeclaringType);
             FieldDefinition? gate = Field(tail[0]), map = Field(tail[7]), key = Field(tail[9]);
             if (gate is null || map is null || key is null || gate == map || gate == key || map == key ||
                 new[] { gate, map, key }.Any(field => field.DeclaringType != method.DeclaringType || !field.IsPrivate || !field.IsInitOnly ||
@@ -103,7 +104,6 @@ internal static class LockedInitializationReader
         reference.Resolve() is TypeDefinition definition && definition.FullName == name &&
         string.Equals(Path.GetFullPath(definition.Module.FileName), Path.GetFullPath(typeof(object).Assembly.Location),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-    private static FieldDefinition? Field(Instruction instruction) => instruction.Operand is FieldReference field ? field.Resolve() : null;
     private static string Hash(string path) { using var stream = File.OpenRead(path); return Convert.ToHexStringLower(SHA256.HashData(stream)); }
     private static int Local(Instruction instruction) => instruction.Operand is VariableDefinition local ? local.Index : instruction.OpCode.Code switch
     {
