@@ -391,7 +391,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         Tensor<T> newFakeImagesWithConditions = ConcatenateImageAndCondition(newFakeImages, conditions);
 
         // Train generator
-        T generatorLoss = TrainGeneratorOnBatch(newGeneratorInput, newFakeImagesWithConditions, allRealLabels);
+        T generatorLoss = TrainGeneratorOnBatch(newGeneratorInput);
 
         // Track losses
         _generatorLosses.Add(generatorLoss);
@@ -431,7 +431,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <summary>
     /// Trains the generator on a batch.
     /// </summary>
-    private T TrainGeneratorOnBatch(Tensor<T> generatorInput, Tensor<T> fakeImagesWithConditions, Tensor<T> targetLabels)
+    private T TrainGeneratorOnBatch(Tensor<T> generatorInput)
     {
         // Train generator to fool discriminator (adversarial objective)
         Generator.SetTrainingMode(true);
@@ -443,13 +443,13 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
                 new[] { generatorInput.Shape[0], _numConditionClasses });
             var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
-            var discScore = Discriminator.Predict(withConditions);
-            // BCE(disc(fake_with_cond), real_labels) via engine ops
-            var diff = Engine.TensorSubtract(discScore, targetLabels);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            return Engine.ReduceMean(squared, allAxes, keepDims: false);
-        });
+
+            // On the tape, with the discriminator frozen. Discriminator.Predict opened a NoGradScope and
+            // detached the score from the generator entirely. The loss is the non-saturating
+            // -log D(G(z|y)) (Mirza and Osindero 2014, eq. 2), replacing a squared distance to 1.
+            var discScore = Discriminator.ForwardFrozenOnTape(withConditions);
+            return Discriminator.BinaryCrossEntropyOnTape(discScore, targetIsReal: true);
+        }, GeneratorOptimizer);  // the configured generator optimizer; omitting it silently used the generator network's own default
     }
 
     /// <summary>
@@ -600,29 +600,13 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private Tensor<T> ConcatenateFlattenedImageAndCondition(Tensor<T> images, Tensor<T> conditions)
     {
+        // Engine ops, not an element copy: the generator step passes its tape-tracked output through
+        // here, and copying into a fresh tensor severed the gradient to the generator.
         int batchSize = images.Shape[0];
-        int imageSize = images.Length / batchSize;
-        int conditionSize = conditions.Shape[1];
-
-        // Create result tensor with space for both image and condition
-        var result = TensorAllocator.Rent<T>(new int[] { batchSize, imageSize + conditionSize });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy image data
-            for (int i = 0; i < imageSize; i++)
-            {
-                result[b, i] = images.GetFlatIndexValue(b * imageSize + i);
-            }
-
-            // Append condition
-            for (int i = 0; i < conditionSize; i++)
-            {
-                result[b, imageSize + i] = conditions[b, i];
-            }
-        }
-
-        return result;
+        var flatImages = images.Shape.Length == 2
+            ? images
+            : Engine.Reshape(images, new[] { batchSize, images.Length / batchSize });
+        return Engine.TensorConcatenate(new[] { flatImages, conditions }, axis: 1);
     }
 
     /// <summary>
@@ -688,63 +672,16 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             return ConcatenateFlattenedImageAndCondition(images, conditions);
         }
 
-        // Create output tensor with extra channels for conditions
-        int[] outputShape = isChannelsFirst
-            ? new int[] { batchSize, channels + conditionSize, height, width }
-            : new int[] { batchSize, height, width, channels + conditionSize };
-        var result = TensorAllocator.Rent<T>(outputShape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Copy original image channels
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T value;
-                        if (images.Shape.Length == 4)
-                        {
-                            value = isChannelsFirst
-                                ? images[b, c, h, w]
-                                : images[b, h, w, c];
-                        }
-                        else
-                        {
-                            // For 3D, calculate linear index
-                            int idx = h * width * channels + w * channels + c;
-                            value = images.GetFlatIndexValue(b * (height * width * channels) + idx);
-                        }
-
-                        if (isChannelsFirst)
-                        {
-                            result[b, c, h, w] = value;
-                        }
-                        else
-                        {
-                            result[b, h, w, c] = value;
-                        }
-                    }
-
-                    // Tile condition across spatial dimensions (replicate at each H, W position)
-                    for (int k = 0; k < conditionSize; k++)
-                    {
-                        T condValue = conditions[b, k];
-                        if (isChannelsFirst)
-                        {
-                            result[b, channels + k, h, w] = condValue;
-                        }
-                        else
-                        {
-                            result[b, h, w, channels + k] = condValue;
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Engine ops, not an element copy (see ConcatenateFlattenedImageAndCondition): the condition is
+        // tiled across every spatial position and appended as extra channels, in the image's own layout.
+        // A 3-D [B, H*W, C] image is read as [B, H, W, C] and returns [B, H, W, C + K], as before.
+        var spatialImages = images.Shape.Length == 4
+            ? images
+            : Engine.Reshape(images, new[] { batchSize, height, width, channels });
+        Tensor<T> tiledConditions = isChannelsFirst
+            ? Engine.TensorTile(Engine.Reshape(conditions, new[] { batchSize, conditionSize, 1, 1 }), new[] { 1, 1, height, width })
+            : Engine.TensorTile(Engine.Reshape(conditions, new[] { batchSize, 1, 1, conditionSize }), new[] { 1, height, width, 1 });
+        return Engine.TensorConcatenate(new[] { spatialImages, tiledConditions }, axis: isChannelsFirst ? 1 : 3);
     }
 
     /// <summary>

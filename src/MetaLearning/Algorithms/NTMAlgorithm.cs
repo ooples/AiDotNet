@@ -106,10 +106,19 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Graves et al. supplies the ARCHITECTURE - controller, addressable memory, read and write heads - and nothing
+// else: its tasks are copy, repeat-copy, associative recall and sorting, and it states no classification
+// objective. The few-shot classification setting this class is exercised under, including the softmax output
+// layer and the cross-entropy episode loss, is Santoro et al. 2016, which builds exactly this memory-augmented
+// controller into a meta-learner. Both are recorded so the citation covers what the class actually does.
 [ResearchPaper("Neural Turing Machines",
     "https://arxiv.org/abs/1410.5401",
     Year = 2014,
     Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
+[ResearchPaper("Meta-Learning with Memory-Augmented Neural Networks",
+    "https://arxiv.org/abs/1605.06065",
+    Year = 2016,
+    Authors = "Adam Santoro, Sergey Bartunov, Matthew Botvinick, Daan Wierstra, Timothy Lillicrap")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
 public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
@@ -157,7 +166,12 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public NTMAlgorithm(NTMOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            // Graves et al. 2014 specifies no classification objective - its tasks are copy and recall - so the
+            // loss comes from the few-shot setting this class is used in, which is Santoro et al. 2016: softmax
+            // the controller output and minimise cross-entropy against the label (eq. 24-25). It used to
+            // inherit the inner model's DefaultLossFunction, which is squared error. The caller's own
+            // LossFunction still wins when supplied.
+            options.LossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
@@ -234,6 +248,16 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The adapted model returns one score per class for each example, so this is the configured loss of their
+    /// logarithm against the class indices - cross-entropy by default. A Vector output carries the predicted
+    /// class of each example instead, and its loss is the classification error rate. The base's default compared
+    /// the whole score block against a vector of labels, which cannot be lined up at all.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -656,7 +680,18 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             if (tensor.Shape.Length == 1)
             {
-                return new Tensor<T>[] { tensor };
+                // One target per timestep, matching ConvertToSequence's one row per timestep. Returning the
+                // whole label tensor as a single entry made the target sequence shorter than the input
+                // sequence, and ProcessSupportSet walks the two in lockstep - so any support set with more
+                // than one row threw IndexOutOfRangeException on its second timestep.
+                var labels = new Tensor<T>[tensor.Length];
+                for (int t = 0; t < tensor.Length; t++)
+                {
+                    labels[t] = new Tensor<T>(new int[] { 1 });
+                    labels[t][0] = tensor[t];
+                }
+
+                return labels;
             }
             else if (tensor.Shape.Length >= 2)
             {
@@ -784,9 +819,28 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        // Convert input to tensor format
-        var inputTensor = ConvertInputToTensor(input);
+        // One score row per example. This used to run the controller ONCE over the whole batch and return a
+        // single row, so a query set of any size came back as one example's scores. Stepping per example is
+        // also what an NTM is for: the memory it reads and writes evolves across the timesteps.
+        int count = MbPAConversions<T>.GetBatchSize(input);
+        var scores = new Tensor<T>(new int[] { count, _options.NumClasses });
 
+        for (int r = 0; r < count; r++)
+        {
+            var single = MbPAConversions<T>.SliceExample(input, r);
+            var stepOutput = PredictTimestep(ConvertInputToTensor(single));
+            for (int c = 0; c < _options.NumClasses && c < stepOutput.Length; c++)
+            {
+                scores[r * _options.NumClasses + c] = stepOutput.GetFlat(c);
+            }
+        }
+
+        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
+    }
+
+    /// <summary>One timestep: address memory, read, write, emit, and carry the read contents forward.</summary>
+    private Tensor<T> PredictTimestep(Tensor<T> inputTensor)
+    {
         // Combine input with previous read contents
         var controllerInput = CombineInputWithReadContents(inputTensor);
 
@@ -821,7 +875,7 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
             _readContents[i] = currentReadContents[i];
         }
 
-        return ConvertTensorToOutput(output);
+        return output;
     }
 
     /// <summary>

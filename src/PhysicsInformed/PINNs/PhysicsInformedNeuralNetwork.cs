@@ -392,7 +392,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         /// <param name="input">Input tensor for evaluation.</param>
         /// <returns>Network output tensor.</returns>
-        public Tensor<T> Forward(Tensor<T> input)
+        /// <remarks>
+        /// Virtual so a composite PINN (DomainDecompositionPINN) can define its solution once and have
+        /// Predict, GetSolution and the PDE residual all evaluate it.
+        /// </remarks>
+        public virtual Tensor<T> Forward(Tensor<T> input)
         {
             Tensor<T> output = input;
             foreach (var layer in Layers)

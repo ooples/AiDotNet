@@ -102,8 +102,8 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
-        EnsureDefaultLayers(criticArchitecture, options.StateSize + options.ActionSize, 1);
+        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, options.HiddenLayers);
+        EnsureDefaultLayers(criticArchitecture, options.StateSize + options.ActionSize, 1, options.HiddenLayers);
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic1 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());

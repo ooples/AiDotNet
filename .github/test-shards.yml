@@ -476,7 +476,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
+      (FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.iT)
   # J-M in turn never once COMPLETED: every run either OOMed (MiniGPT-v2 / Llama-3.2-Vision /
   # Kimi-VL, all bounded now) or ran out the 45-min budget. It carries 183 generated classes,
   # and the last CI run covered only 44 of them in 14.4 min of execution before dying —
@@ -503,13 +503,13 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.M2|FullyQualifiedName~Generated.MA|FullyQualifiedName~Generated.Ma|FullyQualifiedName~Generated.MC|FullyQualifiedName~Generated.Mc|FullyQualifiedName~Generated.Mea|FullyQualifiedName~Generated.MedC|FullyQualifiedName~Generated.MedG|FullyQualifiedName~Generated.MedF|FullyQualifiedName~Generated.MedN|FullyQualifiedName~Generated.Medi)
+      (FullyQualifiedName~Generated.M2|FullyQualifiedName~Generated.MA|FullyQualifiedName~Generated.Ma|FullyQualifiedName~Generated.MC|FullyQualifiedName~Generated.Mc|FullyQualifiedName~Generated.Mea|FullyQualifiedName~Generated.MedC|FullyQualifiedName~Generated.MedG|FullyQualifiedName~Generated.MedF|FullyQualifiedName~Generated.MedN|FullyQualifiedName~Generated.Mb|FullyQualifiedName~Generated.Medi)
   - name: ModelFamily - Generated Layers M MedS-Meta
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.MEG|FullyQualifiedName~Generated.Meg|FullyQualifiedName~Generated.MER|FullyQualifiedName~Generated.MedS|FullyQualifiedName~Generated.Mel|FullyQualifiedName~Generated.Mem|FullyQualifiedName~Generated.Mes|FullyQualifiedName~Generated.MetaC)
+      (FullyQualifiedName~Generated.MEG|FullyQualifiedName~Generated.Meg|FullyQualifiedName~Generated.MER|FullyQualifiedName~Generated.MedS|FullyQualifiedName~Generated.Mel|FullyQualifiedName~Generated.Mem|FullyQualifiedName~Generated.Mes|FullyQualifiedName~Generated.MetaB|FullyQualifiedName~Generated.MetaC|FullyQualifiedName~Generated.MetaD|FullyQualifiedName~Generated.MetaF|FullyQualifiedName~Generated.MetaL|FullyQualifiedName~Generated.MetaO|FullyQualifiedName~Generated.MetaP|FullyQualifiedName~Generated.MetaS|FullyQualifiedName~Generated.MetaT)
   - name: ModelFamily - Generated Layers M MetaV-Mu
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -542,15 +542,15 @@ shard:
       FullyQualifiedName~ModelFamilyTests.Generated&
       (FullyQualifiedName~Generated.Pa|FullyQualifiedName~Generated.PA|FullyQualifiedName~Generated.Pc|FullyQualifiedName~Generated.PC|
       FullyQualifiedName~Generated.Pi|FullyQualifiedName~Generated.PI|FullyQualifiedName~Generated.Pl|FullyQualifiedName~Generated.PL|
-      FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.PN|FullyQualifiedName~Generated.Pp|FullyQualifiedName~Generated.PP)
+      FullyQualifiedName~Generated.PM|FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.PN|FullyQualifiedName~Generated.Pp|FullyQualifiedName~Generated.PP)
   - name: ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Pe|FullyQualifiedName~Generated.Ph|
+      (FullyQualifiedName~Generated.PE|FullyQualifiedName~Generated.Pe|FullyQualifiedName~Generated.Ph|
       FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|FullyQualifiedName~Generated.PR|
-      FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.PS|FullyQualifiedName~Generated.Pu|FullyQualifiedName~Generated.PU|
+      FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.PS|FullyQualifiedName~Generated.PT|FullyQualifiedName~Generated.Pu|FullyQualifiedName~Generated.PU|
       FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.PW|FullyQualifiedName~Generated.Py)
   # Q-S was itself a 45-min CANCELLATION, exactly like N-Z and N-S before it.
   # MEASURED (full local run, all correctness fixes in place): 203 classes,
@@ -579,7 +579,7 @@ shard:
     # 56 classes, 15.9 min. Heaviest: RecurrentGemmaLanguageModel 5.9m, RealESRGANVideo 2.3m.
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.Ra|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.Re|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
+      (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R2|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.Ra|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.Re|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
   - name: ModelFamily - Generated Layers R2-SAI
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -602,7 +602,7 @@ shard:
     # 40 classes, 16.4 min. Heaviest: SECBERT 5.5m, SeACo 2.8m.
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.Sar|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.Sc|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Se|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
+      (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.Sar|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.Sc|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Se|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.SD|FullyQualifiedName~Generated.Sig|FullyQualifiedName~Generated.SIB)
   # The previous Sil-Sy job reached the 45-minute job timeout after four
   # individual MoreData watchdogs. Split its exact prefix union at the
   # Sq/St boundary so both halves retain headroom even if a future model
@@ -615,7 +615,8 @@ shard:
       (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.Sl|
       FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.So|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.Sp|
       FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sq|FullyQualifiedName~Generated.Sil|
-      FullyQualifiedName~Generated.Sim)
+      FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.SIm|
+      FullyQualifiedName~Generated.Sm|FullyQualifiedName~Generated.SN)
   # SPLIT FROM "St-Sy", also killed by the runner (MemAvailable floor 218 MB) at ~18
   # minutes with no TRX, on BOTH this run and the baseline. Same treatment: halve the
   # working set rather than extend the clock. The token set is carried over verbatim so
@@ -653,13 +654,13 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.T5R|FullyQualifiedName~Generated.TCD|FullyQualifiedName~Generated.TCN|FullyQualifiedName~Generated.TD3|FullyQualifiedName~Generated.TDP|FullyQualifiedName~Generated.TDT|FullyQualifiedName~Generated.TFC|FullyQualifiedName~Generated.TFG|FullyQualifiedName~Generated.TFT|FullyQualifiedName~Generated.TLB|FullyQualifiedName~Generated.TLe|FullyQualifiedName~Generated.TOT|FullyQualifiedName~Generated.TRI|FullyQualifiedName~Generated.TRP|FullyQualifiedName~Generated.TS2|FullyQualifiedName~Generated.TSF|FullyQualifiedName~Generated.TTT|FullyQualifiedName~Generated.TTV|FullyQualifiedName~Generated.TVA|FullyQualifiedName~Generated.Tab|FullyQualifiedName~Generated.Tac)
+      (FullyQualifiedName~Generated.T5R|FullyQualifiedName~Generated.TCD|FullyQualifiedName~Generated.TCN|FullyQualifiedName~Generated.TD3|FullyQualifiedName~Generated.TDP|FullyQualifiedName~Generated.TDT|FullyQualifiedName~Generated.TFC|FullyQualifiedName~Generated.TFG|FullyQualifiedName~Generated.TFT|FullyQualifiedName~Generated.TLB|FullyQualifiedName~Generated.TLe|FullyQualifiedName~Generated.TOT|FullyQualifiedName~Generated.TRI|FullyQualifiedName~Generated.TRP|FullyQualifiedName~Generated.TS2|FullyQualifiedName~Generated.TSF|FullyQualifiedName~Generated.TTT|FullyQualifiedName~Generated.TTV|FullyQualifiedName~Generated.TVA|FullyQualifiedName~Generated.Tab|FullyQualifiedName~Generated.Tac|FullyQualifiedName~Generated.T5T|FullyQualifiedName~Generated.TA|FullyQualifiedName~Generated.Tas|FullyQualifiedName~Generated.TN|FullyQualifiedName~Generated.TSD|FullyQualifiedName~Generated.TSM)
   - name: ModelFamily - Generated Layers T Tem-Tri
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri)
+      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TET|FullyQualifiedName~Generated.TIM|FullyQualifiedName~Generated.Tok|FullyQualifiedName~Generated.TrO)
   - name: ModelFamily - Generated Layers U
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -670,7 +671,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.Va|FullyQualifiedName~Generated.Ve|FullyQualifiedName~Generated.VF)
+      (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.Va|FullyQualifiedName~Generated.Ve|FullyQualifiedName~Generated.VE|FullyQualifiedName~Generated.VF)
   - name: ModelFamily - Generated Layers Video
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0

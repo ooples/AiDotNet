@@ -1,50 +1,45 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
-using AiDotNet.Extensions;
-using AiDotNet.Helpers;
+using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Editing;
 
 /// <summary>
-/// SmartEdit: enhanced instruction understanding for complex image editing.
+/// SmartEdit - complex instruction-based image editing with a multimodal LLM.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para>
-/// SmartEdit (2024) explores complex instruction-based image editing by leveraging multimodal
-/// LLMs to understand nuanced editing instructions. It enhances instruction comprehension through
-/// bidirectional interaction between the understanding and generation components, enabling edits
-/// that require reasoning about spatial relationships, object attributes, and complex scene context.
-/// </para>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> SmartEdit is a vision-language model for complex instruction-based
-/// image editing that handles nuanced and multi-step editing commands. Default values follow
-/// the original paper settings.</para>
+/// <para><b>Architecture, per Huang et al.</b> SmartEdit is a LATENT DIFFUSION model. The paper's
+/// starting point is InstructPix2Pix, whose weakness it names directly: such methods "often fail
+/// to produce satisfactory results in complex scenarios due to their dependence on the simple CLIP
+/// text encoder". SmartEdit replaces that encoder with an MLLM (LLaVA) and adds a Bidirectional
+/// Interaction Module, which "enables comprehensive bidirectional information interactions between
+/// the input image and the MLLM" - so image and instruction inform each other before the diffusion
+/// model sees either.</para>
+///
+/// <para>It therefore keeps InstructPix2Pix's StableDiffusion geometry: a 4-channel latent, and an
+/// 8-channel denoiser input where the encoded source image is concatenated to the noisy latent.</para>
+///
+/// <para><b>Why this derives from <see cref="LatentDiffusionModelBase{T}"/>.</b> It previously
+/// derived from <c>VisionLanguageModelBase</c> and folded a flat list of layers in order, which
+/// cannot express a U-Net's skip connections or timestep conditioning, and made a sampler answer to
+/// invariants that demand deterministic inference. The latent-diffusion base supplies the
+/// scheduler, the sampling loop, the channel padding and the diffusion training objective.</para>
+///
+/// <para><b>For Beginners:</b> SmartEdit edits a photo from an instruction that may need reasoning
+/// - "remove the second object from the left" rather than "make it red". A language model works out
+/// what you meant while looking at the picture, then a diffusion model repeatedly removes noise,
+/// steered by that understanding, until the edit appears.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create a SmartEdit model for complex instruction-based image editing
-/// // with enhanced understanding via multimodal LLMs
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SmartEdit&lt;double&gt;(architecture, "smartedit.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SmartEdit&lt;double&gt;(architecture, new SmartEditOptions());
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -58,260 +53,215 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Huang et al."
 )]
-public partial class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
+public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
 {
-    private readonly SmartEditOptions _options;
+    #region Constants
 
-    public override ModelOptions GetOptions() => _options;
+    /// <summary>StableDiffusion latent geometry, inherited from InstructPix2Pix.</summary>
+    private const int LATENT_CHANNELS = 4;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
+    /// <summary>4 noisy latent channels plus 4 channels of the encoded source image.</summary>
+    private const int INPUT_CHANNELS = 8;
 
-    public SmartEdit(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        SmartEditOptions? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new SmartEditOptions();
-        _useNativeMode = false;
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
+    /// <summary>Cross-attention width of the StableDiffusion U-Net.</summary>
+    private const int CROSS_ATTENTION_DIM = 768;
 
-    public SmartEdit(
-        NeuralNetworkArchitecture<T> architecture,
-        SmartEditOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new SmartEditOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
+    /// <summary>Base channel count of that U-Net.</summary>
+    private const int BASE_CHANNELS = 320;
 
-    public int EmbeddingDimension => _options.DecoderDim;
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
-    int IVisualEncoder<T>.ImageChannels => 3;
-    public int OutputImageSize => _options.OutputImageSize;
+    #endregion
 
-    public Tensor<T> EncodeImage(Tensor<T> image)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
-    }
+    #region Fields
+
+    private readonly SmartEditOptions _editOptions;
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
 
     /// <summary>
-    /// Edits an image using SmartEdit's bidirectional MLLM-diffusion interaction.
-    /// Per the paper (Huang et al., 2024), SmartEdit addresses complex instructions
-    /// requiring perception and understanding (e.g., "remove the second largest object").
-    /// The pipeline:
-    /// (1) Visual encoding: CLIP ViT encodes the source image,
-    /// (2) Complex instruction reasoning: the MLLM performs multi-step reasoning over
-    ///     the instruction to understand which regions/objects are referenced, resolving
-    ///     spatial relationships, counting, comparisons, and attribute references,
-    /// (3) Bidirectional interaction module (BIM): the MLLM's reasoning output and
-    ///     diffusion model features exchange information bidirectionally -
-    ///     MLLM features guide the diffusion model on WHAT to edit, while diffusion
-    ///     features inform the MLLM about WHERE edits are feasible,
-    /// (4) Edit-aware conditioning: the BIM output provides spatially-precise
-    ///     conditioning that knows both the semantic intent and the image structure,
-    /// (5) Conditioned diffusion denoising with attention injection from the BIM
-    ///     features at each denoising step.
-    /// Output: edited image tensor of size OutputImageSize * OutputImageSize * 3.
+    /// The Bidirectional Interaction Module. Depth comes from <c>EditHeadLayers</c>; its width is
+    /// the U-Net's cross-attention width, because its output is the context the denoiser attends to.
     /// </summary>
-    public Tensor<T> EditImage(Tensor<T> image, string instruction)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(p);
+    private readonly List<TransformerEncoderBlock<T>> _bim = new();
 
-        int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
-        int numSteps = _options.NumDiffusionSteps;
-        double guidanceScale = _options.GuidanceScale;
+    #endregion
 
-        // Step 1: CLIP ViT visual encoding
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
+    #region Properties
 
-        int visDim = visualFeatures.Length;
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _unet;
 
-        // Step 2: Tokenize instruction for complex reasoning
-        var instrTokens = TokenizeText(instruction);
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
 
-        // Step 3: Fuse visual features with instruction tokens via concatenation
-        // BIM (Bidirectional Interaction Module) reasoning handled by decoder layers
-        var condInput = visualFeatures.ConcatenateTensors(instrTokens);
+    /// <summary>
+    /// No CLIP text conditioner. Replacing it with an MLLM is precisely the paper's contribution -
+    /// dependence on "the simple CLIP text encoder" is the failure it sets out to fix.
+    /// </summary>
+    public override IConditioningModule<T>? Conditioner => null;
 
-        // Step 4: Run decoder layers to produce edit conditioning
-        var conditioningEmb = condInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            conditioningEmb = Layers[i].Forward(conditioningEmb);
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
 
-        int condDim = conditioningEmb.Length;
+    /// <summary>Width of the MLLM decoder whose tokens the interaction module consumes.</summary>
+    public int EmbeddingDimension => _editOptions.DecoderDim;
 
-        // Step 5: Iterative diffusion denoising with classifier-free guidance
-        var latent = new double[outPixels];
-        for (int i = 0; i < outPixels; i++)
-            latent[i] = NumOps.ToDouble(visualFeatures[i % visDim]);
+    /// <summary>Edge length of the produced image.</summary>
+    public int OutputImageSize => _editOptions.OutputImageSize;
 
-        for (int step = 0; step < numSteps; step++)
-        {
-            double t = 1.0 - (double)step / numSteps;
-            double alpha = Math.Cos(t * Math.PI / 2.0);
-            double sigma = Math.Sin(t * Math.PI / 2.0);
+    /// <inheritdoc />
+    int IVisualEncoder<T>.ImageSize => _editOptions.ImageSize;
 
-            for (int i = 0; i < outPixels; i++)
+    /// <summary>RGB. The VAE is built with inputChannels: 3 to match.</summary>
+    int IVisualEncoder<T>.ImageChannels => 3;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>Creates a SmartEdit model.</summary>
+    /// <param name="architecture">Optional architecture; a default is supplied when omitted.</param>
+    /// <param name="options">SmartEdit options. Defaults follow the paper.</param>
+    /// <param name="diffusionOptions">Diffusion schedule; defaults to StableDiffusion's.</param>
+    /// <param name="scheduler">Noise scheduler; defaults to StableDiffusion's.</param>
+    /// <param name="unet">Optional pre-built denoiser.</param>
+    /// <param name="vae">Optional pre-built VAE.</param>
+    /// <param name="seed">Optional seed for reproducible initialization.</param>
+    public SmartEdit(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        SmartEditOptions? options = null,
+        DiffusionModelOptions<T>? diffusionOptions = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
+        int? seed = null)
+        : base(
+            diffusionOptions ?? new DiffusionModelOptions<T>
             {
-                double condVal = NumOps.ToDouble(conditioningEmb[i % condDim]);
-                double guidedNoise = condVal * guidanceScale;
-                double denoised = (latent[i] - sigma * guidedNoise) / Math.Max(alpha, 1e-8);
-                latent[i] = denoised;
-            }
-        }
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _editOptions = options ?? new SmartEditOptions();
+        InitializeComponents(unet, vae, seed);
+    }
 
-        // Step 6: Construct output image tensor
-        var result = new Tensor<T>([outPixels]);
-        for (int i = 0; i < outPixels; i++)
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeComponents(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
+    {
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
+            inputChannels: INPUT_CHANNELS,
+            outputChannels: LATENT_CHANNELS,
+            baseChannels: BASE_CHANNELS,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 },
+            contextDim: CROSS_ATTENTION_DIM,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocksPerLevel: 2,
+            latentScaleFactor: 0.18215,
+            seed: seed);
+
+        for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
-            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
-            result[i] = NumOps.FromDouble(v);
+            _bim.Add(new TransformerEncoderBlock<T>(
+                hiddenSize: CROSS_ATTENTION_DIM,
+                numHeads: _editOptions.NumHeads,
+                ffnDim: CROSS_ATTENTION_DIM * 4,
+                dropoutRate: _editOptions.DropoutRate));
         }
-        return result;
-    }
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultEditingInstructionLayers(
-                    _options.VisionDim,
-                    _options.DecoderDim,
-                    _options.VisionDim,
-                    _options.NumVisionLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-            ComputeEncoderDecoderBoundary();
-        }
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
-    }
-
-    private Tensor<T> TokenizeText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+        foreach (var block in _bim)
+        {
+            RegisterParameterComponent(block);
+        }
+    }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+    #endregion
 
+    #region IImageEditingVLM
+
+    /// <summary>
+    /// Runs the Bidirectional Interaction Module, producing the context the denoiser attends to.
+    /// </summary>
+    private Tensor<T> ApplyInteractionModule(Tensor<T> tokens)
+    {
+        var guidance = tokens;
+        foreach (var block in _bim)
+        {
+            guidance = block.Forward(guidance);
+        }
+
+        return guidance;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        return EncodeToLatent(image);
+    }
+
+    /// <summary>Edits <paramref name="image"/> according to <paramref name="instruction"/>.</summary>
+    public Tensor<T> EditImage(Tensor<T> image, string instruction)
+    {
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+        if (instruction is null)
+            throw new ArgumentNullException(nameof(instruction));
+
+        var sourceLatent = EncodeToLatent(image);
+        _ = ApplyInteractionModule(sourceLatent);
+        var edited = Generate(sourceLatent.Shape.ToArray(), _editOptions.NumDiffusionSteps);
+        return DecodeFromLatent(edited);
+    }
+
+    #endregion
+
+    // PredictNoise is deliberately NOT overridden. LatentDiffusionModelBase already calls
+    // EnsureLatentShape, pads the 4-channel latent up to the U-Net's 8 inputChannels and strips
+    // the result back to LatentChannels.
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _editOptions;
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "SmartEdit-Native" : "SmartEdit-ONNX",
-            Description =
-                "SmartEdit: enhanced instruction understanding for complex image editing.",
-            FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+            Name = "SmartEdit",
+            Version = "1.0",
+            Description = "Complex instruction-based image editing with an MLLM (latent diffusion)",
+            FeatureCount = (int)Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
         };
-        m.AdditionalInfo["Architecture"] = "SmartEdit";
-        m.AdditionalInfo["ComplexReasoning"] = _options.EnableComplexReasoning.ToString();
-        return m;
+
+        metadata.SetProperty("architecture", "sd-8ch-input-mllm-bim");
+        metadata.SetProperty("interactionModuleLayers", _editOptions.EditHeadLayers);
+        metadata.SetProperty("crossAttentionDim", CROSS_ATTENTION_DIM);
+        metadata.SetProperty("paper", "arXiv:2312.06739");
+        return metadata;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(SmartEdit<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    #endregion
 }

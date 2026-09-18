@@ -22,12 +22,12 @@ namespace AiDotNet.MetaLearning.Options;
 public enum ProtoNetsDistanceFunction
 {
     /// <summary>
-    /// Standard Euclidean (L2) distance.
+    /// Squared Euclidean distance, the paper's choice.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Computes sqrt(sum((a_i - b_i)^2)) - the straight-line distance between points.
-    /// This is the most common choice and works well for most applications.
+    /// Computes sum((a_i - b_i)^2). Snell et al. 2017 use the squared distance, which makes the classifier linear in
+    /// the query embedding and corresponds to spherical Gaussian class densities. It used to take the square root.
     /// </para>
     /// <para><b>Use When:</b> You have no specific reason to use another metric.</para>
     /// </remarks>
@@ -285,13 +285,14 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     public bool NormalizeFeatures { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to use an attention mechanism for prototype computation.
+    /// Gets or sets whether to weight each support example in its class prototype by learned attention.
     /// </summary>
-    /// <value>True to use attention; false for simple averaging. Default is false.</value>
+    /// <value>True to use attention; false for the paper's plain mean. Default is false.</value>
     /// <remarks>
     /// <para>
-    /// When enabled, uses learned attention weights to compute weighted prototypes
-    /// instead of simple averaging. This can help focus on more informative examples.
+    /// An extension. A learned query vector w scores each support embedding h (score h . w), and each prototype is
+    /// the softmax-weighted mean of its class's embeddings. w starts at zero - uniform weights, the paper's mean -
+    /// and is trained on the same prototype loss as the embedding.
     /// </para>
     /// <para><b>For Beginners:</b> Start with false (simple averaging).
     /// Enable if you have noisy or heterogeneous support sets.
@@ -300,25 +301,27 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     public bool UseAttentionMechanism { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to use adaptive class-specific scaling factors.
+    /// Gets or sets whether to learn a positive distance scale per class slot.
     /// </summary>
     /// <value>True to use adaptive scaling; false otherwise. Default is false.</value>
     /// <remarks>
     /// <para>
-    /// When enabled, learns per-class scaling factors for distances.
-    /// This allows the model to handle classes with different intra-class variances.
+    /// An extension in the spirit of TADAM's learned metric scaling (Oreshkin et al. 2018): each class index gets a
+    /// scale exp(kappa) multiplying its distances, trained on the prototype loss. kappa starts at zero (scale 1).
+    /// Slots follow class indices, so the scales transfer only where tasks use class indices consistently.
     /// </para>
     /// </remarks>
     public bool UseAdaptiveClassScaling { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the scaling factor for Mahalanobis distance.
+    /// Gets or sets the initial scale of the learned Mahalanobis metric.
     /// </summary>
-    /// <value>The Mahalanobis scaling factor. Default is 1.0.</value>
+    /// <value>The initial metric scale. Default is 1.0.</value>
     /// <remarks>
     /// <para>
-    /// This is a simplified scaling factor used when DistanceFunction is Mahalanobis.
-    /// In a full implementation, this would be replaced by a learned covariance matrix.
+    /// With DistanceFunction = Mahalanobis the distance is sum_f m_f (a_f - b_f)^2 with a learned diagonal metric
+    /// m = MahalanobisScaling * exp(rho), rho starting at zero and trained on the prototype loss. Snell et al. 2017
+    /// note that any regular Bregman divergence - Mahalanobis among them - keeps the prototype a class mean.
     /// </para>
     /// </remarks>
     public double MahalanobisScaling { get; set; } = 1.0;

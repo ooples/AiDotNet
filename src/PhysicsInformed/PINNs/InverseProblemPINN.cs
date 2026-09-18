@@ -88,10 +88,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 
-        // Trainable parameters (the unknowns we're trying to find)
+        // The unknown physical parameters being identified. A buffer: saved and counted, but updated by
+        // Solve's own finite-difference step, never handed to the network's gradient tape or optimizer.
         [AiDotNet.Attributes.Buffer]
         private Vector<T> _parameters;
-        [AiDotNet.Attributes.Buffer]
+
+        // Solve's per-step finite-difference gradient of those parameters - workspace, rewritten every
+        // step, so [Scratch]. As a [Buffer] it was counted as model state (ParameterCount changed after
+        // the first Solve step), and while still null it left the layout FitDeferred, so every
+        // parameter read threw before the model had ever been solved.
+        [AiDotNet.Attributes.Scratch]
         private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied

@@ -207,8 +207,9 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// <param name="architecture">The user-provided neural network architecture.</param>
     /// <param name="expectedInputSize">Expected input size for the agent network.</param>
     /// <param name="expectedOutputSize">Expected output size for the agent network.</param>
-    /// <param name="hiddenLayerCount">Number of hidden layers to create if none are provided.</param>
-    /// <param name="hiddenLayerSize">Hidden layer width to use when creating defaults.</param>
+    /// <param name="hiddenLayerSizes">The hidden layer widths to create when none are provided: the agent
+    /// options' <see cref="TradingAgentOptions{T}.HiddenLayers"/>. A hard-coded 2 x 64 default used to stand in
+    /// for it, so the declared option changed nothing.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Trading agents need a neural network with the right input and output sizes:
@@ -226,11 +227,12 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
         int expectedOutputSize,
-        int hiddenLayerCount = 2,
-        int hiddenLayerSize = 64)
+        IReadOnlyList<int> hiddenLayerSizes)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null)
+            throw new ArgumentNullException(nameof(hiddenLayerSizes));
 
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
@@ -241,10 +243,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         if (architecture.Layers.Count == 0)
         {
             architecture.Layers.AddRange(LayerHelper<T>.CreateDefaultLayers(
-                architecture,
-                hiddenLayerCount: hiddenLayerCount,
-                hiddenLayerSize: hiddenLayerSize,
-                outputSize: expectedOutputSize));
+                architecture, hiddenLayerSizes, expectedOutputSize));
         }
     }
 
