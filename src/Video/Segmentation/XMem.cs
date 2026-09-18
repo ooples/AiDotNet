@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -67,6 +68,15 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 0.05,
+                ReferenceBatchSize = 16, Phase = TrainingPhase.PreTraining,
+                Source = "Cheng and Schwing 2022, Sec. 4: AdamW with a learning rate of 1e-5 and a "
+                        + "weight decay of 0.05, for 150K iterations at a batch size of 16 in static "
+                        + "image pre-training.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 0.05,
+                ReferenceBatchSize = 8, Phase = TrainingPhase.FineTuning,
+                Source = "Cheng and Schwing 2022, Sec. 4: main training runs 110K iterations at a batch "
+                        + "size of 8, otherwise as the pre-training stage.")]
 public partial class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;
@@ -168,14 +178,15 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         // Cheng and Schwing train XMem with AdamW at 1e-5 and weight decay 0.05.
         // Keep the optimizer injectable, but make the native default reproduce those
         // settings instead of silently using the framework's generic Adam defaults.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
 
         InitializeLayers();
     }

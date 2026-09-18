@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -67,6 +68,13 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://doi.org/10.48550/arXiv.2204.08387", Year = 2022, Authors = "Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei")]
+[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 2048,
+                Source = "Huang et al. 2022, Sec. 3: LayoutLMv3 is pre-trained with the Adam optimizer "
+                        + "at a batch size of 2,048 for 500,000 steps. No learning rate or warmup is "
+                        + "declared because both vary by model size -- 1e-4 with a 4.8% warmup for BASE, "
+                        + "5e-5 with 10% for LARGE -- and the 1e-5 at batch 16 elsewhere in the paper is "
+                        + "the FUNSD fine-tuning setting. Recorded but not routed, since a reference "
+                        + "batch size with no rate to scale would rescale the library default instead.")]
 public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv3Options _options;
@@ -194,7 +202,8 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _patchSize = 16; // Default patch size for LayoutLMv3
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         Guard.Positive(imageSize, nameof(imageSize));
         ImageSize = imageSize;
@@ -263,7 +272,8 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         MaxSequenceLength = maxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.RoBERTa);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         InitializeLayers();
         InitializeEmbeddings();

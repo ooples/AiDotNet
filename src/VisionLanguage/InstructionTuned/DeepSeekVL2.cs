@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -62,6 +64,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Wu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, DecayRate = 0.1,
+                MilestoneFractions = [0.5, 0.75],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Wu et al. 2024, Sec. 4: AdamW with beta1 0.9 and beta2 0.95, under a step "
+                        + "scheduler that divides the learning rate by 10 at 50 and 75 percent of the "
+                        + "total training steps. Those fractions are declared as milestone fractions "
+                        + "since the paper gives them as proportions rather than step counts. No peak "
+                        + "rate is stated.")]
 public partial class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DeepSeekVL2Options _options;
@@ -106,7 +116,8 @@ public partial class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTu
         _options = options ?? new DeepSeekVL2Options();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
