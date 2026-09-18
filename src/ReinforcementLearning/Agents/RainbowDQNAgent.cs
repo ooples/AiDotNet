@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -60,6 +61,12 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 6.25e-5, Epsilon = 1.5e-4,
+                ReferenceBatchSize = 32,
+                Source = "Hessel et al. 2018, Sec. 5: Rainbow uses Adam at a quarter of DQN's 0.00025 "
+                        + "learning rate, selected among {a/2, a/4, a/6}, giving 6.25e-5, with 1.5e-4 "
+                        + "for Adam's epsilon. The RMSprop the paper mentions belongs to the original "
+                        + "DQN setup it builds on, not to Rainbow.")]
 public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 

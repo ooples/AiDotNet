@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -51,6 +52,11 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2109.02974",
     Year = 2021,
     Authors = "Rui Liu, Hanming Deng, Yangyi Huang, Xiaoyu Shi, Lewei Lu, Wenxiu Sun, Xiaogang Wang, Jifeng Dai, Hongsheng Li")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, DecayRate = 0.1,
+                Milestones = [200000], Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Liu et al. 2021, Sec. 4: the Adam optimizer over 250k iterations, with an "
+                        + "initial learning rate of 0.01 reduced by a factor of 10 at 200k iterations, "
+                        + "sampling frames from one video on each of 8 GPUs.")]
 public partial class FuseFormer<T> : VideoInpaintingBase<T>
 {
     private readonly FuseFormerOptions _options;
@@ -92,11 +98,12 @@ public partial class FuseFormer<T> : VideoInpaintingBase<T>
     {
         _options = options ?? new FuseFormerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsTemporalPropagation = true;
         InitializeLayers();
     }

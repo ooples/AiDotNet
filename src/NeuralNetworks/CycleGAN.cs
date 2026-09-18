@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +63,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, ReferenceBatchSize = 1,
+                Source = "Zhu et al. 2017, Sec. 4: the Adam solver at a learning rate of 0.0002 with a "
+                        + "batch size of 1. No schedule is declared: the paper holds that rate for the "
+                        + "first 100 epochs and then decays it linearly to zero over the next 100, a "
+                        + "hold-then-decay shape whose two halves are stated as epoch counts rather than "
+                        + "as a schedule this model could follow directly.")]
 public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 {
 
@@ -323,10 +330,14 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         DiscriminatorB = CreateNetworkForInputType(discriminatorB, inputType);
 
         // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
-        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB, CreateStandardGanAdamOptions());
-        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA, CreateStandardGanAdamOptions());
-        _discriminatorAOptimizer = discriminatorAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA, CreateStandardGanAdamOptions());
-        _discriminatorBOptimizer = discriminatorBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB, CreateStandardGanAdamOptions());
+        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB, CreateStandardGanAdamOptions()));
+        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA, CreateStandardGanAdamOptions()));
+        _discriminatorAOptimizer = discriminatorAOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA, CreateStandardGanAdamOptions()));
+        _discriminatorBOptimizer = discriminatorBOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB, CreateStandardGanAdamOptions()));
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -51,6 +52,10 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2211.11293",
     Year = 2022,
     Authors = "Hao Luo, Peng Zhao, Ling Pei")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 8,
+                Source = "Shi et al. 2022, Sec. 4: for the offline video inpainting task, a batch size "
+                        + "of 8 and a learning rate of 1e-4 over 500k iterations at an image size of "
+                        + "432x240. The optimizer is left unspecified because the paper names none.")]
 public partial class FlowLens<T> : VideoInpaintingBase<T>
 {
     private readonly FlowLensOptions _options;
@@ -92,11 +97,12 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
     {
         _options = options ?? new FlowLensOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsTemporalPropagation = true;
         InitializeLayers();
     }

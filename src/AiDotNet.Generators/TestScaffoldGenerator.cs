@@ -13259,11 +13259,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // rising to step 2 = 0.646797, the same first-update hump Vocos records at the
                     // same 2e-4 rate. Fifteen steps clear it (measured ~2.5 s for the pair, so the
                     // added steps are free). The DEFAULT 1 % decrease threshold is untouched.
-                    // AudioPaLM now uses its declared Adafactor rate (1e-4), not the old
-                    // AdamW default (1e-3). One update no longer spans the required 1% decrease.
-                    // Keep the real optimizer and unchanged threshold; measure the same bounded
-                    // 15-step trajectory as the other conservative TTS recipes in this branch.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "AudioPaLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // AudioPaLM is the same artifact once more, and its recipe is the reason: the
+                    // paper's Adafactor ramps LINEARLY to 1e-4 (Rubenstein et al. 2023), so the
+                    // first update lands at the very bottom of the warm-up where the step size is
+                    // near zero. The two-step window therefore measures the ramp rather than the
+                    // trajectory - measured step 1 = 2.412728 falling only to step 2 = 2.409396,
+                    // a 0.14 % drop against the generic 1 % bar. The descent is real, just slower
+                    // to start: measured on the same fixed pair, step 15 = 1.771684, a 26.6 %
+                    // reduction from step 1. It clears the SAME unchanged 1 % threshold by step 5
+                    // and stays clear at 10, 15 and 20, and the whole 15-step probe still runs in
+                    // under a second, so the added steps are free. Fifteen matches the window its
+                    // twelve siblings above already use. The DEFAULT 1 % threshold is untouched.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling

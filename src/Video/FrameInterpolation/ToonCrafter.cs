@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -63,6 +64,11 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2405.17933",
     Year = 2024,
     Authors = "Jinbo Xing, Hanyuan Liu, Menghan Xia, Yong Zhang, Xintao Wang, Ying Shan, Tien-Tsin Wong")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-5, ReferenceBatchSize = 32,
+                Source = "Xing et al. 2024, Sec. 4: toon rectification learning trains the spatial "
+                        + "layers for 50K steps at a learning rate of 1e-5 and a mini-batch size of 32. "
+                        + "The optimizer is left unspecified because the paper names none -- the Adam in "
+                        + "its text is the author name Adam Letts in a reference.")]
 public partial class ToonCrafter<T> : FrameInterpolationBase<T>
 {
     private readonly ToonCrafterOptions _options;
@@ -108,11 +114,12 @@ public partial class ToonCrafter<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new ToonCrafterOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

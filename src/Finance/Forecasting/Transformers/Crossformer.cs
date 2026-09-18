@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -68,6 +69,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Crossformer: Transformer Utilizing Cross-Dimension Dependency for Multivariate Time Series Forecasting", "https://openreview.net/forum?id=vSVLM2j9eie", Year = 2023, Authors = "Yunhao Zhang, Junchi Yan")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 16,
+                DecayRate = 0.98, StepSize = 2, MaxGradientNorm = 5.0,
+                Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Zhang and Yan 2023, Sec. 4: all models train for 100 epochs with Adam at an "
+                        + "initial learning rate of 1e-3, a batch size of 2 across 8 GPUs, the rate "
+                        + "decayed by 0.98 every two epochs and gradient clipping at a maximum norm of "
+                        + "5.")]
 public partial class Crossformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -251,7 +260,9 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.SequenceLength;
@@ -296,7 +307,9 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.SequenceLength;
