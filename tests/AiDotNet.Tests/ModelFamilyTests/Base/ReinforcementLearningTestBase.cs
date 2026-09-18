@@ -28,12 +28,85 @@ public abstract class ReinforcementLearningTestBase<T>
 
     protected abstract IFullModel<T, Vector<T>, Vector<T>> CreateModel();
 
+    /// <summary>Fallback state width, used only for an agent that does not report its own.</summary>
     protected virtual int StateDim => 4;
+
+    private int? _resolvedStateDim;
+    private int? _resolvedActionDim;
+
+    /// <summary>The state width THIS agent accepts, taken from the model rather than assumed.</summary>
+    /// <remarks>
+    /// A fixed 4 is wrong for every agent declaring a different StateSize -- FinancialDQNAgent uses 10
+    /// and MarketMakingAgent 64 -- and now that TradingAgentBase.ValidateTransitionShape enforces the
+    /// declared width, every invariant that feeds a state throws "State length 4 must match StateSize
+    /// N" instead of testing anything. FeatureCount is each agent's own answer, so ask it once.
+    /// </remarks>
+    protected int EffectiveStateDim
+    {
+        get
+        {
+            if (_resolvedStateDim is null) ResolveAgentShapes();
+            return _resolvedStateDim ?? StateDim;
+        }
+    }
+
+    /// <summary>The action width THIS agent produces.</summary>
+    /// <remarks>
+    /// ValidateTransitionShape checks the action too, so a target vector sized by the state width
+    /// fails exactly as hard as a mis-sized state. Read from SelectAction's own output rather than
+    /// from options: every agent can answer that, with no per-agent knowledge and no reflection.
+    /// </remarks>
+    protected int EffectiveActionDim
+    {
+        get
+        {
+            if (_resolvedActionDim is null) ResolveAgentShapes();
+            return _resolvedActionDim ?? StateDim;
+        }
+    }
+
+    private void ResolveAgentShapes()
+    {
+        int stateDim = StateDim;
+        int actionDim = StateDim;
+
+        using (var probe = CreateModel())
+        {
+            if (probe is AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<T> agent
+                && agent.FeatureCount > 0)
+            {
+                stateDim = agent.FeatureCount;
+            }
+
+            if (probe is IRLAgent<T> rlAgent)
+            {
+                try
+                {
+                    var sampleAction = rlAgent.SelectAction(new Vector<T>(stateDim), false);
+                    if (sampleAction is not null && sampleAction.Length > 0)
+                        actionDim = sampleAction.Length;
+                }
+                catch (ArgumentException)
+                {
+                    // An agent that rejects a single-agent state (a multi-agent method wants a joint
+                    // observation) keeps the declared default, and the invariant that needs the shape
+                    // fails on its own terms rather than here, where the message would be unreadable.
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+        }
+
+        _resolvedStateDim = stateDim;
+        _resolvedActionDim = actionDim;
+    }
 
     private Vector<T> CreateRandomState(Random rng)
     {
-        var state = new Vector<T>(StateDim);
-        for (int i = 0; i < StateDim; i++)
+        int dim = EffectiveStateDim;
+        var state = new Vector<T>(dim);
+        for (int i = 0; i < dim; i++)
             state[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
         return state;
     }
@@ -67,21 +140,22 @@ public abstract class ReinforcementLearningTestBase<T>
     /// </summary>
     private Vector<T>[] BuildStateBattery()
     {
-        var ascending = new Vector<T>(StateDim);
-        var descending = new Vector<T>(StateDim);
-        var altA = new Vector<T>(StateDim);
-        var altB = new Vector<T>(StateDim);
-        var spikeLow = new Vector<T>(StateDim);
-        var spikeHigh = new Vector<T>(StateDim);
-        for (int i = 0; i < StateDim; i++)
+        int dim = EffectiveStateDim;
+        var ascending = new Vector<T>(dim);
+        var descending = new Vector<T>(dim);
+        var altA = new Vector<T>(dim);
+        var altB = new Vector<T>(dim);
+        var spikeLow = new Vector<T>(dim);
+        var spikeHigh = new Vector<T>(dim);
+        for (int i = 0; i < dim; i++)
         {
-            ascending[i] = ToT((i + 1.0) / StateDim);               // 0.25, 0.50, 0.75, 1.00
-            descending[i] = ToT((StateDim - i) / (double)StateDim); // 1.00, 0.75, 0.50, 0.25
-            altA[i] = ToT((i % 2 == 0) ? 1.0 : -1.0);               // +,-,+,-
-            altB[i] = ToT((i % 2 == 0) ? -1.0 : 1.0);               // -,+,-,+
+            ascending[i] = ToT((i + 1.0) / dim);               // 0.25, 0.50, 0.75, 1.00
+            descending[i] = ToT((dim - i) / (double)dim);      // 1.00, 0.75, 0.50, 0.25
+            altA[i] = ToT((i % 2 == 0) ? 1.0 : -1.0);          // +,-,+,-
+            altB[i] = ToT((i % 2 == 0) ? -1.0 : 1.0);          // -,+,-,+
         }
-        spikeLow[0] = ToT(1.0);                 // weight on the first feature
-        spikeHigh[StateDim - 1] = ToT(1.0);     // weight on the last feature
+        spikeLow[0] = ToT(1.0);             // weight on the first feature
+        spikeHigh[dim - 1] = ToT(1.0);      // weight on the last feature
         return new[] { ascending, descending, altA, altB, spikeLow, spikeHigh };
     }
 
@@ -120,9 +194,10 @@ public abstract class ReinforcementLearningTestBase<T>
         using var model = CreateModel();
         var state = CreateRandomState(rng);
 
-        // Train briefly
-        var target = new Vector<T>(StateDim);
-        for (int i = 0; i < StateDim; i++) target[i] = ToT(0.5);
+        // Train briefly. The target becomes the ACTION in StoreSupervisedExperience, so it must be
+        // action-width: ValidateTransitionShape rejects a mis-sized action just as it does a state.
+        var target = new Vector<T>(EffectiveActionDim);
+        for (int i = 0; i < target.Length; i++) target[i] = ToT(0.5);
         model.Train(state, target);
 
         var action = model.Predict(state);
@@ -321,7 +396,7 @@ public abstract class ReinforcementLearningTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
         var state = CreateRandomState(rng);
-        var target = new Vector<T>(StateDim);
+        var target = new Vector<T>(EffectiveActionDim);
         model.Train(state, target);
         Assert.NotNull(model.GetModelMetadata());
     }
@@ -367,7 +442,7 @@ public abstract class ReinforcementLearningTestBase<T>
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
             "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
 
-        model.Train(CreateRandomState(rng), new Vector<T>(StateDim));
+        model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
 
         Assert.True(parameterizable.GetParameters().Length > 0,
             "After training, the agent should expose the parameters it learned.");
