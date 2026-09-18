@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../Attribution.Runtime/AttributionRuntime.csproj" />
+    <ProjectReference Include="../Subject/AttributionSubject.csproj" />
+  </ItemGroup>
+</Project>
