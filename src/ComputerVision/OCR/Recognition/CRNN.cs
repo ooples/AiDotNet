@@ -56,25 +56,8 @@ public partial class CRNN<T> : OCRBase<T>
 
     private readonly Dense<T> _outputLayer;
     private readonly int _hiddenDim;
+    // Part of the native weight-file configuration, even though lazy LSTMs infer their input shape.
     private readonly int _sequenceFeatureDim;
-
-    // LSTM state tracking
-    [Scratch]
-    private Tensor<T>? _lstm1FwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm1FwCell;
-    [Scratch]
-    private Tensor<T>? _lstm1BwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm1BwCell;
-    [Scratch]
-    private Tensor<T>? _lstm2FwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm2FwCell;
-    [Scratch]
-    private Tensor<T>? _lstm2BwHidden;
-    [Scratch]
-    private Tensor<T>? _lstm2BwCell;
 
     /// <inheritdoc/>
     public override string Name => "CRNN";
@@ -85,6 +68,7 @@ public partial class CRNN<T> : OCRBase<T>
     public CRNN(OCROptions<T> options) : base(options)
     {
         _hiddenDim = 256;
+        _sequenceFeatureDim = 512;
 
         // CNN backbone for feature extraction (VGG-style architecture)
         // Stage 1
@@ -102,44 +86,20 @@ public partial class CRNN<T> : OCRBase<T>
         // Stage 4
         _conv7 = new Conv2D<T>(512, 512, kernelSize: 2, padding: 0);
 
-        // After conv layers, assuming input height 32, the feature map height becomes 1
-        // Width is preserved (roughly input_width / 4 due to pooling)
-        // Feature dimension = 512 channels * 1 height = 512
-        _sequenceFeatureDim = 512;
-
         // Bidirectional LSTM Layer 1
         // Input: [batch, seqLen, 512], Output: [batch, seqLen, 256]
-        int[] inputShape1 = new[] { 1, _sequenceFeatureDim }; // [batch, features] for single timestep
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         _lstm1Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
         _lstm1Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Bidirectional LSTM Layer 2
         // Input: [batch, seqLen, 512 (256*2)], Output: [batch, seqLen, 256]
-        int[] inputShape2 = new[] { 1, _hiddenDim * 2 };
         _lstm2Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
         _lstm2Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);
 
-        // Initialize LSTM states
-        ResetLSTMStates(1);
-    }
-
-    /// <summary>
-    /// Resets the LSTM hidden and cell states.
-    /// </summary>
-    private void ResetLSTMStates(int batchSize)
-    {
-        _lstm1FwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1FwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1BwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm1BwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2FwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2FwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2BwHidden = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        _lstm2BwCell = new Tensor<T>(new[] { batchSize, _hiddenDim });
     }
 
     /// <inheritdoc/>
@@ -175,15 +135,23 @@ public partial class CRNN<T> : OCRBase<T>
     /// <inheritdoc/>
     public override (string text, T confidence) RecognizeText(Tensor<T> croppedImage)
     {
-        int batch = croppedImage.Shape[0];
+        var probs = ApplySoftmax(ComputeLogits(croppedImage));
+        string text = DecodeCTC(probs);
+        T confidence = ComputeConfidence(probs, text);
+        return (text, confidence);
+    }
 
-        // Reset LSTM states for new sequence
-        ResetLSTMStates(batch);
+    /// <inheritdoc />
+    /// <remarks>Per-timestep character logits <c>[batch, width, vocabulary]</c>, before the softmax.</remarks>
+    protected override Tensor<T> ForwardLogits(Tensor<T> image) => ComputeLogits(PreprocessCrop(image));
 
-        // Convert to grayscale if needed
+    /// <summary>
+    /// CNN backbone, bidirectional LSTM and output projection: the differentiable part of CRNN.
+    /// </summary>
+    private Tensor<T> ComputeLogits(Tensor<T> croppedImage)
+    {
         var grayImage = ConvertToGrayscale(croppedImage);
 
-        // Forward pass through CNN backbone
         var x = _conv1.Forward(grayImage);
         x = ApplyReLU(x);
         x = MaxPool2D(x, 2, 2);
@@ -211,23 +179,9 @@ public partial class CRNN<T> : OCRBase<T>
         x = _conv7.Forward(x);
         x = ApplyReLU(x);
 
-        // Squeeze height dimension and transpose to (batch, width, channels)
         var seqFeatures = SqueezeAndPermute(x);
-
-        // Bidirectional LSTM processing
-        var lstmOut = ApplyBidirectionalLSTM(seqFeatures, batch);
-
-        // Output projection
-        var logits = ApplyOutputLayer(lstmOut);
-
-        // Apply softmax for probabilities
-        var probs = ApplySoftmax(logits);
-
-        // CTC decoding
-        string text = DecodeCTC(probs);
-        T confidence = ComputeConfidence(probs, text);
-
-        return (text, confidence);
+        var lstmOut = ApplyBidirectionalLSTM(seqFeatures);
+        return ApplyOutputLayer(lstmOut);
     }
 
     /// <summary>
@@ -235,151 +189,67 @@ public partial class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> ConvertToGrayscale(Tensor<T> image)
     {
-        int batch = image.Shape[0];
         int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
         if (channels == 1)
         {
             return image;
         }
 
-        var gray = new Tensor<T>(new[] { batch, 1, height, width });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Standard grayscale conversion: 0.299*R + 0.587*G + 0.114*B
-                    double r = NumOps.ToDouble(image[b, 0, h, w]);
-                    double g = channels > 1 ? NumOps.ToDouble(image[b, 1, h, w]) : r;
-                    double bl = channels > 2 ? NumOps.ToDouble(image[b, 2, h, w]) : r;
-
-                    double grayVal = 0.299 * r + 0.587 * g + 0.114 * bl;
-                    gray[b, 0, h, w] = NumOps.FromDouble(grayVal);
-                }
-            }
-        }
-
-        return gray;
+        // gray = 0.299 R + 0.587 G + 0.114 B; a missing blue channel uses red.
+        var engine = AiDotNetEngine.Current;
+        var r = engine.TensorNarrow(image, 1, 0, 1);
+        var g = engine.TensorNarrow(image, 1, 1, 1);
+        var b = channels > 2 ? engine.TensorNarrow(image, 1, 2, 1) : r;
+        return engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, NumOps.FromDouble(0.114)));
     }
 
     /// <summary>
     /// Applies bidirectional LSTM using proper LSTMLayer cells.
     /// </summary>
-    private Tensor<T> ApplyBidirectionalLSTM(Tensor<T> x, int batch)
+    private Tensor<T> ApplyBidirectionalLSTM(Tensor<T> x)
     {
-        // x: [batch, seq_len, features]
+        var layer1 = ConcatenateBidirectional(
+            RunDirection(_lstm1Forward, x, reverse: false), RunDirection(_lstm1Backward, x, reverse: true));
+        return ConcatenateBidirectional(
+            RunDirection(_lstm2Forward, layer1, reverse: false), RunDirection(_lstm2Backward, layer1, reverse: true));
+    }
+
+    /// <summary>
+    /// Runs one LSTM direction over the whole sequence <c>[batch, seqLen, features]</c> and returns
+    /// its outputs <c>[batch, seqLen, hidden]</c> in the original time order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sequence goes to the layer in ONE call, which carries the hidden and cell state from step
+    /// to step inside it. This used to feed the layer one timestep at a time as a
+    /// <c>[batch, features]</c> tensor - which the layer reads as a <c>[timeSteps, features]</c>
+    /// sequence of batch one, starting from zero state on every call. Each "step" was therefore an
+    /// independent one-step LSTM: nothing was carried across time, the recurrent weights and the
+    /// forget gate multiplied zero state and never received a gradient (24 of the model's 64
+    /// trainable tensors), and a batch larger than one was misread as time.
+    /// </para>
+    /// <para>
+    /// The backward direction reverses time with an engine gather before and after the layer, so the
+    /// flip stays on the gradient tape.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunDirection(LSTMLayer<T> lstm, Tensor<T> x, bool reverse)
+    {
         int seqLen = x.Shape[1];
-        int features = x.Shape[2];
+        var reversed = reverse ? Enumerable.Range(0, seqLen).Reverse().ToArray() : null;
 
-        // First bidirectional layer
-        var fw1Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-        var bw1Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-
-        // Forward direction
-        _lstm1Forward.ResetState();
-        for (int t = 0; t < seqLen; t++)
-        {
-            var input = ExtractTimestep(x, t, batch, features);
-            var output = _lstm1Forward.Forward(input);
-            StoreTimestep(fw1Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Backward direction
-        _lstm1Backward.ResetState();
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            var input = ExtractTimestep(x, t, batch, features);
-            var output = _lstm1Backward.Forward(input);
-            StoreTimestep(bw1Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Concatenate forward and backward outputs
-        var concat1 = ConcatenateBidirectional(fw1Outputs, bw1Outputs, batch, seqLen, _hiddenDim);
-
-        // Second bidirectional layer
-        var fw2Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-        var bw2Outputs = new Tensor<T>(new[] { batch, seqLen, _hiddenDim });
-
-        // Forward direction
-        _lstm2Forward.ResetState();
-        for (int t = 0; t < seqLen; t++)
-        {
-            var input = ExtractTimestep(concat1, t, batch, _hiddenDim * 2);
-            var output = _lstm2Forward.Forward(input);
-            StoreTimestep(fw2Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Backward direction
-        _lstm2Backward.ResetState();
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            var input = ExtractTimestep(concat1, t, batch, _hiddenDim * 2);
-            var output = _lstm2Backward.Forward(input);
-            StoreTimestep(bw2Outputs, output, t, batch, _hiddenDim);
-        }
-
-        // Final concatenation
-        return ConcatenateBidirectional(fw2Outputs, bw2Outputs, batch, seqLen, _hiddenDim);
-    }
-
-    /// <summary>
-    /// Extracts a single timestep from the sequence tensor.
-    /// </summary>
-    private Tensor<T> ExtractTimestep(Tensor<T> x, int t, int batch, int features)
-    {
-        var timestep = new Tensor<T>(new[] { batch, features });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                timestep[b, f] = x[b, t, f];
-            }
-        }
-
-        return timestep;
-    }
-
-    /// <summary>
-    /// Stores LSTM output into the sequence tensor at a specific timestep.
-    /// </summary>
-    private void StoreTimestep(Tensor<T> output, Tensor<T> lstmOut, int t, int batch, int hiddenDim)
-    {
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < hiddenDim; h++)
-            {
-                output[b, t, h] = lstmOut[b, h];
-            }
-        }
+        lstm.ResetState();
+        var output = lstm.Forward(reversed is null ? x : CvTensorOps<T>.Select(x, reversed, 1));
+        return reversed is null ? output : CvTensorOps<T>.Select(output, reversed, 1);
     }
 
     /// <summary>
     /// Concatenates forward and backward LSTM outputs.
     /// </summary>
-    private Tensor<T> ConcatenateBidirectional(Tensor<T> forward, Tensor<T> backward, int batch, int seqLen, int hiddenDim)
-    {
-        var concat = new Tensor<T>(new[] { batch, seqLen, hiddenDim * 2 });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < hiddenDim; h++)
-                {
-                    concat[b, t, h] = forward[b, t, h];
-                    concat[b, t, hiddenDim + h] = backward[b, t, h];
-                }
-            }
-        }
-
-        return concat;
-    }
+    private Tensor<T> ConcatenateBidirectional(Tensor<T> forward, Tensor<T> backward)
+        => AiDotNetEngine.Current.TensorConcatenate(new[] { forward, backward }, 2);
 
     /// <summary>
     /// Applies softmax normalization across the vocabulary dimension.
@@ -393,56 +263,10 @@ public partial class CRNN<T> : OCRBase<T>
     /// Applies simple batch normalization.
     /// </summary>
     private Tensor<T> ApplyBatchNorm(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        var result = new Tensor<T>(x._shape);
-        double epsilon = 1e-5;
-
-        for (int c = 0; c < channels; c++)
-        {
-            // Compute mean and variance for this channel
-            double sum = 0;
-            double sumSq = 0;
-            int count = batch * height * width;
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = NumOps.ToDouble(x[b, c, h, w]);
-                        sum += val;
-                        sumSq += val * val;
-                    }
-                }
-            }
-
-            double mean = sum / count;
-            double variance = (sumSq / count) - (mean * mean);
-            double stdDev = Math.Sqrt(variance + epsilon);
-
-            // Normalize
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = NumOps.ToDouble(x[b, c, h, w]);
-                        double normalized = (val - mean) / stdDev;
-                        result[b, c, h, w] = NumOps.FromDouble(normalized);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        // Normalises with the CURRENT batch's statistics (biased variance, no affine parameters),
+        // exactly as the loop it replaces. Note that this makes one image's output depend on what else
+        // is in its batch; it is preserved here and not silently changed.
+        => CvTensorOps<T>.BatchStatisticsNorm(x, 1e-5);
 
     /// <inheritdoc/>
     public override long GetParameterCount()
@@ -737,119 +561,175 @@ public partial class CRNN<T> : OCRBase<T>
         _outputLayer.ReadParameters(reader);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
-    }
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
     private Tensor<T> MaxPool2D(Tensor<T> x, int kernelH, int kernelW)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        int outH = height / kernelH;
-        int outW = width / kernelW;
-
-        var result = new Tensor<T>(new[] { batch, channels, outH, outW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outH; h++)
-                {
-                    for (int w = 0; w < outW; w++)
-                    {
-                        double maxVal = double.NegativeInfinity;
-
-                        for (int kh = 0; kh < kernelH; kh++)
-                        {
-                            for (int kw = 0; kw < kernelW; kw++)
-                            {
-                                int srcH = h * kernelH + kh;
-                                int srcW = w * kernelW + kw;
-
-                                if (srcH < height && srcW < width)
-                                {
-                                    maxVal = Math.Max(maxVal, NumOps.ToDouble(x[b, c, srcH, srcW]));
-                                }
-                            }
-                        }
-
-                        result[b, c, h, w] = NumOps.FromDouble(maxVal);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        => CvTensorOps<T>.MaxPoolFloor(x, kernelH, kernelW);
 
     private Tensor<T> SqueezeAndPermute(Tensor<T> x)
     {
-        // x: [batch, channels, height, width]
-        // Output: [batch, width, channels*height]
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        int featureDim = channels * height;
-
-        var result = new Tensor<T>(new[] { batch, width, featureDim });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                int idx = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        result[b, w, idx++] = x[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        // [batch, channels, height, width] -> [batch, width, channels * height], channel-major.
+        int batch = x.Shape[0], channels = x.Shape[1], height = x.Shape[2], width = x.Shape[3];
+        return AiDotNetEngine.Current.Reshape(AiDotNetEngine.Current.TensorPermute(x, new[] { 0, 3, 1, 2 }), new[] { batch, width, channels * height });
     }
 
-    private Tensor<T> ApplyOutputLayer(Tensor<T> x)
+    private Tensor<T> ApplyOutputLayer(Tensor<T> x) => _outputLayer.ForwardTokens(x);
+
+    /// <summary>
+    /// Runs one training step with the CTC loss.
+    /// </summary>
+    /// <param name="input">The text-line image.</param>
+    /// <param name="expectedOutput">
+    /// The target text as label ids <c>[batch, length]</c> (0 is the blank and is treated as padding),
+    /// or as per-column scores <c>[batch, columns, vocabulary]</c> - such as <see cref="Predict"/>'s
+    /// output shape - whose greedy CTC decoding (most likely class per column, repeats merged, blanks
+    /// dropped) is the label sequence.
+    /// </param>
+    /// <remarks>
+    /// Connectionist temporal classification (Graves et al. 2006) is how CRNN is trained in the paper
+    /// (Shi et al. 2016) and every reference implementation: the loss sums over every alignment of the
+    /// label sequence to the image columns, so no per-column targets are needed. Reduced as PyTorch's
+    /// default does: each sequence's loss divided by its label length, then averaged over the batch.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int features = x.Shape[2];
-
-        var result = new Tensor<T>(new[] { batch, seqLen, VocabularySize });
-
-        for (int b = 0; b < batch; b++)
+        if (input is null)
         {
-            for (int t = 0; t < seqLen; t++)
-            {
-                var feat = new Tensor<T>(new[] { 1, features });
-                for (int f = 0; f < features; f++)
-                {
-                    feat[0, f] = x[b, t, f];
-                }
+            throw new ArgumentNullException(nameof(input));
+        }
 
-                var output = _outputLayer.Forward(feat);
-                for (int v = 0; v < VocabularySize; v++)
-                {
-                    result[b, t, v] = output[0, v];
-                }
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        var labels = CtcLabelsFrom(expectedOutput);
+        var ctc = new CTCLoss<T>(VocabularySize, blankIndex: 0);
+        RecordTrainingLoss(TensorModelTrainer<T>.Step(
+            this, input, EncodeCtcTargets(labels), NumOps.FromDouble(TrainingLearningRate), ForwardLogits,
+            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels)));
+    }
+
+    private Tensor<T> MeanCtcLoss(CTCLoss<T> ctc, Tensor<T> logits, Tensor<T> encodedTargets, int[][] labels)
+    {
+        int columns = logits.Shape[1];
+        for (int b = 0; b < labels.Length; b++)
+        {
+            // CTC needs a column per label plus a blank between each pair of equal neighbours.
+            int required = labels[b].Length + labels[b].Where((label, i) => i > 0 && labels[b][i - 1] == label).Count();
+            if (required > columns)
+            {
+                throw new ArgumentException(
+                    $"Label sequence {b} needs at least {required} columns for CTC, but the recognizer produces {columns}.");
             }
         }
 
-        return result;
+        var perSequence = ctc.ComputeTapeLoss(Engine.TensorLogSoftmax(logits, axis: -1), encodedTargets);  // [batch]
+        var weights = new Tensor<T>(new[] { labels.Length });
+        for (int b = 0; b < labels.Length; b++)
+        {
+            weights[b] = NumOps.FromDouble(1.0 / (Math.Max(1, labels[b].Length) * labels.Length));
+        }
+
+        return Engine.ReduceSum(Engine.TensorMultiply(perSequence, weights), null);
+    }
+
+    /// <summary>
+    /// Reads CTC label sequences from label ids <c>[batch, length]</c> or scores <c>[batch, columns, vocabulary]</c>.
+    /// </summary>
+    private int[][] CtcLabelsFrom(Tensor<T> target)
+    {
+        if (target.Rank == 3 && target.Shape[2] == VocabularySize)
+        {
+            int batch = target.Shape[0], columns = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                var sequence = new List<int>();
+                int previous = 0;
+                for (int t = 0; t < columns; t++)
+                {
+                    int best = 0;
+                    double bestValue = double.NegativeInfinity;
+                    for (int v = 0; v < VocabularySize; v++)
+                    {
+                        double value = NumOps.ToDouble(target[(((b * columns) + t) * VocabularySize) + v]);
+                        if (value > bestValue)
+                        {
+                            bestValue = value;
+                            best = v;
+                        }
+                    }
+
+                    if (best != 0 && best != previous)
+                    {
+                        sequence.Add(best);
+                    }
+
+                    previous = best;
+                }
+
+                labels[b] = sequence.ToArray();
+            }
+
+            return labels;
+        }
+
+        if (target.Rank == 2)
+        {
+            int batch = target.Shape[0], length = target.Shape[1];
+            var labels = new int[batch][];
+            for (int b = 0; b < batch; b++)
+            {
+                var sequence = new List<int>();
+                for (int t = 0; t < length; t++)
+                {
+                    double id = Math.Round(NumOps.ToDouble(target[(b * length) + t]));
+                    if (id < 0 || id >= VocabularySize)
+                    {
+                        throw new ArgumentException(
+                            $"Label {id} at [{b}, {t}] is outside the vocabulary [0, {VocabularySize}).", nameof(target));
+                    }
+
+                    if (id != 0)
+                    {
+                        sequence.Add((int)id);
+                    }
+                }
+
+                labels[b] = sequence.ToArray();
+            }
+
+            return labels;
+        }
+
+        throw new ArgumentException(
+            $"CRNN training targets are label ids [batch, length] or scores [batch, columns, {VocabularySize}]; " +
+            $"got [{string.Join(", ", target.Shape.ToArray())}].", nameof(target));
+    }
+
+    /// <summary>
+    /// Encodes label sequences in <see cref="CTCLoss{T}"/>'s layout:
+    /// <c>[batch, length0, labels0..., length1, labels1..., ...]</c>.
+    /// </summary>
+    private Tensor<T> EncodeCtcTargets(int[][] labels)
+    {
+        var values = new List<T> { NumOps.FromDouble(labels.Length) };
+        foreach (var sequence in labels)
+        {
+            values.Add(NumOps.FromDouble(sequence.Length));
+            values.AddRange(sequence.Select(label => NumOps.FromDouble(label)));
+        }
+
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
     }
 }
