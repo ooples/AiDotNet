@@ -1735,8 +1735,27 @@ if ($SelfTest) {
             "classification: $($case.Path) expected $($case.Expect) but got $actual" +
             $(if ($case.Pr) { " (PR #$($case.Pr))" } else { '' }))
     }
-    try { Assert-NonRuntimeDirectories -Root $PSScriptRoot } catch {
+    # THE TRIP-WIRE, ARMED. Pointed at the repository root rather than $PSScriptRoot: this script
+    # lives in tools/TestImpact, so the original looked for tools/TestImpact/website, found nothing,
+    # and passed without checking anything -- a guard that cannot fail is not a guard.
+    $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    try { Assert-NonRuntimeDirectories -Root $repositoryRoot } catch {
         [void] $failures.Add("non-runtime directory trip-wire: $_")
+    }
+    # And proved to fire, against a tree built for the purpose, so the check above is not merely
+    # passing because the directory happens to be absent from this checkout.
+    $tripwire = Join-Path ([IO.Path]::GetTempPath()) ("nonruntime-" + [Guid]::NewGuid().ToString('n'))
+    try {
+        [void] (New-Item -ItemType Directory -Path (Join-Path $tripwire 'website/src') -Force)
+        Set-Content -LiteralPath (Join-Path $tripwire 'website/src/Leaked.cs') -Value 'class Leaked {}'
+        Assert-Throws { Assert-NonRuntimeDirectories -Root $tripwire } `
+            'a non-runtime directory holding compilable code must be rejected'
+        Remove-Item -LiteralPath (Join-Path $tripwire 'website/src/Leaked.cs') -Force
+        try { Assert-NonRuntimeDirectories -Root $tripwire } catch {
+            [void] $failures.Add("trip-wire rejected a clean non-runtime directory: $_")
+        }
+    } finally {
+        Remove-Item -LiteralPath $tripwire -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) }
