@@ -659,7 +659,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri)
+      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TrO)
   - name: ModelFamily - Generated Layers U
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
