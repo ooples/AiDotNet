@@ -39,10 +39,24 @@ Assert-True ($legacyMap.alwaysRun.Count -eq 0 -and $extension.Map.knownShards[0]
     'Legacy extension mutated its source or invented indexed coverage.'
 $complete = Complete-CiMapWorkloads -Map $extension.Map -Manifest $all
 Assert-True ($complete.Added.Count -eq 0) 'A complete map was extended twice.'
+$newOrdinary = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($all + [pscustomobject]@{ name = 'New ordinary' })
+Assert-True (($newOrdinary.Added -join ',') -ceq 'Count,Shape,New ordinary' -and
+    ($newOrdinary.Map.alwaysRun -join ',') -ceq 'Count,Shape,New ordinary') `
+    'A new ordinary shard the map has not measured was not made mandatory.'
+Assert-True (($newOrdinary.Map.knownShards -join ',') -ceq 'Ordinary') `
+    'A new ordinary shard was given indexed coverage it never measured.'
 $rejected = $false
-try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($all + [pscustomobject]@{ name = 'New ordinary' }) }
+try { $null = Complete-CiMapWorkloads -Map $legacyMap -Manifest @($normal, [pscustomobject]@{ name = 'Bad'; workload = 'tests' }) }
 catch { $rejected = $true }
-Assert-True $rejected 'Legacy compatibility concealed a missing ordinary shard.'
+Assert-True $rejected 'A new workload with a malformed kind was accepted.'
+$retiring = [pscustomobject]@{ knownShards = @('Ordinary', 'Gone'); alwaysRun = @('Count', 'Dropped'); files = [pscustomobject]@{} }
+$retired = Complete-CiMapWorkloads -Map $retiring -Manifest $all
+Assert-True (($retired.Retired -join ',') -ceq 'Dropped,Gone' -and ($retired.RetiredIndexed -join ',') -ceq 'Gone') `
+    'Retired workloads were not reported, or an always-run one was reported as indexed.'
+Assert-True (($retired.Map.alwaysRun -join ',') -ceq 'Count,Shape') `
+    'A retired always-run workload was kept, or a new one was not made mandatory.'
+Assert-True (($retired.Map.knownShards -join ',') -ceq 'Ordinary,Gone') `
+    'A retired indexed workload lost its position, which would misattribute every later file index entry.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($normal, $sweep) -RequiresValidation $true -Escalated $false
 Assert-True (-not $runnable.Escalated -and $runnable.Shards.Count -eq 2) 'A valid mixed selection widened.'
 $runnable = Complete-CiWorkloadSelection -All $all -Selected @($shape) -RequiresValidation $true -Escalated $false
