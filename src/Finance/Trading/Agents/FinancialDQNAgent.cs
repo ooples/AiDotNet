@@ -231,6 +231,10 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// persisted with the agent, lets a reloaded agent resume its schedule instead of restarting it).
     /// </summary>
     private int _updateCount;
+    // Counts hard syncs, starting at 1 for the constructor's initial copy. Published so a test can
+    // check the SCHEDULE rather than just the total: TargetSyncCount == 1 + updates / frequency is an
+    // exact identity under a deterministic sync, and the old 1-in-N coin flip could not satisfy it.
+    private int _targetSyncCount;
 
     /// <summary>
     /// Current exploration rate: <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>, where
@@ -400,20 +404,8 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         using var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
 
-        // One gradient update applied: advance the epsilon schedule.
-        if (_updateCount < int.MaxValue)
-        {
-            _updateCount++;
-        }
+        CompleteGradientUpdate();
 
-        // Hard-sync the target network every TargetUpdateFrequency gradient updates. This used to fire on
-        // an unseeded 1-in-N coin flip, which made the target schedule (and so the whole training run)
-        // irreproducible and let the target go stale for arbitrarily long stretches.
-        int targetUpdateFrequency = Math.Max(1, TradingOptions.TargetUpdateFrequency);
-        if (_updateCount % targetUpdateFrequency == 0)
-        {
-            UpdateTargetNetwork();
-        }
 
         // Anneal AFTER a real update, never on the early-return paths above: those bail out because the
         // replay buffer has not filled a minibatch yet, so nothing was learned and exploration has not
@@ -447,8 +439,35 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, UpdateTargetNetwork updates internal parameters or state. This keeps the FinancialDQNAgent architecture aligned with the latest values.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Advances the schedules that one applied gradient update earns: the epsilon anneal and the
+    /// deterministic target sync.
+    /// </summary>
+    /// <remarks>
+    /// Shared by Train() and ApplyGradients() so a caller driving the network directly follows the same
+    /// schedule. ApplyGradients previously hard-synced on EVERY call, which kept the target identical to
+    /// the online network and erased the very lag that makes the TD target stable.
+    ///
+    /// The sync used to fire on an unseeded 1-in-N coin flip, so the target could go stale for arbitrarily
+    /// long stretches and two runs with the same seed synced at different steps.
+    /// </remarks>
+    private void CompleteGradientUpdate()
+    {
+        if (_updateCount < int.MaxValue)
+        {
+            _updateCount++;
+        }
+
+        int targetUpdateFrequency = Math.Max(1, TradingOptions.TargetUpdateFrequency);
+        if (_updateCount % targetUpdateFrequency == 0)
+        {
+            UpdateTargetNetwork();
+        }
+    }
+
     private void UpdateTargetNetwork()
     {
+        _targetSyncCount++;
         _targetNetwork.UpdateParameters(_qNetwork.GetParameters());
     }
 
@@ -550,6 +569,8 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         var metrics = base.GetTradingMetrics();
         metrics["Epsilon"] = NumOps.FromDouble(CurrentEpsilon);
+        metrics["TargetSyncCount"] = NumOps.FromDouble(_targetSyncCount);
+        metrics["TrainingSteps"] = NumOps.FromDouble(_updateCount);
         return metrics;
     }
 
@@ -591,7 +612,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _qNetwork.ApplyGradients(gradients, learningRate);
-        UpdateTargetNetwork();
+        CompleteGradientUpdate();
     }
 
     #endregion
