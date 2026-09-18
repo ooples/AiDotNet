@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -49,6 +50,14 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BloombergGPT: A Large Language Model for Finance", "https://arxiv.org/abs/2303.17564", Year = 2023, Authors = "Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan Kambadur, David Rosenberg, Gideon Mann")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 6e-5, WeightDecay = 0.1,
+                WarmupSteps = 1800, MinLearningRate = 6e-6,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wu et al. 2023, Sec. 4 and Table: AdamW with a weight decay of 0.1, a maximum "
+                        + "learning rate of 6e-5 and a cosine decay schedule with linear warmup over the "
+                        + "first 1800 steps, reaching a final learning rate of 6e-6, which the paper "
+                        + "gives as 0.1x the maximum. No batch size is declared because the run employs "
+                        + "batch size warmup, so no single value holds.")]
 public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
@@ -104,7 +113,9 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
         options.Validate();
 
         _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -135,7 +146,9 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
         options.Validate();
 
         _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

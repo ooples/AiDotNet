@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -43,6 +45,10 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                Schedule = LearningRateSchedulerType.TriStage,
+                WarmupFraction = 0.10, HoldFraction = 0.40, MinLearningRate = 0,
+                Source = "Pratap et al. 2023: Adam with beta1 0.9 and beta2 0.98 under a tri-stage schedule -- warmed up over the first 10% of updates, held for the next 40%, then decayed over the final 50%. A separate fine-tuning run warms up over 32K steps and then decays polynomially to zero.")]
 public partial class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OmnilangualASROptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +58,9 @@ public partial class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     public bool SupportsWordTimestamps => false;
 
     public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, string modelPath, OmnilangualASROptions? options = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
-    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, OmnilangualASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
+    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, OmnilangualASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using the omnilingual encoder with adaptive language projection.

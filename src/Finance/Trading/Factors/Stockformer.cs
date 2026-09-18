@@ -79,6 +79,14 @@ namespace AiDotNet.Finance.Trading.Factors;
     "https://arxiv.org/abs/2401.06139",
     Year = 2025,
     Authors = "Bohan Ma, Yushan Xue, Yuan Lu, Jing Chen")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Ma et al. 2024, Parameter Settings: the model is trained with the Adam "
+                        + "optimizer for 100 epochs at an initial learning rate of 0.001. No schedule is "
+                        + "declared because the stated decay rate of 0.1 comes with no interval or "
+                        + "endpoint. The batch size of 2 is not declared as a reference batch size: the "
+                        + "paper attributes it to computational resource constraints rather than to the "
+                        + "recipe, and at that value it would rescale a user's rate by their whole "
+                        + "batch.")]
 public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -124,7 +132,8 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// </para>
     /// </remarks>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
-        _trainingOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _trainingOptimizer ??= PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

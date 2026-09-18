@@ -1,0 +1,439 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
+
+namespace AiDotNet.Generators;
+
+/// <summary>
+/// Keeps <c>[PaperOptimizer]</c> declarations honest, and reports models that still train at the
+/// optimizer's generic defaults instead of their paper's settings.
+/// </summary>
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
+{
+    private static readonly DiagnosticDescriptor MissingPaperOptimizer = new(
+        "AIDN101",
+        "Model cites a paper but does not declare the optimizer settings that paper specifies",
+        "'{0}' has [ResearchPaper] but no [PaperOptimizer], so it trains at the optimizer class's "
+            + "generic defaults rather than its paper's. Add [PaperOptimizer(...)] with a Source "
+            + "naming the section the values come from, or leave it undeclared if the paper does "
+            + "not state them.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Models that declare no paper hyperparameters silently inherit the optimizer "
+            + "class defaults, which rarely match the published training recipe.");
+
+    private static readonly DiagnosticDescriptor MissingSource = new(
+        "AIDN102",
+        "Every declared paper optimizer must cite its source",
+        "'{0}' declares [PaperOptimizer] without a Source. Name the section or table the optimizer "
+            + "recipe comes from (for example Source = \"Sec. 4.1, Table 8\"), or remove the "
+            + "declaration -- an uncited recipe reads as authoritative and will not be re-checked.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Every optimizer recipe, including an optimizer-only declaration, is a claim "
+            + "about a paper and must identify where that claim can be verified.");
+
+    private static readonly DiagnosticDescriptor DuplicateDeclaration = new(
+        "AIDN103",
+        "Duplicate [PaperOptimizer] for the same variant",
+        "'{0}' declares [PaperOptimizer] more than once for variant '{1}'. Resolution selects by "
+            + "variant before optimizer kind, so one recipe is silently dead -- give each "
+            + "declaration a distinct Variant, or keep a single entry.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A model variant identifies one complete training recipe. Multiple optimizer "
+            + "kinds for the same variant make resolution depend on attribute ordering.");
+
+    private static readonly DiagnosticDescriptor MalformedCitation = new(
+        "AIDN105",
+        "Citation URL is not a usable arXiv reference",
+        "'{0}' cites arXiv id '{1}', which cannot exist: an arXiv identifier is YYMM.NNNNN and "
+            + "this one has month {2}. A wrong citation makes every value declared from it wrong "
+            + "while looking sourced.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description:
+            "Only URLs on arxiv.org are checked. A DOI contains digit runs of the same shape, and "
+            + "parsing ids out of arbitrary URLs reports valid DOIs as broken.");
+
+    private static readonly DiagnosticDescriptor DeclarationNotWired = new(
+        "AIDN104",
+        "Declared paper recipe is never used, because the optimizer is still hardcoded",
+        "'{0}' declares [PaperOptimizer] but constructs its optimizer directly, so the recipe is "
+            + "inert. Route the construction through PaperOptimizerFactory.CreateFor, keeping the "
+            + "existing constructor as the fallback: optimizer ?? PaperOptimizerFactory.CreateFor(this) "
+            + "?? new SomeOptimizer(this).",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A recipe that is declared but not wired reads as if the model trains at its "
+            + "paper's settings when it does not.");
+
+    /// <inheritdoc />
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
+        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired, MalformedCitation);
+
+    /// <inheritdoc />
+    public override void Initialize(AnalysisContext context)
+    {
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+        context.RegisterCompilationStartAction(compilationContext =>
+            compilationContext.RegisterSymbolStartAction(StartTypeAnalysis, SymbolKind.NamedType));
+    }
+
+    private static void StartTypeAnalysis(SymbolStartAnalysisContext context)
+    {
+        var type = (INamedTypeSymbol)context.Symbol;
+        if (type.TypeKind != TypeKind.Class || type.DeclaringSyntaxReferences.Length == 0) return;
+
+        bool citesPaper = type.GetAttributes().Any(IsResearchPaper);
+        bool ownsRecipe = type.GetAttributes().Any(IsPaperOptimizer);
+        bool hasEffectiveRecipe = EnumerateEffectiveRecipes(type).Any(IsSpecifiedRecipe);
+        if (!citesPaper && !ownsRecipe && !hasEffectiveRecipe) return;
+
+        // Symbol-start/end provides a SemanticModel for every partial declaration while retaining
+        // one final reporting point for the complete type. This avoids both duplicate partial-type
+        // diagnostics and Compilation.GetSemanticModel inside an analyzer.
+        var constructions = new ConcurrentBag<bool>();
+        if (!type.IsAbstract)
+        {
+            context.RegisterSyntaxNodeAction(syntaxContext =>
+            {
+                var creation = (ObjectCreationExpressionSyntax)syntaxContext.Node;
+                if (creation.ArgumentList?.Arguments.Count != 1) return;
+                if (syntaxContext.SemanticModel.GetTypeInfo(creation).Type is not INamedTypeSymbol createdType)
+                    return;
+                if (!ImplementsGradientOptimizer(createdType)) return;
+
+                TypeDeclarationSyntax? ownerDeclaration = creation.Ancestors()
+                    .OfType<TypeDeclarationSyntax>()
+                    .FirstOrDefault();
+                if (ownerDeclaration is null) return;
+                if (!SymbolEqualityComparer.Default.Equals(
+                        syntaxContext.SemanticModel.GetDeclaredSymbol(ownerDeclaration), type))
+                    return;
+
+                constructions.Add(SelectionUsesFactory(creation, syntaxContext.SemanticModel));
+            }, SyntaxKind.ObjectCreationExpression);
+        }
+
+        context.RegisterSymbolEndAction(endContext => AnalyzeType(
+            endContext, type, constructions, citesPaper, hasEffectiveRecipe));
+    }
+
+    private static void AnalyzeType(
+        SymbolAnalysisContext context,
+        INamedTypeSymbol type,
+        ConcurrentBag<bool> constructions,
+        bool citesPaper,
+        bool hasEffectiveRecipe)
+    {
+
+        var declarations = type.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(context.CancellationToken))
+            .OfType<ClassDeclarationSyntax>()
+            .ToArray();
+        if (declarations.Length == 0) return;
+
+        var declaredRecipes = type.GetAttributes().Where(IsPaperOptimizer).ToArray();
+        ValidateOwnedRecipes(context, type, declarations[0], declaredRecipes);
+        ValidateCitations(context, type, declarations[0]);
+
+        // Abstract bases own and are diagnosed for their declarations, but wiring is a concrete
+        // model responsibility. Derived types consume inherited recipes without repeating their
+        // base's AIDN102/AIDN103 diagnostics.
+        if (type.IsAbstract) return;
+
+        if (constructions.IsEmpty) return;
+
+        if (!hasEffectiveRecipe)
+        {
+            if (citesPaper)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    MissingPaperOptimizer, declarations[0].Identifier.GetLocation(), type.Name));
+            }
+
+            return;
+        }
+
+        if (constructions.Any(usesFactory => !usesFactory))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                DeclarationNotWired, declarations[0].Identifier.GetLocation(), type.Name));
+        }
+    }
+
+    private static void ValidateOwnedRecipes(
+        SymbolAnalysisContext context,
+        INamedTypeSymbol type,
+        ClassDeclarationSyntax fallbackDeclaration,
+        IReadOnlyList<AttributeData> declaredRecipes)
+    {
+        // Seed with inherited variants so a derived declaration cannot shadow a base declaration.
+        // Only the newly introduced (derived) declaration is reported, so an invalid base recipe
+        // still produces exactly one diagnostic at its owning declaration.
+        var seenVariants = new HashSet<string>(StringComparer.Ordinal);
+        for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            foreach (var inherited in current.GetAttributes().Where(IsPaperOptimizer))
+            {
+                seenVariants.Add(RecipeKey(inherited));
+            }
+        }
+
+        foreach (var attribute in declaredRecipes)
+        {
+            Location location = attribute.ApplicationSyntaxReference is { } reference
+                ? Location.Create(reference.SyntaxTree, reference.Span)
+                : fallbackDeclaration.Identifier.GetLocation();
+            string source = GetStringArgument(attribute, "Source") ?? string.Empty;
+            string variant = GetStringArgument(attribute, "Variant") ?? string.Empty;
+            string key = RecipeKey(attribute);
+
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(MissingSource, location, type.Name));
+            }
+
+            if (!seenVariants.Add(key))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DuplicateDeclaration,
+                    location,
+                    type.Name,
+                    variant.Length == 0 ? "(default)" : variant));
+            }
+        }
+    }
+
+    private static bool ImplementsGradientOptimizer(INamedTypeSymbol type)
+        => type.AllInterfaces.Any(candidate => candidate.Name == "IGradientBasedOptimizer"
+            && candidate.Arity == 3
+            && candidate.ContainingNamespace.ToDisplayString() == "AiDotNet.Interfaces");
+
+    /// <summary>
+    /// Checks the expression that selects the directly-created fallback. A factory call elsewhere
+    /// in the class is not evidence that its result controls this optimizer assignment.
+    /// </summary>
+    private static bool SelectionUsesFactory(
+        ObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel)
+    {
+        SyntaxNode selection = creation;
+        while (selection.Parent is ParenthesizedExpressionSyntax
+            or CastExpressionSyntax
+            or BinaryExpressionSyntax
+            or ConditionalExpressionSyntax
+            // A construction passed INTO the factory is reached through the argument list, not
+            // through an assignment. Stopping at the argument missed exactly the shape
+            // VerifyHandBuilt takes -- a bare `new SomeOptimizer(this)` handed to it as the
+            // fallback -- and reported those models as unwired.
+            or ArgumentSyntax
+            or ArgumentListSyntax
+            or InvocationExpressionSyntax)
+        {
+            selection = selection.Parent;
+        }
+
+        if (selection.Parent is EqualsValueClauseSyntax equalsValue)
+            selection = equalsValue.Value;
+        else if (selection.Parent is AssignmentExpressionSyntax assignment
+            && ReferenceEquals(assignment.Right, selection))
+            selection = assignment.Right;
+        else if (selection.Parent is ArrowExpressionClauseSyntax arrow)
+            selection = arrow.Expression;
+        else if (selection.Parent is ReturnStatementSyntax returnStatement
+            && returnStatement.Expression is not null)
+            selection = returnStatement.Expression;
+
+        return selection.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation => IsPaperOptimizerFactoryCall(semanticModel, invocation));
+    }
+
+    private static bool IsPaperOptimizerFactoryCall(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation)
+    {
+        if (semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method) return false;
+
+        // VerifyHandBuilt counts as reaching the factory as much as CreateFor does. Models that
+        // already build their paper correctly -- a dimension-aware Noam schedule, options that
+        // deliberately disable clipping the paper does not use -- keep their own optimizer and have
+        // the declaration verify it. Recognising only CreateFor would report those as unwired and
+        // push them towards being replaced by something less faithful.
+        return method.Name is "CreateFor" or "VerifyHandBuilt"
+            && method.ContainingType.Name == "PaperOptimizerFactory"
+            && method.ContainingType.ContainingNamespace.ToDisplayString() == "AiDotNet.Optimizers";
+    }
+
+    /// <summary>The key a declaration is unique on: its variant AND its component.</summary>
+    /// <remarks>
+    /// Component is part of the identity, not a detail of it. A composite model legitimately
+    /// declares one row per part -- Stable Audio Open gives separate rates for its autoencoder,
+    /// its discriminators and its DiT -- and keying on variant alone would report every one of
+    /// those as a duplicate of the others.
+    /// </remarks>
+    private static string RecipeKey(AttributeData attribute)
+        => DescribePhase(attribute)
+            + "|" + (GetStringArgument(attribute, "Variant") ?? string.Empty)
+            + "|" + (GetStringArgument(attribute, "Component") ?? string.Empty);
+
+    /// <summary>Rejects an arXiv id whose month cannot exist.</summary>
+    /// <remarks>
+    /// Structural only. Whether a citation points at the RIGHT paper cannot be decided without
+    /// fetching it, which is why the two real mis-citations here were found by comparing the
+    /// declared title against the PDF rather than by any analyzer.
+    /// </remarks>
+    private static void ValidateCitations(SymbolAnalysisContext context, INamedTypeSymbol type,
+        ClassDeclarationSyntax fallbackDeclaration)
+    {
+        foreach (var citation in type.GetAttributes().Where(IsResearchPaper))
+        {
+            string url = citation.ConstructorArguments.Length > 1
+                ? citation.ConstructorArguments[1].Value?.ToString() ?? string.Empty
+                : string.Empty;
+            if (url.Length == 0) continue;
+
+            if (!TryGetModernArxivId(url, out string identifier, out int month)) continue;
+            if (month >= 1 && month <= 12) continue;
+
+            Location location = citation.ApplicationSyntaxReference is { } reference
+                ? Location.Create(reference.SyntaxTree, reference.Span)
+                : fallbackDeclaration.Identifier.GetLocation();
+            context.ReportDiagnostic(Diagnostic.Create(
+                MalformedCitation, location, type.Name, identifier, month));
+        }
+    }
+
+    /// <summary>Parses a modern arXiv identifier from an arXiv URL in bounded linear time.</summary>
+    /// <remarks>
+    /// This deliberately uses URI and character parsing rather than a timed regular expression.
+    /// Analyzer callbacks execute concurrently with a memory-intensive compilation, and regex
+    /// timeouts include scheduler/GC pauses. A harmless citation could therefore crash the compiler
+    /// with AD0001 even though the old pattern itself was simple. Structural parsing cannot time out,
+    /// and checking the host also prevents an <c>example.com/arxiv.org/...</c> path from being treated
+    /// as an arXiv citation.
+    /// </remarks>
+    private static bool TryGetModernArxivId(string url, out string identifier, out int month)
+    {
+        identifier = string.Empty;
+        month = 0;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || uri is null) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        string host = uri.Host;
+        if (!host.Equals("arxiv.org", StringComparison.OrdinalIgnoreCase)
+            && !host.EndsWith(".arxiv.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string[] segments = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2) return false;
+        if (!segments[0].Equals("abs", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("pdf", StringComparison.OrdinalIgnoreCase)
+            && !segments[0].Equals("html", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string candidate = segments[1];
+        if (candidate.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = candidate.Substring(0, candidate.Length - 4);
+        }
+
+        if (candidate.Length < 5) return false;
+        int versionIndex = candidate.IndexOf('v', 5);
+        if (versionIndex < 0) versionIndex = candidate.IndexOf('V', 5);
+        if (versionIndex >= 0)
+        {
+            if (versionIndex == candidate.Length - 1) return false;
+            for (int index = versionIndex + 1; index < candidate.Length; index++)
+            {
+                if (!IsAsciiDigit(candidate[index])) return false;
+            }
+
+            candidate = candidate.Substring(0, versionIndex);
+        }
+
+        if (candidate.Length is not (9 or 10) || candidate[4] != '.') return false;
+        for (int index = 0; index < candidate.Length; index++)
+        {
+            if (index == 4) continue;
+            if (!IsAsciiDigit(candidate[index])) return false;
+        }
+
+        identifier = candidate;
+        month = (candidate[2] - '0') * 10 + candidate[3] - '0';
+        return true;
+    }
+
+    private static bool IsAsciiDigit(char value) => value >= '0' && value <= '9';
+
+    /// <summary>The declared phase, as part of a recipe identity.</summary>
+    /// <remarks>
+    /// A model declaring both a pre-training and a fine-tuning recipe records what its paper
+    /// says rather than repeating itself. Keying without the phase reports every multi-stage
+    /// model as a duplicate, which is exactly what happened when the phase key was introduced.
+    /// </remarks>
+    private static string DescribePhase(AttributeData attribute)
+    {
+        foreach (var named in attribute.NamedArguments.Where(named => named.Key == "Phase" && named.Value.Value is not null))
+        {
+            return named.Value.Value.ToString() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static IEnumerable<AttributeData> EnumerateEffectiveRecipes(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var attribute in current.GetAttributes().Where(IsPaperOptimizer))
+            {
+                yield return attribute;
+            }
+        }
+    }
+
+    private static bool IsSpecifiedRecipe(AttributeData attribute)
+    {
+        if (attribute.ConstructorArguments.Length == 0) return false;
+        object? value = attribute.ConstructorArguments[0].Value;
+        return value is not null && Convert.ToInt64(value) != 0;
+    }
+
+    private static bool IsPaperOptimizer(AttributeData attribute)
+        => attribute.AttributeClass?.Name is "PaperOptimizerAttribute" or "PaperOptimizer";
+
+    private static bool IsResearchPaper(AttributeData attribute)
+        => attribute.AttributeClass?.Name is "ResearchPaperAttribute" or "ResearchPaper";
+
+    private static string? GetStringArgument(AttributeData attribute, string name)
+    {
+        foreach (var named in attribute.NamedArguments.Where(named => named.Key == name))
+        {
+            return named.Value.Value as string;
+        }
+
+        return null;
+    }
+
+}

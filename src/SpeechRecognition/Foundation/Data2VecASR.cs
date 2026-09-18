@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,6 +45,15 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language", "https://arxiv.org/abs/2202.03555", Year = 2022, Authors = "Baevski et al.")]
+[PaperOptimizer(OptimizerKind.Adam, WarmupFraction = 0.03, HoldFraction = 0.9,
+                MinLearningRate = 0, Schedule = LearningRateSchedulerType.TriStage,
+                Source = "Baevski et al. 2022, Sec. 4: speech pre-training uses a tri-stage scheduler "
+                        + "that linearly warms the learning rate over the first 3 percent of updates, "
+                        + "holds it for 90 percent and linearly decays it over the remaining 7, training "
+                        + "the Base model for 400K updates. No reference batch size is declared because "
+                        + "the paper gives the batch as 63 minutes of audio rather than as a count of "
+                        + "examples. The 0.002 and 0.001 rates elsewhere in the paper belong to its "
+                        + "ViT-B and ViT-L vision models, not to this speech model.")]
 public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Data2VecASROptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +63,9 @@ public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     public bool SupportsWordTimestamps => false;
 
     public Data2VecASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Data2VecASROptions? options = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, Data2VecASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, Data2VecASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using data2vec's continuous SSL encoder with CTC decoding.

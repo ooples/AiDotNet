@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -60,6 +62,11 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Xiao et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Xiao et al. 2023, Sec. 4.1: AdamW with cosine learning rate decay. The paper "
+                        + "states neither a peak rate nor a batch size in its training description, so "
+                        + "neither is declared.")]
 public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly Florence2Options _options;
@@ -107,12 +114,13 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         // the first un-warmed steps and loss RISES (observed: 16.6 -> 64.6 in one step).
         // ViT/transformer fine-tuning uses 1e-4..1e-5, so pin the conservative stable
         // end (1e-5) as the paper-faithful default — matching the sibling SigLIP2 encoder.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-5,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-5,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

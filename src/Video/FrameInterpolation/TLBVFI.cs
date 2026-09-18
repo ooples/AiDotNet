@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -53,6 +54,10 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2507.04984",
     Year = 2025,
     Authors = "Zonglin Lyu, Chen Chen")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Zhang et al. 2025, Sec. 4: the diffusion model is trained with Adam at a "
+                        + "learning rate of 1e-4 for 50 epochs. The separate 1e-5 for 35 epochs in the "
+                        + "same section trains the autoencoder, not this model.")]
 public partial class TLBVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -86,7 +91,9 @@ public partial class TLBVFI<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new TLBVFIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

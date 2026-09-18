@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -67,6 +68,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer", "https://arxiv.org/abs/1701.06538", Year = 2017, Authors = "Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, Jeff Dean")]
+[PaperOptimizer(OptimizerKind.Adam, WarmupSteps = 1000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Shazeer et al. 2017, Sec. 5: the Adam optimizer with the base learning rate "
+                        + "increased linearly over the first 1000 training steps and then decreased "
+                        + "proportionally to the inverse square root of the step number, which is the "
+                        + "Noam schedule. The paper states no peak rate, so none is declared.")]
 public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     /// <summary>
@@ -203,13 +210,14 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
         // out as the framework-wide tape default; made explicit on MoE so the
         // public Train() path benefits without going through the tape-only
         // path. Callers passing an explicit optimizer are unaffected.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                UseAMSGrad = true
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-4,
+                    UseAMSGrad = true
+                }));
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();

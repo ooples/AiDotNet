@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -59,6 +61,11 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, DecayRate = 0.5, StepSize = 1,
+                Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Zhou et al. 2021, Sec. 4: the proposed methods are optimized with Adam, its "
+                        + "learning rate starting from 1e-4 and decaying two times smaller every epoch.")]
 public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />

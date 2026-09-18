@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -63,6 +65,11 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Gupta et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-3, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Alam et al. 2024, Sec. 4: a learning rate of 1e-3 with a cosine scheduler. "
+                        + "The optimizer is left unspecified because the paper names none -- the Adam in "
+                        + "its text is the author Adam Grycner in a reference.")]
 public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MayaOptions _options;
@@ -108,7 +115,8 @@ public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         _options = options ?? new MayaOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

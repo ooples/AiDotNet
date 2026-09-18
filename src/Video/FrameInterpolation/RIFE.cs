@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -66,6 +67,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2011.06294",
     Year = 2022,
     Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 1e-4,
+                MinLearningRate = 1e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Huang et al. 2022, Sec. 4: RIFE is optimized by AdamW with a weight decay of "
+                        + "1e-4 on 224x224 patches, the learning rate reduced from 1e-4 to 1e-5 by "
+                        + "cosine annealing across the whole of training.")]
 public partial class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
@@ -204,14 +211,15 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new RIFEOptions();
         Options = _options;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAMSGrad = false,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAMSGrad = false,
+                }));
         SetBaseTrainOptimizer(_optimizer);
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,13 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2024,
     Authors = "Sun et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95,
+                Epsilon = 1e-6, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Sun et al. 2023, Sec. 4: AdamW with beta1 0.9, beta2 0.95 and epsilon 1e-6, "
+                        + "using a log learning rate warm-up and linear decay with a peak learning rate "
+                        + "of 1e-4.")]
 public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu2Options _options;
@@ -102,7 +111,9 @@ public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         _options = options ?? new Emu2Options();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

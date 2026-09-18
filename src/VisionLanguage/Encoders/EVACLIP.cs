@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -57,6 +59,15 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Sun et al."
 )]
+[PaperOptimizer(OptimizerKind.Lamb, Beta1 = 0.9, Beta2 = 0.98, WeightDecay = 0.05,
+                ReferenceBatchSize = 32768, WarmupSteps = 2000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Sun et al. 2023, Sec. 3: the LAMB optimizer with a weight decay of 0.05, "
+                        + "beta1 0.9 and beta2 0.98, a 2000-step warm-up and a cosine schedule, at a "
+                        + "batch size of 32768. No single learning rate is declared because the paper "
+                        + "sets 2e-4 for the vision encoder and 2e-5 for the text encoder, and this "
+                        + "model builds one optimizer over both, so neither rate would be correct for "
+                        + "all of it.")]
 public partial class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly EVACLIPOptions _options;
@@ -113,7 +124,9 @@ public partial class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         _options = options ?? new EVACLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

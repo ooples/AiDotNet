@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Yang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 128,
+                Source = "Yang et al. 2020, Sec. 3: Adam with an initial learning rate of 1e-4 for both generator and discriminator; batch size 128 for multi-band MelGAN (48 for the basic and full-band variants).")]
 public partial class MultiBandMelGAN<T> : VocoderBase<T>
 {
     private readonly MultiBandMelGANOptions _options;
@@ -80,7 +84,9 @@ public partial class MultiBandMelGAN<T> : VocoderBase<T>
     {
         _options = options ?? new MultiBandMelGANOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

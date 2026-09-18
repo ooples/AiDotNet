@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -49,6 +50,12 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 8e-6, WeightDecay = 1e-5,
+                ReferenceBatchSize = 32,
+                Source = "Xie et al. 2023, Sec. 4: fine-tuning based on the AdamW optimizer with a "
+                        + "batch size of 32, an initial learning rate of 8e-6 and a weight decay of "
+                        + "1e-5. The two variants differ only in epoch count, so those shared values "
+                        + "apply to both.")]
 public partial class FinMA<T> : FinancialNLPModelBase<T>
 {
     #region Shared Fields
@@ -96,7 +103,9 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
 
         _dropout = options.DropoutRate;
         _numAgents = options.NumAgents;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -128,7 +137,9 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
 
         _dropout = options.DropoutRate;
         _numAgents = options.NumAgents;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

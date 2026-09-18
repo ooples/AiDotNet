@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -93,6 +94,11 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063", Year = 2019, Authors = "Dogu Araci")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.2,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                ReferenceBatchSize = 64,
+                Source = "Araci 2019, Sec. 4.3.3: learning rate 2e-5, warm-up proportion 0.2, mini-batch size 64, 6 epochs, with the slanted triangular schedule of Howard and Ruder 2018 -- linear warmup then linear decay. The optimizer is not named there; FinBERT fine-tunes BERT, and Devlin et al. 2019 state Adam for fine-tuning (Sec. A.3).")]
 public partial class FinBERT<T> : FinancialNLPModelBase<T>
 {
     #region Execution Mode
@@ -205,7 +211,9 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _maxSequenceLength = _options.MaxSequenceLength;
         _vocabularySize = _options.VocabularySize;
@@ -248,7 +256,9 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _maxSequenceLength = _options.MaxSequenceLength;
         _vocabularySize = _options.VocabularySize;

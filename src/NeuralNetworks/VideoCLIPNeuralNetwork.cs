@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -58,6 +60,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding", "https://arxiv.org/abs/2109.14084", Year = 2021, Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Arber Zela, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, LearningRate = 5e-5,
+                WarmupSteps = 1000, Schedule = LearningRateSchedulerType.Polynomial,
+                MinLearningRate = 0, MaxGradientNorm = 2.0,
+                Source = "Xu et al. 2021, Training Details: Adam with betas (0.9, 0.98), initial learning rate 5e-5, 1000 warm-up steps, a polynomial decay schedule, and gradients clipped at 2.0. The decay power is not stated, so the library default of 1 applies.")]
 public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IVideoCLIPModel<T>
 {
     private readonly VideoCLIPOptions _options;
@@ -216,7 +222,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             _textEncoder = textEncoder;
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
             InitializeLayers();
         }
@@ -274,7 +282,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _temporalAggregation = temporalAggregation;
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
         InitializeNativeLayers(channels);

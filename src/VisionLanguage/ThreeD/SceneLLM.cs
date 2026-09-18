@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,16 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Fu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, ReferenceBatchSize = 64,
+                WarmupSteps = 1000, Phase = TrainingPhase.PreTraining,
+                Source = "Fu et al. 2024, Sec. 4: AdamW at a total batch size of 64, with a learning "
+                        + "rate of 1e-5 to train the projection layer, starting with 1000 warmup steps "
+                        + "at a warmup learning rate of 1e-6.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 64,
+                WarmupSteps = 2000, Phase = TrainingPhase.FineTuning,
+                Source = "Fu et al. 2024, Sec. 4: the stage that finetunes the projection layer "
+                        + "together with the LLM uses a learning rate of 2e-5 and 2000 warmup steps, at "
+                        + "the same total batch size of 64.")]
 public partial class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly SceneLLMOptions _options;
@@ -103,7 +115,9 @@ public partial class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
     {
         _options = options ?? new SceneLLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -51,6 +52,9 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2207.06937",
     Year = 2022,
     Authors = "Chenyang Qi, Junming Chen, Xin Yang, Qifeng Chen")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 16,
+                Source = "Qi et al. 2022, Appendix A.5: Adam at an initial learning rate of 1e-3, "
+                        + "optimized for 700,000 iterations with clips at a batch size of 16.")]
 public partial class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
@@ -90,27 +94,28 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new BSVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                // Optimizer settings taken from the reference implementation's training config
-                // (ChenyangQiQi/BSVD, options/train/bsvd_c64_unblind.yml), not guessed:
-                //   optim_g: Adam, lr 1e-3, betas [0.9, 0.99], weight_decay 0
-                //   use_grad_clip: 5
-                // beta2 = 0.99 rather than the 0.999 default adapts the second moment about ten
-                // times faster, which materially shortens Adam's early-step overshoot; combined
-                // with the grad-norm bound it is what keeps the first iterations well-behaved.
-                Beta1 = _options.AdamBeta1,
-                Beta2 = _options.AdamBeta2,
-                Epsilon = 1e-8,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = true,
-                MaxGradientNorm = _options.GradientClipNorm
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    // Optimizer settings taken from the reference implementation's training config
+                    // (ChenyangQiQi/BSVD, options/train/bsvd_c64_unblind.yml), not guessed:
+                    //   optim_g: Adam, lr 1e-3, betas [0.9, 0.99], weight_decay 0
+                    //   use_grad_clip: 5
+                    // beta2 = 0.99 rather than the 0.999 default adapts the second moment about ten
+                    // times faster, which materially shortens Adam's early-step overshoot; combined
+                    // with the grad-norm bound it is what keeps the first iterations well-behaved.
+                    Beta1 = _options.AdamBeta1,
+                    Beta2 = _options.AdamBeta2,
+                    Epsilon = 1e-8,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = _options.GradientClipNorm
+                }));
         IsBlindDenoising = true;
         InitializeLayers();
     }

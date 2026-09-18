@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -55,6 +56,10 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Character Region Awareness for Text Detection", "https://doi.org/10.48550/arXiv.1904.01941", Year = 2019, Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Baek et al. 2019, Sec. 4: the ADAM optimizer is used in all training "
+                        + "processes. The paper states no learning rate, batch size or schedule, so none "
+                        + "is declared.")]
 public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly CRAFTOptions _options;
@@ -148,7 +153,9 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _useNativeMode = false;
         _backboneChannels = backboneChannels;
         _upscaleChannels = upscaleChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 
@@ -186,7 +193,9 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
         _upscaleChannels = upscaleChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 

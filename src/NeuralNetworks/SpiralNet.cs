@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +58,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 32,
+                DecayRate = 0.99, Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Gong et al. 2019, Sec. 4: Adam for 300 epochs with a learning rate of 0.001 "
+                        + "and a learning rate decay of 0.99 per epoch, at a batch size of 32.")]
 public partial class SpiralNet<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
@@ -144,7 +151,9 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         // start and trip Training_ShouldReduceLoss even though training works.
         // The larger step produces a clear, noise-robust decrease while staying
         // well within the single-step stability bound.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-3 });
         _spiralIndicesPerLevel = [];

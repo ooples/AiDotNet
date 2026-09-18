@@ -1,3 +1,4 @@
+using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -76,6 +77,13 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
+[PaperOptimizer(OptimizerKind.Adam, SearchedValues = [0.01, 0.001, 0.0001],
+                Provenance = RecipeProvenance.Searched,
+                Source = "Hamilton et al. 2017, Sec. 4: all models use the Adam optimizer, with the "
+                        + "learning rate selected from {0.01, 0.001, 0.0001}. No single rate is declared "
+                        + "because the paper states a search space; the candidates are recorded instead. "
+                        + "DeepWalk, which the paper notes performed better with vanilla gradient "
+                        + "descent, is a baseline rather than this model.")]
 public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
@@ -202,7 +210,8 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
                 baseLearningRate: 0.001, gamma: 0.99),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts));
 
         InitializeLayers();
     }

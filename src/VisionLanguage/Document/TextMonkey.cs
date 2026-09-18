@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,17 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Liu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, ReferenceBatchSize = 128,
+                WarmupSteps = 150, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Liu et al. 2024, Sec. 4.1: AdamW at a learning rate of 1e-5 for the initial "
+                        + "stage under a cosine schedule, with a 150-step warmup and batches of 128.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-6, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Liu et al. 2024, Sec. 4.1: the subsequent stage reduces the learning rate to "
+                        + "5e-6, otherwise as the initial stage.")]
 public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly TextMonkeyOptions _options;
@@ -102,7 +115,9 @@ public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnders
     {
         _options = options ?? new TextMonkeyOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

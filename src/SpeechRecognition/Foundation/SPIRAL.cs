@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,6 +45,12 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SPIRAL: Self-supervised Perturbation-Invariant Representation Learning for Speech Pre-Training", "https://arxiv.org/abs/2201.10207", Year = 2022, Authors = "Huang et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-3, ReferenceBatchSize = 384,
+                WarmupFraction = 0.08,
+                Source = "Huang et al. 2022, Sec. 4.1: pre-training optimizes with Adam, warming the "
+                        + "learning rate over the first 8 percent of updates to a peak of 3e-3, with the "
+                        + "BASE model trained at a batch size of 24 per GPU across 16 GPUs for 200k "
+                        + "steps -- 384 in total, which is what the reference batch records.")]
 public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SPIRALOptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +60,9 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public SPIRAL(NeuralNetworkArchitecture<T> architecture, string modelPath, SPIRALOptions? options = null) : base(architecture) { _options = options ?? new SPIRALOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public SPIRAL(NeuralNetworkArchitecture<T> architecture, SPIRALOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SPIRALOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SPIRAL(NeuralNetworkArchitecture<T> architecture, SPIRALOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SPIRALOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using SPIRAL's perturbation-invariant SSL encoder with CTC.

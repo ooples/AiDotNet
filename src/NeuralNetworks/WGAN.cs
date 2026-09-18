@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -52,6 +54,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
+[PaperOptimizer(OptimizerKind.RmsProp, LearningRate = 5e-05,
+                Source = "Arjovsky et al. 2017, Algorithm 1: RMSProp with a learning rate of 0.00005. "
+                        + "The clipping the paper specifies is weight clipping to the range [-c, c] "
+                        + "applied after each update, which is a constraint on the critic rather than "
+                        + "gradient-norm clipping, so no gradient clip is declared.")]
 public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
     private readonly WGANOptions _options;
@@ -298,8 +305,10 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         _lossFunction = lossFunction ?? new WassersteinLoss<T>();
 
         // Initialize optimizers (RMSProp with lr=0.00005 is the WGAN paper default).
-        _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateWganRmsPropOptions());
-        _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic, CreateWganRmsPropOptions());
+        _generatorOptimizer = generatorOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateWganRmsPropOptions()));
+        _criticOptimizer = criticOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic, CreateWganRmsPropOptions()));
 
         InitializeLayers();
     }

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -62,6 +63,13 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2111.13817",
     Year = 2022,
     Authors = "Zhihao Shi, Xiangyu Xu, Xiaohong Liu, Jun Chen, Ming-Hsuan Yang")]
+[PaperOptimizer(OptimizerKind.Adamax, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 4, MinLearningRate = 1e-6,
+                Source = "Shi et al. 2022, Sec. 4: the AdaMax optimizer with beta1 0.9 and beta2 0.999, "
+                        + "a training batch size of 4, trained for 100 epochs with the learning rate "
+                        + "initially set to 2e-4 and gradually decayed to 1e-6. No schedule is declared "
+                        + "because the paper gives the decay's endpoints but never its shape or "
+                        + "interval.")]
 public partial class VFIT<T> : FrameInterpolationBase<T>
 {
     private readonly VFITOptions _options;
@@ -107,7 +115,9 @@ public partial class VFIT<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new VFITOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate

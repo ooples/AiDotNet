@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,15 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, MinLearningRate = 0,
+                DecayRate = 1.0, Schedule = LearningRateSchedulerType.Polynomial,
+                Phase = TrainingPhase.FineTuning,
+                Provenance = RecipeProvenance.PerDataset,
+                Source = "Chen et al. 2023, Table 20: fine-tuning decays the learning rate linearly "
+                        + "from 1e-4 to zero, over a number of steps that differs per benchmark -- 10k "
+                        + "for COCO, 20k for VQAv2 and the multitask settings, 5k for the rest -- which "
+                        + "is what the per-dataset provenance records. The optimizer is left unspecified "
+                        + "because this table names none.")]
 public partial class PaLIX<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLIXOptions _options;
@@ -103,7 +114,8 @@ public partial class PaLIX<T> : VisionLanguageModelBase<T>, IGenerativeVisionLan
     {
         _options = options ?? new PaLIXOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

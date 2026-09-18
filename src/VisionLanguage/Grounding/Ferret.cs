@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,10 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2023,
     Authors = "You et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 128,
+                Source = "You et al. 2023, Sec. 4: Ferret is trained on GRIT for three epochs at a "
+                        + "learning rate of 2e-5 and a batch size of 128. The paper names its optimizer "
+                        + "only by citation, Loshchilov and Hutter 2017, which is AdamW.")]
 public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly FerretOptions _options;
@@ -101,7 +107,9 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     {
         _options = options ?? new FerretOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
