@@ -592,6 +592,31 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     }
 
     /// <summary>
+    /// Yields this agent's registered state as per-component chunks, each carrying the stable ID and
+    /// role of the component it came from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> has exposed this for a while; agents did not,
+    /// so anything outside the agent could only see one anonymous flat vector. That is precisely the
+    /// resolution at which a dead component is invisible: an actor-critic agent concatenates several
+    /// networks into that vector, so a policy network receiving no gradient at all still leaves the
+    /// vector changing, because the critics train.
+    /// </para>
+    /// <para>
+    /// Reconstructing the split from <see cref="ParameterLayout"/> offsets is not a substitute: the
+    /// running offset is accumulated from each slot's anticipated <c>ParameterCount</c>, while a lazily
+    /// shaped component reports a smaller <c>MaterializedParameterCount</c>, so the two disagree exactly
+    /// where the arithmetic matters. Reading the chunks directly avoids the reconstruction entirely.
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        _ = Components;
+        return _parameterRegistry.GetParameterStateChunks();
+    }
+
+    /// <summary>
     /// Sets the agent's parameters.
     /// </summary>
     /// <inheritdoc />
