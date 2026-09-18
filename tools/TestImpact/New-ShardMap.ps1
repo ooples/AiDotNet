@@ -19,6 +19,12 @@
 .PARAMETER OutFile
     Where to write shard-map.json.
 
+.PARAMETER CoverageRequirementsFile
+    Optional JSON array of shard entries (the converted test-shards.yml). An entry with a mustCover list
+    of path wildcards is selectable only when its digest executed at least one file matching one of them;
+    otherwise it is always-run. This is for shards whose subject runs where coverage may not reach - the
+    model-inventory sweeps and conformance windows execute models in a child worker process - so a
+    coverage gap costs extra runs instead of silently hiding the shard from the changes it tests.
 .PARAMETER SelfTest
     Runs adversarial producer checks and exits.
 #>
@@ -28,6 +34,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Build')] [string[]] $AllShards,
     [Parameter(Mandatory, ParameterSetName = 'Build')] [string] $Sha,
     [Parameter(Mandatory, ParameterSetName = 'Build')] [string] $OutFile,
+    [Parameter(ParameterSetName = 'Build')] [string] $CoverageRequirementsFile = '',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -99,11 +106,37 @@ function Read-ValidatedDigest {
     return $digest
 }
 
+function Read-CoverageRequirements {
+    <# shard name -> mustCover wildcards, from the converted test-shards.yml. Entries without one are omitted. #>
+    param([Parameter(Mandatory)] [string] $Path)
+    try { $entries = @(Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json) }
+    catch { throw "Coverage requirements file $Path is not valid JSON: $($_.Exception.Message)" }
+    $requirements = @{}
+    foreach ($entry in $entries) {
+        if (-not $entry.PSObject.Properties['mustCover']) { continue }
+        $patterns = @($entry.mustCover | ForEach-Object { [string] $_ } | Where-Object { $_ })
+        if ($patterns.Count -eq 0) { throw "Shard '$($entry.name)' declares an empty mustCover list." }
+        $requirements[[string] $entry.name] = $patterns
+    }
+    return $requirements
+}
+
+function Test-DigestMeetsRequirement {
+    param([Parameter(Mandatory)] $Digest, [Parameter(Mandatory)] [string[]] $Patterns)
+    foreach ($property in @($Digest.files.PSObject.Properties)) {
+        foreach ($pattern in $Patterns) {
+            if ($property.Name -like $pattern) { return $true }
+        }
+    }
+    return $false
+}
+
 function New-ShardMapObject {
     param(
         [Parameter(Mandatory)] [string] $DigestDirectory,
         [Parameter(Mandatory)] [string[]] $AllShards,
-        [Parameter(Mandatory)] [string] $Sha
+        [Parameter(Mandatory)] [string] $Sha,
+        [hashtable] $CoverageRequirements = @{}
     )
 
     if ($Sha -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
@@ -134,8 +167,21 @@ function New-ShardMapObject {
 
     $known = [System.Collections.Generic.List[string]]::new()
     $always = [System.Collections.Generic.List[string]]::new()
+    foreach ($requirementName in @($CoverageRequirements.Keys)) {
+        if (-not $manifestSet.Contains([string] $requirementName)) {
+            throw "Coverage requirement names unknown shard '$requirementName'."
+        }
+    }
     foreach ($name in $manifest) {
         if ($digests.ContainsKey($name) -and @($digests[$name].files.PSObject.Properties).Count -gt 0) {
+            if ($CoverageRequirements.ContainsKey($name) -and
+                -not (Test-DigestMeetsRequirement -Digest $digests[$name] -Patterns $CoverageRequirements[$name])) {
+                # The shard ran and recorded coverage, but none of the code it exists to test. Its subject
+                # executed somewhere coverage did not reach, so its digest cannot say which changes affect it.
+                Write-Host "::warning::shard '$name' recorded no file matching $($CoverageRequirements[$name] -join ', ') - always-run until its coverage reaches its subject"
+                [void] $always.Add($name)
+                continue
+            }
             [void] $known.Add($name)
         }
         else {
@@ -244,6 +290,36 @@ if ($SelfTest) {
             -Files ([pscustomobject] @{ 'src/U.cs' = @(1, 1) })
         Assert-Throws { New-ShardMapObject -DigestDirectory $temp -AllShards @('Alpha', 'Empty') -Sha $fixtureSha } `
             'unknown shard digests must be rejected'
+        Remove-Item -LiteralPath (Join-Path $temp 'unknown.digest.json')
+
+        # A shard whose digest never reaches its declared subject is always-run, not selectable: its
+        # subject executed where coverage did not follow (a child worker), so the digest is not evidence.
+        Write-DigestFixture -Path (Join-Path $temp 'window.digest.json') -Shard 'Window' `
+            -Files ([pscustomobject] @{ 'src/Harness/Probe.cs' = @(1, 4) })
+        Write-DigestFixture -Path (Join-Path $temp 'reached.digest.json') -Shard 'Reached' `
+            -Files ([pscustomobject] @{ 'src/Harness/Probe.cs' = @(1, 4); 'src/Document/VisionLanguage/Align.cs' = @(10, 12) })
+        $requirements = @{ 'Window' = @('*/VisionLanguage/*'); 'Reached' = @('*/VisionLanguage/*') }
+        try {
+            $map = New-ShardMapObject -DigestDirectory $temp -AllShards @('Alpha', 'Empty', 'Window', 'Reached') `
+                -Sha $fixtureSha -CoverageRequirements $requirements
+            Assert-True ($map.alwaysRun -contains 'Window') 'a digest that missed its declared subject must be always-run'
+            Assert-True ($map.knownShards -contains 'Reached') 'a digest that reached its declared subject must stay selectable'
+            Assert-True ($map.knownShards -contains 'Alpha') 'a shard without a requirement must be unaffected'
+            $windowIndexed = @($map.files.'src/Harness/Probe.cs' | Where-Object { $map.knownShards[$_.s] -eq 'Window' })
+            Assert-True ($windowIndexed.Count -eq 0) 'an always-run shard must not be indexed'
+        }
+        catch { [void] $failures.Add("coverage requirement fixture failed: $_") }
+        Assert-Throws { New-ShardMapObject -DigestDirectory $temp -AllShards @('Alpha', 'Empty', 'Window', 'Reached') `
+                -Sha $fixtureSha -CoverageRequirements @{ 'Ghost' = @('*') } } `
+            'a requirement for a shard the manifest lacks must be rejected'
+
+        $requirementsFile = Join-Path $temp 'requirements.json'
+        @(@{ name = 'Window'; mustCover = @('*/VisionLanguage/*') }, @{ name = 'Alpha' }) |
+            ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $requirementsFile -Encoding utf8
+        $parsed = Read-CoverageRequirements -Path $requirementsFile
+        Assert-True ($parsed.Count -eq 1 -and $parsed['Window'][0] -eq '*/VisionLanguage/*') 'mustCover entries were not read'
+        @(@{ name = 'Window'; mustCover = @() }) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $requirementsFile -Encoding utf8
+        Assert-Throws { Read-CoverageRequirements -Path $requirementsFile } 'an empty mustCover list must be rejected'
     }
     finally {
         Remove-Item -LiteralPath $temp -Recurse -Force
@@ -258,7 +334,9 @@ if ($SelfTest) {
     exit 0
 }
 
-$map = New-ShardMapObject -DigestDirectory $DigestDirectory -AllShards $AllShards -Sha $Sha
+$coverageRequirements = if ($CoverageRequirementsFile) { Read-CoverageRequirements -Path $CoverageRequirementsFile } else { @{} }
+$map = New-ShardMapObject -DigestDirectory $DigestDirectory -AllShards $AllShards -Sha $Sha `
+    -CoverageRequirements $coverageRequirements
 $directory = Split-Path -Parent $OutFile
 if ($directory -and -not (Test-Path -LiteralPath $directory)) {
     New-Item -ItemType Directory -Path $directory -Force | Out-Null

@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -28,7 +29,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         {
             var arch = new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
-            return new MambaLanguageModel<double>(arch, vocabSize: 12, modelDimension: 8, numLayers: 1, stateDimension: 4, maxSeqLength: 8);
+            return new MambaLanguageModel<double>(arch, new MambaOptions { VocabSize = 12, ModelDimension = 8, NumLayers = 1, StateDimension = 4, MaxSequenceLength = 8 });
         }
 
         [Fact(Timeout = 120000)]
@@ -63,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             // Mamba stack: EmbeddingLayer + MambaBlock x2 + LayerNorm + Dense head.
             var arch = new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
-            var model = new MambaLanguageModel<double>(arch, vocabSize: 12, modelDimension: 8, numLayers: 2, stateDimension: 4, maxSeqLength: 8);
+            var model = new MambaLanguageModel<double>(arch, new MambaOptions { VocabSize = 12, ModelDimension = 8, NumLayers = 2, StateDimension = 4, MaxSequenceLength = 8 });
 
             var segments = ModelParameterMap.Build(model);
             var names = segments.Select(s => s.Name).ToList();
@@ -124,7 +125,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         {
             var arch = new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
-            return new MambaLanguageModel<double>(arch, vocabSize: 12, modelDimension: 8, numLayers: 2, stateDimension: 4, maxSeqLength: 8);
+            return new MambaLanguageModel<double>(arch, new MambaOptions { VocabSize = 12, ModelDimension = 8, NumLayers = 2, StateDimension = 4, MaxSequenceLength = 8 });
         }
 
         [Fact(Timeout = 120000)]

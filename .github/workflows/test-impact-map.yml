@@ -281,11 +281,16 @@ jobs:
         shell: pwsh
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          # Entries that declare mustCover stay always-run unless their digest reached that code (see the
+          # MODEL-INVENTORY section of test-shards.yml): their subject runs in a child worker process.
+          $requirements = Join-Path $env:RUNNER_TEMP 'shard-coverage-requirements.json'
+          ConvertTo-Json -InputObject @($all) -Depth 6 | Set-Content -LiteralPath $requirements -Encoding utf8
           & ./tools/TestImpact/New-ShardMap.ps1 `
               -DigestDirectory digests `
               -AllShards @($all.name) `
               -Sha '${{ steps.source.outputs.sha }}' `
-              -OutFile shard-map.json
+              -OutFile shard-map.json `
+              -CoverageRequirementsFile $requirements
 
           $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
           $map = Get-Content shard-map.json -Raw | ConvertFrom-Json

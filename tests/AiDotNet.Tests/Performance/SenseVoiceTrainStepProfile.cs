@@ -25,6 +25,10 @@ using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.Performance;
 
+// SerialPerf: its budgets are wall-clock milliseconds, so it runs in the serialized performance
+// shards, not beside parallel test collections that would make it measure machine load. It had never
+// run in CI at all until then - no shard filter selected AiDotNet.Tests.Performance.
+[Trait("Category", "SerialPerf")]
 public class SenseVoiceTrainStepProfile
 {
     private readonly ITestOutputHelper _output;
