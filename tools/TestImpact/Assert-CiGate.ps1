@@ -124,17 +124,18 @@ if ($gateStage -eq [CiGateStage]::Validation) {
 }
 else {
     switch ($reuse) {
+        # SonarCloud is advisory: it is reported below but never required. Its instrumented build
+        # did not finish on any PR or master push checked in 2026-09 (timeouts and lost runners),
+        # so requiring it blocked every merge without ever producing an analysis.
         ([CiValidationReuseScope]::None) {
             Add-RequiredSuccess $requirements 'validation-gate' $validationGate
             Add-RequiredSuccess $requirements 'codeql' $codeql
-            Add-RequiredSuccess $requirements 'sonarcloud' $sonar
         }
         ([CiValidationReuseScope]::Validation) {
             if ($requiresRuntimeValidation) {
                 Add-RequiredSuccess $requirements 'promote-ci-test-analysis' $promotion
             }
             Add-RequiredSuccess $requirements 'codeql' $codeql
-            Add-RequiredSuccess $requirements 'sonarcloud' $sonar
         }
         ([CiValidationReuseScope]::Complete) {
             if ($requiresRuntimeValidation) {
@@ -165,6 +166,10 @@ $summary = [System.Collections.Generic.List[string]]::new()
 [void] $summary.Add('|---|---|')
 foreach ($requirement in $requirements) {
     [void] $summary.Add("| $($requirement.Name) | $($requirement.Conclusion.ToString()) |")
+}
+if ($gateStage -eq [CiGateStage]::Complete) {
+    [void] $summary.Add('')
+    [void] $summary.Add("Advisory (not required): sonarcloud $($sonar.ToString())")
 }
 [void] $summary.Add('')
 [void] $summary.Add($(if ($failed.Count -eq 0) { '**Gate PASSED**' } else { '**Gate FAILED**' }))

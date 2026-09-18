@@ -258,6 +258,16 @@ Assert-Contract ($sonarHeader.Contains($effectiveValidationEnvironment)) `
     'Sonar steps parse EFFECTIVE_REQUIRES_VALIDATION but the Sonar job does not define it'
 Assert-Contract (([Regex]::Matches($validation, '(?m)^      EFFECTIVE_REQUIRES_VALIDATION:')).Count -eq 1) `
     'EFFECTIVE_REQUIRES_VALIDATION must be defined exactly once on the Sonar job'
+# Sonar's expensive steps gate on SONAR_ANALYZE, which must carry BOTH the runtime requirement above
+# (so a non-runtime change never analyses) and the nightly-only event restriction (so no pull request,
+# merge group or push waits on an analysis that never finished there).
+$sonarAnalyzeEnvironment = 'SONAR_ANALYZE: ${{ (github.event_name == ''schedule'' || github.event_name == ''workflow_dispatch'') && ((needs.validation-source.outputs.reuse == ''true'' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || ''true'') || ''false'' }}'
+Assert-Contract ($sonarHeader.Contains($sonarAnalyzeEnvironment)) `
+    'SONAR_ANALYZE is missing from the Sonar job or no longer requires both runtime validation and a nightly event'
+Assert-Contract (([Regex]::Matches($validation, '(?m)^      SONAR_ANALYZE:')).Count -eq 1) `
+    'SONAR_ANALYZE must be defined exactly once on the Sonar job'
+Assert-Contract (-not $sonarJob.Contains('fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION')) `
+    'a Sonar step gates on EFFECTIVE_REQUIRES_VALIDATION alone and would analyse on pull requests'
 
 foreach ($job in @(
     'test-regression-analysis', 'sonarcloud', 'ci-test-analysis',
@@ -490,7 +500,7 @@ foreach ($consumer in @(
     foreach ($step in @($downloadStep, $importStep)) {
         $condition = [regex]::Match($step, '(?m)^        if: (?<expression>[^\r\n]+)').Groups['expression'].Value
         $expectedCondition = "needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'"
-        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && $expectedCondition }}" }
+        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.SONAR_ANALYZE) && $expectedCondition }}" }
         Assert-Contract ($condition.Trim() -ceq $expectedCondition) `
             "$($consumer.Job) delta import is not disabled after selector escalation"
     }
@@ -832,14 +842,20 @@ Assert-Contract ($ciGatePolicyText.Contains('([CiValidationReuseScope]::Validati
     'CI Gate has no validation-only reuse mode'
 Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql' `$codeql")) `
     'validation-only reuse does not rerun CodeQL'
-Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud' `$sonar")) `
-    'validation-only reuse does not rerun SonarCloud'
+# SonarCloud is advisory: the gate reports it but must never require it, or its unfinished
+# analysis blocks every merge again.
+Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud'")) `
+    'CI Gate requires SonarCloud, whose analysis does not finish on pull requests'
+Assert-Contract ($ciGatePolicyText.Contains('Advisory (not required): sonarcloud')) `
+    'CI Gate no longer reports the advisory SonarCloud result'
 
-# SonarCloud Analysis is still a required repository status. Its job must succeed cheaply for a
-# non-runtime PR, but no setup, cache, download, restore, scanner, or build step may execute there.
+# SonarCloud Analysis may still be a required repository status. Its job must succeed cheaply for a
+# non-runtime change and for every non-nightly event, and no setup, cache, download, restore,
+# scanner, or build step may execute there.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
-Assert-Contract ($sonarJob.Contains('- name: Report non-runtime validation')) `
-    'the required SonarCloud status has no lightweight non-runtime success path'
+$sonarSkipReport = Get-StepBlock -JobBlock $sonarJob -Step 'Report skipped analysis'
+Assert-Contract ($sonarSkipReport.Contains('if: ${{ !fromJSON(env.SONAR_ANALYZE) }}')) `
+    'the SonarCloud status has no lightweight success path when analysis is skipped'
 foreach ($stepName in @(
     'Set up JDK 17', 'Checkout code', 'Setup .NET 10.0', 'Cache NuGet packages',
     'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
@@ -847,8 +863,8 @@ foreach ($stepName in @(
     'Build source generator first', 'Build (Release)', 'End SonarCloud analysis'
 )) {
     $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
-    Assert-Contract ($step.Contains('fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION')) `
-        "SonarCloud step '$stepName' can run for a non-runtime change"
+    Assert-Contract ($step.Contains('fromJSON(env.SONAR_ANALYZE')) `
+        "SonarCloud step '$stepName' can run for a non-runtime change or outside the nightly run"
 }
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
 # library and tests for three frameworks under analyzers and never finished inside the job limit.
