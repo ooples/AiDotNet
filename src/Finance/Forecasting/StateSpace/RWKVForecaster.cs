@@ -165,10 +165,8 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     /// <summary>
     /// Initializes a new instance in native mode for training.
     /// </summary>
-    public RWKVForecaster(
-        NeuralNetworkArchitecture<T> architecture,
+    public RWKVForecaster(NeuralNetworkArchitecture<T> architecture,
         RWKVForecastingOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -179,7 +177,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         _useNativeMode = true;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new RWKVForecastingOptions<T>()).NumFeatures;
         InitializeLayers();
 
         // Optimizer construction MUST come after InitializeLayers(). CreateDefaultOptimizer passes

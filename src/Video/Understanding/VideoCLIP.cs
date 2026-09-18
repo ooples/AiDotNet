@@ -217,37 +217,30 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </remarks>
     public VideoCLIP(
         NeuralNetworkArchitecture<T> architecture,
-        int numFrames = 32,
-        int embeddingDim = 512,
-        int textMaxLength = 77,
-        int vocabSize = 49408,
-        double temperature = 1.0,
-        int hiddenDim = 768,
-        string? vocabPath = null,
-        string? mergesPath = null,
         VideoCLIPVideoOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new VideoCLIPVideoOptions();
+        _options.Validate();
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFrames = numFrames;
-        _embeddingDim = embeddingDim;
-        _textMaxLength = textMaxLength;
-        _vocabSize = vocabSize;
-        _temperature = temperature;
-        Temperature = temperature;
+        _numFrames = _options.NumFrames;
+        _embeddingDim = _options.EmbeddingDim;
+        _textMaxLength = _options.TextMaxLength;
+        _vocabSize = _options.VocabSize;
+        _temperature = _options.Temperature;
+        Temperature = _options.Temperature;
 
         // Initialize tokenizer
-        if (vocabPath is not null && mergesPath is not null &&
-            !string.IsNullOrEmpty(vocabPath) && !string.IsNullOrEmpty(mergesPath))
+        if (_options.VocabPath is not null && _options.MergesPath is not null &&
+            !string.IsNullOrEmpty(_options.VocabPath) && !string.IsNullOrEmpty(_options.MergesPath))
         {
             // Use proper CLIP tokenization from pretrained files
-            _tokenizer = ClipTokenizerFactory.FromPretrained(vocabPath, mergesPath);
+            _tokenizer = ClipTokenizerFactory.FromPretrained(_options.VocabPath, _options.MergesPath);
         }
         else
         {
@@ -268,8 +261,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         Guard.Positive(_options.NumTextBlocks, nameof(_options.NumTextBlocks));
         Guard.Positive(_options.LearningRate, nameof(_options.LearningRate));
 
-        int effectiveHiddenDim = options is null ? hiddenDim : _options.HiddenDimension;
-        Guard.Positive(effectiveHiddenDim, nameof(hiddenDim));
+        int effectiveHiddenDim = options is null ? _options.HiddenDim : _options.HiddenDimension;
+        Guard.Positive(effectiveHiddenDim, nameof(_options.HiddenDim));
         _hiddenDim = effectiveHiddenDim;
         _textHiddenDim = effectiveHiddenDim;
         int numSpatialBlocks = _options.NumSpatialBlocks;

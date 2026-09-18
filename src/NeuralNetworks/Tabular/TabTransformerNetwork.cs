@@ -103,7 +103,6 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// <param name="options">TabTransformer-specific options for transformer configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 1.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TabTransformer network based on the architecture you provide.
@@ -141,15 +140,13 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public TabTransformerNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabTransformerNetwork(NeuralNetworkArchitecture<T> architecture,
         TabTransformerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabTransformerOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         if (_options.LearningRate <= 0)
@@ -170,10 +167,15 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
             });
 
         // Validate configuration
-        if (_options.EmbeddingDimension % _options.NumHeads != 0)
+        // Guards HiddenDimension, not EmbeddingDimension. The feature tokenizer embeds each
+        // feature into HiddenDimension and every attention layer is built from it, so that is the
+        // width the head count has to divide. EmbeddingDimension is never passed to layer
+        // construction here, so the old check validated a value this model does not use -- it
+        // would accept a genuinely invalid attention geometry and reject a valid one.
+        if (_options.HiddenDimension % _options.NumHeads != 0)
         {
             throw new ArgumentException(
-                $"EmbeddingDimension ({_options.EmbeddingDimension}) must be divisible by NumHeads ({_options.NumHeads})");
+                $"HiddenDimension ({_options.HiddenDimension}) must be divisible by NumHeads ({_options.NumHeads})");
         }
 
         InitializeLayers();
@@ -215,7 +217,8 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
                 numLayers: _options.NumLayers,
                 sequenceLength: 1,  // For tabular data, sequence length is typically 1
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension));
         }
     }
 

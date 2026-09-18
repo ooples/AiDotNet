@@ -136,18 +136,10 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 7,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int visualBackboneChannels = 256,
+        LayoutLMv2Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMv2Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMv2Options();
         Options = _options;
@@ -160,16 +152,20 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _visualBackboneChannels = visualBackboneChannels;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _visualBackboneChannels = _options.VisualBackboneChannels;
         _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -203,34 +199,27 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     /// </remarks>
     public LayoutLMv2(
         NeuralNetworkArchitecture<T> architecture,
+        LayoutLMv2Options? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 7,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 30522,
-        int visualBackboneChannels = 256,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutLMv2Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutLMv2Options();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _visualBackboneChannels = visualBackboneChannels;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _visualBackboneChannels = _options.VisualBackboneChannels;
         _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

@@ -99,7 +99,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="optimizer">The optimization algorithm to use for training. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, an appropriate loss function is selected based on the task type.</param>
-    /// <param name="maxGradNorm">The maximum gradient norm for gradient clipping during training.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a Mixture-of-Experts neural network based on the provided options and architecture.
@@ -172,9 +171,8 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
         MixtureOfExpertsOptions<T> options,
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), options.MaxGradNorm)
     {
         Guard.NotNull(options);
         _options = options;

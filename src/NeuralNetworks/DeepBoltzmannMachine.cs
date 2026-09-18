@@ -251,7 +251,6 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 128),  // DBM is generative: output = reconstruction of input
-            epochs: 10,
             activationFunction: (IActivationFunction<T>?)null)
     {
     }
@@ -260,28 +259,20 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epochs">The number of training epochs.</param>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <param name="learningRateDecay">The learning rate decay factor per epoch. Default is 1.0 (no decay).</param>
     /// <param name="activationFunction">The scalar activation function to use. Default is sigmoid.</param>
-    /// <param name="batchSize">The number of examples in each training batch. Default is 32.</param>
-    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
     /// <remarks>
     /// This constructor creates a Deep Boltzmann Machine with the specified architecture and training parameters,
     /// using a scalar activation function that is applied element-wise to unit activations.
     /// </remarks>
-    public DeepBoltzmannMachine(
-        NeuralNetworkArchitecture<T> architecture,
-        int epochs = 10,
-        double learningRateDecay = 1.0,
+    public DeepBoltzmannMachine(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
-        int batchSize = 32,
-        int cdSteps = 1,
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        options ??= new DeepBoltzmannMachineOptions();
         // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). DBM updates
         // compound through stacked RBM layers; standard Adam's bias-corrected
         // m̂ / √v̂ ratio doesn't decay fast enough after the loss converges
@@ -292,13 +283,13 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
-        _options = options ?? new DeepBoltzmannMachineOptions();
+        _options = options;
         Options = _options;
-        _epochs = epochs;
+        _epochs = options.Epochs;
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
-        _learningRateDecay = NumOps.FromDouble(learningRateDecay);
-        _batchSize = batchSize;
-        _cdSteps = cdSteps;
+        _learningRateDecay = NumOps.FromDouble(options.LearningRateDecay);
+        _batchSize = options.BatchSize;
+        _cdSteps = options.CdSteps;
         _activationFunction = activationFunction ?? new SigmoidActivation<T>();
         _layerBiases = new List<Tensor<T>>();
         _layerWeights = new List<Tensor<T>>();
@@ -312,28 +303,20 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the DeepBoltzmannMachine class with vector activation.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epochs">The number of training epochs.</param>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <param name="learningRateDecay">The learning rate decay factor per epoch. Default is 1.0 (no decay).</param>
     /// <param name="vectorActivationFunction">The vector activation function to use. Default is sigmoid.</param>
-    /// <param name="batchSize">The number of examples in each training batch. Default is 32.</param>
-    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
     /// <remarks>
     /// This constructor creates a Deep Boltzmann Machine with the specified architecture and training parameters,
     /// using a vector activation function that processes entire tensors at once for improved performance.
     /// </remarks>
-    public DeepBoltzmannMachine(
-        NeuralNetworkArchitecture<T> architecture,
-        int epochs,
-        double learningRateDecay = 1.0,
+    public DeepBoltzmannMachine(NeuralNetworkArchitecture<T> architecture,
+        IVectorActivationFunction<T> vectorActivationFunction,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? vectorActivationFunction = null,
-        int batchSize = 32,
-        int cdSteps = 1,
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        options ??= new DeepBoltzmannMachineOptions();
         // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). DBM updates
         // compound through stacked RBM layers; standard Adam's bias-corrected
         // m̂ / √v̂ ratio doesn't decay fast enough after the loss converges
@@ -344,14 +327,14 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
-        _options = options ?? new DeepBoltzmannMachineOptions();
+        _options = options;
         Options = _options;
-        _epochs = epochs;
+        _epochs = options.Epochs;
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
-        _learningRateDecay = NumOps.FromDouble(learningRateDecay);
-        _batchSize = batchSize;
-        _cdSteps = cdSteps;
-        _vectorActivationFunction = vectorActivationFunction ?? new SigmoidActivation<T>();
+        _learningRateDecay = NumOps.FromDouble(options.LearningRateDecay);
+        _batchSize = options.BatchSize;
+        _cdSteps = options.CdSteps;
+        _vectorActivationFunction = vectorActivationFunction;
         _layerBiases = new List<Tensor<T>>();
         _layerWeights = new List<Tensor<T>>();
         _layerSizes = new List<int>();

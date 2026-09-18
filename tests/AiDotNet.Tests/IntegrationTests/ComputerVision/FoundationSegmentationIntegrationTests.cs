@@ -41,7 +41,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Construction_NativeMode_Succeeds()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -49,7 +49,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Predict_ReturnsOutput()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -58,7 +58,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Train_DoesNotThrow()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -68,7 +68,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_Metadata_ReturnsCorrectModelType()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var meta = model.GetModelMetadata();
         Assert.Equal("SAM", meta.AdditionalInfo["ModelName"]);
     }
@@ -83,7 +83,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM_PromptableSegmentation_SetImageAndSegmentFromPoints()
     {
-        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), options: new SAMOptions { NumClasses = 1, ModelSize = SAMModelSize.ViTBase });
         var promptable = (IPromptableSegmentation<float>)model;
         Assert.True(promptable.SupportsPointPrompts);
         promptable.SetImage(Rand(3, 32, 32));
@@ -99,7 +99,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Construction_NativeMode_Succeeds()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -107,7 +107,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Predict_ReturnsOutput()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -116,7 +116,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAM21_Train_DoesNotThrow()
     {
-        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
+        var model = new SAM21<float>(Arch(), options: new SAM21Options { NumClasses = 1, ModelSize = SAM21ModelSize.Tiny });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -137,7 +137,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAMHQ_Construction_NativeMode_Succeeds()
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = SAMHQModelSize.ViTBase });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -145,7 +145,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAMHQ_Predict_ReturnsOutput()
     {
-        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), options: new SAMHQOptions { NumClasses = 1, ModelSize = SAMHQModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -165,7 +165,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Construction_Succeeds()
     {
-        var model = new Mask2Former<float>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { ModelSize = Mask2FormerModelSize.SwinTiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -173,7 +173,7 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Predict_ReturnsOutput()
     {
-        var model = new Mask2Former<float>(Arch(), modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), options: new Mask2FormerOptions { ModelSize = Mask2FormerModelSize.SwinTiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -193,14 +193,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OneFormer_Construction_Succeeds()
     {
-        var model = new OneFormer<float>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { ModelSize = OneFormerModelSize.SwinLarge });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task OneFormer_Predict_ReturnsOutput()
     {
-        var model = new OneFormer<float>(Arch(), modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), options: new OneFormerOptions { ModelSize = OneFormerModelSize.SwinLarge });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -220,14 +220,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_Construction_Succeeds()
     {
-        var model = new MaskDINO<float>(Arch(), modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { ModelSize = MaskDINOModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_Predict_ReturnsOutput()
     {
-        var model = new MaskDINO<float>(Arch(), modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), options: new MaskDINOOptions { ModelSize = MaskDINOModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -247,14 +247,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_Construction_Succeeds()
     {
-        var model = new OMGSeg<float>(Arch(), modelSize: OMGSegModelSize.Large);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { ModelSize = OMGSegModelSize.Large });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_Predict_ReturnsOutput()
     {
-        var model = new OMGSeg<float>(Arch(), modelSize: OMGSegModelSize.Large);
+        var model = new OMGSeg<float>(Arch(), options: new OMGSegOptions { ModelSize = OMGSegModelSize.Large });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -274,14 +274,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task EoMT_Construction_Succeeds()
     {
-        var model = new EoMT<float>(Arch(), modelSize: EoMTModelSize.Base);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { ModelSize = EoMTModelSize.Base });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task EoMT_Predict_ReturnsOutput()
     {
-        var model = new EoMT<float>(Arch(), modelSize: EoMTModelSize.Base);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { ModelSize = EoMTModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -301,14 +301,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MixedQueryTransformer_Construction_Succeeds()
     {
-        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), options: new MixedQueryTransformerOptions { ModelSize = MixedQueryTransformerModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task MixedQueryTransformer_Predict_ReturnsOutput()
     {
-        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), options: new MixedQueryTransformerOptions { ModelSize = MixedQueryTransformerModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -328,14 +328,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_Construction_Succeeds()
     {
-        var model = new UNINEXT<float>(Arch(), modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), options: new UNINEXTOptions { ModelSize = UNINEXTModelSize.R50 });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_Predict_ReturnsOutput()
     {
-        var model = new UNINEXT<float>(Arch(), modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), options: new UNINEXTOptions { ModelSize = UNINEXTModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -382,14 +382,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task XDecoder_Construction_Succeeds()
     {
-        var model = new XDecoder<float>(Arch(), modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), options: new XDecoderOptions { ModelSize = XDecoderModelSize.Tiny });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task XDecoder_Predict_ReturnsOutput()
     {
-        var model = new XDecoder<float>(Arch(), modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), options: new XDecoderOptions { ModelSize = XDecoderModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

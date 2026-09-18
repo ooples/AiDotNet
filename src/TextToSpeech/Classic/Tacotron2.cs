@@ -55,25 +55,27 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
         bool nativeMarker)
         : base(
             architecture,
-            sampleRate: options.SampleRate,
-            numMels: options.MelChannels,
-            vocabSize: options.VocabSize,
-            embeddingDim: options.EncoderDim,
-            encoderDim: options.EncoderDim,
-            decoderDim: options.DecoderRnnDim,
-            attentionDim: options.AttentionDimension,
-            attentionFilters: options.AttentionLocationChannels,
-            prenetDim: options.PrenetDim,
-            postnetEmbeddingDim: options.PostnetDim,
-            numEncoderConvLayers: options.NumEncoderLayers,
-            numPostnetConvLayers: options.PostnetLayers,
-            numMelsPerFrame: options.OutputsPerStep,
-            maxDecoderSteps: GetDecoderStepLimit(options),
-            stopThreshold: options.StopThreshold,
-            fftSize: options.FftSize,
-            hopLength: options.HopSize,
             optimizer: optimizer,
-            options: new Tacotron2ModelOptions())
+            options: new Tacotron2ModelOptions
+            {
+                SampleRate = options.SampleRate,
+                NumMels = options.MelChannels,
+                VocabSize = options.VocabSize,
+                EmbeddingDim = options.EncoderDim,
+                EncoderDim = options.EncoderDim,
+                DecoderDim = options.DecoderRnnDim,
+                AttentionDim = options.AttentionDimension,
+                AttentionFilters = options.AttentionLocationChannels,
+                PrenetDim = options.PrenetDim,
+                PostnetEmbeddingDim = options.PostnetDim,
+                NumEncoderConvLayers = options.NumEncoderLayers,
+                NumPostnetConvLayers = options.PostnetLayers,
+                NumMelsPerFrame = options.OutputsPerStep,
+                MaxDecoderSteps = GetDecoderStepLimit(options),
+                StopThreshold = options.StopThreshold,
+                FftSize = options.FftSize,
+                HopLength = options.HopSize,
+            })
     {
         _ = nativeMarker;
         _options = options;
@@ -97,14 +99,16 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
         : base(
             architecture,
             acousticModelPath: modelPath,
-            sampleRate: options.SampleRate,
-            numMels: options.MelChannels,
-            maxDecoderSteps: GetDecoderStepLimit(options),
-            stopThreshold: options.StopThreshold,
-            fftSize: options.FftSize,
-            hopLength: options.HopSize,
-            onnxOptions: options.OnnxOptions,
-            options: new Tacotron2ModelOptions())
+            options: new Tacotron2ModelOptions
+            {
+                SampleRate = options.SampleRate,
+                NumMels = options.MelChannels,
+                MaxDecoderSteps = GetDecoderStepLimit(options),
+                StopThreshold = options.StopThreshold,
+                FftSize = options.FftSize,
+                HopLength = options.HopSize,
+            },
+            onnxOptions: options.OnnxOptions)
     {
         _ = onnxMarker;
         _options = options;

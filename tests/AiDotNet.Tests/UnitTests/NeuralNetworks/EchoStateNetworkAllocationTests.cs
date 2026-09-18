@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -22,8 +23,8 @@ public sealed class EchoStateNetworkAllocationTests
         using var model = new EchoStateNetwork<float>(
             architecture,
             reservoirSize: width,
-            warmupPeriod: 200,
-            reservoirInputScalarActivation: null);
+            reservoirInputScalarActivation: null,
+            options: new EchoStateNetworkOptions { WarmupPeriod = 200 });
         var input = new Tensor<float>([1, width]);
         for (int i = 0; i < input.Length; i++)
             input[i] = (i + 1) / 100f;

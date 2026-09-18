@@ -201,16 +201,14 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     {
     }
 
-    public VariationalAutoencoder(
-        NeuralNetworkArchitecture<T> architecture,
+    public VariationalAutoencoder(NeuralNetworkArchitecture<T> architecture,
         int latentSize,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         VariationalAutoencoderOptions? options = null) :
-        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VariationalAutoencoderOptions()).MaxGradNorm)
     {
-        _options = options ?? new VariationalAutoencoderOptions();
+        _options = options;
         Options = _options;
 
         LatentSize = latentSize;

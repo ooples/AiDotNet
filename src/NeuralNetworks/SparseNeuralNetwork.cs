@@ -77,10 +77,8 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the SparseNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="sparsity">The fraction of weights that should be zero (0.0 to 1.0). Default is 0.9 (90% sparse).</param>
     /// <param name="optimizer">The optimization algorithm to use for training. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, MSE is used.</param>
-    /// <param name="maxGradNorm">The maximum gradient norm for gradient clipping during training.</param>
     /// <remarks>
     /// <para>
     /// Higher sparsity values mean fewer connections and faster computation, but may reduce
@@ -100,23 +98,20 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public SparseNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        double sparsity = 0.9,
+    public SparseNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
-        SparseNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        SparseNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), (options ??= new SparseNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new SparseNeuralNetworkOptions();
+        _options = options;
         Options = _options;
 
-        if (sparsity < 0 || sparsity >= 1.0)
+        if (options.Sparsity < 0 || options.Sparsity >= 1.0)
         {
-            throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));
+            throw new ArgumentException("Sparsity must be in [0, 1).", nameof(options.Sparsity));
         }
 
-        _sparsity = NumOps.FromDouble(sparsity);
+        _sparsity = NumOps.FromDouble(options.Sparsity);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 

@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
-/// var model = new DEVA&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new DEVA&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new DEVA&lt;double&gt;(architecture,
+///     options: new DEVAOptions { NumClasses = 1, DropRate = 0, ModelSize = DEVAModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for video tracking inference
-/// var onnxModel = new DEVA&lt;double&gt;(architecture, "deva.onnx", numClasses: 1);
+/// var onnxModel = new DEVA&lt;double&gt;(architecture, "deva.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -90,9 +93,6 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size variant (default: Base).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -101,21 +101,20 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// </remarks>
     public DEVA(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        DEVAModelSize modelSize = DEVAModelSize.Base, double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         DEVAOptions? options = null)
         // DEVA's own loss default is preserved verbatim - the base would otherwise substitute plain
         // CrossEntropyWithLogitsLoss, which is wrong for the single-mask (numClasses == 1) case.
         // `optimizer` is passed straight through INCLUDING null; the base's CreateDefaultOptimizer()
         // builds the same `new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)` this used to inline,
         // but lazily, which is the one thing a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction ?? (numClasses == 1
+        : base(architecture, optimizer, lossFunction ?? ((options ??= new DEVAOptions()).NumClasses == 1
             ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>()), numClasses, maxTrackedObjects: 128)
+            : new CrossEntropyWithLogitsLoss<T>()), (options ??= new DEVAOptions()).NumClasses, maxTrackedObjects: 128)
     {
-        _options = options ?? new DEVAOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
     }
 
@@ -124,8 +123,6 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size for metadata (default: Base).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -135,14 +132,14 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public DEVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1, DEVAModelSize modelSize = DEVAModelSize.Base,
+    public DEVA(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         DEVAOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 128)
+        : base(architecture, onnxModelPath, (options ??= new DEVAOptions()).NumClasses, maxTrackedObjects: 128)
     {
-        _options = options ?? new DEVAOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = 0;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
     }
     #endregion

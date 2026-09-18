@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new VisionMamba&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new VisionMamba&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new VisionMamba&lt;double&gt;(architecture,
+///     options: new VisionMambaOptions { NumClasses = 150, DropRate = 0.1, ModelSize = VisionMambaModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for linear-complexity segmentation
-/// var onnxModel = new VisionMamba&lt;double&gt;(architecture, "vim.onnx", numClasses: 150);
+/// var onnxModel = new VisionMamba&lt;double&gt;(architecture, "vim.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -87,9 +90,6 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
-    /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -98,20 +98,19 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// </remarks>
     public VisionMamba(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 150,
-        VisionMambaModelSize modelSize = VisionMambaModelSize.Tiny, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         VisionMambaOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
         // hand. `optimizer` is passed straight through INCLUDING null; the base's lazy
         // CreateDefaultOptimizer() produces the same `new AdamWOptimizer<...>(this)` default, which
         // could never be written as a base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new VisionMambaOptions()).NumClasses)
     {
-        _options = options ?? new VisionMambaOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyVisionMambaInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -137,8 +136,6 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
-    /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -148,17 +145,17 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public VisionMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 150, VisionMambaModelSize modelSize = VisionMambaModelSize.Tiny,
+    public VisionMamba(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         VisionMambaOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new VisionMambaOptions()).NumClasses)
     {
-        _options = options ?? new VisionMambaOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyVisionMambaInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

@@ -131,7 +131,6 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     /// <param name="options">TVAE-specific options for encoder and decoder configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TVAE network based on the architecture you provide.
@@ -163,15 +162,13 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     {
     }
 
-    public TVAEGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TVAEGenerator(NeuralNetworkArchitecture<T> architecture,
         TVAEOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TVAEOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TVAEOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -366,7 +363,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
@@ -375,9 +372,10 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -400,7 +398,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         SetTrainingMode(true);
         try
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 for (int batch = 0; batch < numBatches; batch++)
                 {
@@ -455,9 +453,10 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -484,7 +483,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
             SetTrainingMode(true);
             try
             {
-                for (int epoch = 0; epoch < epochs; epoch++)
+                for (int epoch = 0; epoch < epochCount; epoch++)
                 {
                     ct.ThrowIfCancellationRequested();
                     for (int batch = 0; batch < numBatches; batch++)

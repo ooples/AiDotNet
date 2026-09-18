@@ -43,7 +43,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new FastSAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new FastSAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new FastSAM&lt;double&gt;(architecture,
+///     options: new FastSAMOptions { NumClasses = 1, DropRate = 0 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -81,8 +84,6 @@ public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -91,16 +92,20 @@ public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
     /// </remarks>
     public FastSAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         FastSAMOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new FastSAMOptions()).NumClasses)
     {
-        if (dropRate < 0 || dropRate > 1)
-            throw new ArgumentOutOfRangeException(nameof(dropRate), "dropRate must be in [0, 1].");
-        _options = options ?? new FastSAMOptions(); Options = _options;
+        // Kept as an explicit guard rather than deferred to SegmentationModelOptions.Validate():
+        // that reports ArgumentException, and this constructor has always reported
+        // ArgumentOutOfRangeException for an out-of-range drop rate. It reads the parameter, not
+        // `_options`, because the field is not assigned until the next statement.
+        if (options.DropRate < 0 || options.DropRate > 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(options), options.DropRate, "DropRate must be in [0, 1].");
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = _options.ChannelDims ?? [80, 160, 320, 640];
         _depths = _options.Depths ?? [3, 6, 6, 3];
         _decoderDim = _options.DecoderDim ?? 256;
@@ -112,7 +117,6 @@ public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -122,14 +126,14 @@ public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public FastSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public FastSAM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         FastSAMOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new FastSAMOptions()).NumClasses)
     {
-        _options = options ?? new FastSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = _options.ChannelDims ?? [80, 160, 320, 640];
         _depths = _options.Depths ?? [3, 6, 6, 3];
         _decoderDim = _options.DecoderDim ?? 256;

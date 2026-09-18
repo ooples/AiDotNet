@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the MobileNetV2Network.
 /// </summary>
-public class MobileNetV2Options : NeuralNetworkOptions
+public class MobileNetV2Options : ModelHyperparameterOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MobileNetV2Options"/> class.
@@ -24,6 +24,7 @@ public class MobileNetV2Options : NeuralNetworkOptions
         if (other is null)
             throw new ArgumentNullException(nameof(other));
 
+        MaxGradNorm = other.MaxGradNorm;
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         DisableFusedOptimizerStep = other.DisableFusedOptimizerStep;

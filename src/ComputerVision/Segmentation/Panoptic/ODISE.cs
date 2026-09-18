@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new ODISE&lt;double&gt;(architecture, numClasses: 133);
+/// var model = new ODISE&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new ODISE&lt;double&gt;(architecture,
+///     options: new ODISEOptions { NumClasses = 133, DropRate = 0.1, ModelSize = ODISEModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for diffusion-based segmentation
-/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx", numClasses: 133);
+/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -109,9 +112,6 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="modelSize">Model size variant (default: Base).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -120,20 +120,19 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// </remarks>
     public ODISE(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 133,
-        ODISEModelSize modelSize = ODISEModelSize.Base, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         ODISEOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // stores `optimizer` verbatim (including null) - ODISE reads _optimizer directly in
         // GetOrCreateBaseOptimizer and deliberately does NOT want the AdamW default.
         // The stuff/thing split is the same one/two-thirds rule the explicit interface members used.
-        : base(architecture, optimizer, lossFunction, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, (options ??= new ODISEOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new ODISEOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = dropRate;
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -142,8 +141,6 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="modelSize">Model size for metadata (default: Base).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -153,17 +150,17 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public ODISE(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 133, ODISEModelSize modelSize = ODISEModelSize.Base,
+    public ODISE(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         ODISEOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, (options ??= new ODISEOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new ODISEOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

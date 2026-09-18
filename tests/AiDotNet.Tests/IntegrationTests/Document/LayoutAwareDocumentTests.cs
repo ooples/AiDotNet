@@ -1,4 +1,6 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Document.LayoutAware;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -217,7 +219,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, options: new DiTOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -225,7 +227,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, options: new DiTOptions { ImageSize = 64 });
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -237,7 +239,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, options: new DiTOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("DiT", meta.Name);
     }
@@ -309,7 +311,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, options: new DiTOptions { ImageSize = 64 });
         // DiT is vision-only, does not require OCR
         Assert.False(model.RequiresOCR);
     }
@@ -337,8 +339,7 @@ public class LayoutAwareDocumentTests
     }
 
     private static LiLT<float> CreateSmallLiLT()
-        => new LiLT<float>(CreateArchitecture(imageSize: 32), numClasses: 4, maxSequenceLength: 64,
-            hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
+        => new LiLT<float>(CreateArchitecture(imageSize: 32), options: new LiLTOptions { NumClasses = 4, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 });
 
     [Fact(Timeout = 120000)]
     public async Task LiLT_BiACM_LayoutStreamInfluencesTextOutput()
@@ -409,14 +410,10 @@ public class LayoutAwareDocumentTests
     }
 
     private static LayoutXLM<float> CreateSmallLayoutXLM()
-        => new LayoutXLM<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
-            maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100,
-            visualBackboneChannels: 32);
+        => new LayoutXLM<float>(CreateArchitecture(imageSize: 32), options: new LayoutXLMOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32 });
 
     private static LayoutLMv2<float> CreateSmallLayoutLMv2()
-        => new LayoutLMv2<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
-            maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100,
-            visualBackboneChannels: 32);
+        => new LayoutLMv2<float>(CreateArchitecture(imageSize: 32), options: new LayoutLMv2Options { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32 });
 
     [Fact(Timeout = 120000)]
     public async Task LayoutXLM_EncodeMultimodal_GrowsSequenceNotBatch_AndIsFinite()
@@ -576,8 +573,7 @@ public class LayoutAwareDocumentTests
     #region DocFormer Tests
 
     private static DocFormer<float> CreateSmallDocFormer()
-        => new DocFormer<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
-            maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
+        => new DocFormer<float>(CreateArchitecture(imageSize: 32), options: new DocFormerOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 });
 
     /// <summary>
     /// DocFormer routes by input rank, and its text stream is now ONE LayoutEmbeddingLayer where it

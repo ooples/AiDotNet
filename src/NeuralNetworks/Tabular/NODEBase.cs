@@ -155,10 +155,15 @@ public abstract class NODEBase<T> : IParameterSource<T>
         // Optional feature preprocessing
         if (Options.UseFeaturePreprocessing)
         {
-            _featurePreprocessing = new FullyConnectedLayer<T>(
-                numFeatures,
-                numFeatures,
-                Options.HiddenActivation ?? new ReLUActivation<T>());
+            _featurePreprocessing = Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    numFeatures,
+                    numFeatures,
+                    Options.HiddenActivation ?? new ReLUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    numFeatures,
+                    numFeatures,
+                    Options.HiddenVectorActivation);
         }
 
         // Initialize tree parameters

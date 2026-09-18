@@ -212,9 +212,12 @@ public static class ClipModelLoader
             downloadedFiles[config.ImageEncoderFile],
             downloadedFiles[config.TextEncoderFile],
             tokenizer,
-            embeddingDimension: config.EmbeddingDimension,
-            maxSequenceLength: config.MaxSequenceLength,
-            imageSize: config.ImageSize
+            options: new AiDotNet.NeuralNetworks.Options.ClipOptions
+            {
+                EmbeddingDimension = config.EmbeddingDimension,
+                MaxSequenceLength = config.MaxSequenceLength,
+                ImageSize = config.ImageSize,
+            }
         );
     }
 
@@ -274,9 +277,12 @@ public static class ClipModelLoader
             imageEncoderPath,
             textEncoderPath,
             tokenizer,
-            embeddingDimension: config.EmbeddingDimension,
-            maxSequenceLength: config.MaxSequenceLength,
-            imageSize: config.ImageSize
+            options: new AiDotNet.NeuralNetworks.Options.ClipOptions
+            {
+                EmbeddingDimension = config.EmbeddingDimension,
+                MaxSequenceLength = config.MaxSequenceLength,
+                ImageSize = config.ImageSize,
+            }
         );
     }
 

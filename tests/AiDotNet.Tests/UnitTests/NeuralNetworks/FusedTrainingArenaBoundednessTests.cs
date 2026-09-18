@@ -19,6 +19,7 @@
 // per step (measured on SimCSE); post-fix it is flat from ~step 10 on.
 
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -67,13 +68,7 @@ public class FusedTrainingArenaBoundednessTests
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: dim,
             outputSize: dim);
-        var model = new SimCSE<float>(
-            arch,
-            embeddingDimension: dim,
-            maxSequenceLength: 256,
-            numLayers: 8,
-            numHeads: 8,
-            feedForwardDim: 1024);
+        var model = new SimCSE<float>(arch, options: new SimCSEOptions { EmbeddingDimension = dim, MaxSequenceLength = 256, NumLayers = 8, NumHeads = 8, FeedForwardDim = 1024 });
 
         // Default route: let the autotuner pick the eager/fused path (NOT streaming).
         // ForceOff guarantees we exercise the fused-optimizer path the fix touches.

@@ -57,7 +57,10 @@ public class OptionsSurfaceRatchetTests
     /// add a property to that model's options class instead.
     /// </para>
     /// <para>
-    /// Phase 2 lowered this from 1067 to 977 by migrating all 17 sequence models (90 params).
+    /// Phase 2 took this from 1067 to 977 (17 sequence models, 90 params); phase 3 to 875
+    /// (11 vision-language models, 102 params), then 861 once enum- and string-typed
+    /// parameters were migrated too and VisionMambaModel was picked up; phase 4a to 782
+    /// (11 embedding and retrieval models, 77 params); phase 4b to 741 (10 GANs, 41 params); phase 5 to 697 (19 Document models, 148 params); phase 6 to 562 (43 Video models, 136 params); phase 7 to 441 (12 audio models, 130 params); phase 8 to 408 (all 8 panoptic segmentation models, 33 params); phase 9 to 392 (3 graph task models, 16 params); phase 10 to 378 (3 graph encoder networks, 14 params); phase 11 to 368 (GraphGenerationModel, 10 params); phase 12 to 350 (3 PINN models, 18 params).
     /// Originally established by this test's first run against master on 2026-09-08. A file-based
     /// estimate of the three areas named in the #2090 spec put it at 806; this reflection
     /// measurement found 1067, because the defect also reaches models the file scan never
@@ -67,8 +70,96 @@ public class OptionsSurfaceRatchetTests
     /// Options classes declare properties, which is a different question from whether the
     /// models read them.
     /// </para>
+    /// <para>
+    /// 53 to 0 with the final tail cluster. Zero means no model constructor takes a tunable
+    /// parameter whose options class does not already declare an equivalently-named property.
+    /// It does NOT mean #2090 is closed: this ratchet credits a NAME match, so it is satisfied
+    /// by a property existing, and says nothing about whether the constructor reads it. The
+    /// stricter <see cref="ConstructorBaseline"/> still stands at 21, and the unread-property
+    /// and Validate-coverage ratchets measure two further defect forms again.
+    /// </para>
     /// </remarks>
-    private const int Baseline = 977;
+    private const int Baseline = 0;
+
+    /// <summary>
+    /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
+    /// giving NO credit for a matching options property.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Baseline"/> counts a parameter as covered once the options class has a
+    /// property of the same name. That is satisfiable without touching the constructor, so a
+    /// model can score as migrated while still taking every parameter it always did —
+    /// <c>UnifiedMultimodalNetwork</c> did exactly that for the whole of phase 3, and it was
+    /// caught by reading the file rather than by this test.
+    /// </para>
+    /// <para>
+    /// This count admits no such credit, so it can only fall when a constructor actually stops
+    /// taking the parameter. Where the two disagree, this one is the truth.
+    /// </para>
+    /// <para>
+    /// Movement, newest last. Both counts falling by the SAME amount is itself diagnostic: it
+    /// means none of the migrated options classes declared a property of a matching name, so none
+    /// had been drawing name credit.
+    /// </para>
+    /// <para>
+    /// 307 to 151 in one step when the segmentation family moved: 62 models x numClasses,
+    /// dropRate and (for 32 of them) modelSize. Both counts fell by the same 156, which is itself
+    /// the diagnostic — not one of those 62 options classes declared a property of a matching
+    /// name, so none of them had been drawing name credit.
+    /// </para>
+    /// <para>
+    /// 151 to 104 when the maxGradNorm cluster moved: 47 models, one parameter each. Both counts
+    /// again fell by the same amount, for the same reason as the segmentation family — none of
+    /// those options classes declared a property of a matching name, because 33 of them sat
+    /// outside the <c>ModelHyperparameterOptions</c> hierarchy entirely and so did not inherit
+    /// <c>MaxGradNorm</c> at all.
+    /// </para>
+    /// <para>
+    /// 104 to 92 with the forecaster numFeatures family: 12 models, one parameter each. The
+    /// property went onto TimeSeriesRegressionOptions itself rather than being gained by a
+    /// re-parent onto ModelHyperparameterOptions, because RegressionOptions also serves the
+    /// classical non-neural regressors.
+    /// </para>
+    /// <para>
+    /// 92 to 74 with the variant/inChannels cluster: 4 detection backbones and 8 diffusion text
+    /// conditioners. Unlike the earlier clusters these models had NO options parameter at all, so
+    /// one was added and twelve options classes created; the backbone ones are named
+    /// <c>ResNetBackboneOptions</c> / <c>EfficientNetBackboneOptions</c> because the bare names
+    /// already belong to the separate <c>ResNetNetwork</c> and <c>EfficientNetNetwork</c>
+    /// classifiers.
+    /// </para>
+    /// <para>
+    /// 74 to 21 with the final tail: 29 model types across NeuralNetworks, PhysicsInformed,
+    /// Document and UncertaintyQuantification. This cluster is where the two ratchets converged —
+    /// <see cref="Baseline"/> reached 0 in the same run — which confirms the 21-point spread
+    /// between them had been exactly what it was recorded as: constructors still taking a
+    /// parameter whose options property already existed, not a detector disagreement.
+    /// </para>
+    /// <para>
+    /// 21 to 0, closing this measure. The 21 reduced to exactly two shapes, both of which read as
+    /// working configurability. Four probabilistic forecasters (CSDI, DiffusionTS, ScoreGrad,
+    /// TSDiff) reconciled parameter and options with
+    /// <c>_numFeatures = numFeatures &gt; 0 ? numFeatures : _options.NumFeatures;</c> — so the
+    /// options value applied ONLY when a caller passed zero or less, and the parameter's own
+    /// default of 1 shadowed it for everyone else. The other six (DGCNN, PointNet,
+    /// PointNetPlusPlus, GaussianSplatting, MeshCNN, SpiralNet) had convenience constructors
+    /// forwarding scalars into an options object initializer, applying the parameter copy last.
+    /// Every one of those 11 defaults was checked against its options property and matched, so the
+    /// removals changed no behaviour. Parameters with no default (numClasses, samplingRates) and
+    /// collaborators (lossFunction, optimizer) stayed: a parameter with no default is a required
+    /// input, not a duplicated value.
+    /// </para>
+    /// <para>
+    /// Zero here means no in-scope model constructor declares a tunable defaulted parameter. It
+    /// does NOT mean issue #2090 is closed — this counts one of six defect forms. The unread
+    /// ratchet still stands at 97, <c>UncoveredBaseline</c> at 81, and the forms with no detector
+    /// at all (hardcoded literals shadowing an option, constructors disagreeing about a default,
+    /// bare optimizers, factories discarding tuned parameters, doc examples that cannot compile)
+    /// remain findable only by reading code.
+    /// </para>
+    /// </remarks>
+    private const int ConstructorBaseline = 0;
 
     /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
@@ -325,6 +416,77 @@ public class OptionsSurfaceRatchetTests
             $"Changing {change} must increase materialized parameters, not just the advertised options.");
     }
 
+    [Fact]
+    public void ModelConstructorsDoNotDeclareTunableParameters_DoesNotRegress()
+    {
+        var remaining = MeasureRemaining();
+        int count = remaining.Count;
+
+        Assert.True(
+            count <= ConstructorBaseline,
+            BuildFailureMessage(
+                $"Tunable constructor parameters grew from {ConstructorBaseline} to {count}.",
+                "A model constructor gained a tunable defaulted parameter, or one that was "
+                    + "supposed to move to Options is still declared. Unlike the count above, "
+                    + "this one cannot be satisfied by adding a property.",
+                remaining));
+
+        Assert.True(
+            count >= ConstructorBaseline - Slack,
+            BuildFailureMessage(
+                $"Tunable constructor parameters fell from {ConstructorBaseline} to {count}. "
+                    + $"Lower the ConstructorBaseline constant in {nameof(OptionsSurfaceRatchetTests)} to {count}.",
+                "The baseline only descends deliberately, so progress is recorded in the diff.",
+                remaining));
+    }
+
+    /// <summary>
+    /// Every tunable defaulted constructor parameter on an in-scope model, with no allowance
+    /// for a matching options property.
+    /// </summary>
+    private static List<Gap> MeasureRemaining()
+    {
+        var remaining = new List<Gap>();
+
+        foreach (var model in GetModelTypes())
+        {
+            // Resolved in a FIRST pass over every constructor, because most models declare their
+            // options parameter LAST. Resolving it lazily while walking parameters in declaration
+            // order labelled each preceding tunable "(no options parameter)" even when the model
+            // took a perfectly good options object -- FEDformer reported that way while
+            // FEDformerOptions<T> declared all twelve of the properties in question. The COUNT was
+            // never affected, only the label, but the label is what a reader plans from.
+            Type? optionsType = ResolveOptionsType(model);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var ctor in model.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+            {
+                foreach (var parameter in ctor.GetParameters())
+                {
+                    var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType)
+                        ?? parameter.ParameterType;
+
+                    if (IsOptionsType(parameterType)) { continue; }
+                    if (!parameter.HasDefaultValue || parameter.Name == null) continue;
+                    if (ExcludedParameterNames.Contains(parameter.Name)) continue;
+                    if (!IsTunable(parameterType)) continue;
+                    if (!seen.Add(parameter.Name)) continue;
+
+                    remaining.Add(new Gap
+                    {
+                        TypeName = StripArity(model.Name),
+                        ParameterName = parameter.Name,
+                        OptionsTypeName = optionsType == null
+                            ? "(no options parameter)"
+                            : StripArity(optionsType.Name),
+                    });
+                }
+            }
+        }
+
+        return remaining;
+    }
+
     private sealed class Gap
     {
         public string TypeName { get; set; } = string.Empty;
@@ -547,6 +709,27 @@ public class OptionsSurfaceRatchetTests
         return type == typeof(int) || type == typeof(long) || type == typeof(double)
             || type == typeof(float) || type == typeof(bool) || type == typeof(decimal)
             || type == typeof(string);
+    }
+
+    /// <summary>
+    /// The options type a model accepts, taken from any of its public constructors.
+    /// </summary>
+    /// <param name="model">The model type.</param>
+    /// <returns>The options type, or null when no constructor accepts one.</returns>
+    private static Type? ResolveOptionsType(Type model)
+    {
+        foreach (var ctor in model.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        {
+            foreach (var parameter in ctor.GetParameters())
+            {
+                var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType)
+                    ?? parameter.ParameterType;
+
+                if (IsOptionsType(parameterType)) return parameterType;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsOptionsType(Type type)

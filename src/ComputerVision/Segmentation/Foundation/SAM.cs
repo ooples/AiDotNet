@@ -48,10 +48,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new SAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new SAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SAM&lt;double&gt;(architecture,
+///     options: new SAMOptions { NumClasses = 1, DropRate = 0.1, ModelSize = SAMModelSize.ViTHuge });
 ///
 /// // Or load a pre-trained ONNX model for zero-shot segmentation
-/// var onnxModel = new SAM&lt;double&gt;(architecture, "sam_vit_h.onnx", numClasses: 1);
+/// var onnxModel = new SAM&lt;double&gt;(architecture, "sam_vit_h.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -102,18 +105,17 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// is paper-faithful out of the box and fully overridable. Static because it is invoked from the
     /// base-constructor initializer, before instance fields are assigned.
     /// </remarks>
-    private static ILossFunction<T> BuildMaskLoss(SAMOptions? options, int numClasses)
+    private static ILossFunction<T> BuildMaskLoss(SAMOptions options)
     {
         // Multi-class masks generalize to softmax CE rather than the binary focal+dice pair.
-        if (numClasses != 1)
+        if (options.NumClasses != 1)
         {
             return new CrossEntropyWithLogitsLoss<T>();
         }
 
-        var o = options ?? new SAMOptions();
         return new CompositeLossWithLogits<T>(
-            (new FocalLoss<T>(gamma: o.FocalGamma, alpha: o.FocalAlpha), o.MaskFocalWeight),
-            (new DiceLoss<T>(), o.MaskDiceWeight));
+            (new FocalLoss<T>(gamma: options.FocalGamma, alpha: options.FocalAlpha), options.MaskFocalWeight),
+            (new DiceLoss<T>(), options.MaskDiceWeight));
     }
 
     // SAM's own promptable state. _imageEmbedding and _imageSet live on PromptableSegmentationBase.
@@ -139,9 +141,6 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function. Default for <paramref name="numClasses"/> == 1 is the paper's objective: a logits-aware <see cref="CompositeLossWithLogits{T}"/> of <see cref="FocalLoss{T}"/> (gamma 2, alpha 0.25) and <see cref="DiceLoss{T}"/> in a 20:1 ratio (Kirillov et al. 2023, §3). Multi-class uses <see cref="CrossEntropyWithLogitsLoss{T}"/>.</param>
-    /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation).</param>
-    /// <param name="modelSize">ViT backbone size (default: ViTHuge — the original SAM default).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -150,13 +149,9 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// ViT-B for efficiency.
     /// </para>
     /// </remarks>
-    public SAM(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 1,
-        SAMModelSize modelSize = SAMModelSize.ViTHuge,
-        double dropRate = 0.1,
         SAMOptions? options = null)
         // Kirillov et al. 2023 ("Segment Anything", §3 Segment Anything Model / Training) supervises
         // mask prediction with "a linear combination of focal loss and dice loss in a 20:1 ratio",
@@ -170,15 +165,15 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         // not the base's plain AdamW - it carries the paper's warmup schedule - so it is still built
         // here, EAGERLY, exactly as before. `_optimizer` is a settable field on SegmentationModelBase
         // precisely so a model can do this.
-        : base(architecture, optimizer, lossFunction ?? BuildMaskLoss(options, numClasses), numClasses)
+        : base(architecture, optimizer, lossFunction ?? BuildMaskLoss(options ??= new SAMOptions()), (options ??= new SAMOptions()).NumClasses)
     {
-        _options = options ?? new SAMOptions();
+        _options = options;
         Options = _options;
         // SAM's own 1024x1024 input default, which differs from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -222,7 +217,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -231,8 +226,6 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of output mask classes (default: 1).</param>
-    /// <param name="modelSize">ViT backbone size for metadata (default: ViTHuge).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -243,30 +236,27 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SAM(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAM(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 1,
-        SAMModelSize modelSize = SAMModelSize.ViTHuge,
         SAMOptions? options = null)
         // Same paper objective as the native constructor above (focal + dice, 20:1), kept in sync so
         // the two entry points do not disagree about what SAM optimises.
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SAMOptions()).NumClasses)
     {
         // The base's ONNX constructor installs a plain CrossEntropyWithLogitsLoss because it has no
         // lossFunction parameter. Restore SAM's paper objective so the two entry points still agree
         // about what SAM optimises, exactly as the old `: base(architecture, BuildMaskLoss(...))` did.
-        LossFunction = BuildMaskLoss(options, numClasses);
-        _options = options ?? new SAMOptions();
+        LossFunction = BuildMaskLoss(options);
+        _options = options;
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }

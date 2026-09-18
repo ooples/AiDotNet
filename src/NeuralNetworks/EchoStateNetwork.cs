@@ -475,18 +475,16 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 1),
-            reservoirSize: 100, warmupPeriod: 0, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
+            reservoirSize: 100,
+            reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null,
+            // The default instance deliberately skips warm-up; the published default is 10.
+            options: new EchoStateNetworkOptions { WarmupPeriod = 0 })
     {
     }
 
     public EchoStateNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize,
-        double spectralRadius = 0.9,
-        double sparsity = 0.1,
-        double leakingRate = 1.0,
-        double regularization = 1e-4,
-        int warmupPeriod = 10,
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? reservoirInputVectorActivation = null,
         IVectorActivationFunction<T>? reservoirOutputVectorActivation = null,
@@ -496,15 +494,17 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new EchoStateNetworkOptions();
+        options ??= _options;
+        _options.Validate();
         Options = _options;
         _reservoirSize = reservoirSize;
-        _spectralRadius = NumOps.FromDouble(spectralRadius);
-        _sparsity = NumOps.FromDouble(sparsity);
+        _spectralRadius = NumOps.FromDouble(options.SpectralRadius);
+        _sparsity = NumOps.FromDouble(options.Sparsity);
         _inputSize = architecture.InputSize;
         _outputSize = architecture.OutputSize;
-        _leakingRate = NumOps.FromDouble(leakingRate);
-        _regularization = NumOps.FromDouble(regularization);
-        _warmupPeriod = warmupPeriod;
+        _leakingRate = NumOps.FromDouble(options.LeakingRate);
+        _regularization = NumOps.FromDouble(options.Regularization);
+        _warmupPeriod = options.WarmupPeriod;
         _isTraining = false;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
@@ -566,11 +566,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     public EchoStateNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize,
-        double spectralRadius = 0.9,
-        double sparsity = 0.1,
-        double leakingRate = 1.0,
-        double regularization = 1e-4,
-        int warmupPeriod = 10,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? reservoirInputScalarActivation = null,
         IActivationFunction<T>? reservoirOutputScalarActivation = null,
@@ -580,15 +575,17 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new EchoStateNetworkOptions();
+        options ??= _options;
+        _options.Validate();
         Options = _options;
         _reservoirSize = reservoirSize;
-        _spectralRadius = NumOps.FromDouble(spectralRadius);
-        _sparsity = NumOps.FromDouble(sparsity);
+        _spectralRadius = NumOps.FromDouble(options.SpectralRadius);
+        _sparsity = NumOps.FromDouble(options.Sparsity);
         _inputSize = architecture.InputSize;
         _outputSize = architecture.OutputSize;
-        _leakingRate = NumOps.FromDouble(leakingRate);
-        _regularization = NumOps.FromDouble(regularization);
-        _warmupPeriod = warmupPeriod;
+        _leakingRate = NumOps.FromDouble(options.LeakingRate);
+        _regularization = NumOps.FromDouble(options.Regularization);
+        _warmupPeriod = options.WarmupPeriod;
         _isTraining = false;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 

@@ -98,11 +98,8 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         string imageEncoderPath,
         string textEncoderPath,
         ITokenizer tokenizer,
-        ILossFunction<T>? lossFunction = null,
-        int embeddingDimension = 512,
-        int maxSequenceLength = 77,
-        int imageSize = 224,
-        ClipOptions? options = null)
+        ClipOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new ClipOptions();
@@ -121,11 +118,16 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         if (!File.Exists(textEncoderPath))
             throw new FileNotFoundException($"Text encoder model file not found: {textEncoderPath}", textEncoderPath);
 
+        // Validated here, not at the top: the encoder paths are checked first, so a missing model
+        // file reports itself as a FileNotFoundException rather than being pre-empted by a
+        // complaint about the options. Three tests document that order.
+        _options.Validate();
+
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
 
         using (var sessionOptions = new SessionOptions())
         {

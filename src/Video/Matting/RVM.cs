@@ -115,17 +115,17 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 
     public RVM(
         NeuralNetworkArchitecture<T> architecture,
+        RVMOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 32,
-        RVMOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new RVMOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numFeatures = numFeatures;
+        _numFeatures = _options.NumFeatures;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
 
@@ -139,7 +139,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         RVMOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new RVMOptions();
         Options = _options;
@@ -151,7 +151,11 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _numFeatures = 32;
+        // Validated after the path check so a missing model file reports itself as
+        // FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numFeatures = _options.NumFeatures;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
         _lossFunction = new MeanSquaredErrorLoss<T>();

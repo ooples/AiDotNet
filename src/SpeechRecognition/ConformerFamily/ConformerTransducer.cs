@@ -62,7 +62,7 @@ public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeech
     /// to produce output probability at each (time, label) position.
     /// Greedy decoding emits the most likely non-blank token at each step.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -72,7 +72,7 @@ public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeech
             var logits = OnnxEncoder.Run(features);
             var (tokens, conf) = GreedyDecodeWithConfidence(logits); var text = TokensToText(tokens);
             double dur = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-            return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(conf), DurationSeconds = dur, Segments = includeTimestamps ? ExtractSegments(text, dur, conf) : Array.Empty<TranscriptionSegment<T>>() };
+            return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(conf), DurationSeconds = dur, Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, dur, conf) : Array.Empty<TranscriptionSegment<T>>() };
         }
 
         // Native: run through all layers (encoder + prediction + joint)
@@ -82,10 +82,10 @@ public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeech
         var (decodedTokens, decodedConf) = GreedyDecodeWithConfidence(output);
         var decodedText = TokensToText(decodedTokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-        return new TranscriptionResult<T> { Text = decodedText, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(decodedConf), DurationSeconds = duration, Segments = includeTimestamps ? ExtractSegments(decodedText, duration, decodedConf) : Array.Empty<TranscriptionSegment<T>>() };
+        return new TranscriptionResult<T> { Text = decodedText, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(decodedConf), DurationSeconds = duration, Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(decodedText, duration, decodedConf) : Array.Empty<TranscriptionSegment<T>>() };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = GreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {

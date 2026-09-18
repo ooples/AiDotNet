@@ -258,7 +258,6 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">TimeGrad-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -266,10 +265,8 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// that can be trained on your data for probabilistic forecasting.
     /// </para>
     /// </remarks>
-    public TimeGrad(
-        NeuralNetworkArchitecture<T> architecture,
+    public TimeGrad(NeuralNetworkArchitecture<T> architecture,
         TimeGradOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -288,7 +285,7 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
         _denoisingDim = _options.DenoisingNetworkDim;
         _betaSchedule = _options.BetaSchedule;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new TimeGradOptions<T>()).NumFeatures;
 
         // Initialize diffusion schedule
         (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =

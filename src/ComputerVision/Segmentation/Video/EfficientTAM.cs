@@ -46,10 +46,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
-/// var model = new EfficientTAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new EfficientTAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new EfficientTAM&lt;double&gt;(architecture,
+///     options: new EfficientTAMOptions { NumClasses = 1, DropRate = 0, ModelSize = EfficientTAMModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for mobile video tracking
-/// var onnxModel = new EfficientTAM&lt;double&gt;(architecture, "efficienttam.onnx", numClasses: 1);
+/// var onnxModel = new EfficientTAM&lt;double&gt;(architecture, "efficienttam.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -105,9 +108,6 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -116,8 +116,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// </remarks>
     public EfficientTAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny, double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         EfficientTAMOptions? options = null)
         // Single-class mask (numClasses == 1): regress the raw mask logit against the target with MSE.
         // NOTE ON LOSS CHOICE: softmax CrossEntropyWithLogitsLoss is DEGENERATE for one class
@@ -133,13 +132,13 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
         // rules out. `optimizer` is passed straight through INCLUDING null; the base's
         // CreateDefaultOptimizer() builds the same `new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)`
         // this used to inline, but lazily - the one thing a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction ?? (numClasses <= 1
+        : base(architecture, optimizer, lossFunction ?? ((options ??= new EfficientTAMOptions()).NumClasses <= 1
             ? new MeanSquaredErrorLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>()), numClasses, maxTrackedObjects: 64)
+            : new CrossEntropyWithLogitsLoss<T>()), (options ??= new EfficientTAMOptions()).NumClasses, maxTrackedObjects: 64)
     {
-        _options = options ?? new EfficientTAMOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -148,8 +147,6 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -159,14 +156,14 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public EfficientTAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1, EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny,
+    public EfficientTAM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         EfficientTAMOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 64)
+        : base(architecture, onnxModelPath, (options ??= new EfficientTAMOptions()).NumClasses, maxTrackedObjects: 64)
     {
-        _options = options ?? new EfficientTAMOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = 0;
-        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

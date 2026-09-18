@@ -173,15 +173,4 @@ public class TinyTimeMixersOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public bool? UseAdaptivePatching { get; set; }
 
-    /// <summary>
-    /// Gets or sets the number of input features (channels) for multivariate forecasting.
-    /// </summary>
-    /// <value>Defaults to 1 (univariate).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Set this to the number of variables in your time series.
-    /// For example, if you have price, volume, and sentiment, set this to 3.
-    /// TTM's channel mixing MLP learns relationships between features.
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 1;
 }

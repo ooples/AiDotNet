@@ -5,6 +5,6 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the ConvolutionalNeuralNetwork.
 /// </summary>
-public class ConvolutionalNeuralNetworkOptions : NeuralNetworkOptions
+public class ConvolutionalNeuralNetworkOptions : ModelHyperparameterOptions
 {
 }

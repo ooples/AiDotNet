@@ -32,7 +32,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv8Seg_Construction_Succeeds()
     {
-        var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
+        var model = new YOLOv8Seg<double>(Arch(), options: new YOLOv8SegOptions { ModelSize = YOLOv8SegModelSize.N });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -40,7 +40,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv8Seg_Predict_ReturnsOutput()
     {
-        var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
+        var model = new YOLOv8Seg<double>(Arch(), options: new YOLOv8SegOptions { ModelSize = YOLOv8SegModelSize.N });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -49,7 +49,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv8Seg_Train_DoesNotThrow()
     {
-        var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
+        var model = new YOLOv8Seg<double>(Arch(), options: new YOLOv8SegOptions { ModelSize = YOLOv8SegModelSize.N });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -70,7 +70,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv9Seg_Construction_Succeeds()
     {
-        var model = new YOLOv9Seg<double>(Arch(), modelSize: YOLOv9SegModelSize.C);
+        var model = new YOLOv9Seg<double>(Arch(), options: new YOLOv9SegOptions { ModelSize = YOLOv9SegModelSize.C });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -78,7 +78,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv9Seg_Predict_ReturnsOutput()
     {
-        var model = new YOLOv9Seg<double>(Arch(), modelSize: YOLOv9SegModelSize.C);
+        var model = new YOLOv9Seg<double>(Arch(), options: new YOLOv9SegOptions { ModelSize = YOLOv9SegModelSize.C });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -98,7 +98,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLO11Seg_Construction_Succeeds()
     {
-        var model = new YOLO11Seg<double>(Arch(), modelSize: YOLO11SegModelSize.N);
+        var model = new YOLO11Seg<double>(Arch(), options: new YOLO11SegOptions { ModelSize = YOLO11SegModelSize.N });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -106,7 +106,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLO11Seg_Predict_ReturnsOutput()
     {
-        var model = new YOLO11Seg<double>(Arch(), modelSize: YOLO11SegModelSize.N);
+        var model = new YOLO11Seg<double>(Arch(), options: new YOLO11SegOptions { ModelSize = YOLO11SegModelSize.N });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -126,7 +126,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLO26Seg_Construction_Succeeds()
     {
-        var model = new YOLO26Seg<double>(Arch(), modelSize: YOLO26SegModelSize.N);
+        var model = new YOLO26Seg<double>(Arch(), options: new YOLO26SegOptions { ModelSize = YOLO26SegModelSize.N });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -134,7 +134,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLO26Seg_Predict_ReturnsOutput()
     {
-        var model = new YOLO26Seg<double>(Arch(), modelSize: YOLO26SegModelSize.N);
+        var model = new YOLO26Seg<double>(Arch(), options: new YOLO26SegOptions { ModelSize = YOLO26SegModelSize.N });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -154,7 +154,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv12Seg_Construction_Succeeds()
     {
-        var model = new YOLOv12Seg<double>(Arch(), modelSize: YOLOv12SegModelSize.N);
+        var model = new YOLOv12Seg<double>(Arch(), options: new YOLOv12SegOptions { ModelSize = YOLOv12SegModelSize.N });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -162,7 +162,7 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv12Seg_Predict_ReturnsOutput()
     {
-        var model = new YOLOv12Seg<double>(Arch(), modelSize: YOLOv12SegModelSize.N);
+        var model = new YOLOv12Seg<double>(Arch(), options: new YOLOv12SegOptions { ModelSize = YOLOv12SegModelSize.N });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

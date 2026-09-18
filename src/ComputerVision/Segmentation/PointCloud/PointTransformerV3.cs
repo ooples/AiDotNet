@@ -41,8 +41,10 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// // Create Point Transformer V3 for 3D semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
-/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
-///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
+/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new PointTransformerV3&lt;float&gt;(architecture,
+///     options: new PointTransformerV3Options { NumClasses = 40, DropRate = 0.1, ModelSize = PointTransformerV3ModelSize.Base });
 /// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);
 /// </code>
 /// </example>
@@ -83,9 +85,6 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 40).</param>
-    /// <param name="modelSize">Model size variant (default: Base).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -94,21 +93,20 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     /// </remarks>
     public PointTransformerV3(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 40,
-        PointTransformerV3ModelSize modelSize = PointTransformerV3ModelSize.Base, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         PointTransformerV3Options? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new PointTransformerV3Options()).NumClasses)
     {
-        _options = options ?? new PointTransformerV3Options(); Options = _options;
+        _options = options; Options = _options;
         // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
         // base's 512x512x3.
         if (architecture.InputHeight <= 0) _height = 1;
         if (architecture.InputWidth <= 0) _width = 1;
         if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -117,8 +115,6 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 40).</param>
-    /// <param name="modelSize">Model size for metadata (default: Base).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -128,21 +124,21 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public PointTransformerV3(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 40, PointTransformerV3ModelSize modelSize = PointTransformerV3ModelSize.Base,
+    public PointTransformerV3(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         PointTransformerV3Options? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new PointTransformerV3Options()).NumClasses)
     {
-        _options = options ?? new PointTransformerV3Options(); Options = _options;
+        _options = options; Options = _options;
         // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
         // base's 512x512x3.
         if (architecture.InputHeight <= 0) _height = 1;
         if (architecture.InputWidth <= 0) _width = 1;
         if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

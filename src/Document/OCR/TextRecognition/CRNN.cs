@@ -125,12 +125,6 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     public CRNN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageWidth = 128,
-        int maxSequenceLength = 32,
-        int cnnChannels = 512,
-        int rnnHiddenSize = 256,
-        int rnnLayers = 2,
-        string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
@@ -145,15 +139,22 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _cnnChannels = cnnChannels;
-        _rnnHiddenSize = rnnHiddenSize;
-        _rnnLayers = rnnLayers;
-        _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _cnnChannels = _options.CnnChannels;
+        _rnnHiddenSize = _options.RnnHiddenSize;
+        _rnnLayers = _options.RnnLayers;
+        _charset = _options.Charset ?? GetDefaultCharset();
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
+        // and no configured rate can reach the model.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _onnxModelPath = onnxModelPath;
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageWidth;
+        base.MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -174,12 +175,6 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// </remarks>
     public CRNN(
         NeuralNetworkArchitecture<T> architecture,
-        int imageWidth = 128,
-        int maxSequenceLength = 32,
-        int cnnChannels = 512,
-        int rnnHiddenSize = 256,
-        int rnnLayers = 2,
-        string? charset = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
@@ -189,15 +184,20 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         Options = _options;
 
         _useNativeMode = true;
-        _cnnChannels = cnnChannels;
-        _rnnHiddenSize = rnnHiddenSize;
-        _rnnLayers = rnnLayers;
-        _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _cnnChannels = _options.CnnChannels;
+        _rnnHiddenSize = _options.RnnHiddenSize;
+        _rnnLayers = _options.RnnLayers;
+        _charset = _options.Charset ?? GetDefaultCharset();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _onnxModelPath = null;
 
-        ImageSize = imageWidth;
-        base.MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageWidth;
+        base.MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
     }

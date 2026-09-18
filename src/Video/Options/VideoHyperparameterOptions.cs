@@ -100,7 +100,14 @@ public abstract class VideoHyperparameterOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
-        Require(NumFeatures, nameof(NumFeatures));
-        Require(NumFrames, nameof(NumFrames));
+        // Deliberately requires nothing. This family spans 43 models — super-resolution,
+        // interpolation, tracking, denoising, segmentation — and they share no knob universally:
+        // DIFRINT has no frame count, several have no feature width. Requiring a value the
+        // family does not share compiles clean and then throws at construction. That mistake
+        // cost 30 failing tests in the GAN family, 11 in Document, and 6 here before the rule
+        // was made explicit.
+        //
+        // A leaf that knows it needs a value calls Require in its own Validate().
+        _ = NumFeatures;
     }
 }

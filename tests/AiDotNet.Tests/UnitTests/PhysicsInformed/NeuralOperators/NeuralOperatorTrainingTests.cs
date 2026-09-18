@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.NeuralOperators;
+using AiDotNet.PhysicsInformed.Options;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -19,10 +20,8 @@ public class NeuralOperatorTrainingTests
         var architecture = CreateLinearArchitecture(inputSize: 2, outputSize: 2);
         var model = new FourierNeuralOperator<double>(
             architecture,
-            modes: 1,
-            width: 2,
             spatialDimensions: new[] { 2 },
-            numLayers: 1);
+            options: new FourierNeuralOperatorOptions { Modes = 1, Width = 2, NumLayers = 1 });
 
         var input = new Tensor<double>(new[] { 1, 2, 2 });
         input[0, 0, 0] = 0.1;
@@ -60,8 +59,7 @@ public class NeuralOperatorTrainingTests
             architecture,
             branchArchitecture,
             trunkArchitecture,
-            latentDimension: 2,
-            numSensors: 2);
+            options: new DeepOperatorNetworkOptions { LatentDimension = 2, NumSensors = 2 });
 
         var inputFunctions = new double[,] { { 0.1, 0.2 } };
         var queryLocations = new double[1, 1, 1];

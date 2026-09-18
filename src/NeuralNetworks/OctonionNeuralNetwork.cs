@@ -69,7 +69,6 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="optimizer">The optimization algorithm to use for training. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function to use for training. If null, MSE is used.</param>
-    /// <param name="maxGradNorm">The maximum gradient norm for gradient clipping during training.</param>
     /// <remarks>
     /// <para>
     /// Note: Input and output dimensions should be multiples of 8 to properly represent octonions.
@@ -88,20 +87,18 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public OctonionNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public OctonionNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = double.MaxValue,
         OctonionNeuralNetworkOptions? options = null)
         : base(
             architecture,
             lossFunction ?? (architecture.TaskType == Enums.NeuralNetworkTaskType.MultiClassClassification
                 ? new CrossEntropyWithLogitsLoss<T>()
                 : new MeanSquaredErrorLoss<T>()),
-            maxGradNorm)
+            (options ??= new OctonionNeuralNetworkOptions()).MaxGradNorm)
     {
-        _options = options ?? new OctonionNeuralNetworkOptions();
+        _options = options;
         ValidateOptions(_options);
         Options = _options;
         _optimizer = optimizer ?? new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(

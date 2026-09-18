@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// <remarks>
 /// <para>
 /// The generator operates in three phases:
-/// 1. Fit marginal distributions for each feature using empirical CDF / kernel density estimation
+/// 1. Fit marginal distributions for each feature using the empirical CDF (the sorted observed values)
 /// 2. Transform data to uniform [0,1] via marginal CDFs, then to standard normal via inverse CDF
 /// 3. Fit a Gaussian copula (correlation matrix) on the normal-transformed data
 /// </para>

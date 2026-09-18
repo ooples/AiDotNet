@@ -1,15 +1,21 @@
 using AiDotNet.Models.Options;
 
+using AiDotNet.Video.Restoration;
+
 namespace AiDotNet.Video.Options;
 
 /// <summary>
 /// Configuration options for the VRT video restoration model.
 /// </summary>
-public class VRTOptions : NeuralNetworkOptions
+public class VRTOptions : VideoHyperparameterOptions
 {
     /// <summary>Initializes the paper/released-training defaults.</summary>
     public VRTOptions()
     {
+        EmbedDim = 120;
+        NumFrames = 6;
+        NumBlocks = 8;
+        ScaleFactor = 4;
     }
 
     /// <summary>Initializes an independent copy of another VRT configuration.</summary>
@@ -22,6 +28,7 @@ public class VRTOptions : NeuralNetworkOptions
         EncoderLayerCount = other.EncoderLayerCount;
         LearningRate = other.LearningRate;
         CharbonnierEpsilon = other.CharbonnierEpsilon;
+        NumBlocks = other.NumBlocks;
     }
 
     /// <summary>
@@ -35,4 +42,20 @@ public class VRTOptions : NeuralNetworkOptions
     /// the restoration objective with epsilon equal to 1e-3.
     /// </summary>
     public double CharbonnierEpsilon { get; set; } = 1e-3;
+
+    /// <summary>
+    /// Gets or sets the num blocks.
+    /// </summary>
+    public int NumBlocks { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

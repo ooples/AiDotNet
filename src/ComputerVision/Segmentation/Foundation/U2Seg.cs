@@ -46,10 +46,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new U2Seg&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new U2Seg&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new U2Seg&lt;double&gt;(architecture,
+///     options: new U2SegOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for annotation-free segmentation
-/// var onnxModel = new U2Seg&lt;double&gt;(architecture, "u2seg.onnx", numClasses: 150);
+/// var onnxModel = new U2Seg&lt;double&gt;(architecture, "u2seg.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -101,9 +104,6 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of discovered classes (default: 150). In unsupervised mode,
-    /// this represents the number of clusters/categories to discover.</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -112,23 +112,20 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
     /// sets the maximum number of categories to discover.
     /// </para>
     /// </remarks>
-    public U2Seg(
-        NeuralNetworkArchitecture<T> architecture,
+    public U2Seg(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        double dropRate = 0.1,
         U2SegOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture, and
         // defaults `optimizer` LAZILY via CreateDefaultOptimizer() - which is why null is passed
         // straight through instead of `optimizer ?? new AdamWOptimizer<...>(this)`, an expression
         // that cannot appear in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, (options ??= new U2SegOptions()).NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new U2SegOptions();
+        _options = options;
         Options = _options;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
 
         // Fixed Swin-T backbone architecture
         _channelDims = [96, 192, 384, 768];
@@ -142,7 +139,6 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of output classes (default: 150).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -152,19 +148,17 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public U2Seg(
-        NeuralNetworkArchitecture<T> architecture,
+    public U2Seg(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
         U2SegOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, (options ??= new U2SegOptions()).NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new U2SegOptions();
+        _options = options;
         Options = _options;
-        _dropRate = 0.0;
+        _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
         _decoderDim = 256;

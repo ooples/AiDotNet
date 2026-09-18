@@ -1,4 +1,5 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Options;
 
@@ -19,7 +20,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// See <see cref="ModelHyperparameterOptions"/> for why these properties are non-nullable.
 /// </para>
 /// <para>
-/// <b>Pooling strategy is deliberately absent.</b> Two unrelated <c>PoolingStrategy</c>
+/// <b>Pooling strategy is deliberately absent.</b> Two unrelated <c>EmbeddingPoolingStrategy</c>
 /// enums exist in this codebase — one nested inside <c>TransformerEmbeddingNetwork&lt;T&gt;</c>
 /// and one in <c>AiDotNet.VisionLanguage.Encoders</c>. Choosing between them, or unifying
 /// them, is part of wiring the embedding models rather than of declaring this base, so the
@@ -44,6 +45,7 @@ public abstract class EmbeddingModelOptions : ModelHyperparameterOptions
     /// <para><b>For Beginners:</b> The size of the output "fingerprint". 768 is the usual
     /// choice for base-sized models; larger means more nuance and more storage per document.</para>
     /// </remarks>
+    [ModelDimensionRole(ModelDimensionRole.AttentionDimension)]
     public int EmbeddingDimension { get; set; }
 
     /// <summary>
@@ -60,6 +62,7 @@ public abstract class EmbeddingModelOptions : ModelHyperparameterOptions
     /// <summary>
     /// Gets or sets the number of attention heads per block.
     /// </summary>
+    [ModelDimensionRole(ModelDimensionRole.AttentionHeadCount)]
     public int NumHeads { get; set; }
 
     /// <summary>

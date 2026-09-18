@@ -101,12 +101,6 @@ public class AutoIntOptions<T> : RiskModelOptions<T>
     public bool UseResidual { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to use layer normalization.
-    /// </summary>
-    /// <value>True to use layer normalization; false otherwise. Defaults to false.</value>
-    public bool UseLayerNorm { get; set; } = false;
-
-    /// <summary>
     /// Gets or sets the hidden dimensions for the MLP output layer.
     /// </summary>
     /// <value>Array of hidden dimensions, defaulting to [64, 32].</value>

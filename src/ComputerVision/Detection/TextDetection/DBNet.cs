@@ -63,7 +63,7 @@ public class DBNet<T> : TextDetectorBase<T>
         _k = k;
 
         // ResNet backbone
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Feature pyramid for multi-scale fusion
         int backboneChannels = Backbone.OutputChannels[^1];

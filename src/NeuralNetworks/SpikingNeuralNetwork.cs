@@ -203,8 +203,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="SpikingNeuralNetwork{T}"/> class with the specified architecture and a vector activation function.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the SNN.</param>
-    /// <param name="timeStep">The simulation time step, defaults to 0.1.</param>
-    /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="vectorActivation">The vector activation function to use. If null, a default activation is used.</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
@@ -218,16 +216,18 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     {
     }
 
-    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null,
+    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        IVectorActivationFunction<T>? vectorActivation = null,
+        ILossFunction<T>? lossFunction = null,
         SpikingNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new SpikingNeuralNetworkOptions();
+        options ??= new SpikingNeuralNetworkOptions();
+        _options = options;
         Options = _options;
 
-        _timeStep = NumOps.FromDouble(timeStep);
-        _simulationSteps = simulationSteps;
+        _timeStep = NumOps.FromDouble(options.TimeStep);
+        _simulationSteps = options.SimulationSteps;
         _vectorActivation = vectorActivation ?? new BinarySpikingActivation<T>();
         _scalarActivation = null;
         _membraneDecay = NumOps.FromDouble(0.9); // Default decay constant
@@ -244,19 +244,19 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="SpikingNeuralNetwork{T}"/> class with the specified architecture and a scalar activation function.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the SNN.</param>
-    /// <param name="timeStep">The simulation time step, defaults to 0.1.</param>
-    /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="scalarActivation">The scalar activation function to use. If null, a default activation is used.</param>
-    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null,
+    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        IActivationFunction<T>? scalarActivation = null,
+        ILossFunction<T>? lossFunction = null,
         SpikingNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new SpikingNeuralNetworkOptions();
+        options ??= new SpikingNeuralNetworkOptions();
+        _options = options;
         Options = _options;
 
-        _timeStep = NumOps.FromDouble(timeStep);
-        _simulationSteps = simulationSteps;
+        _timeStep = NumOps.FromDouble(options.TimeStep);
+        _simulationSteps = options.SimulationSteps;
         _scalarActivation = scalarActivation ?? new BinarySpikingActivation<T>();
         _vectorActivation = null;
         _membraneDecay = NumOps.FromDouble(0.9); // Default decay constant
@@ -1315,8 +1315,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// Sets the simulation parameters for the network.
     /// </summary>
-    /// <param name="timeStep">The simulation time step.</param>
-    /// <param name="simulationSteps">The number of simulation steps.</param>
     /// <remarks>
     /// <para>
     /// This method configures the temporal aspects of the spiking neural network simulation.

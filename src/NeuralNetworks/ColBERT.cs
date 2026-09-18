@@ -95,28 +95,22 @@ namespace AiDotNet.NeuralNetworks
         /// Initializes a new instance of the ColBERT model.
         /// </summary>
         public ColBERT(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            int vocabSize = 30522,
-            int outputDimension = 128,
-            int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            ColBERTOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, 768, maxSequenceLength, numLayers, numHeads, feedForwardDim, PoolingStrategy.Mean, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        ColBERTOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
-            _options = options ?? new ColBERTOptions();
+        _options = options ?? new ColBERTOptions();
+        _options.Validate();
             Options = _options;
 
-            _outputDim = outputDimension;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _outputDim = _options.OutputDimension;
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
             _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
             InitializeLayersCore(false);

@@ -57,7 +57,7 @@ public class CRAFT<T> : TextDetectorBase<T>
         _hiddenDim = GetHiddenDim(options.Size);
 
         // VGG16-based backbone
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Upsampling convolutions for feature fusion
         int backboneChannels = Backbone.OutputChannels[^1];

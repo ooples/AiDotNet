@@ -100,16 +100,6 @@ public class CSDIOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int SequenceLength { get; set; } = 100;
 
-    /// <summary>
-    /// Gets or sets the number of features (variables).
-    /// </summary>
-    /// <value>The number of features, defaulting to 1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many variables are measured at each time step.
-    /// CSDI can impute multivariate time series with complex dependencies.
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the hidden dimension for the score network.

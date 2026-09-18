@@ -66,7 +66,7 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         _roiOutputSize = roiOutputSize;
 
         // Backbone: ResNet-50 with FPN
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
         Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: 256);
 
         // Region Proposal Network

@@ -249,15 +249,13 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         int latentSize,
         int intermediateLatentSize,
         InputType inputType,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.001,
-        bool enableStyleMixing = true,
-        double styleMixingProbability = 0.9,
-        StyleGANOptions? options = null)
+        StyleGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(CreateStyleGANArchitecture(latentSize, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _options = options ?? new StyleGANOptions();
+        _options.Validate();
         Options = _options;
 
         // Input validation
@@ -286,21 +284,21 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
             throw new ArgumentOutOfRangeException(nameof(intermediateLatentSize), intermediateLatentSize, "Intermediate latent size must be positive.");
         }
 
-        if (initialLearningRate <= 0)
+        if (_options.InitialLearningRate <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.InitialLearningRate), _options.InitialLearningRate, "Initial learning rate must be positive.");
         }
 
-        if (styleMixingProbability < 0 || styleMixingProbability > 1)
+        if (_options.StyleMixingProbability < 0 || _options.StyleMixingProbability > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(styleMixingProbability), styleMixingProbability, "Style mixing probability must be in range [0, 1].");
+            throw new ArgumentOutOfRangeException(nameof(_options.StyleMixingProbability), _options.StyleMixingProbability, "Style mixing probability must be in range [0, 1].");
         }
 
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
-        _enableStyleMixing = enableStyleMixing;
-        _styleMixingProbability = NumOps.FromDouble(styleMixingProbability);
-        _initialLearningRate = initialLearningRate;
+        _enableStyleMixing = _options.EnableStyleMixing;
+        _styleMixingProbability = NumOps.FromDouble(_options.StyleMixingProbability);
+        _initialLearningRate = _options.InitialLearningRate;
 
         // Initialize MappingNetwork optimizer state
         _mappingMomentum = Vector<T>.Empty();

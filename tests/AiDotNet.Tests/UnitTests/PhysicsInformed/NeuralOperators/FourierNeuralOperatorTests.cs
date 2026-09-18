@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.NeuralOperators;
+using AiDotNet.PhysicsInformed.Options;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -20,10 +21,8 @@ public class FourierNeuralOperatorTests
 
         var model = new FourierNeuralOperator<double>(
             architecture,
-            modes: 2,
-            width: 4,
             spatialDimensions: new[] { 4, 4 },
-            numLayers: 1);
+            options: new FourierNeuralOperatorOptions { Modes = 2, Width = 4, NumLayers = 1 });
 
         var input = new Tensor<double>(new[] { 1, 2, 4, 4 });
         var output = model.Forward(input);

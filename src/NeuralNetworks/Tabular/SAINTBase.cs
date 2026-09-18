@@ -154,10 +154,15 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         }
 
         // Numerical feature embedding
-        _numericalEmbedding = new FullyConnectedLayer<T>(
-            1,
-            Options.EmbeddingDimension,
-            Options.HiddenActivation ?? new GELUActivation<T>());
+        _numericalEmbedding = Options.HiddenVectorActivation is null
+            ? new FullyConnectedLayer<T>(
+                1,
+                Options.EmbeddingDimension,
+                Options.HiddenActivation ?? new GELUActivation<T>())
+            : FullyConnectedLayer<T>.WithVectorActivation(
+                1,
+                Options.EmbeddingDimension,
+                Options.HiddenVectorActivation);
 
         // Categorical embeddings
         if (NumCategoricalFeatures > 0 && Options.CategoricalCardinalities != null)
@@ -206,10 +211,15 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
             }
 
             // Feed-forward network
-            _ffnLayers.Add(new FullyConnectedLayer<T>(
-                Options.EmbeddingDimension,
-                Options.EmbeddingDimension,
-                Options.HiddenActivation ?? new GELUActivation<T>()));
+            _ffnLayers.Add(Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    Options.EmbeddingDimension,
+                    Options.EmbeddingDimension,
+                    Options.HiddenActivation ?? new GELUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    Options.EmbeddingDimension,
+                    Options.EmbeddingDimension,
+                    Options.HiddenVectorActivation));
 
             // Layer normalizations
             if (Options.UseLayerNorm)
@@ -229,10 +239,15 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         int mlpInput = TotalEmbeddedFeatures * Options.EmbeddingDimension;
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
-            _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
-                hiddenDim,
-                Options.HiddenActivation ?? new GELUActivation<T>()));
+            _mlpLayers.Add(Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenActivation ?? new GELUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenVectorActivation));
             mlpInput = hiddenDim;
         }
 

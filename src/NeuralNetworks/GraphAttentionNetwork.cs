@@ -159,24 +159,43 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
 
     public GraphAttentionNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int numHeads = 8,
-        int numLayers = 2,
-        double dropoutRate = 0.6,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
         ILearningRateScheduler? learningRateScheduler = null,
         GraphAttentionNetworkOptions? options = null)
+        : this(options ?? new GraphAttentionNetworkOptions(), architecture, optimizer, lossFunction, learningRateScheduler)
+    {
+    }
+
+    /// <summary>
+    /// Initializes the model from an already-resolved options instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base initializer needs MaxGradNorm and runs before the body, so the options must
+    /// be resolved first. Chaining avoids constructing a throwaway options object just to
+    /// read one value off it. Options come first because a nullable and a non-nullable
+    /// reference type are the same type to the compiler, so ordering is what keeps this from
+    /// being a duplicate signature.
+    /// </para>
+    /// </remarks>
+    private GraphAttentionNetwork(
+        GraphAttentionNetworkOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction,
+        ILearningRateScheduler? learningRateScheduler)
         : base(architecture,
                lossFunction ?? new CrossEntropyWithLogitsLoss<T>(),
-               maxGradNorm)
+               options.MaxGradNorm)
     {
-        _options = options ?? new GraphAttentionNetworkOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        NumHeads = numHeads;
-        DropoutRate = dropoutRate;
+        NumHeads = _options.NumHeads;
+        DropoutRate = _options.DropoutRate;
         HiddenDim = 64; // Default hidden dimension
-        NumLayers = numLayers;
+        NumLayers = _options.NumLayers;
 
         // The graph-aware layer builder intentionally leaves the per-node prediction
         // head as logits (a global ActivationLayer would normalize nodes together).

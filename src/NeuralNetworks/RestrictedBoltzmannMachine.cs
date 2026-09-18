@@ -341,12 +341,16 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     {
     }
 
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null,
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture,
+        int visibleSize,
+        int hiddenSize,
+        IActivationFunction<T>? scalarActivation = null,
+        ILossFunction<T>? lossFunction = null,
         RestrictedBoltzmannMachineOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new RestrictedBoltzmannMachineOptions();
+        options ??= new RestrictedBoltzmannMachineOptions();
+        _options = options;
         Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
@@ -354,8 +358,8 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
         _scalarActivation = scalarActivation ?? new SigmoidActivation<T>();
-        _learningRate = NumOps.FromDouble(learningRate);
-        _cdSteps = cdSteps;
+        _learningRate = NumOps.FromDouble(options.LearningRate);
+        _cdSteps = options.CdSteps;
         _samplingRandom = RandomHelper.CreateSeededRandom(architecture.RandomSeed ?? DefaultSamplingSeed);
     }
 
@@ -389,12 +393,16 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     /// that can process all neurons in a layer simultaneously, which can be more efficient.
     /// </para>
     /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null,
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture,
+        int visibleSize,
+        int hiddenSize,
+        IVectorActivationFunction<T>? vectorActivation = null,
+        ILossFunction<T>? lossFunction = null,
         RestrictedBoltzmannMachineOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _options = options ?? new RestrictedBoltzmannMachineOptions();
+        options ??= new RestrictedBoltzmannMachineOptions();
+        _options = options;
         Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
@@ -402,8 +410,8 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
         _vectorActivation = vectorActivation ?? new SigmoidActivation<T>();
-        _learningRate = NumOps.FromDouble(learningRate);
-        _cdSteps = cdSteps;
+        _learningRate = NumOps.FromDouble(options.LearningRate);
+        _cdSteps = options.CdSteps;
         _samplingRandom = RandomHelper.CreateSeededRandom(architecture.RandomSeed ?? DefaultSamplingSeed);
     }
 
@@ -1221,8 +1229,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     /// <summary>
     /// Sets the training parameters for the RBM.
     /// </summary>
-    /// <param name="learningRate">The learning rate for weight updates.</param>
-    /// <param name="cdSteps">The number of Contrastive Divergence steps.</param>
     /// <remarks>
     /// <para>
     /// This method configures the learning rate and the number of Contrastive Divergence steps

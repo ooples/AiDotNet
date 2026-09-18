@@ -85,31 +85,22 @@ namespace AiDotNet.NeuralNetworks
         /// Initializes a new instance of the SimCSE model.
         /// </summary>
         public SimCSE(
-            NeuralNetworkArchitecture<T> architecture,
-            ITokenizer? tokenizer = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-            SimCSEType type = SimCSEType.Unsupervised,
-            int vocabSize = 30522,
-            int embeddingDimension = 768,
-            int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            double dropoutRate = 0.1,
-            PoolingStrategy poolingStrategy = PoolingStrategy.ClsToken,
-            ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0,
-            SimCSEOptions? options = null)
-            : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
+        NeuralNetworkArchitecture<T> architecture,
+        SimCSEOptions? options = null,
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+            : base(architecture, options, tokenizer, optimizer, lossFunction)
         {
-            _options = options ?? new SimCSEOptions();
+        _options = options ?? new SimCSEOptions();
+        _options.Validate();
             Options = _options;
-            _simCseType = type;
-            _dropoutRate = dropoutRate;
-            _vocabSize = vocabSize;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
+            _simCseType = _options.Type;
+            _dropoutRate = _options.DropoutRate;
+            _vocabSize = _options.VocabSize;
+            _numLayers = _options.NumLayers;
+            _numHeads = _options.NumHeads;
+            _feedForwardDim = _options.FeedForwardDim;
 
             InitializeLayersCore(false);
         }
