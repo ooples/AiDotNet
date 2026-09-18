@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -866,7 +867,7 @@ public class FusedOptimizerIntegrationTests
         public FusedRecurrentGemmaTestModel(
             NeuralNetworkArchitecture<float> architecture,
             int vocabSize)
-            : base(architecture, vocabSize: vocabSize)
+            : base(architecture, new RecurrentGemmaOptions { VocabSize = vocabSize })
         {
         }
 

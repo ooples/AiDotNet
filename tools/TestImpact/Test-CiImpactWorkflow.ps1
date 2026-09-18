@@ -23,7 +23,8 @@ param(
     [string] $ValidationReuseResolver = 'tools/TestImpact/Resolve-CiValidationReuse.ps1',
     [string] $ValidationCertificateWriter = 'tools/TestImpact/New-CiValidationCertificate.ps1',
     [string] $MapCertificateWriter = 'tools/TestImpact/New-ShardMapCertificate.ps1',
-    [string] $CiGatePolicy = 'tools/TestImpact/Assert-CiGate.ps1'
+    [string] $CiGatePolicy = 'tools/TestImpact/Assert-CiGate.ps1',
+    [string] $ShardManifest = '.github/test-shards.yml'
 )
 
 Set-StrictMode -Version Latest
@@ -190,8 +191,6 @@ $validationJobs = @(
     'build',
     'build-compat',
     'test-net10-sharded',
-    'parameter-enumeration-sweep',
-    'model-shape-conformance-windows',
     'test-regression-analysis',
     'size-check',
     'ci-test-analysis'
@@ -233,6 +232,23 @@ Assert-Contract (-not $codeqlHeader.Contains(
 Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
     'CodeQL cannot publish its required result after a selector failure'
 
+# CodeQL analyzes only what the traced build compiles. A project dropped from this step silently
+# disappears from code scanning instead of failing, which is how the Serving API and the
+# playground functions went unanalyzed. Every build must also be restored first (--no-restore).
+$codeqlBuild = Get-StepBlock -JobBlock $codeqlJob -Step 'Build for CodeQL (net10.0)'
+$codeqlRestore = Get-StepBlock -JobBlock $codeqlJob -Step 'Restore dependencies'
+Assert-Contract ([bool] $codeqlBuild) 'CodeQL has no traced build step'
+foreach ($codeqlProject in @(
+        'src/AiDotNet.csproj -c Release --no-restore -f net10.0',
+        'src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore',
+        'src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore')) {
+    Assert-Contract ($codeqlBuild.Contains("dotnet build $codeqlProject")) `
+        "CodeQL's traced build does not compile '$codeqlProject'"
+    $projectPath = $codeqlProject.Split(' ')[0]
+    Assert-Contract ($codeqlRestore.Contains("dotnet restore $projectPath")) `
+        "CodeQL builds '$projectPath' with --no-restore but never restores it"
+}
+
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
@@ -242,6 +258,16 @@ Assert-Contract ($sonarHeader.Contains($effectiveValidationEnvironment)) `
     'Sonar steps parse EFFECTIVE_REQUIRES_VALIDATION but the Sonar job does not define it'
 Assert-Contract (([Regex]::Matches($validation, '(?m)^      EFFECTIVE_REQUIRES_VALIDATION:')).Count -eq 1) `
     'EFFECTIVE_REQUIRES_VALIDATION must be defined exactly once on the Sonar job'
+# Sonar's expensive steps gate on SONAR_ANALYZE, which must carry BOTH the runtime requirement above
+# (so a non-runtime change never analyses) and the nightly-only event restriction (so no pull request,
+# merge group or push waits on an analysis that never finished there).
+$sonarAnalyzeEnvironment = 'SONAR_ANALYZE: ${{ (github.event_name == ''schedule'' || github.event_name == ''workflow_dispatch'') && ((needs.validation-source.outputs.reuse == ''true'' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || ''true'') || ''false'' }}'
+Assert-Contract ($sonarHeader.Contains($sonarAnalyzeEnvironment)) `
+    'SONAR_ANALYZE is missing from the Sonar job or no longer requires both runtime validation and a nightly event'
+Assert-Contract (([Regex]::Matches($validation, '(?m)^      SONAR_ANALYZE:')).Count -eq 1) `
+    'SONAR_ANALYZE must be defined exactly once on the Sonar job'
+Assert-Contract (-not $sonarJob.Contains('fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION')) `
+    'a Sonar step gates on EFFECTIVE_REQUIRES_VALIDATION alone and would analyse on pull requests'
 
 foreach ($job in @(
     'test-regression-analysis', 'sonarcloud', 'ci-test-analysis',
@@ -313,10 +339,11 @@ Assert-Contract ($validationReuseResolverText.Contains("'--paginate', '--slurp'"
 
 $selectorJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
 $selectorHeader = Get-JobHeader -JobBlock $selectorJob
+# The sweeps and conformance windows used to be bespoke jobs bound to their own selected matrix.
+# They are shards now (see the retirement check and the shard-manifest contract below), so the only
+# workload job left to bind is the sharded test matrix itself.
 foreach ($binding in @(
-    @{ Job = 'test-net10-sharded'; Flag = 'requires_tests'; Matrix = 'matrix' },
-    @{ Job = 'parameter-enumeration-sweep'; Flag = 'requires_sweeps'; Matrix = 'parameter_matrix' },
-    @{ Job = 'model-shape-conformance-windows'; Flag = 'requires_shapes'; Matrix = 'shape_matrix' }
+    @{ Job = 'test-net10-sharded'; Flag = 'requires_tests'; Matrix = 'matrix' }
 )) {
     $workloadJob = Get-JobBlock -WorkflowText $validation -Job $binding.Job
     $workloadHeader = Get-JobHeader -JobBlock $workloadJob
@@ -330,24 +357,6 @@ foreach ($binding in @(
         $matrixInput[0].Value.Trim() -cmatch ('^(?:include|shard): \$\{\{ fromJSON\(needs\.select-shards\.outputs\.' +
             [regex]::Escape($binding.Matrix) + '\) \}\}$')) `
         "$($binding.Job) uses an independent matrix instead of the selected workload partition"
-}
-foreach ($consumer in @('test-regression-analysis', 'ci-test-analysis', 'sonarcloud')) {
-    $consumerHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job $consumer)
-    foreach ($producer in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
-        Assert-Contract (Test-JobDependency -JobHeader $consumerHeader -Dependency $producer) `
-            "$consumer can consume incomplete auxiliary artifacts before $producer finishes"
-    }
-}
-foreach ($producer in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
-    $job = Get-JobBlock -WorkflowText $validation -Job $producer
-    $link = Get-StepBlock -JobBlock $job -Step 'Connect isolated worker coverage'
-    Assert-Contract ($link -cmatch '(?m)^          \./tools/TestImpact/Connect-WorkerCoverage\.ps1') `
-        "$producer can publish parent-only coverage without linking the isolated worker"
-    $evidence = Get-StepBlock -JobBlock $job -Step 'Write auxiliary shard evidence'
-    Assert-Contract ($evidence -cmatch '(?m)^          \./tools/TestImpact/Write-AuxiliaryEvidence\.ps1') `
-        "$producer does not use the validated auxiliary evidence writer"
-    Assert-Contract ($job -cmatch '(?m)^    name: Tests \(\$\{\{ matrix\.framework \}\}\) - \$\{\{ matrix\.name \}\}') `
-        "$producer is invisible to the complete workload audit"
 }
 Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
     'select-shards does not depend on validation-source'
@@ -428,19 +437,17 @@ Assert-Contract ($selectStep.Contains('coverage_run_without_instrumentation=$(Co
 
 # ---- Post-merge delta reuse. A pull request merged while behind master lands a tree its run never
 # validated, so exact-tree reuse never matched and nearly every merge re-ran all 116 shards.
-$sourceJob = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
-$sourceHeader = Get-JobHeader -JobBlock $sourceJob
-Assert-Contract ($sourceJob.Contains("fetch-depth: `${{ github.event_name == 'push' && '0' || '1' }}") -and
-        -not $sourceJob.Contains("== 'push' && 0 ||")) `
+$sourceHeader = Get-JobHeader -JobBlock $resolver
+Assert-Contract ($resolver.Contains("fetch-depth: `${{ github.event_name == 'push' && '0' || '1' }}") -and
+        -not $resolver.Contains("== 'push' && 0 ||")) `
     'validation-source lacks the history to rebuild the validated tree and diff it in map coordinates'
-$deltaMapStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve certified shard map for delta reuse'
+$deltaMapStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve certified shard map for delta reuse'
 Assert-Contract ([regex]::Matches($deltaMapStep, '(?m)^        id: delta-map[ \t]*(?:#[^\r\n]*)?\r?$').Count -eq 1 -and
         [regex]::Matches($deltaMapStep, '(?m)^        id:').Count -eq 1) `
     'the delta-map step lacks the exact unique identity consumed by the reuse resolver'
 Assert-Contract ([bool] $deltaMapStep -and $deltaMapStep.Contains('continue-on-error: true') -and
         $deltaMapStep.Contains('Resolve-CertifiedShardMap.ps1') -and $deltaMapStep.Contains('Test-CertifiedShardMap.ps1')) `
     'delta reuse does not select with an audited map, or a map failure can fail the push instead of disabling delta reuse'
-$resolveStep = Get-StepBlock -JobBlock $sourceJob -Step 'Resolve exact-tree PR run'
 $mapTimeout = [regex]::Match($deltaMapStep, '(?m)^        timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
 $jobTimeout = [regex]::Match($sourceHeader, '(?m)^    timeout-minutes: (?<minutes>[1-9][0-9]*)[ \t]*\r?$')
 $evidenceWait = [regex]::Match($resolveStep, '(?m)^            -WaitMinutes (?<minutes>[0-9]+)[ \t]*\r?$')
@@ -462,8 +469,8 @@ Assert-Contract ($validationReuseResolverText.Contains("-DecisionScope Validatio
     'delta reuse can claim Complete scope although CodeQL and Sonar analysed a different tree'
 Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains('PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}')) `
     'a partial post-merge re-run does not reduce the shard matrix'
-$mapStep = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
-Assert-Contract ($mapStep.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
+$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
+Assert-Contract ($mapDownload.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
     'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
@@ -493,7 +500,7 @@ foreach ($consumer in @(
     foreach ($step in @($downloadStep, $importStep)) {
         $condition = [regex]::Match($step, '(?m)^        if: (?<expression>[^\r\n]+)').Groups['expression'].Value
         $expectedCondition = "needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'"
-        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && $expectedCondition }}" }
+        if ($consumer.Job -ceq 'sonarcloud') { $expectedCondition = "`${{ fromJSON(env.SONAR_ANALYZE) && $expectedCondition }}" }
         Assert-Contract ($condition.Trim() -ceq $expectedCondition) `
             "$($consumer.Job) delta import is not disabled after selector escalation"
     }
@@ -551,7 +558,7 @@ Assert-Contract (-not $collectStateStep.Contains('Invoke-WebRequest')) `
 Assert-Contract (([Regex]::Matches($collectStateStep, 'Invoke-GitHubApiWithRetry')).Count -eq 5) `
     'not every aggregate GitHub API read is routed through retry policy'
 
-$artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
+$artifactConsumers = @('test-net10-sharded')
 foreach ($job in $artifactConsumers) {
     $consumer = Get-JobBlock -WorkflowText $validation -Job $job
     $header = Get-JobHeader -JobBlock $consumer
@@ -660,10 +667,125 @@ foreach ($stepName in @(
     Assert-Contract ($upload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
         "'$stepName' can amplify an artifact-service failure after the required download failed"
 }
-$shapeConsumer = Get-JobBlock -WorkflowText $validation -Job 'model-shape-conformance-windows'
-$shapeUpload = Get-StepBlock -JobBlock $shapeConsumer -Step 'Upload window report'
-Assert-Contract ($shapeUpload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
-    'shape-conformance can upload after its required build artifact was unavailable'
+# THE MODEL-INVENTORY SWEEPS AND CONFORMANCE WINDOWS ARE SHARDS. As two bespoke jobs they ran all
+# 45 workloads on every validating run whatever the change touched, and nothing about them could
+# be selected, reused or imported. Keeping them in .github/test-shards.yml is what lets the map,
+# the delta planner and the audit treat them like every other shard, so their return as separate
+# jobs - or an entry losing the configuration that bounds it - is a regression.
+foreach ($retired in @('parameter-enumeration-sweep', 'model-shape-conformance-windows')) {
+    Assert-Contract (-not [Regex]::IsMatch($validation, "(?m)^  $([Regex]::Escape($retired)):\s*\r?$")) `
+        "'$retired' is back as a job that runs outside shard selection"
+}
+$shardList = Get-Content -LiteralPath $ShardManifest -Raw
+$shardEntries = [Regex]::Split($shardList, '(?m)^  - name: ') | Select-Object -Skip 1
+function Get-ShardEntry([string] $Name) {
+    $shardEntries | Where-Object { $_.StartsWith($Name + "`n") -or $_.StartsWith($Name + "`r`n") } | Select-Object -First 1
+}
+$expectedInventoryShards = [System.Collections.Generic.List[object]]::new()
+foreach ($k in 0..7) {
+    [void] $expectedInventoryShards.Add(@{ Name = "Sweep - ParameterCountContractTests $k/8"; Filter = 'FullyQualifiedName~ParameterCountContractTests'; Env = @("AIDOTNET_PARAMETER_COUNT_SHARD: '$k'"); MustCover = 'src/NeuralNetworks/Layers/*' })
+}
+[void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
+[void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
+foreach ($offset in (0..34 | ForEach-Object { $_ * 5 })) {
+    [void] $expectedInventoryShards.Add(@{
+        Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
+        MustCover = '*/VisionLanguage/*'
+        Env = @("ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'", "ADNSHAPE_CONF_OFFSET: '$offset'", "ADNSHAPE_CONF_BUDGET: '5'") })
+}
+# The two repaired model-shape sweeps. Both were Category=Sweep tests that no shard filter selected and
+# that could not pass until their models were moved into the ParameterSweepWorker child process. They run
+# their subject in that worker exactly like the count/chunk sweeps and the conformance windows, so losing
+# heavy, mustCover, coverageIncludeDirectory or the env that pins the worker count is the same regression
+# here as it is there, and is guarded identically.
+foreach ($shape in @(
+        @{ Name = 'Sweep - Model shape law'; Filter = 'FullyQualifiedName~ModelFamilyLawTests'
+            MustCover = @('src/Audio/*', 'src/VisionLanguage/*', 'src/TextToSpeech/*', 'src/NeuralNetworks/DeclaredModelLayoutBases.cs') },
+        @{ Name = 'Sweep - Model shape discovery'; Filter = 'FullyQualifiedName~ModelShapeDiscoveryProbeTests'
+            MustCover = @('src/NeuralNetworks/*') })) {
+    [void] $expectedInventoryShards.Add(@{
+        Name = $shape.Name; Filter = $shape.Filter; MustCover = $shape.MustCover
+        Env = @("ADNSHAPE_WORKERS: '2'", "ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'") })
+}
+foreach ($expected in $expectedInventoryShards) {
+    $entry = Get-ShardEntry $expected.Name
+    Assert-Contract ([bool] $entry) "inventory shard '$($expected.Name)' is missing from test-shards.yml"
+    if (-not $entry) { continue }
+    Assert-Contract ($entry.Contains("filter: '$($expected.Filter)'")) "inventory shard '$($expected.Name)' has the wrong filter"
+    Assert-Contract ($entry -match '(?m)^    heavy: true\s*$') "inventory shard '$($expected.Name)' is not on the heavy path"
+    $hangLimit = [regex]::Match($entry, '(?m)^    hangTimeout: (?<minutes>[1-9][0-9]*)min[ \t]*\r?$')
+    Assert-Contract ($hangLimit.Success -and [int] $hangLimit.Groups['minutes'].Value -gt 5) `
+        "inventory shard '$($expected.Name)' must declare a hang timeout greater than the 5-minute default"
+    if ($expected.ContainsKey('MustCover')) {
+        # A shard may declare several subject globs (the model-shape law covers four families), so the
+        # expected line is rebuilt from the list. A single pattern renders exactly as it did before.
+        $mustCoverLine = '    mustCover: [' + ((@($expected.MustCover) | ForEach-Object { "'$_'" }) -join ', ') + ']'
+        Assert-Contract ($entry.Contains($mustCoverLine)) `
+            "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
+        Assert-Contract ($entry.Contains('    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0')) `
+            "inventory shard '$($expected.Name)' does not instrument the worker its models run in"
+    }
+    foreach ($pair in $expected.Env) {
+        Assert-Contract ($entry.Contains("      $pair")) "inventory shard '$($expected.Name)' lost its env '$pair'"
+    }
+}
+
+Assert-Contract ($map.Contains('-CoverageRequirementsFile $requirements')) `
+    'the map build ignores mustCover, so a shard whose subject coverage never reached can become selectable'
+
+# The four Sweep-category surveys no job ran (every shard excludes Category=Sweep; the old sweep job named
+# only its own three classes). They run in one gating heavy shard now; losing any of them silently
+# returns it to never running.
+$surveys = Get-ShardEntry 'Sweep - Layer and Model Contract Surveys'
+# Get-ShardEntry emits nothing when that shard is absent, and PowerShell treats the resulting
+# AutomationNull as an EMPTY COLLECTION on the left of -match: the assertions below would then hand
+# Assert-Contract an Object[] and terminate the whole contract instead of reporting. Normalising to an
+# empty string makes a missing or renamed survey shard fail cleanly with the messages below.
+if ($null -eq $surveys) { $surveys = '' }
+Assert-Contract ([bool] $surveys) 'the contract-survey sweeps have no shard and would never run'
+Assert-Contract ($surveys -match '(?m)^    heavy: true\s*$') 'the contract-survey shard is not on the heavy path'
+Assert-Contract ($surveys -match '(?m)^    hangTimeout: 35min\s*$') 'the contract-survey shard lost its 35-minute hang timeout'
+foreach ($survey in @('LayerOverrideRedundancyTests', 'LayerParameterSurfaceTests', 'ContractShadowSweepTests', 'ModelBaseCoverageTests')) {
+    Assert-Contract ($surveys -and $surveys.Contains("FullyQualifiedName~$survey")) "the survey sweep '$survey' is no longer selected by any shard"
+}
+
+# THE INVENTORY LIST IS CLOSED. Every 'Sweep - ' and 'Conformance - ' entry must be one this contract
+# knows about, so a new worker-backed sweep cannot land in the manifest with nothing asserting its
+# filter, heavy, hangTimeout, mustCover, coverageIncludeDirectory or env - which is exactly how the two
+# model-shape sweeps first arrived. The contract-survey shard is exempt by EXACT name because it has its
+# own dedicated assertions immediately above; renaming it makes this check fire, so the exemption cannot
+# rot into an unconditional escape hatch.
+$expectedInventoryNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($expected in $expectedInventoryShards) { [void] $expectedInventoryNames.Add([string] $expected.Name) }
+[void] $expectedInventoryNames.Add('Sweep - Layer and Model Contract Surveys')
+foreach ($inventoryEntry in $shardEntries) {
+    $entryName = ($inventoryEntry -split '\r?\n', 2)[0].Trim()
+    if ($entryName -notmatch '^(?:Sweep|Conformance) - ') { continue }
+    Assert-Contract ($expectedInventoryNames.Contains($entryName)) `
+        ("inventory shard '$entryName' is not in the contract's expected inventory list. A new " +
+         "'Sweep - ' or 'Conformance - ' shard must be added to `$expectedInventoryShards in " +
+         'tools/TestImpact/Test-CiImpactWorkflow.ps1 in the same commit that adds it to ' +
+         '.github/test-shards.yml, so its filter, heavy, hangTimeout, mustCover, ' +
+         'coverageIncludeDirectory and env stay guarded like every other inventory shard.')
+}
+
+$shardRun = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+Assert-Contract ($shardRun.Contains('SHARD_ENV: ${{ toJSON(matrix.shard.env) }}')) `
+    'the shard step does not receive the entry env as data'
+Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
+    'the shard step does not apply the entry env through the validated helper'
+Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
+    'a shard declaring heavy: true does not get the heavy path'
+Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
+        $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
+    'a shard whose models run in the worker never instruments the worker'
+Assert-Contract ($shardRun.Contains("'--blame-hang-timeout', `$hangTimeout,")) `
+    'a shard hangTimeout is not passed to the blame-hang collector'
+$shardRetry = Get-StepBlock -JobBlock $testConsumer -Step 'Rerun PR-new failures once'
+Assert-Contract ($shardRetry.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
+    'a targeted retry runs without the shard env and would walk the whole inventory'
+Assert-Contract ($selectStep.Contains("`$declared.PSObject.Properties['heavy'] -and `$declared.heavy -eq `$true")) `
+    'a map-feeding run does not treat heavy: true entries as no-coverage shards'
 
 $promotion = Get-JobBlock -WorkflowText $validation -Job 'promote-ci-test-analysis'
 Assert-Contract ($promotion.Contains("needs.validation-source.outputs.reuse == 'true'")) `
@@ -720,14 +842,20 @@ Assert-Contract ($ciGatePolicyText.Contains('([CiValidationReuseScope]::Validati
     'CI Gate has no validation-only reuse mode'
 Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql' `$codeql")) `
     'validation-only reuse does not rerun CodeQL'
-Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud' `$sonar")) `
-    'validation-only reuse does not rerun SonarCloud'
+# SonarCloud is advisory: the gate reports it but must never require it, or its unfinished
+# analysis blocks every merge again.
+Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud'")) `
+    'CI Gate requires SonarCloud, whose analysis does not finish on pull requests'
+Assert-Contract ($ciGatePolicyText.Contains('Advisory (not required): sonarcloud')) `
+    'CI Gate no longer reports the advisory SonarCloud result'
 
-# SonarCloud Analysis is still a required repository status. Its job must succeed cheaply for a
-# non-runtime PR, but no setup, cache, download, restore, scanner, or build step may execute there.
+# SonarCloud Analysis may still be a required repository status. Its job must succeed cheaply for a
+# non-runtime change and for every non-nightly event, and no setup, cache, download, restore,
+# scanner, or build step may execute there.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
-Assert-Contract ($sonarJob.Contains('- name: Report non-runtime validation')) `
-    'the required SonarCloud status has no lightweight non-runtime success path'
+$sonarSkipReport = Get-StepBlock -JobBlock $sonarJob -Step 'Report skipped analysis'
+Assert-Contract ($sonarSkipReport.Contains('if: ${{ !fromJSON(env.SONAR_ANALYZE) }}')) `
+    'the SonarCloud status has no lightweight success path when analysis is skipped'
 foreach ($stepName in @(
     'Set up JDK 17', 'Checkout code', 'Setup .NET 10.0', 'Cache NuGet packages',
     'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
@@ -735,8 +863,8 @@ foreach ($stepName in @(
     'Build source generator first', 'Build (Release)', 'End SonarCloud analysis'
 )) {
     $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
-    Assert-Contract ($step.Contains('fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION')) `
-        "SonarCloud step '$stepName' can run for a non-runtime change"
+    Assert-Contract ($step.Contains('fromJSON(env.SONAR_ANALYZE')) `
+        "SonarCloud step '$stepName' can run for a non-runtime change or outside the nightly run"
 }
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
 # library and tests for three frameworks under analyzers and never finished inside the job limit.
@@ -770,7 +898,6 @@ Assert-Contract (
 # Only an explicit audited miss or an unclassified failure revokes older positive evidence.
 # Cancellation and a typed zero-miss/no-reduction result are neutral, so queue cleanup cannot
 # silently disable selective CI across the repository.
-$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
 Assert-Contract ($mapDownload.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1')) `
     'PR selection bypasses the executable certified-map resolver'
 Assert-Contract ($mapDownload.Contains('-ResultFile map-resolution.json')) `
