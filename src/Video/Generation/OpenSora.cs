@@ -345,10 +345,25 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Performs a single denoising prediction step on the input latents.
     /// </summary>
-    /// <param name="input">Input latent tensor [B, C, H, W].</param>
-    /// <returns>Predicted denoised output.</returns>
+    /// <param name="input">Input latent tensor [B, C, H, W], or a single latent [C, H, W].</param>
+    /// <returns>Predicted denoised output, in the input's shape.</returns>
+    /// <remarks>
+    /// A single latent <c>[C, H, W]</c> - the shape this model's default architecture declares - is
+    /// denoised as a batch of one and returned without the batch axis, the same promotion the model
+    /// already applies to single images elsewhere (see <c>AddBatchDimension</c>). The denoiser indexes
+    /// axis 3 of its features, so a rank-3 latent used to throw IndexOutOfRange.
+    /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (input.Rank == 3)
+        {
+            var denoised = PredictCore(AddBatchDimension(input));
+            return denoised.Reshape([denoised.Shape[1], denoised.Shape[2], denoised.Shape[3]]);
+        }
+
         // Create default time embedding at t=0.5 (mid-point)
         var timeEmbed = CreateTimeEmbedding(0.5);
 

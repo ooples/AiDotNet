@@ -89,6 +89,9 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
 
     private readonly bool _useNativeMode;
 
+    /// <summary>Default clip length (frames), as in the TimeSformer paper's 8-frame clips.</summary>
+    private const int DefaultNumFrames = 8;
+
     #endregion
 
     #region ONNX Mode Fields
@@ -151,6 +154,26 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings (8-frame 224x224 RGB clips, 400 classes).
+    /// </summary>
+    /// <remarks>
+    /// The declared input is the clip the model is built for, <c>[8, 3, 224, 224]</c>
+    /// (<see cref="Enums.InputType.FourDimensional"/> with <c>inputFrames</c> equal to the default
+    /// <c>numFrames</c>). It used to be <see cref="Enums.InputType.ThreeDimensional"/>, i.e. a single
+    /// <c>[3, 224, 224]</c> frame, so everything that sizes an input from <c>GetInputShape()</c> — the
+    /// auto-batching rank check among them — treated a one-frame image as this video model's input.
+    /// </remarks>
+    public TimeSformer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.FourDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400,
+            inputFrames: DefaultNumFrames))
+    {
+    }
+
+    /// <summary>
     /// Creates a TimeSformer model using native layers for training and inference.
     /// </summary>
     /// <param name="architecture">Architecture for the video encoder.</param>
@@ -160,21 +183,14 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
     /// <param name="embedDim">Embedding dimension (default: 768).</param>
     /// <param name="numHeads">Number of attention heads (default: 12).</param>
     /// <param name="numLayers">Number of transformer layers (default: 12).</param>
-    /// <param name="numFrames">Number of frames to process (default: 8).</param>
+    /// <param name="numFrames">Number of frames per clip (default: 8). When the architecture declares a
+    /// frame count (<see cref="NeuralNetworkArchitecture{T}.InputFrames"/> &gt; 0) that count is used, as for
+    /// VideoMAE; passing a different non-default value throws, since the two would describe different
+    /// clips. The frame count sizes the positional table and is the group size the divided space-time
+    /// blocks fall back to when they are run without an explicit frame count.</param>
     /// <param name="patchSize">Patch size for tokenization (default: 16).</param>
     /// <param name="attentionType">Type of space-time attention (default: DividedSpaceTime).</param>
-    /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public TimeSformer()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
-            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: 224, inputWidth: 224, inputDepth: 3,
-            outputSize: 400))
-    {
-    }
-
+    /// <param name="options">Optional configuration options.</param>
     public TimeSformer(
         NeuralNetworkArchitecture<T> architecture,
         int numClasses = 400,
@@ -183,7 +199,7 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         int embedDim = 768,
         int numHeads = 12,
         int numLayers = 12,
-        int numFrames = 8,
+        int numFrames = DefaultNumFrames,
         int patchSize = 16,
         AttentionType attentionType = AttentionType.DividedSpaceTime,
         TimeSformerOptions? options = null)
@@ -209,7 +225,7 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         _embedDim = embedDim;
         _numHeads = numHeads;
         _numLayers = numLayers;
-        _numFrames = numFrames;
+        _numFrames = VideoClipFrameCount.Resolve(architecture, numFrames, DefaultNumFrames);
         _patchSize = patchSize;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _numClasses = numClasses;
@@ -249,7 +265,7 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         _embedDim = embedDim;
         _numHeads = 12;
         _numLayers = 12;
-        _numFrames = 8;
+        _numFrames = VideoClipFrameCount.Resolve(architecture, DefaultNumFrames, DefaultNumFrames);
         _patchSize = 16;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _numClasses = numClasses;
@@ -282,14 +298,28 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         if (videoFrames is null)
             throw new ArgumentNullException(nameof(videoFrames));
 
-        if (_useNativeMode)
-        {
-            return Forward(videoFrames);
-        }
-        else
+        if (!_useNativeMode)
         {
             return PredictOnnx(videoFrames);
         }
+
+        var probabilities = Forward(videoFrames);
+
+        // Unbatched in, unbatched out. TokenizeVideo treats a [T, C, H, W] clip (or a single [C, H, W]
+        // frame) as a batch of one, so the head emits [1, NumClasses]. This method documents
+        // [NumClasses] for that input, the model's output layout is batch-optional, and the base
+        // PredictCore squeezes the unit batch it adds - so return the unbatched vector here too. Only
+        // the tokenized path is squeezed: a caller-supplied layer stack receives the input unchanged, so
+        // its leading axis is whatever the caller gave it.
+        if (_usesTokenizedNativePath
+            && videoFrames.Rank < 5
+            && probabilities.Rank == 2
+            && probabilities.Shape[0] == 1)
+        {
+            return probabilities.Reshape([probabilities.Shape[1]]);
+        }
+
+        return probabilities;
     }
 
     /// <summary>
@@ -387,31 +417,15 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
-    private Tensor<T> Softmax(Tensor<T> logits)
-    {
-        var result = new Tensor<T>(logits._shape);
-        double maxVal = double.MinValue;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double val = Convert.ToDouble(logits.Data.Span[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sum += Math.Exp(Convert.ToDouble(logits.Data.Span[i]) - maxVal);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double prob = Math.Exp(Convert.ToDouble(logits.Data.Span[i]) - maxVal) / sum;
-            result.Data.Span[i] = NumOps.FromDouble(prob);
-        }
-
-        return result;
-    }
+    /// <summary>
+    /// Softmax over the class axis (the last one), independently for every clip in the batch.
+    /// </summary>
+    /// <remarks>
+    /// This used to normalise over EVERY element of the logits tensor, so for a batch of B clips the
+    /// B x NumClasses probabilities summed to 1 in total instead of 1 per clip: each clip's
+    /// "probabilities" were scaled by how confident the other clips in the batch happened to be.
+    /// </remarks>
+    private Tensor<T> Softmax(Tensor<T> logits) => Engine.Softmax(logits);
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
