@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Models.Options;
@@ -67,6 +67,10 @@ public class TradingAgentOptions<T> : ModelOptions
         DiscountFactor = other.DiscountFactor;
         LossFunction = other.LossFunction;
         Seed = other.Seed;
+        // TradingAgentOptions<T>.Seed HIDES ModelOptions.Seed, and `: this()` leaves the base property
+        // null. Without this, a configured base seed is lost and GetOptions(), which returns
+        // ModelOptions, reports the default instead of what the caller configured.
+        ((ModelOptions)this).Seed = ((ModelOptions)other).Seed;
         BatchSize = other.BatchSize;
         ReplayBufferSize = other.ReplayBufferSize;
         TargetUpdateFrequency = other.TargetUpdateFrequency;
@@ -77,7 +81,9 @@ public class TradingAgentOptions<T> : ModelOptions
         StateSize = other.StateSize;
         ActionSize = other.ActionSize;
         ContinuousActions = other.ContinuousActions;
-        HiddenLayers = other.HiddenLayers;
+        // Clone: int[] is mutable, so sharing it would let a layer-width change on either options
+        // instance silently alter the other's network configuration.
+        HiddenLayers = (int[])other.HiddenLayers.Clone();
         InitialCapital = other.InitialCapital;
         TransactionCost = other.TransactionCost;
         MaxPositionSize = other.MaxPositionSize;

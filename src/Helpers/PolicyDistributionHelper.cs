@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides tape-differentiable policy distribution computations for reinforcement learning.
@@ -217,8 +217,10 @@ public static class PolicyDistributionHelper<T>
     /// position) has limits. Passing the sample through tanh squeezes it into a fixed range without
     /// clipping, so the policy can still be trained by gradients everywhere.
     /// </remarks>
-    public static Tensor<T> SquashAction(IEngine engine, Tensor<T> preSquashActions, double scale)
+    internal static Tensor<T> SquashAction(IEngine engine, Tensor<T> preSquashActions, double scale)
     {
+        ValidateActionScale(scale);
+
         // Scaling unconditionally rather than testing scale == 1: multiplying by one is an identity, so
         // the guard would only trade an exact floating-point comparison for a negligible multiply.
         return engine.TensorMultiplyScalar(engine.TensorTanh(preSquashActions), NumOps.FromDouble(scale));
@@ -247,9 +249,11 @@ public static class PolicyDistributionHelper<T>
     /// entropy bonus is measured against the wrong distribution and the temperature drifts.
     /// </para>
     /// </remarks>
-    public static Tensor<T> ComputeSquashedGaussianLogProb(
+    internal static Tensor<T> ComputeSquashedGaussianLogProb(
         IEngine engine, Tensor<T> means, Tensor<T> logStds, Tensor<T> preSquashActions, double scale)
     {
+        ValidateActionScale(scale);
+
         var gaussianLogProb = ComputeGaussianLogProb(engine, means, logStds, preSquashActions);
 
         // -sum_i log(1 - tanh^2(u_i)). The epsilon keeps a saturated tanh from producing log(0).
@@ -272,5 +276,23 @@ public static class PolicyDistributionHelper<T>
 
         // log(1) is 0, so an unscaled policy is unaffected and no float comparison is needed.
         return engine.TensorAddScalar(corrected, NumOps.FromDouble(-actionSize * Math.Log(scale)));
+    }
+    /// <summary>
+    /// Rejects a scale that cannot describe a valid action range.
+    /// </summary>
+    /// <remarks>
+    /// Zero collapses every action onto the origin and sends the log-probability to infinity via
+    /// -D*log(scale); negative, NaN and infinite scales produce invalid actions or a non-finite
+    /// density. Failing here beats propagating a silent NaN into the temperature update.
+    /// </remarks>
+    private static void ValidateActionScale(double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(scale), scale,
+                "Action scale must be a finite positive value; it divides the squashed density once "
+                + "per action dimension, so zero or a non-finite scale yields an undefined log-probability.");
+        }
     }
 }

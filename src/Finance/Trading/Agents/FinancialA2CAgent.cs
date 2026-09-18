@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -233,6 +233,16 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         for (int i = 0; i < logits.Length; i++)
         {
             probabilities[i] = numOps.ToDouble(logits[i]);
+            // Fail on a diverged actor rather than converting it into a trade. A non-finite logit
+            // makes max and sum non-finite and every probability NaN; SampleCategorical then never
+            // satisfies r < cumulative so it returns the LAST tier while ArgMaxIndex returns the
+            // FIRST -- a specific position decision silently produced by a numerical failure.
+            if (double.IsNaN(probabilities[i]) || double.IsInfinity(probabilities[i]))
+            {
+                throw new InvalidOperationException(
+                    $"Policy logit[{i}] is {probabilities[i]}, so the actor has diverged and no action "
+                    + "distribution can be formed. Refusing to select a trade from a non-finite policy.");
+            }
             if (probabilities[i] > max)
             {
                 max = probabilities[i];

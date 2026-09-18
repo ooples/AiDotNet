@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Interfaces;
@@ -198,7 +198,11 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (action is null) throw new ArgumentNullException(nameof(action));
 
-        return _critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, action))).ToVector()[0];
+        // Predict returns an OWNED tensor and ToVector copies out of it; without disposing both the
+        // input and the result, repeated evaluation retains pooled/native/GPU storage until finalization.
+        using var criticInput = Tensor<T>.FromVector(ConcatenateStateAction(state, action));
+        using var criticOutput = _critic.Predict(criticInput);
+        return criticOutput.ToVector()[0];
     }
 
     private static Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
@@ -253,7 +257,9 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _policyNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
+        using var policyInput = Tensor<T>.FromVector(state);
+        using var policyOutput = _policyNetwork.Predict(policyInput);
+        var action = policyOutput.ToVector();
 
         // Zero-mean Gaussian exploration from the agent's seeded stream. The previous U[0, 0.05) noise was
         // unseeded and one-sided (mean +0.025), so every exploratory quote was skewed the same way and the
@@ -361,7 +367,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
         using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
-        var nextActions = _targetPolicyNetwork.Predict(nextStates).ToVector();
+        using var nextActionsTensor = _targetPolicyNetwork.Predict(nextStates);
+        var nextActions = nextActionsTensor.ToVector();
         var nextStateActionsData = new T[n * stateActionDim];
         var stateActionsData = new T[n * stateActionDim];
         for (int i = 0; i < n; i++)
@@ -380,7 +387,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         }
 
         using var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
-        var nextQ = _targetCritic.Predict(nextStateActions).ToVector();
+        using var nextQTensor = _targetCritic.Predict(nextStateActions);
+        var nextQ = nextQTensor.ToVector();
 
         var targetData = new T[n];
         for (int i = 0; i < n; i++)
@@ -396,7 +404,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         T criticLoss = _critic.GetLastLoss();
 
         // ---- 2. Policy update: ascend Q(s, mu(s)) (deterministic policy gradient) ----
-        var means = _policyNetwork.Predict(states).ToVector();
+        using var meansTensor = _policyNetwork.Predict(states);
+        var means = meansTensor.ToVector();
         var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
 
         T maxPosition = TradingOptions.MaxPositionSize;
@@ -468,8 +477,10 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
             // iteration allocates two [n, stateActionDim] buffers that nothing reads after its pass.
             using var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
             using var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
-            var plusQ = _critic.Predict(plus).ToVector();
-            var minusQ = _critic.Predict(minus).ToVector();
+            using var plusQTensor = _critic.Predict(plus);
+            var plusQ = plusQTensor.ToVector();
+            using var minusQTensor = _critic.Predict(minus);
+            var minusQ = minusQTensor.ToVector();
             for (int i = 0; i < n; i++)
             {
                 gradients[(i * actionDim) + dimension] =

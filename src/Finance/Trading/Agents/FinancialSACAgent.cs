@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -894,7 +894,14 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         var metrics = base.GetTradingMetrics();
         metrics["Alpha"] = NumOps.FromDouble(CurrentAlpha);
-        metrics["PolicyStdDev"] = NumOps.FromDouble(CurrentPolicyStandardDeviations.Average());
+        // Only report the spread when it actually tracks the policy. _logStd is updated in step 4
+        // of Train, which is SKIPPED for a state-conditioned head, so this key would otherwise report
+        // the constructor's 0.1 forever and read as an exploration width that never moves. Omitting
+        // it is honest; a constant dressed up as a measurement is not.
+        if (_actorHead != SacActorHead.StateConditionedGaussian)
+        {
+            metrics["PolicyStdDev"] = NumOps.FromDouble(CurrentPolicyStandardDeviations.Average());
+        }
         metrics["Updates"] = NumOps.FromDouble(_updateCount);
         return metrics;
     }
