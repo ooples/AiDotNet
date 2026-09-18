@@ -1040,8 +1040,9 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
         }
 
-        foreach (var model in byType)
+        foreach (var candidates in candidatesByType)
         {
+            var model = candidates[0];
             // UNIQUE OR THE BUILD THROWS. Built from the SIMPLE name (which also drops
             // arity) while the grouping key is namespace-qualified, so two annotated layers
             // both named DenseLayer in different namespaces emitted the same file name and
@@ -1057,7 +1058,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                     UnsupportedArity, model.Location.ToLocation(), model.TypeName, model.TypeParameters.Count));
             }
 
-            spc.AddSource($"{HintName(model)}.LayerState.g.cs", SourceText(EmitWriter(model)));
+            spc.AddSource($"{HintName(model)}.LayerState.g.cs", SourceText(EmitWriter(WithEveryConstructorState(candidates))));
         }
 
         spc.AddSource(
@@ -1078,6 +1079,57 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     private static Microsoft.CodeAnalysis.Text.SourceText SourceText(string text)
         => Microsoft.CodeAnalysis.Text.SourceText.From(text, Encoding.UTF8);
+
+    /// <summary>
+    /// The writer model for a layer whose generated factory tries each valid constructor in order.
+    /// </summary>
+    /// <remarks>
+    /// The factory has a branch for every constructor, but the writer saved only the first one's state, so a
+    /// layer built through any other overload could never be rebuilt: InputLayer(int[] inputShape) wrote no
+    /// inputShape and failed to clone with "cannot be rebuilt" although its factory branch existed. Later
+    /// constructors now contribute the state keys the first does not already write. This cannot change which
+    /// branch a layer built through the first constructor selects: the factory still tries that branch first,
+    /// against exactly the keys it saw before. A positive dimension the first constructor lacks is omitted when
+    /// unresolved, by the same rule the first constructor's own dimensions follow.
+    /// </remarks>
+    /// <summary>
+    /// Whether a nullable reference-type member backs a non-nullable constructor parameter.
+    /// </summary>
+    /// <remarks>
+    /// The factory reads such a parameter with the plain reader, so the writer must use the plain form and
+    /// omit the key while the member is null; <c>FormatNullable</c>'s "v:" prefix is unreadable there.
+    /// </remarks>
+    private static bool IsNullReferenceForRequiredValue(ParamModel p) =>
+        p.BackingMemberIsNullable && !p.IsNullable && !p.NeedsConvert
+        && p.Kind is ValueKind.String or ValueKind.Int32Array or ValueKind.DoubleArray
+            or ValueKind.BooleanArray or ValueKind.StringArray or ValueKind.Int32Jagged;
+
+    private static LayerModel WithEveryConstructorState(List<LayerModel> candidates)
+    {
+        var writer = candidates[0];
+        if (candidates.Count == 1) return writer;
+
+        var keys = new HashSet<string>(
+            writer.Parameters.Where(p => p.IsState || p.UseBackedActivation).Select(p => p.Key), System.StringComparer.Ordinal);
+        var names = new HashSet<string>(writer.Parameters.Select(p => p.Name), System.StringComparer.Ordinal);
+        var extra = new List<ParamModel>();
+        // The state/backing-member test is a pure predicate, so it filters the sequence. The key and
+        // name checks below are NOT: Add both records the parameter and reports whether it was new, so
+        // it stays in the body where the mutation is visible rather than hiding inside a Where.
+        var restorable = candidates
+            .Skip(1)
+            .SelectMany(candidate => candidate.Parameters)
+            .Where(parameter => parameter.IsState && parameter.BackingMember is not null);
+        foreach (var parameter in restorable)
+        {
+            if (!keys.Add(parameter.Key) || !names.Add(parameter.Name)) continue;
+            if (parameter.Kind == ValueKind.Int32 && IsPositiveDimensionName(parameter.Name))
+                parameter.OmitWhenNonPositive = true;
+            extra.Add(parameter);
+        }
+
+        return extra.Count == 0 ? writer : writer.WithParameters(writer.Parameters.Concat(extra).ToList());
+    }
 
     private static string EmitWriter(LayerModel model)
     {
@@ -1192,6 +1244,17 @@ public class LayerStateGenerator : IIncrementalGenerator
                 continue;
             }
 
+            if (IsNullReferenceForRequiredValue(p))
+            {
+                // The reader for a non-nullable parameter parses the plain form. A null member means the
+                // layer was not built through this constructor, so the key is omitted, not written as "n:".
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
+                sb.AppendLine("        }");
+                continue;
+            }
+
             var formatter = p.BackingMemberIsNullable ? "FormatNullable" : "Format";
             sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{formatter}({read});");
         }
@@ -1267,6 +1330,15 @@ public class LayerStateGenerator : IIncrementalGenerator
                 sb.AppendLine($"        if ({positive})");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{omitFormatter}({read});");
+                sb.AppendLine("        }");
+                continue;
+            }
+
+            if (IsNullReferenceForRequiredValue(p))
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
                 sb.AppendLine("        }");
                 continue;
             }
@@ -1368,6 +1440,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             sb.AppendLine($"        if (genericDefinition == typeof({first.OpenGenericFqn}))");
             sb.AppendLine("        {");
 
+            bool unconditional = false;
             foreach (var model in ordered)
             {
                 var args = string.Join(", ", model.Parameters.Select(p => Argument(p)));
@@ -1382,9 +1455,16 @@ public class LayerStateGenerator : IIncrementalGenerator
 
                 bool scalar = model.Parameters.Any(p => p.IsActivation && !p.IsVectorActivation);
                 bool vector = model.Parameters.Any(p => p.IsActivation && p.IsVectorActivation);
+                // Requiring an absent activation only disambiguates overloads: it keeps a layer whose live
+                // activation came from a constructor argument from being rebuilt through an overload that would
+                // silently pick a different one. When no constructor of the type takes that kind of activation,
+                // the constructor fixes it itself (InputLayer's Identity), so the live value must not veto the
+                // rebuild; demanding null there made such layers impossible to clone through any constructor.
+                bool typeTakesScalar = ordered.Any(m => m.Parameters.Any(p => p.IsActivation && !p.IsVectorActivation));
+                bool typeTakesVector = ordered.Any(m => m.Parameters.Any(p => p.IsActivation && p.IsVectorActivation));
                 if (scalar)
                 {
-                    required.Add("vectorActivation is null");
+                    if (typeTakesVector) required.Add("vectorActivation is null");
                     var slot = model.Parameters.First(p => p.IsActivation && !p.IsVectorActivation);
                     if (slot.DefaultExpression is null)
                         required.Add(slot.UseBackedActivation
@@ -1393,18 +1473,28 @@ public class LayerStateGenerator : IIncrementalGenerator
                 }
                 else if (vector)
                 {
-                    required.Add("scalarActivation is null");
+                    if (typeTakesScalar) required.Add("scalarActivation is null");
                     var slot = model.Parameters.First(p => p.IsActivation && p.IsVectorActivation);
                     if (slot.DefaultExpression is null)
                         required.Add("vectorActivation is not null || state.Has(\"__aidotnet_vector_activation_0\")");
                 }
                 else
                 {
-                    required.Add("scalarActivation is null");
-                    required.Add("vectorActivation is null");
+                    if (typeTakesScalar) required.Add("scalarActivation is null");
+                    if (typeTakesVector) required.Add("vectorActivation is null");
                 }
 
-                string condition = required.Count == 0 ? "true" : string.Join(" && ", required);
+                if (required.Count == 0)
+                {
+                    // Nothing can reject this constructor, so any later overload for the type is unreachable;
+                    // emitting them (or the trailing "return false") fails the build with CS0162.
+                    sb.AppendLine($"            layer = new {closed}({args});");
+                    sb.AppendLine("            return true;");
+                    unconditional = true;
+                    break;
+                }
+
+                string condition = string.Join(" && ", required);
                 sb.AppendLine($"            if ({condition})");
                 sb.AppendLine("            {");
                 sb.AppendLine($"                layer = new {closed}({args});");
@@ -1412,9 +1502,12 @@ public class LayerStateGenerator : IIncrementalGenerator
                 sb.AppendLine("            }");
             }
 
-            sb.AppendLine();
-            sb.AppendLine("            layer = null;");
-            sb.AppendLine("            return false;");
+            if (!unconditional)
+            {
+                sb.AppendLine();
+                sb.AppendLine("            layer = null;");
+                sb.AppendLine("            return false;");
+            }
             sb.AppendLine("        }");
             sb.AppendLine();
         }
@@ -1854,6 +1947,15 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// <summary>The type closed over the factory's single numeric parameter.</summary>
         public string ClosedFqn => TypeParameters.Count == 0 ? BaseFqn : BaseFqn + "<T>";
         public List<ParamModel> Parameters = new();
+
+        /// <summary>A copy whose writer emits <paramref name="parameters"/>; factories keep the original.</summary>
+        public LayerModel WithParameters(List<ParamModel> parameters)
+        {
+            var copy = (LayerModel)MemberwiseClone();
+            copy.Parameters = parameters;
+            return copy;
+        }
+
         /// <summary>Diagnostics as DATA, not as live Diagnostic instances.</summary>
         /// <remarks>
         /// A Diagnostic holds a Location, a Location holds a SyntaxTree, and a SyntaxTree roots
