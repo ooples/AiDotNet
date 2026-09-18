@@ -14593,6 +14593,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool TrainsViaSingleTransitionAdapter => false;");
             }
+
+            // Agents whose Train() CANNOT be driven by a single-agent store-then-Train loop at all,
+            // because they consume joint multi-agent transitions through a different API. Both throw
+            // rather than under-train: MADDPG reports "requires joint transitions stored via
+            // StoreMultiAgentExperience ... expected 8/4/8" for a 4/2/4 single-agent transition.
+            // - MADDPG (Lowe et al. 2017): centralised critic over the joint observation/action.
+            // - QMIX (Rashid et al. 2018): value decomposition over a joint observation.
+            if (model.ClassName == "MADDPGAgent"
+                || model.ClassName == "QMIXAgent")
+            {
+                sb.AppendLine("    protected override bool SupportsSingleAgentOnlineLoop => false;");
+            }
+
+            // Agents that DO run the online loop but cannot be expected to shift their greedy action
+            // toward whichever action was just rewarded, so the reward-following OUTCOME invariant does
+            // not apply. This is about the learning signal, not about state-conditionality, so it is a
+            // separate flag from IsStateConditional (whose membership is different).
+            // - A2C / PPO / TRPO: on-policy actor-critic; the update needs whole trajectories with
+            //   advantages, so a stream of isolated transitions yields a near-zero policy step.
+            // - REINFORCE (Williams 1992): Monte-Carlo policy gradient; it needs COMPLETE episodes,
+            //   as the return is only defined at episode end.
+            // - SARSA(lambda): on-policy with eligibility traces; it evaluates the action actually
+            //   taken by the behaviour policy rather than the one that was paid.
+            // - CQL / IQL: OFFLINE RL by construction -- they learn from a fixed dataset and add a
+            //   conservative (CQL) or expectile (IQL) penalty that deliberately resists moving toward
+            //   actions not supported by that dataset.
+            // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
+            //   value, so it follows the learned world model's reward head rather than the reward
+            //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            if (model.ClassName == "A2CAgent"
+                || model.ClassName == "PPOAgent"
+                || model.ClassName == "TRPOAgent"
+                || model.ClassName == "REINFORCEAgent"
+                || model.ClassName == "SARSALambdaAgent"
+                || model.ClassName == "CQLAgent"
+                || model.ClassName == "IQLAgent"
+                || model.ClassName == "DreamerAgent")
+            {
+                sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
+            }
         }
         else if (family == TestFamily.Forecasting)
         {

@@ -32,15 +32,40 @@ public abstract class ReinforcementLearningTestBase<T>
     /// <summary>Fallback state width, used only for an agent that does not report its own.</summary>
     protected virtual int StateDim => 4;
 
+    /// <summary>
+    /// False for an agent whose Train() cannot be driven by a single-agent store-then-Train loop at
+    /// all, because it consumes joint multi-agent transitions through a different API.
+    /// </summary>
+    /// <remarks>
+    /// MADDPG and QMIX THROW rather than under-train ("requires joint transitions stored via
+    /// StoreMultiAgentExperience ... expected 8/4/8" for a 4/2/4 single-agent transition), so the
+    /// real-loop invariants cannot run against them at all. Emitted by the scaffold generator.
+    /// </remarks>
+    protected virtual bool SupportsSingleAgentOnlineLoop => true;
+
+    /// <summary>
+    /// False for an agent that runs the online loop but cannot be expected to shift its greedy action
+    /// toward whichever action was just rewarded.
+    /// </summary>
+    /// <remarks>
+    /// This is about the LEARNING SIGNAL, not about state-conditionality, so it is deliberately a
+    /// separate flag from <see cref="IsStateConditional"/>, whose membership is different: on-policy
+    /// methods need whole trajectories (A2C/PPO/TRPO), REINFORCE needs complete episodes, SARSA(lambda)
+    /// evaluates the action actually taken, CQL/IQL are offline by construction and resist moving
+    /// toward actions their fixed dataset does not support, and Dreamer optimises against an imagined
+    /// value whose world model needs far more than a unit-test budget to fit. Emitted by the generator.
+    /// </remarks>
+    protected virtual bool FollowsOnlineReward => true;
+
     private int? _resolvedStateDim;
     private int? _resolvedActionDim;
 
     /// <summary>The state width THIS agent accepts, taken from the model rather than assumed.</summary>
     /// <remarks>
-    /// A fixed 4 is wrong for every agent declaring a different StateSize -- FinancialDQNAgent uses 10
-    /// and MarketMakingAgent 64 -- and now that TradingAgentBase.ValidateTransitionShape enforces the
-    /// declared width, every invariant that feeds a state throws "State length 4 must match StateSize
-    /// N" instead of testing anything. FeatureCount is each agent's own answer, so ask it once.
+    /// A fixed 4 was wrong for every agent declaring a different StateSize -- FinancialDQNAgent uses
+    /// 10, MarketMakingAgent 64 -- and once TradingAgentBase.ValidateTransitionShape began enforcing
+    /// the declared width, every invariant that fed a state threw "State length 4 must match StateSize
+    /// N" instead of testing anything at all. FeatureCount is each agent's own answer, so ask once.
     /// </remarks>
     protected int EffectiveStateDim
     {
@@ -89,9 +114,10 @@ public abstract class ReinforcementLearningTestBase<T>
                 }
                 catch (ArgumentException)
                 {
-                    // An agent that rejects a single-agent state (a multi-agent method wants a joint
-                    // observation) keeps the declared default, and the invariant that needs the shape
-                    // fails on its own terms rather than here, where the message would be unreadable.
+                    // An agent that rejects a single-agent state (MADDPG wants a joint observation)
+                    // keeps the declared default; SupportsSingleAgentOnlineLoop skips it before the
+                    // width is ever used, and the narrower invariants fail on their own terms rather
+                    // than here, where the message would be unreadable.
                 }
                 catch (InvalidOperationException)
                 {
@@ -443,6 +469,17 @@ public abstract class ReinforcementLearningTestBase<T>
     [SkippableFact(Timeout = 300000)]
     public async Task Policy_ShouldFollowTheReward()
     {
+        Skip.IfNot(SupportsSingleAgentOnlineLoop,
+            "This agent consumes joint multi-agent transitions through a different API, so the "
+            + "single-agent store-then-Train loop this invariant drives cannot run against it.");
+
+        Skip.IfNot(FollowsOnlineReward,
+            "This agent runs the loop but cannot be expected to move its greedy action toward the "
+            + "rewarded one within a unit-test budget: on-policy methods need whole trajectories, "
+            + "REINFORCE needs complete episodes, SARSA(lambda) evaluates the action it actually took, "
+            + "CQL/IQL are offline and resist actions their fixed dataset does not support, and "
+            + "Dreamer optimises against an imagined value whose world model is nowhere near fitted.");
+
         // OUTCOME invariant, deliberately mechanism-independent.
         //
         // Every structural check has a blind spot. Per-component liveness cannot see this defect at
@@ -593,6 +630,14 @@ public abstract class ReinforcementLearningTestBase<T>
     [SkippableFact(Timeout = 300000)]
     public async Task EveryTrainableComponent_ShouldChangeDuringTraining()
     {
+        // Only the agents that physically CANNOT run this loop are excused. Notably Dreamer is NOT:
+        // its actor really did receive no gradient (the finite-difference policy improvement collapsed
+        // to a no-op), and that was fixed at the source rather than skipped here, so this invariant
+        // stays live on it and will catch the regression if the taped gradient is ever severed again.
+        Skip.IfNot(SupportsSingleAgentOnlineLoop,
+            "This agent consumes joint multi-agent transitions through a different API, so the "
+            + "single-agent store-then-Train loop this invariant drives cannot run against it.");
+
         // WHY THIS EXISTS, given Training_ShouldChangeParameters already runs.
         //
         // Two independent holes, either of which hides a completely dead network.
