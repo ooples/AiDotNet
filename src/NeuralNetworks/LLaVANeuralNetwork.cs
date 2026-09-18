@@ -41,10 +41,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LLaVAOptions { ImageSize = 336, MaxTextLength = 512 };
-/// var model = new LLaVANeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 336, 336 });
-/// var output = model.Predict(image);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 336, 336 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LLaVANeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

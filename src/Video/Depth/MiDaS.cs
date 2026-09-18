@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Depth;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 384, inputWidth: 384, inputDepth: 3);
 /// var model = new MiDaS&lt;double&gt;(arch);
 /// var depthMap = model.EstimateDepth(image);

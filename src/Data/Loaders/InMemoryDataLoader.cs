@@ -31,6 +31,9 @@ namespace AiDotNet.Data.Loaders;
 /// var loader = new InMemoryDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(features, labels);
 ///
 /// // Use with AiModelBuilder
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var model = new SimpleRegression&lt;double&gt;();
+///
 /// var result = await builder
 ///     .ConfigureDataLoader(loader)
 ///     .ConfigureModel(model)

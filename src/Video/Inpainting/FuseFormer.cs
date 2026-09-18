@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Inpainting;
 /// // Create a FuseFormer model for transformer-based video inpainting
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new FuseFormerOptions();
 /// var fuseFormer = new FuseFormer&lt;double&gt;(architecture, options);

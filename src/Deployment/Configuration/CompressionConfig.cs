@@ -32,7 +32,7 @@ namespace AiDotNet.Deployment.Configuration;
 ///     .BuildAsync();
 ///
 /// // Or customize compression settings
-/// var result = await builder
+/// var result2 = await builder
 ///     .ConfigureCompression(new CompressionConfig
 ///     {
 ///         Mode = CompressionMode.Full,

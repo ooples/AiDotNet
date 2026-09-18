@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Depth;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
-/// var model = new DepthAnythingV2&lt;double&gt;(architecture, modelSize: ModelSize.Large);
+/// var model = new DepthAnythingV2&lt;double&gt;(architecture, modelSize: DepthAnythingV2&lt;double&gt;.ModelSize.Large);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

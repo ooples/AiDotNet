@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// // Create a W2v-BERT model combining contrastive and masked language modeling
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new W2vBERT&lt;double&gt;(architecture);
 ///

@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// // Create a VoxtLM model for unified speech-text generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new VoxtLM&lt;double&gt;(architecture);
 ///

@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// // Create a Wav2Vec 2.0 model for self-supervised contrastive speech learning
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new Wav2Vec2ASR&lt;double&gt;(architecture);
 ///
