@@ -459,6 +459,12 @@ failed_tests_report.md
 *-SUMMARY.md
 *_SUMMARY.md
 AGENT_*.md
+# Per-PR review "proof" write-ups. These kept reaching master because the rules above cover
+# REPORT/SUMMARY/FINDINGS but not PROOF: .github/PR2128_REVIEW_PROOF.md was tracked on master
+# and inherited by every branch cut from it.
+*_PROOF.md
+*-PROOF.md
+PR*_REVIEW_*.md
 
 # One-off / temp scripts at the repo root.
 fix-*.ps1
