@@ -6,6 +6,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
+using AiDotNet.Evolution;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
@@ -2628,6 +2629,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Optional structural distance between two candidates, required whenever
     /// <see cref="AiDotNet.Configuration.EvolutionOptions.NoveltyDistanceThreshold"/> is positive.
     /// </param>
+    /// <param name="archiveFactory">Optional factory for a distinct empty archive per island.</param>
+    /// <param name="winnerModelFactory">Optional typed adapter that materializes the best genome as the built model.</param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// Checkpointing needs a genome codec, so this overload rejects options that request it; use the overload that
@@ -2641,7 +2644,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         ICandidateRefiner<TGenome>? refiner = null,
         IMigrationPolicy<TGenome>? migration = null,
         IEvolutionObserver<TGenome>? observer = null,
-        IGenomeDistance<TGenome>? genomeDistance = null);
+        IGenomeDistance<TGenome>? genomeDistance = null,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory = null,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory = null);
 
     /// <summary>
     /// Configures evolution of a candidate type of your own, with checkpointing and resume available.
@@ -2660,6 +2665,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Optional structural distance between two candidates, required whenever
     /// <see cref="AiDotNet.Configuration.EvolutionOptions.NoveltyDistanceThreshold"/> is positive.
     /// </param>
+    /// <param name="archiveFactory">Optional factory for a distinct empty archive per island.</param>
+    /// <param name="winnerModelFactory">Optional typed adapter that materializes the best genome as the built model.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureEvolution<TGenome>(
         IEvolutionTask<TGenome> task,
@@ -2671,7 +2678,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IMigrationPolicy<TGenome>? migration = null,
         IEvolutionObserver<TGenome>? observer = null,
         IEvolutionCheckpointStore? checkpointStore = null,
-        IGenomeDistance<TGenome>? genomeDistance = null);
+        IGenomeDistance<TGenome>? genomeDistance = null,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory = null,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory = null);
 
     /// <summary>
     /// Configures the programs a program-evolution run starts from, as plain source text.
@@ -2698,6 +2707,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// either test cases or an evaluator script on the options.
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureProgramEvolution(ProgramEvolutionOptions options);
+
+    /// <summary>Requires trusted public correctness checks before evaluating program fitness.</summary>
+    /// <param name="correctness">Checks reporting a maximization pass fraction in [0, 1]. Only exactly 1 and
+    /// zero constraint violations pass. The caller owns isolation and versioning; never expose held-out tests.</param>
+    /// <returns>This builder for fluent configuration.</returns>
+    /// <remarks>Pair with ConfigureProgramEvolution. Checking and fitness costs must use the same units.</remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramCorrectness(IProgramFitnessEvaluator correctness);
 
     /// <summary>
     /// Configures the language model that proposes program edits.

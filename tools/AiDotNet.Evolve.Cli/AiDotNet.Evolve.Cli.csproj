@@ -20,5 +20,6 @@
     <!-- The command implementations are internal so the tool has no public surface to keep stable; the test project
          calls them directly rather than spawning a process, which is what keeps the CLI tests fast and reliable. -->
     <InternalsVisibleTo Include="AiDotNetTests" />
+    <InternalsVisibleTo Include="AiDotNet.Evolve.Cli.Tests" />
   </ItemGroup>
 </Project>

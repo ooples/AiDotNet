@@ -46,12 +46,20 @@ public static class FencedCodeExtractor
         string response,
         ProgramLanguage language = ProgramLanguage.Generic,
         bool allowRawFallback = true)
+        => ExtractCore(response, language, allowRawFallback, preserveText: false);
+
+    // Evolution's executable-source path keeps content whitespace and mixed line endings; the one terminator
+    // delimiting the closing fence is transport, not source. A source EOF newline requires an extra blank line.
+    internal static FencedCodeExtractionResult ExtractExact(string response, ProgramLanguage language)
+        => ExtractCore(response, language, allowRawFallback: false, preserveText: true);
+
+    private static FencedCodeExtractionResult ExtractCore(string response, ProgramLanguage language, bool allowRawFallback, bool preserveText)
     {
         if (response is null) throw new ArgumentNullException(nameof(response));
         if (!Enum.IsDefined(typeof(ProgramLanguage), language)) throw new ArgumentOutOfRangeException(nameof(language));
 
         var diagnostics = new List<string>();
-        IReadOnlyList<FencedCodeBlock> blocks = ScanBlocks(response, diagnostics);
+        IReadOnlyList<FencedCodeBlock> blocks = ScanBlocks(response, diagnostics, preserveText);
 
         FencedCodeBlock? labeled = SelectLongest(blocks, block => block.Language.HasValue && block.Language.Value == language);
         if (labeled is not null)
@@ -103,9 +111,10 @@ public static class FencedCodeExtractor
         return ScanBlocks(response, new List<string>());
     }
 
-    private static IReadOnlyList<FencedCodeBlock> ScanBlocks(string response, List<string> diagnostics)
+    private static IReadOnlyList<FencedCodeBlock> ScanBlocks(string response, List<string> diagnostics, bool preserveText = false)
     {
         List<string> lines = ProgramText.SplitLines(response);
+        List<int>? offsets = preserveText ? ProgramText.LineStarts(response) : null;
         var blocks = new List<FencedCodeBlock>();
 
         int index = 0;
@@ -141,8 +150,25 @@ public static class FencedCodeExtractor
                     " was never closed; the remainder of the response was treated as its content.");
             }
 
-            string text = TrimBlankLines(ProgramText.JoinLines(content, ProgramText.LineFeedText, trailingNewLine: false));
-            if (text.Length > 0) blocks.Add(new FencedCodeBlock(label, text, openLine + 1, fenceLength));
+            if (preserveText && !closed) continue;
+            string text;
+            if (offsets is not null)
+            {
+                var exact = new System.Text.StringBuilder();
+                for (int part = 0; part < content.Count; part++)
+                {
+                    if (part > 0)
+                    {
+                        int previousLine = openLine + part;
+                        int end = offsets[previousLine] + lines[previousLine].Length;
+                        exact.Append(response, end, offsets[previousLine + 1] - end);
+                    }
+                    exact.Append(content[part]);
+                }
+                text = exact.ToString();
+            }
+            else text = TrimBlankLines(ProgramText.JoinLines(content, ProgramText.LineFeedText, trailingNewLine: false));
+            if (!string.IsNullOrWhiteSpace(text)) blocks.Add(new FencedCodeBlock(label, text, openLine + 1, fenceLength));
         }
 
         return blocks;

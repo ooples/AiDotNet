@@ -11,6 +11,33 @@ public sealed class ProgramFitnessEvaluatorTests
 {
     private static readonly EvolutionEvaluationContext Context = new(0, 1234UL, 7UL, 1);
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Cancellation_after_dispatch_charges_the_current_example(int completed)
+    {
+        int calls = 0;
+        var engine = new FakeProgramExecutionEngine((_, _) =>
+        {
+            if (calls++ == completed) throw new OperationCanceledException();
+            return FakeExecutionOutcome.Success("ok");
+        });
+        var evaluator = new InputOutputProgramFitnessEvaluator(engine, new[] { Example("a", "ok"), Example("b", "ok") });
+        var result = await evaluator.EvaluateAsync(Genome(), Context);
+        Assert.Equal(EvolutionEvaluationStatus.Canceled, result.Status);
+        Assert.Equal(completed + 1, result.CostUnits);
+        Assert.Equal(completed + 1, engine.Calls);
+    }
+
+    [Fact]
+    public async Task Fatal_runner_failure_is_not_converted_into_an_ordinary_fitness_score()
+    {
+        var engine = new FakeProgramExecutionEngine((_, _) => throw new OutOfMemoryException("synthetic fatal runner failure"));
+        var evaluator = new InputOutputProgramFitnessEvaluator(engine, new[] { Example("a", "ok") });
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => evaluator.EvaluateAsync(Genome(), Context).AsTask());
+        Assert.Equal(1, engine.Calls);
+    }
+
     private static ProgramGenome Genome(string source = "print(1)") =>
         new(source, ProgramLanguage.Python);
 

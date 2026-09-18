@@ -98,8 +98,8 @@ evolution:
         // Two runs configured from the two documents would be the same run, which is the property that makes a
         // configuration file worth committing.
         Assert.Equal(
-            first.ToEngineOptions().ToSemanticCanonicalString(),
-            second.ToEngineOptions().ToSemanticCanonicalString());
+            first.ToEngineOptions().GetConfigurationHash(),
+            second.ToEngineOptions().GetConfigurationHash());
     }
 
     [Fact]

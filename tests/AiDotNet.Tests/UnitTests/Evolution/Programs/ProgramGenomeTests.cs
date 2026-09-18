@@ -16,8 +16,8 @@ public sealed class ProgramGenomeTests
         Assert.Equal("def solve():\n    return 1", unix.NormalizedSource);
         Assert.Equal(unix.NormalizedSource, windows.NormalizedSource);
         Assert.Equal(unix.NormalizedSource, oldMac.NormalizedSource);
-        Assert.Equal(unix.Id, windows.Id);
-        Assert.Equal(unix.Id, oldMac.Id);
+        Assert.NotEqual(unix.Id, windows.Id);
+        Assert.NotEqual(unix.Id, oldMac.Id);
     }
 
     [Fact]
@@ -28,15 +28,16 @@ public sealed class ProgramGenomeTests
     }
 
     [Fact]
-    public void ByteOrderMarkIsStrippedBeforeHashing()
+    public void ByteOrderMarkIsDisplayOnlyNormalization()
     {
         var withMark = new ProgramGenome("\uFEFFprint(1)");
         var without = new ProgramGenome("print(1)");
-        Assert.Equal(without.Id, withMark.Id);
+        Assert.Equal(without.NormalizedSource, withMark.NormalizedSource);
+        Assert.NotEqual(without.Id, withMark.Id);
     }
 
     [Fact]
-    public void IdIsStableLowercaseHexOverNormalizedSourceAndLanguage()
+    public void IdIsStableLowercaseHexOverExactSourceAndLanguage()
     {
         var genome = new ProgramGenome("print(1)\n");
         Assert.Equal(64, genome.Id.Length);
@@ -46,8 +47,8 @@ public sealed class ProgramGenomeTests
                 "Identity must be lowercase hexadecimal.");
         }
 
-        Assert.Equal(genome.Id, ProgramGenome.ComputeId("print(1)   \r\n"));
-        Assert.Equal(genome.Id, new ProgramGenome("print(1)").Id);
+        Assert.Equal(genome.Id, ProgramGenome.ComputeId(genome.Source));
+        Assert.NotEqual(genome.Id, new ProgramGenome("print(1)").Id);
     }
 
     [Fact]
@@ -67,13 +68,13 @@ public sealed class ProgramGenomeTests
 
         Assert.NotEqual(plain.Id, accented.Id);
         Assert.NotEqual(plain.Id, emoji.Id);
-        Assert.Equal(accented.Id, new ProgramGenome("caf\u00E9 = 1").Id);
+        Assert.Equal(accented.Id, new ProgramGenome("caf\u00E9 = 1\n").Id);
     }
 
     [Fact]
     public void ValueEqualityCoversSourceAndLanguageButNotTheDescription()
     {
-        var first = new ProgramGenome("print(1)\n", ProgramLanguage.Python, "seed");
+        var first = new ProgramGenome("print(1)", ProgramLanguage.Python, "seed");
         var second = new ProgramGenome("print(1)", ProgramLanguage.Python, "seed");
         var otherLanguage = new ProgramGenome("print(1)", ProgramLanguage.Generic, "seed");
         var otherDescription = new ProgramGenome("print(1)", ProgramLanguage.Python, "child");
@@ -106,8 +107,8 @@ public sealed class ProgramGenomeTests
             }
         }
 
-        Assert.Equal(4, genomes.Select(genome => genome.Id).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(genomes[0].Id, ProgramGenome.ComputeId("print(1)   \r\n", ProgramLanguage.Python));
+        Assert.Equal(5, genomes.Select(genome => genome.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(genomes[0].Id, ProgramGenome.ComputeId(genomes[0].Source, ProgramLanguage.Python));
         Assert.NotEqual(genomes[0].Id, ProgramGenome.ComputeId("print(1)"));
     }
 

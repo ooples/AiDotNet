@@ -136,6 +136,19 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
         if (measured.Status != EvolutionEvaluationStatus.Completed && !_options.RunOnFailedEvaluations) return measured;
         if (!measured.Quality.HasValue) return measured;
 
+        // The original scalar's uncertainty does not describe a model-blended score. Refuse before model spend.
+        if (measured.MeasurementOrigin is not null)
+        {
+            var diagnostics = measured.Diagnostics.Take(EvolutionTaskResult.MaximumDiagnostics - 1).Concat(new[]
+            {
+                new EvolutionDiagnostic("program_judge_measurement_origin_unsupported",
+                    "Origin-bearing measurements require a separately defined combined-score provenance model before LLM blending.")
+            });
+            return new EvolutionTaskResult(EvolutionEvaluationStatus.Failed, measured.Quality, measured.Direction,
+                measured.Descriptors, measured.Objectives, measured.ConstraintViolations, measured.CostUnits,
+                diagnostics, measured.Metrics, measured.Artifacts).WithMeasurementOrigin(measured.MeasurementOrigin);
+        }
+
         JudgeOutcome outcome = await JudgeAsync(candidate, context, cancellationToken).ConfigureAwait(false);
         if (!outcome.HasScores)
         {
@@ -462,7 +475,7 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
     {
         var components = new List<string>
         {
-            "llm-judge-program-evaluator-v1",
+            "llm-judge-program-evaluator-v2-measurement-origin",
             inner.Id,
             inner.VersionHash,
             promptBuilder.VersionHash,

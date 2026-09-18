@@ -22,7 +22,8 @@ namespace AiDotNet.Configuration;
 /// </para>
 /// <para><b>For Beginners:</b> Think of this as the rules-of-the-house form you fill in before letting generated
 /// code run on your machine: where it may run, how long it may run, how much memory it may use, and which program
-/// on your computer should be used to run each language. The defaults are safe and small. The one field worth
+/// on your computer should be used to run each language. Process mode alone does not restrict filesystem or network
+/// access; hostile code requires an independently provisioned OS/container boundary. The one field worth
 /// reading twice is <see cref="AllowUnsafeInProcessExecution"/>, which turns off the protection entirely; leave it
 /// alone unless you fully control the code being executed.</para>
 /// </remarks>

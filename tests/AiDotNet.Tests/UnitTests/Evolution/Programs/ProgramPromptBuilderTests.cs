@@ -304,7 +304,7 @@ public sealed class ProgramPromptBuilderTests
         };
         context.Inspirations = new List<ProgramPromptExample>
         {
-            new(new ProgramGenome("def f():  \n    return 1\n"), ProgramPromptExampleKind.Diverse, 0.5),
+            new(new ProgramGenome("def f():\n    return 1\n"), ProgramPromptExampleKind.Diverse, 0.5),
             new(new ProgramGenome("def g():\n    return 2\n"), ProgramPromptExampleKind.Diverse, 0.4)
         };
 

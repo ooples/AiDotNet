@@ -35,7 +35,7 @@ public sealed class ProgramGenomeCodec : IEvolutionGenomeCodec<ProgramGenome>
     public string Id => "program-genome";
 
     /// <inheritdoc/>
-    public string VersionHash => "program-genome-v1";
+    public string VersionHash => "program-genome-v2-exact-source";
 
     /// <inheritdoc/>
     public string Serialize(ProgramGenome genome)
