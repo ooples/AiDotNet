@@ -46,6 +46,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Octonion Networks", "https://arxiv.org/abs/1903.08478", Year = 2019, Authors = "Jiasong Wu et al.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 0.01,
+                Source = "Wu et al. 2019, Sec. 4: the first 20 epochs are preheated at a learning rate "
+                        + "of 0.01, after which the middle 40 epochs raise it tenfold. No schedule is "
+                        + "declared because a warm-up that raises the rate at an epoch boundary and then "
+                        + "holds it is not a curve the attribute expresses, and the paper gives no decay "
+                        + "thereafter. The optimizer is left unspecified because the paper names none.")]
 public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OctonionNeuralNetworkOptions _options;
@@ -104,24 +110,25 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
         _options = options ?? new OctonionNeuralNetworkOptions();
         ValidateOptions(_options);
         Options = _options;
-        _optimizer = optimizer ?? new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new NesterovAcceleratedGradientOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.InitialLearningRate,
-                InitialMomentum = _options.Momentum,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveMomentum = false,
-                EnableGradientClipping = false,
-                LearningRateScheduler = new LambdaLRScheduler(
-                    _options.InitialLearningRate,
-                    epoch => epoch < _options.RampEpoch
-                        ? 1.0
-                        : epoch < _options.FirstDecayEpoch
-                            ? 10.0
-                            : epoch < _options.SecondDecayEpoch ? 1.0 : 0.1),
-                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new NesterovAcceleratedGradientOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.InitialLearningRate,
+                    InitialMomentum = _options.Momentum,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveMomentum = false,
+                    EnableGradientClipping = false,
+                    LearningRateScheduler = new LambdaLRScheduler(
+                        _options.InitialLearningRate,
+                        epoch => epoch < _options.RampEpoch
+                            ? 1.0
+                            : epoch < _options.FirstDecayEpoch
+                                ? 10.0
+                                : epoch < _options.SecondDecayEpoch ? 1.0 : 0.1),
+                    SchedulerStepMode = SchedulerStepMode.StepPerEpoch
+                }));
         // Use the same loss function instance that was passed to base class
         _lossFunction = LossFunction;
 

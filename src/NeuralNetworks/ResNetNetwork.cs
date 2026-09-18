@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -59,6 +61,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.1, Momentum = 0.9, WeightDecay = 1e-4, ReferenceBatchSize = 256,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "He et al. 2016, Sec. 3.4 (Implementation): SGD, lr 0.1 divided by 10 when the error plateaus, momentum 0.9, weight decay 1e-4.")]
 public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ResNetOptions _options;
@@ -166,7 +171,9 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         // Validate that architecture matches configuration
         ValidateArchitectureMatchesConfiguration(architecture, configuration);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();

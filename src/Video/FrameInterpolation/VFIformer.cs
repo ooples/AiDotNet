@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -66,6 +67,11 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2111.13817",
     Year = 2022,
     Authors = "Zhihao Shi, Xiangyu Xu, Xiaohong Liu, Jun Chen, Ming-Hsuan Yang")]
+[PaperOptimizer(OptimizerKind.Adamax, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999,
+                MinLearningRate = 1e-6,
+                Source = "Lu et al. 2022, Sec. 4: the AdaMax optimizer with beta1 0.9 and beta2 0.999, "
+                        + "trained for 100 epochs with the learning rate initially 2e-4 and gradually "
+                        + "decayed to 1e-6.")]
 public partial class VFIformer<T> : FrameInterpolationBase<T>
 {
     private readonly VFIformerOptions _options;
@@ -115,9 +121,10 @@ public partial class VFIformer<T> : FrameInterpolationBase<T>
         // matching the paper's Adam setup) into the optimizer. Previously this constructed a
         // bare AdamWOptimizer that used AdamW's 1e-3 default, ~5x too high for this deep
         // encoder-decoder — training diverged (loss exploded) instead of decreasing.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }));
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

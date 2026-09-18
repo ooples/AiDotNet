@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -60,6 +61,8 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepFilterNet: A Low Complexity Speech Enhancement Framework for Full-Band Audio Based on Deep Filtering", "https://arxiv.org/abs/2110.05588", Year = 2022, Authors = "Hendrik Schröter, Alberto N. Escalante-B., Tobias Rosenkranz, Andreas Maier")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 32,
+                Source = "Schroeter et al. 2021: Adam with an initial learning rate of 1e-3 and a batch size of 32 over 30 epochs.")]
 public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DeepFilterNetOptions _options;
@@ -372,7 +375,9 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         _hopSize = hopSize;
         _lookahead = lookahead;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         int nFft = NextPowerOfTwo(_fftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _hopSize,

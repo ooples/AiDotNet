@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -56,6 +58,11 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2024,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wang et al. 2024, Sec. 3: both training stages use a learning rate of 5e-5 "
+                        + "with cosine annealing of the learning rate to zero. The optimizer is left "
+                        + "unspecified because the paper names none.")]
 public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu3Options _options;
@@ -103,7 +110,9 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         _options = options ?? new Emu3Options();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

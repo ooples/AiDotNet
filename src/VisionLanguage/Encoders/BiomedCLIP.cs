@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -65,6 +67,15 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.98,
+                Epsilon = 1e-6, WeightDecay = 0.2, ReferenceBatchSize = 4096,
+                WarmupSteps = 2000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhang et al. 2023, Supplementary Table 9: AdamW with a peak learning rate of "
+                        + "5.0e-4, weight decay 0.2, momentum beta1 0.9 and beta2 0.98, eps 1.0e-6, "
+                        + "cosine decay over 32 epochs with 2000 warmup steps, at a batch size of 4k. A "
+                        + "separate ablation raises the batch from 4k to 64k during training; the "
+                        + "constant-4k setting is the one declared.")]
 public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
@@ -150,6 +161,7 @@ public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
         // the test framework's default fixed-target regression contract.
         _optimizer =
             optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
                 this,
                 new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

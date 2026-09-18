@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -63,6 +65,20 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 8e-6, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0.2, WarmupSteps = 1600, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Li et al. 2023, config table: AdamW with momentum (0.9, 0.95) read as beta1 "
+                        + "and beta2, a base learning rate of 8e-6 decaying by cosine to a minimum of 0, "
+                        + "1600 warm-up steps and a weight decay of 0.2, at a batch size of 32768. The "
+                        + "batch is deliberately not declared as a scaling reference: the paper reports "
+                        + "a base learning rate and says it follows FLIP, whose convention multiplies "
+                        + "such a rate by batch/256, but this paper never states that formula, so the "
+                        + "rate is recorded exactly as written and left unscaled rather than being "
+                        + "adjusted by a convention borrowed from a cited work. The model keeps its own "
+                        + "optimizer and is verified against this record rather than built from it: 8e-6 "
+                        + "is a paper-scale rate over billions of samples, and applying it here leaves "
+                        + "the loss flat over the handful of steps a conformance run performs.")]
 public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     // NO SHAPE CONTRACT, for the same measured reason as BiomedCLIP.
@@ -126,7 +142,8 @@ public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
         _options = options ?? new CLIPAOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

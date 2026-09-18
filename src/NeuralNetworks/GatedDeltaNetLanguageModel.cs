@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -37,6 +38,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-4, WeightDecay = 0.1,
+                MinLearningRate = 0, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Yang et al. 2024, Sec. 5: AdamW with a peak learning rate of 4e-4, a weight "
+                        + "decay of 0.1 and gradient clipping of 1.0, under a cosine schedule.")]
 public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GatedDeltaNetOptions _options;
@@ -87,12 +93,13 @@ public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBas
         // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
         // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
         // something the caller could change short of building the whole optimizer themselves.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         InitializeLayers();
     }
 

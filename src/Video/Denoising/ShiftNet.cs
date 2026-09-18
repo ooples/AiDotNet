@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -70,6 +71,11 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2206.10810",
     Year = 2023,
     Authors = "Dasong Li, Xiaoyu Shi, Yi Zhang, Ka Chun Cheung, Simon See, Xiaogang Wang, Hongwei Qin, Hongsheng Li")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 4e-4, ReferenceBatchSize = 8,
+                MinLearningRate = 1e-7,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Li et al. 2022, Sec. 4.1: the Adam optimizer with the learning rate decreased "
+                        + "from 4e-4 to 1e-7 by cosine annealing, at a batch size of 8 over 750 epochs.")]
 public partial class ShiftNet<T> : VideoDenoisingBase<T>
 {
     private readonly ShiftNetOptions _options;

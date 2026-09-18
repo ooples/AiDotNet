@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -78,6 +79,9 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/1711.06045",
     Year = 2017,
     Authors = "Joost van Amersfoort, Wenzhe Shi, Alejandro Acosta, Francisco Massa, Johannes Totz, Zehan Wang, Jose Caballero")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0001, EarlyStoppingPatience = 10,
+                Source = "van Amersfoort et al. 2017, Sec. 4: Adam optimisation with a learning rate of "
+                        + "0.0001 and early stopping with a patience of 10 epochs.")]
 public partial class Figan<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -139,12 +143,13 @@ public partial class Figan<T> : FrameInterpolationBase<T>
         _flow = new FiganMultiScaleFlow<T>(_options.NumScales);
 
         // Adam at the paper's 1e-4.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
 
         InitializeLayers();
     }

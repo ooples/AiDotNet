@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -50,6 +52,13 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2023,
     Authors = "Xu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, WeightDecay = 0.01,
+                ReferenceBatchSize = 4096,
+                Source = "Xu et al. 2023, Sec. 4: the AdamW optimizer with a base learning rate of 2e-5 "
+                        + "and a weight decay of 0.01, pre-training for 100k steps at a batch size of "
+                        + "4,096. The model keeps its own optimizer and is verified against this record "
+                        + "rather than built from it: 2e-5 is a 100k-step rate and leaves the loss flat "
+                        + "over the handful of steps a conformance run performs.")]
 public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly BridgeTowerOptions _options;
@@ -97,7 +106,8 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         _options = options ?? new BridgeTowerOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -65,6 +66,8 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OCR-free Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2111.15664", Year = 2022, Authors = "Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Kim et al. 2022, Sec. 4: Adam with an initial pre-training learning rate of 1e-4, decreased as training progresses over 200K steps. No schedule is declared because the paper says only that the rate decreases, without naming a curve; fine-tuning selects a rate from 1e-5 to 1e-4, which is a range rather than a value.")]
 public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
 {
     private readonly DonutOptions _options;
@@ -239,7 +242,9 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         _decoderHeads = decoderHeads;
         _vocabSize = vocabSize;
         _maxGenerationLength = maxGenerationLength;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = Math.Max(imageHeight, imageWidth);
         ImageHeight = imageHeight;
@@ -328,7 +333,9 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         MaxSequenceLength = maxGenerationLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Native layers/embeddings are materialized on first use to avoid
         // constructor-time allocation for metadata and construction probes.

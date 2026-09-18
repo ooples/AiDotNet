@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -38,6 +39,14 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("xLSTM: Extended Long Short-Term Memory", "https://arxiv.org/abs/2405.04517", Year = 2024, Authors = "Maximilian Beck, Korbinian Poppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Gunter Klambauer, Johannes Brandstetter, Sepp Hochreiter")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.99,
+                WeightDecay = 0.1, ReferenceBatchSize = 256, WarmupSteps = 4000,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Beck et al. 2024, Sec. 4: AdamW with beta1 0.9, beta2 0.99 and a weight decay "
+                        + "of 0.1, a maximum learning rate of 1e-3, 4k steps of linear warm-up then "
+                        + "cosine decay over 50k steps in total, at a batch size of 256 and context "
+                        + "length 512.")]
 public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly XLSTMOptions _options;
@@ -93,11 +102,12 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         // training fell through to the framework default and barely moved: across the memorization
         // task the loss drifted only 0.13% between one and two iterations, leaving the more-data
         // invariant inside its own noise floor.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         InitializeLayers();
     }
 

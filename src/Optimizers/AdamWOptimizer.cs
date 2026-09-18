@@ -121,7 +121,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
-        InitializeAdaptiveParameters();
+        InitializeAdamWScalars();
     }
 
     /// <summary>
@@ -148,6 +148,17 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// Initializes the adaptive parameters used by the AdamW optimizer.
     /// </summary>
     protected override void InitializeAdaptiveParameters()
+        => InitializeAdamWScalars();
+
+    /// <summary>
+    /// Resets AdamW's adaptive scalars without dispatching to an override during construction.
+    /// </summary>
+    /// <remarks>
+    /// The optimizer is intentionally extensible, so <see cref="InitializeAdaptiveParameters"/>
+    /// remains virtual for normal lifecycle resets. Its constructor must not call that virtual
+    /// surface while a derived optimizer is only partially initialized.
+    /// </remarks>
+    private void InitializeAdamWScalars()
     {
         // Learning rate is handled by base class (synced with scheduler)
         _currentBeta1 = NumOps.FromDouble(_options.Beta1);

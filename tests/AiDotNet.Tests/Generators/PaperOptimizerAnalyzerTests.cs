@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -31,7 +33,11 @@ namespace AiDotNet.Attributes
         public double Momentum { get; set; } = double.NaN;
     }
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-    public sealed class ResearchPaperAttribute : Attribute { }
+    public sealed class ResearchPaperAttribute : Attribute
+    {
+        public ResearchPaperAttribute() { }
+        public ResearchPaperAttribute(string title, string url) { }
+    }
 }
 namespace AiDotNet.Interfaces
 {
@@ -264,5 +270,73 @@ public sealed class Model
 }";
 
         Assert.Empty((await RunAsync(source)).Where(item => item.Id is "AIDN101" or "AIDN104"));
+    }
+
+    [Fact]
+    public async Task ArxivCitation_WithImpossibleMonth_IsReported()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+[ResearchPaper(""Fixture"", ""https://arxiv.org/abs/2499.12345v2"")]
+public sealed class Model { }";
+
+        Diagnostic diagnostic = Assert.Single((await RunAsync(source)).Where(item => item.Id == "AIDN105"));
+        Assert.Contains("2499.12345", diagnostic.GetMessage(), StringComparison.Ordinal);
+        Assert.Contains("month 99", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArxivCitation_ValidVersionAndPdfSuffix_AreAccepted()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+[ResearchPaper(""Versioned"", ""https://arxiv.org/abs/2406.12345v3"")]
+public sealed class VersionedModel { }
+[ResearchPaper(""PDF"", ""https://export.arxiv.org/pdf/2406.1234v2.pdf"")]
+public sealed class PdfModel { }";
+
+        Assert.Empty((await RunAsync(source)).Where(item => item.Id == "AIDN105"));
+    }
+
+    [Fact]
+    public async Task NonArxivHost_WithArxivTextInPath_IsNotMisclassified()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+[ResearchPaper(""Fixture"", ""https://example.com/arxiv.org/abs/2499.12345"")]
+public sealed class Model { }";
+
+        Assert.Empty((await RunAsync(source)).Where(item => item.Id == "AIDN105"));
+    }
+
+    [Fact]
+    public async Task ShortArxivPath_DoesNotCrashAnalyzer()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+[ResearchPaper(""Fixture"", ""https://arxiv.org/abs/x"")]
+public sealed class Model { }";
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(source);
+        Assert.DoesNotContain(diagnostics, item => item.Id == "AD0001");
+        Assert.Empty(diagnostics.Where(item => item.Id == "AIDN105"));
+    }
+
+    [Fact]
+    public async Task CitationSweep_DoesNotCrashAnalyzer()
+    {
+        var source = new StringBuilder("using AiDotNet.Attributes;\n");
+        for (int index = 0; index < 2500; index++)
+        {
+            source.Append("[ResearchPaper(\"Fixture\", \"https://arxiv.org/abs/2406.")
+                .Append(index.ToString("D5", CultureInfo.InvariantCulture))
+                .Append("\")] public sealed class Model")
+                .Append(index.ToString(CultureInfo.InvariantCulture))
+                .Append(" { }\n");
+        }
+
+        ImmutableArray<Diagnostic> diagnostics = await RunAsync(source.ToString());
+        Assert.DoesNotContain(diagnostics, item => item.Id == "AD0001");
+        Assert.Empty(diagnostics.Where(item => item.Id == "AIDN105"));
     }
 }

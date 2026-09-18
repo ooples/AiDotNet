@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,15 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2024,
     Authors = "Cheng et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 0.001,
+                ReferenceBatchSize = 1024, Phase = TrainingPhase.PreTraining,
+                Source = "Cheng et al. 2024, Sec. 4: the global batch size and learning rate are set "
+                        + "empirically to 1,024 and 1e-3 for pre-training. The optimizer is left "
+                        + "unspecified because the paper names none.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-5,
+                ReferenceBatchSize = 2048, Phase = TrainingPhase.FineTuning,
+                Source = "Cheng et al. 2024, Sec. 4: fine-tuning uses a global batch size of 2,048 and "
+                        + "a learning rate of 2e-5.")]
 public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA2Options _options;

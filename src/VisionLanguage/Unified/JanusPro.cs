@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -82,6 +84,23 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0, ReferenceBatchSize = 512, WarmupSteps = 5000,
+                MaxGradientNorm = 1.0, Schedule = LearningRateSchedulerType.Constant,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Chen et al. 2025, hyperparameter table: AdamW with beta1 0.9 and beta2 0.95, "
+                        + "a weight decay of 0, a gradient clip of 1.0 and a constant scheduler "
+                        + "throughout. Stage 2, unified pre-training, runs at a learning rate of 1e-4 "
+                        + "with 5000 warmup steps and a batch size of 512. These rows are identical for "
+                        + "Janus-Pro-1B and 7B, so no size blocks them; only the stage 3 step count "
+                        + "differs. Stage 1 trains the adaptor at 1e-3 with 600 warmup steps and a batch "
+                        + "of 256.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-5, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0, ReferenceBatchSize = 128, WarmupSteps = 0,
+                MaxGradientNorm = 1.0, Schedule = LearningRateSchedulerType.Constant,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Chen et al. 2025, hyperparameter table: stage 3, supervised fine-tuning, runs "
+                        + "at a learning rate of 4e-5 with no warmup and a batch size of 128.")]
 public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options;
@@ -179,7 +198,9 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
     {
         _options = options ?? new JanusProOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

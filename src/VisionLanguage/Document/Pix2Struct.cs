@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,12 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2023,
     Authors = "Lee et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 0.01, ReferenceBatchSize = 2048,
+                WarmupSteps = 1000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Lee et al. 2023, Sec. 3: optimized using Adafactor, with a linear warmup of "
+                        + "1000 steps to a peak learning rate of 0.01 followed by cosine decay to 0, at "
+                        + "a batch size of 2048.")]
 public partial class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly Pix2StructOptions _options;
@@ -101,7 +109,9 @@ public partial class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnders
     {
         _options = options ?? new Pix2StructOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

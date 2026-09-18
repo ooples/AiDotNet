@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -68,6 +70,9 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.01342",
     Year = 2021,
     Authors = "Somepalli, G., Goldblum, M., Schwarzschild, A., Bruss, C. B., & Goldstein, T.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01,
+                LearningRate = 0.0001, ReferenceBatchSize = 256,
+                Source = "Somepalli et al. 2021, Training: AdamW with beta1 0.9, beta2 0.999, decay 0.01 and a learning rate of 0.0001 with batches of size 256.")]
 public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly SAINTOptions<T> _options;
@@ -158,7 +163,9 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new SAINTOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)

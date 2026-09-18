@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Kaneko et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, Beta1 = 0.5, Beta2 = 0.9,
+                Source = "Kaneko et al. 2022, Sec. 4: trained for 2.5M iterations using the Adam "
+                        + "optimizer with an initial learning rate of 0.0002 and momentum terms beta1 "
+                        + "0.5 and beta2 0.9. The paper's word momentum here names the Adam betas.")]
 public partial class ISTFTNet<T> : VocoderBase<T>
 {
     private readonly ISTFTNetOptions _options;
@@ -80,7 +86,9 @@ public partial class ISTFTNet<T> : VocoderBase<T>
     {
         _options = options ?? new ISTFTNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

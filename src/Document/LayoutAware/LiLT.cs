@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -62,6 +63,11 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.01, ReferenceBatchSize = 96,
+                Source = "Wang et al. 2022, Sec. 4.1: LiLT BASE is pre-trained with Adam at a learning "
+                        + "rate of 2e-5, a weight decay of 1e-2 and betas (0.9, 0.999), at a batch size "
+                        + "of 96 for 5 epochs.")]
 public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LiLTOptions _options;
@@ -165,7 +171,9 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _textBackbone = textBackbone;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
         MaxSequenceLength = maxSequenceLength;

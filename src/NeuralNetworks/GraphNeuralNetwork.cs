@@ -1,4 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -51,6 +52,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, EarlyStoppingPatience = 10,
+                Source = "Kipf and Welling 2017, Sec. 5: all models trained for a maximum of 200 epochs "
+                        + "using Adam with a learning rate of 0.01 and early stopping with a window size "
+                        + "of 10.")]
 public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;

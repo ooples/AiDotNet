@@ -85,6 +85,98 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public string Variant { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Which part of a composite model this recipe applies to, for example
+    /// <c>"discriminator"</c>. Empty means the model as a whole.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Papers for composite models state different settings per part. Stable Audio Open gives a
+    /// base learning rate of 1.5e-4 for its autoencoder, 3e-4 for its discriminators and 5e-5 for
+    /// its DiT; a GAN paper routinely separates generator from discriminator. One recipe per model
+    /// cannot express any of that, and picking whichever number appears first would be a silent
+    /// mis-declaration of the rest.
+    /// </para>
+    /// <para>
+    /// The call site names the component it is building --
+    /// <c>PaperOptimizerFactory.CreateFor(this, "discriminator")</c> -- and matching is exact and
+    /// case-insensitive. A component with no declaration of its own falls back to the unnamed
+    /// recipe, so a model can declare a shared default and override only the parts that differ.
+    /// </para>
+    /// </remarks>
+    public string Component { get; set; } = string.Empty;
+
+    // ---- Which recipe this is ------------------------------------------------------------
+
+    /// <summary>Which stage of training this recipe describes. Defaults to pre-training.</summary>
+    /// <remarks>
+    /// A model declaring several phases records the whole of what its paper says, and resolution
+    /// picks the one being built. Before this key existed the only option was to declare one stage
+    /// and describe the others in prose, which put the paper's own words out of reach of any check.
+    /// </remarks>
+    public TrainingPhase Phase { get; set; } = TrainingPhase.PreTraining;
+
+    /// <summary>
+    /// A phase whose unstated values this one copies, for papers that say a later stage uses the
+    /// same settings as an earlier one.
+    /// </summary>
+    /// <remarks>
+    /// SPEAR-TTS states its second stage as "the optimizer and the learning rate schedule are the
+    /// same as for S1". Repeating the values instead would be a transcription the paper never made,
+    /// and two copies of a number drift apart the first time one is corrected. Only values this
+    /// declaration leaves unset are inherited, so an override stays visible.
+    /// </remarks>
+    public TrainingPhase InheritsFrom { get; set; } = TrainingPhase.Unspecified;
+
+    /// <summary>How this recipe's values were arrived at. Defaults to stated outright.</summary>
+    public RecipeProvenance Provenance { get; set; } = RecipeProvenance.Stated;
+
+    /// <summary>
+    /// The learning rates a paper searched over, when <see cref="Provenance"/> is
+    /// <see cref="RecipeProvenance.Searched"/>. Empty otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A search is not a recommendation. iTransformer tries {1e-3, 5e-4, 1e-4} and BERT tries
+    /// {5e-5, 3e-5, 2e-5}; declaring any single one as though the paper prescribed it would invent
+    /// a fact. Recording the set keeps the paper's actual claim, and a caller can see the range.
+    /// </remarks>
+    public double[] SearchedValues { get; set; } = [];
+
+    // ---- Recipe elements beyond the optimizer itself --------------------------------------
+
+    /// <summary>Decay of an exponential moving average kept over the weights. Unset means none.</summary>
+    /// <remarks>
+    /// Twelve of 122 surveyed papers keep an EMA, almost always at 0.9999 — DDPM, MobileNetV3 and
+    /// ADM among them — and the averaged weights, not the raw ones, are what those papers evaluate.
+    /// A reproduction that skips it produces a visibly different model, so its absence is a
+    /// deviation worth reporting rather than a detail.
+    /// </remarks>
+    public double EmaDecay { get; set; } = double.NaN;
+
+    /// <summary>Per-layer multiplier applied to the base rate, deepest layer first. Unset means none.</summary>
+    /// <remarks>
+    /// Standard when fine-tuning a pretrained backbone: each layer nearer the input gets the rate
+    /// of the one above it times this factor, so early features move less than the head. ConvNeXt
+    /// and BLIP-2 both use it, and applying a flat rate instead disturbs exactly the pretrained
+    /// features the stage is meant to preserve.
+    /// </remarks>
+    public double LayerwiseLearningRateDecay { get; set; } = double.NaN;
+
+    /// <summary>Epochs without improvement before training stops. Unset means the paper does not stop early.</summary>
+    /// <remarks>
+    /// For several papers this IS the stopping rule — DeepAR states early stopping and no length at
+    /// all — so a fixed-length run reproduces neither its cost nor its result.
+    /// </remarks>
+    public int EarlyStoppingPatience { get; set; }
+
+    /// <summary>Micro-batches accumulated before each optimizer step. Unset means one.</summary>
+    /// <remarks>
+    /// Load-bearing rather than incidental: the batch a rate was tuned for is the EFFECTIVE batch,
+    /// accumulation included. Band-Split RNN reaches its effective 64 as 32 x 2. Reading
+    /// <see cref="ReferenceBatchSize"/> as the per-step batch when the paper meant the accumulated
+    /// one would scale the rate by the wrong factor while citing a rule that assumes otherwise.
+    /// </remarks>
+    public int GradientAccumulationSteps { get; set; }
     // ---- Optimizer hyperparameters -------------------------------------------------------
 
     /// <summary>The paper's learning rate. Unset means the paper does not state a constant one.</summary>
@@ -151,14 +243,135 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public int WarmupSteps { get; set; }
 
+    /// <summary>
+    /// What the rate does AFTER warmup finishes, when <see cref="Schedule"/> is
+    /// <see cref="LearningRateSchedulerType.LinearWarmup"/>.
+    /// </summary>
+    /// <remarks>
+    /// Warmup and the decay that follows it are two halves of one published curve, and the second
+    /// half is the half that is usually dropped. Whisper warms up over 2048 updates and then decays
+    /// linearly to zero (Radford et al. 2022, Table 17); holding the rate flat after warmup would
+    /// reproduce the first 0.2% of that schedule and none of the rest. Left at
+    /// <c>Constant</c> the rate simply holds, which is right for papers that only specify warmup.
+    /// </remarks>
+    public LinearWarmupScheduler.DecayMode PostWarmupDecay { get; set; }
+        = LinearWarmupScheduler.DecayMode.Constant;
+
+    /// <summary>
+    /// Warmup expressed as a fraction of the whole run, for papers that state it that way.
+    /// Unset means the paper gives an absolute step count, or no warmup.
+    /// </summary>
+    /// <remarks>
+    /// HuBERT ramps up over the first 8% of training steps (Hsu et al. 2021, Sec. IV-A), which no
+    /// absolute number can represent: 8% of a 400k-step pre-training run and 8% of a short
+    /// fine-tune are different counts and both are what the paper says. Stated as a fraction it
+    /// stays exact at any run length, where a transcribed step count would be wrong at every length
+    /// but one. Takes precedence over <see cref="WarmupSteps"/> when both are declared.
+    /// </remarks>
+    public double WarmupFraction { get; set; } = double.NaN;
+
+    /// <summary>
+    /// How much of the run is spent holding the peak rate before decay begins, for
+    /// <see cref="LearningRateSchedulerType.TriStage"/>. Unset means no hold phase.
+    /// </summary>
+    /// <remarks>
+    /// wav2vec 2.0 fine-tunes with warmup over the first 10% of updates, a constant hold for the
+    /// next 40%, and linear decay for the remainder (Baevski et al. 2020, Sec. 4.3). The hold is
+    /// not a detail: without it the rate begins falling four times earlier than published.
+    /// </remarks>
+    public double HoldFraction { get; set; } = double.NaN;
+
+    /// <summary>
+    /// Which cyclic policy the paper uses, for <see cref="LearningRateSchedulerType.Cyclic"/>.
+    /// </summary>
+    /// <remarks>
+    /// The policies differ in amplitude: triangular2 halves the range on every cycle where
+    /// triangular keeps it, so after four cycles -- what ECAPA-TDNN trains for (Desplanques et al.
+    /// 2020, Sec. 3) -- the two have drifted apart by 8x. For a cyclic schedule
+    /// <see cref="LearningRate"/> is the upper bound and <see cref="MinLearningRate"/> the lower,
+    /// with <see cref="StepSize"/> the half-cycle, which is how these papers state them.
+    /// </remarks>
+    public CyclicLRScheduler.CyclicMode CyclicPolicy { get; set; }
+        = CyclicLRScheduler.CyclicMode.Triangular;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
     /// <summary>Interval, in steps or epochs, between decay events. Unset means unstated.</summary>
+    /// <summary>
+    /// Whether the schedule's intervals are counted in optimizer steps or in epochs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Papers overwhelmingly state decay in EPOCHS -- "decay by 0.01 every 3 epochs", "halved every
+    /// two epochs", "a 0.999 factor in every epoch" -- while the schedule attached from a recipe is
+    /// stepped per batch. Declaring the interval without its unit silently reinterprets epochs as
+    /// steps, which is not a small error: MobileNetV3's 0.01 every 3 epochs becomes a 100x cut every
+    /// 3 steps, and the model stops training within a few updates.
+    /// </para>
+    /// <para>
+    /// Defaults to <c>StepPerBatch</c>, which is the cadence every schedule these recipes express is
+    /// written in -- StepSize, WarmupSteps, Noam's t and milestone fractions all count steps. Set
+    /// <c>StepPerEpoch</c> whenever the paper counts in epochs.
+    /// </para>
+    /// <para>
+    /// This is NOT the library default: <c>GradientBasedOptimizerOptions.SchedulerStepMode</c>
+    /// defaults to <c>StepPerEpoch</c>. The factory therefore writes the declared cadence onto the
+    /// options unconditionally. An earlier revision wrote it only when it differed from
+    /// <c>StepPerBatch</c>, on the assumption that the options already agreed -- they do not, so
+    /// every recipe that did not explicitly ask for an epoch cadence got a schedule that was
+    /// attached and then never advanced.
+    /// </para>
+    /// </remarks>
+    public SchedulerStepMode ScheduleStepMode { get; set; } = SchedulerStepMode.StepPerBatch;
+
     public int StepSize { get; set; }
+
+    /// <summary>
+    /// The exact steps a paper decays at, for schedules stated as a list rather than an interval.
+    /// Empty means the paper gives an interval, or no step decay.
+    /// </summary>
+    /// <remarks>
+    /// Segment Anything decreases the rate by 10x at 60,000 and again at 86,666 iterations (Kirillov
+    /// et al. 2023, Training recipe) -- points that are not evenly spaced, so no
+    /// <see cref="StepSize"/> interval can describe them.
+    /// </remarks>
+    public int[] Milestones { get; set; } = [];
+
+    /// <summary>
+    /// Decay points stated as fractions of the whole run, for papers that give them that way.
+    /// Empty means the paper gives absolute steps, or no step decay.
+    /// </summary>
+    /// <remarks>
+    /// Mask2Former decays "at 0.9 and 0.95 fractions of the total number of training steps"
+    /// (Cheng et al. 2022, Sec. 4), and CSDI at 75% and 90% of its epochs. Transcribing those into
+    /// absolute steps bakes in one particular run length and is wrong at every other, so the
+    /// fractions are kept and resolved against the configured run. Takes precedence over
+    /// <see cref="Milestones"/> when both are declared.
+    /// </remarks>
+    public double[] MilestoneFractions { get; set; } = [];
 
     /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
     public double MinLearningRate { get; set; } = double.NaN;
+
+    /// <summary>
+    /// The batch size the paper's learning rate was chosen for. Unset means unstated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A learning rate is only meaningful alongside the batch it was tuned for. MobileNetV3's 0.1
+    /// is stated for batch 4096; applied at batch 32 it is roughly two orders of magnitude too
+    /// large, and training does not converge. Declaring the reference batch lets the library apply
+    /// the linear scaling rule -- multiply the rate by the ratio of actual to reference batch
+    /// (Goyal et al. 2017, "Accurate, Large Minibatch SGD") -- instead of transplanting a number
+    /// into a regime it was never chosen for.
+    /// </para>
+    /// <para>
+    /// Left unset, the declared rate is used as-is. That is the right default for papers that
+    /// state a rate without tying it to a large batch.
+    /// </para>
+    /// </remarks>
+    public int ReferenceBatchSize { get; set; }
 
     // ---- Gradient clipping ---------------------------------------------------------------
 
@@ -188,7 +401,19 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(MaxGradientNorm)
         || UseNesterov
         || WarmupSteps > 0
+        || !double.IsNaN(WarmupFraction)
+        || !double.IsNaN(HoldFraction)
         || StepSize > 0
+        || ScheduleStepMode != SchedulerStepMode.StepPerBatch
+        || Milestones.Length > 0
+        || MilestoneFractions.Length > 0
+        || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
+        || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)
-        || Schedule != LearningRateSchedulerType.Constant;
+        || Schedule != LearningRateSchedulerType.Constant
+        || !double.IsNaN(EmaDecay)
+        || !double.IsNaN(LayerwiseLearningRateDecay)
+        || EarlyStoppingPatience > 0
+        || GradientAccumulationSteps > 0
+        || SearchedValues.Length > 0;
 }

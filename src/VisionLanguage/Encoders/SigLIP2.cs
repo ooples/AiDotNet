@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -97,6 +99,19 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Tschannen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, WeightDecay = 1e-4,
+                ReferenceBatchSize = 32768, WarmupSteps = 20000, MinLearningRate = 0,
+                MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Tschannen et al. 2025, Sec. 3: a learning rate of 1e-3, decoupled weight "
+                        + "decay of 1e-4 and gradient clipping to norm 1, at a batch size of 32k under a "
+                        + "cosine schedule with 20k warmup steps. The paper names Adam, but the weight "
+                        + "decay it specifies is decoupled, which is AdamW; declaring Adam here would "
+                        + "apply the decay as coupled L2 instead. The model keeps its own "
+                        + "optimizer rather than being built from this record: building one "
+                        + "from the recipe snapshots a parameter buffer inside the "
+                        + "constructor, where this model reports 64 parameters against the 50 "
+                        + "it trains with, and the buffer is rejected on the first step.")]
 public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
@@ -184,13 +199,14 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         // Gradient clipping (norm 1.0) is on by AdamW default.
         _optimizer =
             optimizer
-            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 1e-5,
-                }
-            );
+            ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = 1e-5,
+                    }
+                ));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

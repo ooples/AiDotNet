@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -57,6 +59,9 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
+                Source = "Chen et al. 2024: AdamW with beta1 0.9, beta2 0.95, weight decay 0.1 and a cosine schedule. No single learning rate is declared because the paper gives one per encoder -- 1e-3 for the image encoder and 1e-4 for the text encoder -- and this model builds one optimizer over both, so neither rate would be right for all of it.")]
 public partial class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly InternViTOptions _options;
@@ -101,7 +106,9 @@ public partial class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
             _options = new InternViTOptions(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

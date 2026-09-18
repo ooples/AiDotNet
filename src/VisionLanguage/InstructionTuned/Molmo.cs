@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -63,6 +65,16 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Deitke et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, ReferenceBatchSize = 128,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Deitke et al. 2024, Sec. 4: four epochs of AdamW with betas (0.9, 0.95), a "
+                        + "batch size of 128 and a cosine learning rate decaying to 10 percent of its "
+                        + "peak. No peak rate is declared because the paper's table gives several -- "
+                        + "6e-6, 2e-4, 2e-5 and 1e-5 across its fine-tune, warmup and ViT stages -- and "
+                        + "the 10 percent floor cannot be stated without knowing which peak it applies "
+                        + "to. The model keeps its own optimizer so the schedule is not applied to a "
+                        + "library default.")]
 public partial class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MolmoOptions _options;
@@ -108,7 +120,8 @@ public partial class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM
         _options = options ?? new MolmoOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

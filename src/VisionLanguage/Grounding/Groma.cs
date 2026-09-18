@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,20 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ma et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, WeightDecay = 1e-4,
+                ReferenceBatchSize = 64, Phase = TrainingPhase.PreTraining,
+                Source = "Ma et al. 2024, training configuration table: detection pre-training uses "
+                        + "AdamW for 12 epochs at a batch size of 64, a learning rate of 2e-4 and a "
+                        + "weight decay of 1e-4.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0,
+                ReferenceBatchSize = 128, Phase = TrainingPhase.Alignment,
+                Source = "Ma et al. 2024: alignment pre-training runs 2 epochs at a batch size of 128, "
+                        + "a learning rate of 1e-4 and no weight decay. The zero decay is the table's "
+                        + "value.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 0,
+                ReferenceBatchSize = 128, Phase = TrainingPhase.FineTuning,
+                Source = "Ma et al. 2024: instruction fine-tuning runs 1 epoch at a batch size of 128, "
+                        + "a learning rate of 1e-5 and no weight decay.")]
 public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GromaOptions _options;
@@ -102,7 +118,9 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     {
         _options = options ?? new GromaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

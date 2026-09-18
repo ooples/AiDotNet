@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -66,6 +68,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models", "https://arxiv.org/abs/2301.12597", Year = 2023, Authors = "Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, WeightDecay = 0.05,
+                LearningRate = 1e-4, MinLearningRate = 5e-5, WarmupSteps = 2000,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Li et al. 2023, Sec. 3.4: AdamW with beta1 0.9, beta2 0.98 and weight decay 0.05; a cosine learning rate decay with a peak of 1e-4, a linear warmup of 2k steps, and a minimum rate of 5e-5 at the second stage.")]
 public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip2Model<T>
 {
     private readonly Blip2Options _options;
@@ -411,7 +417,9 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
 
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
             InitializeLayers();
@@ -515,7 +523,9 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
         InitializeNativeLayers(channels);

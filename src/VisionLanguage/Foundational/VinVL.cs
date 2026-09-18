@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -57,6 +59,17 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2021,
     Authors = "Zhang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4,
+                ReferenceBatchSize = 1024, Phase = TrainingPhase.PreTraining,
+                Source = "Zhang et al. 2021, Sec. 4: OSCAR+B is trained for at least 1M steps with a "
+                        + "learning rate of 1e-4 and a batch size of 1024. The optimizer is left "
+                        + "unspecified because this paper never names one -- it builds on Oscar, which "
+                        + "uses AdamW, but attributing that here would state a choice this paper did not "
+                        + "make.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5, ReferenceBatchSize = 128,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Zhang et al. 2021, Sec. 4: the OSCAR+B model is fine-tuned for 25 epochs with "
+                        + "a learning rate of 5e-5 and a batch size of 128.")]
 public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VinVLOptions _options;
@@ -107,13 +120,14 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         // VinVL trains Oscar+'s BERT-style single-stream fusion encoder with
         // AdamW at transformer-scale hyperparameters. Honor the public options
         // instead of AdamW's generic 1e-3 default.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

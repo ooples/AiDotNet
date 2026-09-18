@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -55,6 +57,16 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Flamingo: a Visual Language Model for Few-Shot Learning", "https://arxiv.org/abs/2204.14198", Year = 2022, Authors = "Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katie Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob Menick, Sebastian Borgeaud, Andrew Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikolaj Binkowski, Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, Karen Simonyan")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.1,
+                WarmupSteps = 5000, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Constant,
+                Source = "Alayrac et al. 2022, Sec. 3.4: AdamW with global norm clipping of 1 and a "
+                        + "weight decay of 0.1 on the trainable parameters other than the Perceiver "
+                        + "Resampler, which uses none. The learning rate rises linearly from 0 to 1e-4 "
+                        + "over the first 5000 steps and is then held constant -- the paper states it "
+                        + "observed no improvement from decaying it, so the constant tail is the stated "
+                        + "choice rather than an omission.")]
 public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IFlamingoModel<T>
 {
     private readonly FlamingoOptions _options;
@@ -223,7 +235,8 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             // Tokenizer is required for ONNX mode - must match the language model backbone
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }

@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -59,6 +61,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.24210",
     Year = 2024,
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Gorishniy et al. 2024, Sec. 4: the AdamW optimizer. No rate, decay or batch "
+                        + "is declared because the paper's table gives tuning distributions (UniformInt, "
+                        + "LogUniform) rather than chosen values, and the Adam appearing elsewhere is "
+                        + "the author Adam Paszke in a PyTorch citation.")]
 public partial class TabMNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabMOptions<T> _options;
@@ -100,7 +107,9 @@ public partial class TabMNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new TabMOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
