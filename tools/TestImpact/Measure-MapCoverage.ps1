@@ -49,14 +49,35 @@ foreach ($file in @($MapFile, $ManifestFile)) {
 $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
 $known = [Collections.Generic.HashSet[string]]::new([string[]] @($map.knownShards), [StringComparer]::Ordinal)
 
-# The manifest is read as text rather than through yq, so this runs anywhere PowerShell does. Shard
-# names are the selector's keys and are required to be unique, which makes a line match sufficient.
-$names = [regex]::Matches(
-    (Get-Content -LiteralPath $ManifestFile -Raw),
-    '(?m)^\s*-\s*name:\s*(.+?)\s*$'
-) | ForEach-Object { $_.Groups[1].Value }
+# PARSED, NOT PATTERN-MATCHED. This first used a single '^\s*-\s*name:' regex on the grounds that it
+# would run anywhere PowerShell does. That was the wrong trade: the pattern silently skips flow-style
+# entries -- "- { name: 'Parameter sweep - Count 0/8', ... }" -- and the manifest carried 45 of them,
+# so the universe read 164 where it was 209. An undercounted universe makes coverage look BETTER than
+# it is and can hide an entire unmapped family, which is precisely what this script exists to expose.
+#
+# yq is how the selector and the map workflow read this file, so it is the authority here too; the
+# text fallback is for a developer machine without it and handles both styles.
+$raw = Get-Content -LiteralPath $ManifestFile -Raw
+$names = @()
+if (Get-Command yq -CommandType Application -ErrorAction SilentlyContinue) {
+    $names = @(& yq -o=json -I=0 '.shard' $ManifestFile | ConvertFrom-Json | ForEach-Object { $_.name })
+    if ($LASTEXITCODE -ne 0) { throw "yq failed to read $ManifestFile" }
+}
+if ($names.Count -eq 0) {
+    $block = [regex]::Matches($raw, '(?m)^\s*-\s*name:\s*(?<v>.+?)\s*$')
+    $flow = [regex]::Matches($raw, '(?m)^\s*-\s*\{\s*name:\s*(?<v>''[^'']*''|"[^"]*"|[^,}]+)')
+    $names = @(@($block) + @($flow) | ForEach-Object { $_.Groups['v'].Value.Trim().Trim("'", '"') })
+}
+if ($names.Count -eq 0) { throw "No shard names found in $ManifestFile" }
 
-if (-not $names) { throw "No shard names found in $ManifestFile" }
+# THE TRIP-WIRE. Whatever did the parsing, the number of names must equal the number of list items
+# under 'shard:'. Without this a parser that quietly skips a style reports a rosy number and nothing
+# ever contradicts it -- the failure mode that produced the 164/209 undercount in the first place.
+$items = ([regex]::Matches($raw, '(?m)^\s{2}-\s')).Count
+if ($names.Count -ne $items) {
+    throw ("parsed {0} shard names but {1} holds {2} list items; the parser is missing entries" -f `
+        $names.Count, $ManifestFile, $items)
+}
 
 # Family is the part before the first ' - ', which is how these names are constructed.
 $rows = $names | ForEach-Object {

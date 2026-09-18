@@ -473,3 +473,6 @@ wiki-generated/
 # the library's XML doc comments — not committed. Run `npm run gen:wiki` in website/ to build
 # it locally.
 website/src/content/docs/reference/wiki/
+
+# Local knowledge graph written by the token-optimizer plugin; never part of the repository.
+.token-optimizer/
