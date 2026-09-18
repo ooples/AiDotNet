@@ -1347,11 +1347,40 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
                     + "publish generated construction metadata.");
             }
 
+            Type runtimeLayerType = layer.GetType();
+
+            // A layer from a CONSUMER assembly cannot be rebuilt through DeserializationHelper. That
+            // helper resolves a layer from a NAME-keyed table populated by scanning AiDotNet's own
+            // assembly, so an external type name is never in it and the lookup throws "Layer type X
+            // is not supported for deserialization" before any of the tiers written to serve
+            // consumer layers (generated factories, LayerFactoryRegistry, the reflection matcher)
+            // can run. A string cannot name a type this assembly cannot reference, so the fix is to
+            // stop going through a string at all for these layers.
+            //
+            // LayerBase already publishes exactly the right contract: its
+            // IConfigurationCloneable.CloneConfiguration() rebuilds a layer's constructor-owned
+            // structure BY TYPE -- generated factory, then the registry that discovers a consumer
+            // assembly's own generated table, then reflection over recorded constructor state -- and
+            // is documented for precisely this "layer held inside a constructor container" case.
+            // Only external layers are routed to it; every AiDotNet layer keeps the existing path,
+            // so this stays a fix rather than a re-plumbing of the 800-odd models that clone today.
+            if (LayerCloning.IsDeclaredOutsideAiDotNet(runtimeLayerType))
+            {
+                if (((IConfigurationCloneable)layerBase).CloneConfiguration() is not ILayer<T> externalCopy)
+                {
+                    throw new NotSupportedException(
+                        $"Layer '{runtimeLayerType.FullName}' produced a configuration clone that is "
+                        + $"not an ILayer<{typeof(T).Name}>.");
+                }
+
+                layerCopies.Add(externalCopy);
+                continue;
+            }
+
             var metadata = layerBase.GetMetadata().ToDictionary(
                 pair => pair.Key,
                 pair => (object)pair.Value,
                 StringComparer.Ordinal);
-            Type runtimeLayerType = layer.GetType();
             Type registryLayerType = runtimeLayerType.IsGenericType
                 ? runtimeLayerType.GetGenericTypeDefinition()
                 : runtimeLayerType;
