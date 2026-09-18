@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -61,6 +61,23 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly INeuralNetwork<T> _targetNetwork;
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
+
+    /// <summary>
+    /// The CURRENT exploration rate, annealed from <see cref="TradingAgentOptions{T}.EpsilonStart"/> toward
+    /// <see cref="TradingAgentOptions{T}.EpsilonEnd"/> by <see cref="TradingAgentOptions{T}.EpsilonDecay"/>.
+    ///
+    /// <para>This field did not exist. <c>SelectAction</c> compared its random draw against
+    /// <c>TradingOptions.EpsilonStart</c> — a constant — so the behaviour policy never annealed: at the
+    /// shipped default of 1.0 the agent chose uniformly at random on EVERY training step, for the whole run,
+    /// and its learning curve was pure noise. <c>EpsilonEnd</c> and <c>EpsilonDecay</c> were declared, were
+    /// validated against each other in <c>TradingAgentOptions.Validate</c>, were plumbed through
+    /// <c>TradingAgentBase.CreateBaseOptions</c>, and were read by nothing.</para>
+    ///
+    /// <para>Not part of serialized state, and deliberately so: exploration is a TRAINING concern. Every
+    /// serving path calls <c>SelectAction(state, training: false)</c>, which never consults epsilon, so a
+    /// reloaded checkpoint starting a fresh anneal changes no decision it makes. <see cref="DQNAgent{T}"/>
+    /// treats it the same way.</para>
+    /// </summary>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -398,7 +415,28 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             UpdateTargetNetwork();
         }
 
+        // Anneal AFTER a real update, never on the early-return paths above: those bail out because the
+        // replay buffer has not filled a minibatch yet, so nothing was learned and exploration has not
+        // earned a reduction. Same schedule and floor as DQNAgent.
+
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Trading metrics plus the CURRENT exploration rate.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>GetTradingMetrics</c> reports Sharpe, drawdown, cumulative return, win rate, trade count,
+    /// portfolio value and initial capital — every one an OUTCOME. None of them distinguishes a policy that
+    /// learned from one acting uniformly at random, which is how a never-annealing epsilon stayed invisible
+    /// while the agent produced noise. Publishing the rate makes the exploration schedule observable from
+    /// outside, so a regression in it fails a test instead of quietly degrading every result.</para>
+    /// </remarks>
+    public override Dictionary<string, T> GetMetrics()
+    {
+        var metrics = base.GetMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(CurrentEpsilon);
+        return metrics;
     }
 
     /// <summary>
