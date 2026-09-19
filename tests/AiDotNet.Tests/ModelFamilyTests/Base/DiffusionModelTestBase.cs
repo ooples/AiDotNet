@@ -795,7 +795,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
                     + "this process and the comparison above does not implicate Clone()";
 
             return "Self-reproduction re-check (failure path only): source re-predict max |diff| = "
-                + $"{sourceDrift:E6}, clone re-predict max |diff| = {cloneDrift:E6} -- {reading}.";
+                + $"{sourceDrift:E6}, clone re-predict max |diff| = {cloneDrift:E6} -- {reading}. "
+                + DescribeNumericEnvironment();
         }
         catch (Exception ex)
         {
@@ -810,6 +811,36 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// Largest absolute element-wise difference. A length mismatch or any non-finite element is
     /// reported as infinite, so neither can ever read as "reproduced exactly".
     /// </summary>
+    /// <summary>
+    /// Reports the process-global switches that decide a GEMM's reduction order, so a failure
+    /// message says which numerics were in force rather than leaving it to be guessed.
+    /// </summary>
+    /// <remarks>
+    /// Deterministic mode is the one that matters most. It defaults to true, and while it is on
+    /// the BLAS dispatcher routes every shape through a pure function of (hardware key, shape);
+    /// while it is off the dispatcher consults a cache that a background thread populates from
+    /// WALL-CLOCK timings, so the strategy chosen for a shape -- and therefore the order its
+    /// products are summed -- can change part-way through a process. It is a process-global
+    /// static that AiModelBuilder and AiModelResult both write, so a sibling test that opts into
+    /// AllowNondeterminism turns it off for every test running alongside it. That would make two
+    /// forwards of the same arithmetic disagree in the last bits without anything being wrong
+    /// with Clone(), and this reading is what tells the two apart.
+    /// </remarks>
+    private static string DescribeNumericEnvironment()
+    {
+        try
+        {
+            return "Numeric environment: DeterministicMode="
+                + $"{AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode}, "
+                + $"engine={AiDotNet.Tensors.Engines.AiDotNetEngine.Current?.GetType().Name ?? "null"}, "
+                + $"ProcessorCount={Environment.ProcessorCount}.";
+        }
+        catch (Exception ex)
+        {
+            return $"Numeric environment could not be read: {ex.GetType().FullName}: {ex.Message}";
+        }
+    }
+
     private static double MaxAbsoluteDifference(Tensor<TNum> a, Tensor<TNum> b)
     {
         if (a.Length != b.Length)
