@@ -654,6 +654,28 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         using var clonedDiffusion =
             Assert.IsAssignableFrom<IDiffusionModel<TNum>>(model.Clone());
 
+        // BOTH FORWARDS RUN BEFORE ANYTHING ELSE TOUCHES EITHER MODEL.
+        //
+        // The bit-identity check below used to sit HERE, between the two Predict calls, and that
+        // placement made it an experiment that disturbs its own subject. It reads
+        // GetParameters() off both models, and GetParameters() is not a passive read: it forces
+        // lazy layers to materialize (the reason Parameters_ShouldBeNonEmpty deliberately asks
+        // ParameterCount instead). Run between the measurements it reaches only the CLONE before
+        // the clone's forward -- the source had already produced `original` -- so the two things
+        // being compared for equality were no longer in comparable states. Whether that is enough
+        // to move a float is a property of the engine's kernels and therefore of the machine: on
+        // Windows/x64 and on a 4-core AVX2 Linux container reproducing the CI shard exactly, every
+        // diffusion fixture measures a clone difference of precisely zero, with the check running
+        // and with it skipped. An asymmetry that is invisible on the machines available to us is
+        // not an asymmetry we get to keep, because the comparison's whole premise is that nothing
+        // distinguishes the two models but the copy.
+        //
+        // Predict itself is instance-independent by construction -- CreateInferenceRng reseeds
+        // from _options.Seed on every call -- so with identical parameters the only thing left
+        // that can separate these two outputs is the execution path, which is exactly what this
+        // ordering stops perturbing.
+        var clonedOutput = PredictModel(clonedDiffusion, input);
+
         // A WIDENED TOLERANCE HAS TO EARN ITSELF.
         //
         // Two very different things produce a clone whose output differs: the clone computed the
@@ -663,17 +685,17 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         // alone they are indistinguishable.
         //
         // So a model that raises either tolerance must first show its clone carries bit-identical
-        // parameters. Models on the family default are left alone -- their tolerance is already
-        // tight enough that a lossy copy fails it -- which keeps this off the hot path for the
-        // rest of the family and out of the memory budget of the large ones, where GetParameters()
-        // would force lazy layers to materialize.
+        // parameters. It still gates the widened bound: this runs before a single element is
+        // compared, so a lossy copy is reported as the parameter defect it is rather than as a
+        // rounding difference the tolerance would excuse. Models on the family default are left
+        // alone -- their tolerance is already tight enough that a lossy copy fails it -- which
+        // keeps this off the hot path for the rest of the family and out of the memory budget of
+        // the large ones.
         if (CloneOutputRelativeTolerance > DefaultCloneOutputRelativeTolerance
             || CloneOutputAbsoluteTolerance > DefaultCloneOutputAbsoluteTolerance)
         {
             AssertCloneParametersAreBitIdentical(model, clonedDiffusion);
         }
-
-        var clonedOutput = PredictModel(clonedDiffusion, input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
         // EVERY ELEMENT AGAINST ITS OWN TOLERANCE. Tracking only the LARGEST difference and
@@ -682,7 +704,10 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         // exceed its own tiny allowance while a bigger difference elsewhere stays inside a
         // bigger one. The single comparison then passed on a Clone() that is demonstrably
         // wrong at index i. Each element is checked where it is; the worst RATIO is kept only
-        // so the failure message points at the element that actually broke.
+        // so the failure message points at the element that actually broke -- which is why the
+        // bookkeeping below runs BEFORE the per-element assertions rather than after them. Kept
+        // after, the failing element was the one element never recorded, so the summary message
+        // named some earlier, passing index as the worst.
         double worstRatio = 0.0;
         double maxDiff = 0.0;
         double maxAllowed = 0.0;
@@ -696,15 +721,6 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
                 + CloneOutputRelativeTolerance * Math.Abs(expected);
             double diff = Math.Abs(actual - expected);
 
-            // A non-finite clone output is a failure in its own right: NaN fails every
-            // comparison, so without this it slips through as "not greater than".
-            Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
-                $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
-
-            Assert.True(diff <= allowed,
-                $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
-                $"which exceeds its own tolerance {allowed:E6}.");
-
             double ratio = allowed > 0 ? diff / allowed : (diff > 0 ? double.PositiveInfinity : 0.0);
             if (!sawAny || ratio > worstRatio)
             {
@@ -714,6 +730,15 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
                 maxAllowed = allowed;
                 maxDiffIndex = i;
             }
+
+            // A non-finite clone output is a failure in its own right: NaN fails every
+            // comparison, so without this it slips through as "not greater than".
+            Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
+                $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
+
+            Assert.True(diff <= allowed,
+                $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
+                $"which exceeds its own tolerance {allowed:E6}.");
         }
 
         // Kept as a summary line: every element was already asserted individually above,
