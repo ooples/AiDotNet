@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2111.09395", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
-public partial class FinRLAgent<T> : TradingAgentBase<T>
+public partial class FinRLAgent<T> : TradingAgentBase<T>, IMaskableAgent<T>
 {
 
     #region Fields
@@ -153,6 +153,35 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         return _innerAgent.SelectAction(state, training);
+    }
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para>This wrapper is only as maskable as whatever it wraps. The DQN, PPO and A2C inner agents are
+    /// discrete and honour a mask; a SAC inner agent is continuous and cannot, because there is no index set
+    /// to restrict.</para>
+    ///
+    /// <para><b>A mask handed to a non-maskable inner agent THROWS rather than being dropped.</b> Silently
+    /// ignoring it would return an action the caller has been told is legal when nothing checked — a
+    /// pre-shield that quietly degrades to no shield at all, which is more dangerous than having none,
+    /// because the caller stops looking. Failing here names the algorithm that cannot comply.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
+    {
+        if (legalActions is null)
+        {
+            return _innerAgent.SelectAction(state, training);
+        }
+
+        if (_innerAgent is IMaskableAgent<T> maskable)
+        {
+            return maskable.SelectAction(state, training, legalActions);
+        }
+
+        throw new InvalidOperationException(
+            $"A legal-action mask was supplied, but the inner {_innerAgent.GetType().Name} has a continuous "
+            + "action space and cannot honour one. Masking restricts a set of discrete indices; constraining "
+            + "a continuous action is projection onto a feasible region, which is a different operation.");
     }
 
     #endregion

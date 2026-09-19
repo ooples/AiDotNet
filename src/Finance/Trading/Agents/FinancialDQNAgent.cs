@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.LossFunctions;
 
@@ -49,7 +50,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -142,32 +144,39 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>BOTH selection sites are masked, and that is the point.</b> An epsilon-greedy agent has two
+    /// ways to choose an action: the exploration draw and the greedy argmax. Masking only the argmax — the
+    /// commonest way to get this wrong — leaves exploration selecting illegal actions at rate epsilon, which
+    /// early in training is nearly every step, and those are precisely the steps the agent learns most
+    /// from.</para>
+    ///
+    /// <para>The argmax SKIPS illegal indices rather than lowering their Q-value. Lowering invites the
+    /// question "how low is low enough", and the answer depends on the numeric range the network happens to
+    /// produce; skipping does not.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+
         // The ANNEALED rate, not the starting one. Reading EpsilonStart here pinned exploration at its
         // initial value for the entire run — 100% uniform-random behaviour at the shipped default of 1.0.
         if (training && RandomHelper.CreateSecureRandom().NextDouble() < _epsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
-            int randomAction = RandomHelper.CreateSecureRandom().Next(TradingOptions.ActionSize);
+            int randomAction = ActionMasking.RandomLegal(
+                RandomHelper.CreateSecureRandom(), mask, TradingOptions.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
         }
 
-        var qValues = _qNetwork.Predict(Tensor<T>.FromVector(state));
-        int bestAction = 0;
-        T maxQ = qValues.Data.Span[0];
-
-        for (int i = 1; i < TradingOptions.ActionSize; i++)
-        {
-            if (NumOps.GreaterThan(qValues.Data.Span[i], maxQ))
-            {
-                maxQ = qValues.Data.Span[i];
-                bestAction = i;
-            }
-        }
+        var qValues = _qNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
 
         var result = new Vector<T>(TradingOptions.ActionSize);
-        result[bestAction] = NumOps.One;
+        result[ActionMasking.ArgMaxLegal(qValues, mask, NumOps)] = NumOps.One;
         return result;
     }
 
