@@ -316,9 +316,10 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     public double CurrentValue => ToDouble(_portfolioValue);
 
     /// <summary>
-    /// Resets the per-episode reward statistics and drawdown peak. Call after <see cref="TradingEnvironment{T}.Reset"/>
-    /// when reusing one environment instance across independent episodes (e.g. evaluation). Not needed for the
-    /// default single-pass training configuration (one episode over the full series).
+    /// Resets the per-episode reward statistics, drawdown peak, turnover and exposure.
+    /// <see cref="TradingEnvironment{T}.Reset"/> now calls this automatically (through
+    /// <see cref="OnReset"/>), so every episode starts from the same baseline; calling it explicitly as well is
+    /// harmless (it is idempotent).
     /// </summary>
     public void ResetEpisodeState()
     {
@@ -328,4 +329,10 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         _grossExposure = 0;
         _shortExposure = 0;
     }
+
+    /// <summary>
+    /// Clears this environment's per-episode state whenever <see cref="TradingEnvironment{T}.Reset"/> starts a
+    /// new episode — without it, reward statistics and the drawdown peak leaked from one episode into the next.
+    /// </summary>
+    protected override void OnReset() => ResetEpisodeState();
 }
