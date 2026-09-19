@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using System;
 using System.Reflection;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -610,13 +610,52 @@ public abstract class ReinforcementLearningTestBase<T>
         // land on opposite sides of it. Discrete and one-hot agents are unaffected -- every pair of
         // distinct one-hots is the same distance apart -- so this sharpens the probe rather than
         // relaxing it.
-        var candidates = new List<Vector<T>> { first };
+        // Pass one: free-running draws, exactly as before. The farthest pair is taken from THIS
+        // pass alone whenever it yields one, so no agent that already answered the probe can have
+        // its pair changed by the fallback below.
+        var freeRunning = new List<Vector<T>> { first };
         for (int attempt = 0; attempt < 256; attempt++)
         {
             var candidate = agent.SelectAction(state, explore: true);
-            if (candidate.Length == first.Length) candidates.Add(candidate);
+            if (candidate.Length == first.Length) freeRunning.Add(candidate);
         }
 
+        var pair = FarthestPair(freeRunning);
+        if (pair.Item1 is not null) return pair;
+
+        // Pass two, only when pass one found nothing: a fresh episode per draw. An agent whose
+        // exploration is EPISODIC rather than per-step offers ONE exploratory action and then acts
+        // greedily for the remainder of the episode. Monte Carlo ES is the textbook case (Sutton
+        // and Barto): its exploring start fires on the first action of an episode and never again
+        // until that episode ends. Pass one never ends an episode, so such an agent contributed a
+        // single random draw, and whether the probe found two distinct actions was decided by
+        // whether that one draw happened to differ from the greedy action -- a coin flip at
+        // ActionSize 2, seen as the same test skipping on four runs of six against identical code.
+        // ResetEpisode is the IRLAgent contract's start-of-episode signal and its base
+        // implementation is a no-op.
+        //
+        // The two passes are kept SEPARATE rather than pooled. Pooling was tried and regressed TD3
+        // from passing to failing: an agent that anneals its exploration scale draws far wider
+        // immediately after a reset than it does deep into a run, so the widest pair across the
+        // pooled set came from two different distributions and was no longer symmetric about the
+        // policy mean -- reintroducing the very bias documented above (-8.962E-001 against
+        // +2.685E+000). Within one pass every draw is comparable.
+        var perEpisode = new List<Vector<T>> { first };
+        for (int attempt = 0; attempt < 256; attempt++)
+        {
+            agent.ResetEpisode();
+            var candidate = agent.SelectAction(state, explore: true);
+            if (candidate.Length == first.Length) perEpisode.Add(candidate);
+        }
+
+        return FarthestPair(perEpisode);
+    }
+
+    /// <summary>
+    /// The two candidates that are farthest apart, or nulls when they all coincide.
+    /// </summary>
+    private (Vector<T>?, Vector<T>?) FarthestPair(List<Vector<T>> candidates)
+    {
         Vector<T>? bestA = null;
         Vector<T>? bestB = null;
         double bestSeparation = 1e-9;
@@ -635,9 +674,7 @@ public abstract class ReinforcementLearningTestBase<T>
             }
         }
 
-        if (bestA is not null && bestB is not null) return (bestA, bestB);
-
-        return (null, null);
+        return (bestA, bestB);
     }
 
     /// <summary>
