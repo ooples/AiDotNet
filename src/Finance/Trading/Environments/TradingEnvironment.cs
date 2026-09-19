@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.Tensors;
 using AiDotNet.Validation;
 
@@ -211,7 +212,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
         var mask = LegalActionMask;
         if (mask is not null)
         {
-            info[IMaskedActionEnvironment<T>.ActionMaskKey] = mask;
+            info[ActionMasking.ActionMaskKey] = mask;
         }
 
         return (nextState, reward, done, info);

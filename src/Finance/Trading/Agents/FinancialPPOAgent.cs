@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
@@ -52,7 +53,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
-public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -332,6 +334,20 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>The mask is applied to the LOGITS, before the softmax.</b> That ordering is not stylistic.
+    /// Huang and Ontañón (2020) showed masking at this point keeps the policy gradient unbiased, and here it
+    /// is also mechanically necessary: both branches below cache <c>LogProbability(probs, index)</c> for the
+    /// PPO update, so masking after the softmax would take that log-probability against a distribution whose
+    /// entries no longer sum to one — making the importance ratio silently wrong rather than merely worse.</para>
+    ///
+    /// <para>The continuous branch returns before any masking. A real-valued action vector has no index set to
+    /// restrict, so a mask there is not a narrower choice, it is a category error.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
         var normalizedState = NormalizeObservation(state, updateStatistics: training);
         var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
@@ -342,7 +358,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             return logits;
         }
 
-        var probs = Softmax(logits);
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+        var probs = Softmax(ActionMasking.MaskLogits(logits, mask, NumOps));
         
         if (training)
         {

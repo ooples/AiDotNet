@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Validation;
 using AiDotNet.LossFunctions;
@@ -51,7 +52,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Asynchronous Methods for Deep Reinforcement Learning", "https://arxiv.org/abs/1602.01783")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -119,9 +121,28 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>This actor emits PROBABILITIES, not logits</b>, so there is no pre-softmax stage to mask and
+    /// the restriction has to be applied to the distribution itself — zeroing the illegal entries and
+    /// RENORMALISING what remains.</para>
+    ///
+    /// <para>The renormalisation is the whole point. <see cref="SampleAction"/> walks a cumulative sum and
+    /// returns <c>probabilities.Length - 1</c> if it falls off the end. Zeroing without renormalising leaves
+    /// the entries summing to less than one, so any draw above that reduced total falls through and returns
+    /// the LAST index — whether or not it is legal.</para>
+    ///
+    /// <para>Both branches are masked. Masking only the sampling path would leave greedy evaluation free to
+    /// argmax onto an illegal action, which is the same defect wearing evaluation clothes.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
-        var probs = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
-        
+        var rawProbs = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+        var probs = ActionMasking.MaskProbabilities(rawProbs, mask, NumOps);
+
         if (training)
         {
             int actionIdx = SampleAction(probs);
@@ -130,19 +151,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             return action;
         }
 
-        int bestIdx = 0;
-        T maxProb = probs[0];
-        for (int i = 1; i < probs.Length; i++)
-        {
-            if (NumOps.GreaterThan(probs[i], maxProb))
-            {
-                maxProb = probs[i];
-                bestIdx = i;
-            }
-        }
-
         var result = new Vector<T>(TradingOptions.ActionSize);
-        result[bestIdx] = NumOps.One;
+        result[ActionMasking.ArgMaxLegal(probs, mask, NumOps)] = NumOps.One;
         return result;
     }
 

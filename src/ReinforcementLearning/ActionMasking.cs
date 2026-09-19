@@ -26,6 +26,23 @@ namespace AiDotNet.ReinforcementLearning;
 public static class ActionMasking
 {
     /// <summary>
+    /// The key under which an environment publishes its legal-action mask in the info dictionary returned by
+    /// <see cref="AiDotNet.Interfaces.IEnvironment{T}.Step"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>The value matches the convention the surrounding ecosystem settled on — PettingZoo, Shimmy and
+    /// OpenSpiel all name it <c>action_mask</c> — so a mask crossing into or out of this library needs no
+    /// renaming.</para>
+    ///
+    /// <para>It lives here rather than on <see cref="AiDotNet.Interfaces.IMaskedActionEnvironment{T}"/>, where
+    /// it would read more naturally, for a hard reason: this library targets <c>net471</c>, and constants in an
+    /// interface compile only against a runtime providing the default-interface-members feature, which .NET
+    /// Framework does not. That is a target constraint, not a style choice — moving it back breaks the
+    /// <c>net471</c> build and nothing else.</para>
+    /// </remarks>
+    public const string ActionMaskKey = "action_mask";
+
+    /// <summary>
     /// Validates a mask against an action-space size, returning <see langword="null"/> when it does not apply.
     /// </summary>
     /// <remarks>

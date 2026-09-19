@@ -26,7 +26,8 @@ namespace AiDotNet.Interfaces;
 /// the unmasked path.</para>
 ///
 /// <para><b>Convention for the info dictionary.</b> Implementations SHOULD also publish the same array under
-/// <see cref="ActionMaskKey"/> in the dictionary returned by <see cref="IEnvironment{T}.Step"/>, so a consumer
+/// <see cref="AiDotNet.ReinforcementLearning.ActionMasking.ActionMaskKey"/> (spelled <c>action_mask</c>) in the
+/// dictionary returned by <see cref="IEnvironment{T}.Step"/>, so a consumer
 /// that only has the step result can read it without holding the environment reference. The property is the
 /// authority; the info entry is a mirror. The property also covers the case the info channel cannot:
 /// <see cref="IEnvironment{T}.Reset"/> returns only an observation, so an agent choosing its FIRST action has
@@ -35,16 +36,6 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">Element type.</typeparam>
 public interface IMaskedActionEnvironment<T> : IEnvironment<T>
 {
-    /// <summary>
-    /// The conventional key under which <see cref="LegalActionMask"/> is mirrored into the info dictionary
-    /// returned by <see cref="IEnvironment{T}.Step"/>.
-    /// </summary>
-    /// <remarks>
-    /// Spelled <c>action_mask</c> to match PettingZoo, Shimmy and RLlib rather than .NET casing, because the
-    /// value of a convention is that it is the same word everywhere.
-    /// </remarks>
-    public const string ActionMaskKey = "action_mask";
-
     /// <summary>
     /// One flag per discrete action: <see langword="true"/> where the action may be selected in the current
     /// state, <see langword="false"/> where it may not. Length equals
