@@ -72,11 +72,18 @@ jobs:
       - name: Build (Release, net10.0)
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
 
-      # POSITIVE CONTROL FOR THE SWITCH ITSELF. If DOTNET_EnableAVX512F=0 were silently ignored,
-      # the treatment arm would run the same kernels as the control arm and a matching tally would
-      # look like evidence against the hypothesis while actually testing nothing. Prove the switch
-      # bites before believing anything downstream of it.
-      - name: Prove DOTNET_EnableAVX512F=0 reaches the JIT
+      # POSITIVE CONTROL FOR THE SWITCH ITSELF, and it has already earned its keep.
+      #
+      # The first attempt asserted DOTNET_EnableAVX512F=0 and this step caught that it does nothing:
+      # "ISA default : Avx512F.IsSupported=True" and "ISA disabled: Avx512F.IsSupported=True" on a
+      # Xeon 6973P-C. EnableAVX512F lives in the JIT's own config table and is honoured only by a
+      # checked JIT; the release JIT shipped on the runner ignores it silently. Without this step the
+      # treatment arm would have run byte-identical kernels to the control arm, and a matching tally
+      # would have read as evidence AGAINST the hypothesis while testing nothing at all.
+      #
+      # So the toggle is now DISCOVERED on the runner rather than assumed: try each candidate, keep
+      # the first that actually moves the reading, and fail the job if none of them do.
+      - name: Discover a vector-width toggle that actually bites
         shell: bash
         run: |
           mkdir -p /tmp/isacheck
@@ -91,18 +98,40 @@ jobs:
           PROJ
           cat > /tmp/isacheck/Program.cs <<'PROG'
           using System;
+          using System.Numerics;
+          using System.Runtime.Intrinsics;
           using System.Runtime.Intrinsics.X86;
-          Console.WriteLine($"Avx512F.IsSupported={Avx512F.IsSupported} Avx2.IsSupported={Avx2.IsSupported}");
+          Console.WriteLine(
+              $"Avx512F={Avx512F.IsSupported} V512hw={Vector512.IsHardwareAccelerated} "
+              + $"V256hw={Vector256.IsHardwareAccelerated} VectorByteCount={Vector<byte>.Count}");
           PROG
-          on=$(cd /tmp/isacheck && dotnet run -c Release 2>/dev/null | tail -1)
-          off=$(cd /tmp/isacheck && DOTNET_EnableAVX512F=0 dotnet run -c Release 2>/dev/null | tail -1)
-          echo "ISA default : $on"
-          echo "ISA disabled: $off"
-          if [ "$on" = "$off" ]; then
-            echo "SWITCH-CONTROL: FAILED -- DOTNET_EnableAVX512F=0 changed nothing. The treatment arm below is meaningless."
+          cd /tmp/isacheck
+          base=$(dotnet run -c Release 2>/dev/null | tail -1)
+          echo "reading, default            : $base"
+
+          # Ordered least-blunt first. PreferredVectorBitWidth is the release-supported knob; the
+          # HWIntrinsic kill-switch is a last resort because it disables every intrinsic, not just
+          # the 512-bit ones, and a result obtained with it says far less.
+          found=""
+          for cand in \
+            'DOTNET_PreferredVectorBitWidth=256' \
+            'DOTNET_MaxVectorTBitWidth=256' \
+            'DOTNET_EnableAVX512F=0' \
+            'DOTNET_EnableHWIntrinsic=0'
+          do
+            got=$(env "$cand" dotnet run -c Release 2>/dev/null | tail -1)
+            echo "reading, $cand : $got"
+            if [ "$got" != "$base" ] && [ -z "$found" ]; then
+              found="$cand"
+            fi
+          done
+
+          if [ -z "$found" ]; then
+            echo "SWITCH-CONTROL: FAILED -- no candidate changed the reading, so no treatment arm is possible."
             exit 1
           fi
-          echo "SWITCH-CONTROL: PASSED -- the flag reaches the JIT."
+          echo "SWITCH-CONTROL: PASSED -- using $found"
+          echo "TREATMENT_TOGGLE=$found" >> "$GITHUB_ENV"
 
       - name: Run both arms
         shell: bash
@@ -132,11 +161,14 @@ jobs:
           }
 
           run_arm control
-          export DOTNET_EnableAVX512F=0
-          run_arm avx512off
-          unset DOTNET_EnableAVX512F
+          # The toggle the previous step PROVED moves the reading on this runner, not one assumed
+          # to work. Its name is printed so the artifact says which instrument produced the tally.
+          echo "Treatment arm uses: ${TREATMENT_TOGGLE}"
+          export "${TREATMENT_TOGGLE?}"
+          run_arm narrowvec
+          unset "${TREATMENT_TOGGLE%%=*}"
 
-          c=$(cat /tmp/control.fails); t=$(cat /tmp/avx512off.fails)
+          c=$(cat /tmp/control.fails); t=$(cat /tmp/narrowvec.fails)
           echo "=================================================="
           echo "control (AVX-512 on):  ${c} failed of ${N}"
           echo "treatment (AVX-512 off): ${t} failed of ${N}"
