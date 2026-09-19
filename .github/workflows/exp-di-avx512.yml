@@ -1,0 +1,158 @@
+name: EXPERIMENT - Diffusion D-I under AVX-512 on vs off
+
+# THROWAWAY EXPERIMENT LANE. Not a gate, not scheduled, never merged to master.
+#
+# Clone_ShouldProduceIdenticalOutput fails intermittently in the "ModelFamily - Diffusion D-I"
+# shard on CI and has never once failed locally -- 6 consecutive runs of the identical filter in a
+# CI-parity container (4 cpus, 16 GiB) all returned 247/247. The clearest difference between the
+# two environments is the instruction set: every runner in this pool reports avx512f, and the
+# local host (Ryzen 9 3950X, Zen 2) does not. If an AVX-512 kernel blocks a reduction differently
+# from the AVX2 one, the same model evaluated twice through a multi-step sampler can disagree in
+# the last bits, which is exactly the observed signature.
+#
+# BOTH ARMS RUN IN ONE JOB, ON ONE RUNNER, so the comparison is not confounded by hardware.
+#
+# HOW TO READ THE RESULT. The control arm (AVX-512 left enabled) MUST fail at least once, or the
+# treatment arm proves nothing: a green treatment arm after a green control arm is a dead control,
+# not evidence. The job prints the tally for both arms and says so explicitly.
+
+# Triggered by pushing the experiment branch, NOT by workflow_dispatch: a dispatchable workflow has
+# to exist on the default branch before GitHub will accept the dispatch, and this file is never
+# going anywhere near master. A push to this one branch runs no other workflow either -- the shard
+# workflow's push trigger is scoped to master, main and ci-proof/**. Re-run the run for more samples.
+on:
+  push:
+    branches:
+      - 'exp/di-avx512'
+
+concurrency:
+  group: exp-di-avx512-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    name: D-I shard, AVX-512 on vs off
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Report the CPU this experiment actually landed on
+        run: |
+          grep -m1 'model name' /proc/cpuinfo
+          if grep -qm1 avx512f /proc/cpuinfo; then
+            echo "RUNNER-ISA: avx512f PRESENT"
+          else
+            echo "RUNNER-ISA: avx512f ABSENT -- this runner cannot test the hypothesis at all."
+          fi
+          nproc
+
+      - name: Restore dependencies
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Inject license public key (aidn2 offline verification, test-only key set)
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+          fi
+
+      - name: Build (Release, net10.0)
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
+
+      # POSITIVE CONTROL FOR THE SWITCH ITSELF. If DOTNET_EnableAVX512F=0 were silently ignored,
+      # the treatment arm would run the same kernels as the control arm and a matching tally would
+      # look like evidence against the hypothesis while actually testing nothing. Prove the switch
+      # bites before believing anything downstream of it.
+      - name: Prove DOTNET_EnableAVX512F=0 reaches the JIT
+        shell: bash
+        run: |
+          mkdir -p /tmp/isacheck
+          cat > /tmp/isacheck/isacheck.csproj <<'PROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>disable</Nullable>
+            </PropertyGroup>
+          </Project>
+          PROJ
+          cat > /tmp/isacheck/Program.cs <<'PROG'
+          using System;
+          using System.Runtime.Intrinsics.X86;
+          Console.WriteLine($"Avx512F.IsSupported={Avx512F.IsSupported} Avx2.IsSupported={Avx2.IsSupported}");
+          PROG
+          on=$(cd /tmp/isacheck && dotnet run -c Release 2>/dev/null | tail -1)
+          off=$(cd /tmp/isacheck && DOTNET_EnableAVX512F=0 dotnet run -c Release 2>/dev/null | tail -1)
+          echo "ISA default : $on"
+          echo "ISA disabled: $off"
+          if [ "$on" = "$off" ]; then
+            echo "SWITCH-CONTROL: FAILED -- DOTNET_EnableAVX512F=0 changed nothing. The treatment arm below is meaningless."
+            exit 1
+          fi
+          echo "SWITCH-CONTROL: PASSED -- the flag reaches the JIT."
+
+      - name: Run both arms
+        shell: bash
+        continue-on-error: true
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        run: |
+          N=8
+          FILTER='FullyQualifiedName~ModelFamilyTests.Diffusion&(FullyQualifiedName~Diffusion.D|FullyQualifiedName~Diffusion.E|FullyQualifiedName~Diffusion.F|FullyQualifiedName~Diffusion.G|FullyQualifiedName~Diffusion.H|FullyQualifiedName~Diffusion.I)'
+
+          run_arm () {
+            arm="$1"; fails=0
+            for i in $(seq 1 "$N"); do
+              if dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj \
+                   -c Release --framework net10.0 --no-build --no-restore \
+                   --filter "$FILTER" --logger 'console;verbosity=normal' \
+                   > "/tmp/${arm}-${i}.log" 2>&1; then
+                echo "ARM=${arm} ITER=${i} PASS"
+              else
+                fails=$((fails+1))
+                echo "ARM=${arm} ITER=${i} FAIL"
+                grep -E 'Failed AiDotNet|differs from|Self-reproduction' "/tmp/${arm}-${i}.log" | head -20 || true
+              fi
+            done
+            echo "TALLY ${arm}: ${fails} failed of ${N}"
+            echo "${fails}" > "/tmp/${arm}.fails"
+          }
+
+          run_arm control
+          export DOTNET_EnableAVX512F=0
+          run_arm avx512off
+          unset DOTNET_EnableAVX512F
+
+          c=$(cat /tmp/control.fails); t=$(cat /tmp/avx512off.fails)
+          echo "=================================================="
+          echo "control (AVX-512 on):  ${c} failed of ${N}"
+          echo "treatment (AVX-512 off): ${t} failed of ${N}"
+          if [ "$c" -eq 0 ]; then
+            echo "VERDICT: INCONCLUSIVE. The control arm never reproduced the failure, so the"
+            echo "treatment arm distinguishes nothing. Re-run with more iterations."
+          elif [ "$t" -eq 0 ]; then
+            echo "VERDICT: CONSISTENT WITH THE AVX-512 HYPOTHESIS -- failures only with AVX-512 enabled."
+          else
+            echo "VERDICT: AGAINST THE AVX-512 HYPOTHESIS -- the failure survives with AVX-512 disabled."
+          fi
+
+      - name: Upload arm logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: exp-di-avx512-logs
+          path: /tmp/*.log
+          if-no-files-found: ignore
