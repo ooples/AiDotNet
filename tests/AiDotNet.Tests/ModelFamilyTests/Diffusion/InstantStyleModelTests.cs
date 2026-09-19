@@ -27,6 +27,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// </remarks>
 public class InstantStyleModelTests : DiffusionModelTestBase<float>
 {
+    // Same accommodation, and the same reason, as its sibling StyDiffModelTests: an FP32 DDIM loop
+    // over COW-shared weights, where the clone's cold packed-weight path rounds differently from
+    // the source's warm one and the difference compounds across denoising steps. Linux CI observed
+    // 1.86e-5 against a 1.60e-5 allowance on an output of magnitude 4.63 -- about 4e-6 relative,
+    // roughly 39 float ulp; the same test is comfortably inside tolerance on Windows/x64, which is
+    // what an execution-path difference looks like and what a lossy copy does not.
+    //
+    // This is not taken on trust. Widening the tolerance makes DiffusionModelTestBase demand that
+    // the clone's parameters be BIT-IDENTICAL to the source's before it honours the wider bound, so
+    // the claim above (same numbers, different order) is asserted rather than assumed.
+    protected override double CloneOutputRelativeTolerance => 1.5e-5;
+
     protected override int[] InputShape => [1, 4, 8, 8];
     protected override int[] OutputShape => [1, 4, 8, 8];
 

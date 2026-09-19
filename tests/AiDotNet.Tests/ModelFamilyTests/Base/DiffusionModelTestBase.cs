@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using System.Runtime;
 using System.Threading;
 using AiDotNet.Helpers;
@@ -193,13 +194,25 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// override this when identical COW-shared weights take a numerically equivalent cold
     /// packed-weight path whose rounding error compounds across denoising steps.
     /// </summary>
-    protected virtual double CloneOutputRelativeTolerance =>
-        typeof(TNum) == typeof(float) ? 1.3e-6 : 1e-7;
+    protected virtual double CloneOutputRelativeTolerance => DefaultCloneOutputRelativeTolerance;
 
     /// <summary>
     /// Absolute tolerance for clone-output comparisons.
     /// </summary>
-    protected virtual double CloneOutputAbsoluteTolerance =>
+    protected virtual double CloneOutputAbsoluteTolerance => DefaultCloneOutputAbsoluteTolerance;
+
+    /// <summary>The family contract, kept separately so an override can be DETECTED.</summary>
+    /// <remarks>
+    /// A derived class that widens either tolerance is claiming its clone runs the same arithmetic
+    /// in a different order, not that its clone holds different weights. That claim is checked:
+    /// <see cref="Clone_ShouldProduceIdenticalOutput"/> demands bit-identical parameters before it
+    /// will honour a widened tolerance, so the relaxation cannot quietly cover a lossy copy.
+    /// </remarks>
+    private static double DefaultCloneOutputRelativeTolerance =>
+        typeof(TNum) == typeof(float) ? 1.3e-6 : 1e-7;
+
+    /// <summary>The family contract for the absolute term. See <see cref="DefaultCloneOutputRelativeTolerance"/>.</summary>
+    private static double DefaultCloneOutputAbsoluteTolerance =>
         typeof(TNum) == typeof(float) ? 1e-5 : 1e-7;
 
     /// <summary>
@@ -640,6 +653,26 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var original = PredictModel(model, input);
         using var clonedDiffusion =
             Assert.IsAssignableFrom<IDiffusionModel<TNum>>(model.Clone());
+
+        // A WIDENED TOLERANCE HAS TO EARN ITSELF.
+        //
+        // Two very different things produce a clone whose output differs: the clone computed the
+        // same arithmetic in a different order (benign, and bounded by float rounding), or the
+        // clone is holding different NUMBERS because the copy lost precision somewhere. A raised
+        // tolerance accommodates the first and silently covers the second, and from the output
+        // alone they are indistinguishable.
+        //
+        // So a model that raises either tolerance must first show its clone carries bit-identical
+        // parameters. Models on the family default are left alone -- their tolerance is already
+        // tight enough that a lossy copy fails it -- which keeps this off the hot path for the
+        // rest of the family and out of the memory budget of the large ones, where GetParameters()
+        // would force lazy layers to materialize.
+        if (CloneOutputRelativeTolerance > DefaultCloneOutputRelativeTolerance
+            || CloneOutputAbsoluteTolerance > DefaultCloneOutputAbsoluteTolerance)
+        {
+            AssertCloneParametersAreBitIdentical(model, clonedDiffusion);
+        }
+
         var clonedOutput = PredictModel(clonedDiffusion, input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
@@ -709,6 +742,48 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         Assert.Equal(expectedName, metadata.Name);
     }
 
+    /// <summary>
+    /// Every parameter of <paramref name="clone"/> must equal its counterpart in
+    /// <paramref name="source"/> EXACTLY -- not within a tolerance.
+    /// </summary>
+    /// <remarks>
+    /// Exact is the right bar because a clone is a copy, not a recomputation: no arithmetic stands
+    /// between the source weight and the copied one. Anything that does introduce arithmetic there
+    /// -- a round trip through a narrower element type, a repacking that rescales, a reconstruction
+    /// from options rather than a copy -- shows up here as a difference in the values themselves,
+    /// which no output tolerance can then excuse.
+    /// </remarks>
+    private static void AssertCloneParametersAreBitIdentical(
+        IDiffusionModel<TNum> source, IDiffusionModel<TNum> clone)
+    {
+        var sourceParameters = source.GetParameters();
+        var cloneParameters = clone.GetParameters();
+
+        // POSITIVE CONTROL. An empty read makes the loop below vacuous, and a vacuous check that
+        // reports success is worse than no check: it would certify the widened tolerance on no
+        // evidence at all.
+        Assert.True(sourceParameters.Length > 0,
+            $"{source.GetType().FullName} exposed no parameters through GetParameters(), so the "
+            + "bit-identity check that justifies its widened clone tolerance measured nothing.");
+
+        Assert.True(sourceParameters.Length == cloneParameters.Length,
+            $"Clone() of {source.GetType().FullName} exposes {cloneParameters.Length} parameters "
+            + $"where the source has {sourceParameters.Length}.");
+
+        var comparer = EqualityComparer<TNum>.Default;
+        for (int i = 0; i < sourceParameters.Length; i++)
+        {
+            if (comparer.Equals(sourceParameters[i], cloneParameters[i])) continue;
+
+            Assert.Fail(
+                $"Clone() of {source.GetType().FullName} changed parameter[{i}]: source "
+                + $"{ToDouble(sourceParameters[i]):E9}, clone {ToDouble(cloneParameters[i]):E9}. "
+                + "This model widens its clone-output tolerance, which is only defensible while the "
+                + "clone holds the same weights and merely reaches them by a different execution "
+                + "path. It does not: the copy itself is lossy, and that is the defect to fix rather "
+                + "than a rounding difference to accommodate.");
+        }
+    }
     [Fact(Timeout = 120000)]
     public async Task Parameters_ShouldBeNonEmpty()
     {
