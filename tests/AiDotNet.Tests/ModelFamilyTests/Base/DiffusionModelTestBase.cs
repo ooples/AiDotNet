@@ -736,9 +736,15 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
             Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
                 $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
 
-            Assert.True(diff <= allowed,
-                $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
-                $"which exceeds its own tolerance {allowed:E6}.");
+            if (diff > allowed)
+            {
+                // The re-check is confined to the failure path on purpose: it costs a second pair
+                // of forwards, and on the green path there is nothing to explain.
+                Assert.Fail(
+                    $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
+                    $"which exceeds its own tolerance {allowed:E6}. " +
+                    DescribeSelfReproduction(model, clonedDiffusion, input, original, clonedOutput));
+            }
         }
 
         // Kept as a summary line: every element was already asserted individually above,
@@ -748,6 +754,87 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
             $"expected={ToDouble(original[maxDiffIndex])}, actual={ToDouble(clonedOutput[maxDiffIndex])}, " +
             $"max |diff|={maxDiff}, allowed={maxAllowed}, precision={typeof(TNum).FullName}, " +
             $"length={original.Length}.");
+    }
+
+    /// <summary>
+    /// Runs ONLY on the failure path: re-predicts BOTH models against the same input and reports
+    /// whether each still reproduces the output it produced moments earlier.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a diagnostic, not a relaxation. It is reached only after an assertion has already
+    /// decided to fail, and it can only add information to the message it fails with.
+    /// </para>
+    /// <para>
+    /// It exists because the two candidate explanations for a clone difference are
+    /// indistinguishable from the assertion above. EITHER the clone genuinely computes something
+    /// different from the source, OR <c>Predict</c> is not reproducible in this process at all --
+    /// in which case the source's own two runs would differ just as much and Clone() is not
+    /// implicated by the comparison. What separates them is exactly whether each model reproduces
+    /// ITSELF, and only an environment that actually reproduces the failure can answer that. Both
+    /// drifts zero means the two models really do disagree; either drift non-zero means the two
+    /// outputs compared above were never comparable to begin with.
+    /// </para>
+    /// </remarks>
+    private string DescribeSelfReproduction(
+        IDiffusionModel<TNum> source,
+        IDiffusionModel<TNum> clone,
+        Tensor<TNum> input,
+        Tensor<TNum> sourceOutput,
+        Tensor<TNum> cloneOutput)
+    {
+        try
+        {
+            double sourceDrift = MaxAbsoluteDifference(PredictModel(source, input), sourceOutput);
+            double cloneDrift = MaxAbsoluteDifference(PredictModel(clone, input), cloneOutput);
+
+            string reading = sourceDrift == 0.0 && cloneDrift == 0.0
+                ? "both models reproduced themselves EXACTLY, so the two outputs above really do "
+                    + "differ and the divergence belongs to Clone()"
+                : "at least one model did NOT reproduce itself, so Predict is non-reproducible in "
+                    + "this process and the comparison above does not implicate Clone()";
+
+            return "Self-reproduction re-check (failure path only): source re-predict max |diff| = "
+                + $"{sourceDrift:E6}, clone re-predict max |diff| = {cloneDrift:E6} -- {reading}.";
+        }
+        catch (Exception ex)
+        {
+            // Reported rather than swallowed: a diagnostic that failed silently would leave the
+            // reader unable to tell a zero drift from a re-prediction that never ran.
+            return "Self-reproduction re-check could not run: "
+                + $"{ex.GetType().FullName}: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Largest absolute element-wise difference. A length mismatch or any non-finite element is
+    /// reported as infinite, so neither can ever read as "reproduced exactly".
+    /// </summary>
+    private static double MaxAbsoluteDifference(Tensor<TNum> a, Tensor<TNum> b)
+    {
+        if (a.Length != b.Length)
+        {
+            return double.PositiveInfinity;
+        }
+
+        double worst = 0.0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double x = ToDouble(a[i]);
+            double y = ToDouble(b[i]);
+            if (double.IsNaN(x) || double.IsNaN(y) || double.IsInfinity(x) || double.IsInfinity(y))
+            {
+                return double.PositiveInfinity;
+            }
+
+            double d = Math.Abs(x - y);
+            if (d > worst)
+            {
+                worst = d;
+            }
+        }
+
+        return worst;
     }
 
     [Fact(Timeout = 120000)]
