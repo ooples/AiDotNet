@@ -480,7 +480,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             _beta);
 
         int stateSize = _options.StateSize;
-        int actionSize = _options.ActionSize;
         int n = batch.Count;
 
         // n-step discount gamma^NSteps, shared by both update paths.
