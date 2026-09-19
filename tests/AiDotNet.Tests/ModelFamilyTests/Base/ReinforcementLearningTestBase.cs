@@ -519,17 +519,55 @@ public abstract class ReinforcementLearningTestBase<T>
         // DIRECTIONAL, not "the two runs differ". Any two training runs differ by initialisation and
         // sampling noise, so a magnitude threshold is nearly vacuous — it passes for a policy that
         // ignores the reward entirely. The real question is whether the policy moved TOWARDS the
-        // action that was paid: the run rewarding A must land closer to A than the run rewarding B
-        // does, and vice versa.
-        double towardsA = Distance(favouringA!, actionA!) - Distance(favouringA!, actionB!);
-        double towardsB = Distance(favouringB!, actionB!) - Distance(favouringB!, actionA!);
+        // action that was paid: the run rewarding A must end up on A's side of the two probe
+        // actions, and the run rewarding B on B's side.
+        //
+        // MEASURED ALONG THE AXIS THAT SEPARATES THE TWO ACTIONS, not as a distance in the full
+        // action space. A and B differ in some coordinates and are near-identical in the rest, so
+        // only the A-B direction carries any reward information at all: in every other coordinate
+        // both actions were paid the same, the critic has no preference, and a continuous policy is
+        // free to drift wherever it likes. A max-abs distance over EVERY coordinate is dominated by
+        // exactly that free drift. Measured on MarketMakingAgent, the trained policy saturates at
+        // its own +/-MaxPositionSize clamp about 1.5 away from both probe actions in the coordinates
+        // neither of them distinguishes -- while landing on precisely the correct side of the
+        // midpoint along the one coordinate that does. Six runs out of six were correct along the
+        // axis and decided by coin-flip without it, which is what the intermittent failures were.
+        //
+        // Projecting first does not relax the invariant. A policy that ignores the reward still
+        // lands on either side of the midpoint at chance, exactly as before; what changes is that
+        // the answer is no longer decided by movement that carries no signal. For a discrete agent
+        // the axis is e_A - e_B and the projection is just "how much more probability mass A has
+        // than B", which is the same question the distance form was asking.
+        var axis = new double[Math.Min(actionA!.Length, actionB!.Length)];
+        double axisNormSquared = 0.0;
+        for (int i = 0; i < axis.Length; i++)
+        {
+            axis[i] = ToD(actionA[i]) - ToD(actionB[i]);
+            axisNormSquared += axis[i] * axis[i];
+        }
+
+        Skip.If(axisNormSquared <= 0.0,
+            "The two probe actions coincide once projected, so no axis separates them and the "
+            + "question cannot be expressed here.");
+
+        // Position along the A-B axis, normalised so that Along(A) - Along(B) == 1.
+        double Along(Vector<T> action)
+        {
+            double dot = 0.0;
+            for (int i = 0; i < axis.Length && i < action.Length; i++) dot += ToD(action[i]) * axis[i];
+            return dot / axisNormSquared;
+        }
+
+        double midpoint = (Along(actionA) + Along(actionB)) / 2.0;
+        double towardsA = midpoint - Along(favouringA!);
+        double towardsB = Along(favouringB!) - midpoint;
 
         Assert.True(towardsA < 0 && towardsB < 0,
-            "The policy did not move towards whichever action was rewarded. Rewarding A left the "
-            + $"greedy action {(towardsA < 0 ? "closer to" : "no closer to")} A (margin {-towardsA:E3}), "
-            + $"and rewarding B left it {(towardsB < 0 ? "closer to" : "no closer to")} B (margin "
-            + $"{-towardsB:E3}); both margins must be positive. Reached after {stepsA} and {stepsB} "
-            + "training steps.\n\n"
+            "The policy did not move towards whichever action was rewarded. Along the A-B axis, "
+            + $"rewarding A left the greedy action {(towardsA < 0 ? "on" : "off")} A's side of the "
+            + $"midpoint (margin {-towardsA:E3}), and rewarding B left it {(towardsB < 0 ? "on" : "off")} "
+            + $"B's side (margin {-towardsB:E3}); both margins must be positive. Reached after "
+            + $"{stepsA} and {stepsB} training steps.\n\n"
             + "A policy can fail this while passing every parameter-movement invariant in the suite: "
             + "SAC's actor keeps moving on its entropy term alone when min(Q1,Q2) is detached from "
             + "the tape, so its weights change every step without ever following the reward. That is "
@@ -548,18 +586,56 @@ public abstract class ReinforcementLearningTestBase<T>
         var first = agent.SelectAction(state, explore: false);
         if (first.Length == 0) return (null, null);
 
-        // Sample until a different action appears; a deterministic or single-action policy yields
-        // none, and that is a legitimate skip.
+        // Collect the whole draw budget, then take the two candidates that are FARTHEST APART.
+        // A deterministic or single-action policy yields none, and that is a legitimate skip.
+        //
+        // Two earlier selections both made this probe unanswerable for continuous control:
+        //
+        //   1. Taking the FIRST merely-different draw. A Gaussian exploration policy with
+        //      sigma = 0.05 separates its first differing draw from the mean by about one sigma, so
+        //      the test asked the critic to resolve a +1/-1 reward gap across a ~0.05 displacement
+        //      in action space. The critic fits the mean, dQ/da is numerically flat over that
+        //      interval, the policy target collapses back onto the current mean, and the outcome is
+        //      decided by rounding: both arms end with the SAME policy and the two margins come out
+        //      exactly symmetric (+x and -x).
+        //
+        //   2. Pairing the greedy action with the farthest draw. That fixes the separation but
+        //      biases the two arms against each other, because the policy STARTS at the greedy
+        //      action: the arm rewarding it passes without the policy moving at all, while the arm
+        //      rewarding the other must travel more than half the gap to register. The observed
+        //      failure was exactly that shape -- +1.507E-001 one way, -1.195E-002 the other.
+        //
+        // The farthest PAIR is symmetric by construction: both members are exploration draws around
+        // the same mean, so each arm has the same distance to cover, and for a Gaussian policy they
+        // land on opposite sides of it. Discrete and one-hot agents are unaffected -- every pair of
+        // distinct one-hots is the same distance apart -- so this sharpens the probe rather than
+        // relaxing it.
+        var candidates = new List<Vector<T>> { first };
         for (int attempt = 0; attempt < 256; attempt++)
         {
             var candidate = agent.SelectAction(state, explore: true);
-            if (candidate.Length != first.Length) continue;
-            for (int i = 0; i < first.Length; i++)
+            if (candidate.Length == first.Length) candidates.Add(candidate);
+        }
+
+        Vector<T>? bestA = null;
+        Vector<T>? bestB = null;
+        double bestSeparation = 1e-9;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            for (int j = i + 1; j < candidates.Count; j++)
             {
-                if (Math.Abs(ToD(first[i]) - ToD(candidate[i])) > 1e-9)
-                    return (first, candidate);
+                double separation = Distance(candidates[i], candidates[j]);
+                if (separation > bestSeparation)
+                {
+                    bestA = candidates[i];
+                    bestB = candidates[j];
+                    bestSeparation = separation;
+                }
             }
         }
+
+        if (bestA is not null && bestB is not null) return (bestA, bestB);
 
         return (null, null);
     }
@@ -598,6 +674,19 @@ public abstract class ReinforcementLearningTestBase<T>
         bool moved = false;
         for (int step = 0; step < RealLoopStepBudget; step++)
         {
+            // Keep FEEDING the agent as well as training it. An off-policy agent replays from its
+            // buffer and is unaffected -- these transitions are drawn from exactly the same
+            // alternating distribution as the prefill above. An ON-POLICY agent is not: A3CAgent
+            // drains its entire trajectory on the first Train() and every later call returns at
+            // once on an empty buffer, so prefill-then-train handed it ONE update while this loop's
+            // budget claimed 800 -- and one policy-gradient step does not move an argmax. The pair
+            // below simply CONTINUES the prefill's stream -- same alternation, same episode
+            // cadence, next index -- so no agent sees a distribution it would not have seen anyway.
+            int fed = 512 + step;
+            bool feedRewarded = fed % 2 == 0;
+            agent.StoreExperience(state, feedRewarded ? rewarded : punished,
+                ToT(feedRewarded ? 1.0 : -1.0), state, done: fed % 64 == 63);
+
             agent.Train();
             if (step % 512 != 511) continue;
 
