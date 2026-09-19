@@ -15018,6 +15018,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
             sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GatedDeltaNetLanguageModel" ? 100 : 15)};");
+            // TrainingStep_ShouldDependOnTheTarget was never capped here, so every class in this set
+            // stayed exposed to the very timeout the set exists to prevent -- the same gap the heavy
+            // branch above records for RealESRGANVideo, repeated on the OTHER set. It is the heaviest
+            // training probe in the suite: three conditions (target A, an A repeat as the noise
+            // control, target B), each averaged over TargetDependenceRepeatCount runs of
+            // TargetDependenceStepCount steps, on top of its own single-step preamble. At the ~2.8 s
+            // per update measured on Upscale4KAgent above, the default 3 repeats are 3*3*3 = 27 updates
+            // plus the preamble -- around 110 s inside a 120 s bound, which is why that fixture passed
+            // one local run and timed out on the next two. Capping the probe's own per-call wall-clock
+            // budget cannot fix it: that budget is per call and the test makes four of them, so its
+            // ceiling is already above the timeout it is meant to respect.
+            //
+            // Cap the REPEATS, not the steps, for the reason the heavy branch documents: repeats only
+            // average the model's own stochasticity away, so dropping them costs sensitivity (a noisy
+            // model reports INCONCLUSIVE instead of certifying) and never correctness, while a 1-step
+            // comparison would measure nothing at all. 1*3 = 3 updates per condition.
+            //
+            // Seven classes are in BOTH sets; DropDuplicateOverrides keeps the FIRST occurrence, which
+            // is the heavy branch's identical cap, so this cannot conflict.
+            sb.AppendLine("    protected override int TargetDependenceRepeatCount => 1;");
             if (model.ClassName is "GatedDeltaNetLanguageModel" or "GLALanguageModel")
             {
                 // The bounded recurrent-language-model trajectories decrease by about
