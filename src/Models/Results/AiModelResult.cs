@@ -3081,9 +3081,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                Console.WriteLine($"Warning: inference optimizations failed: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning(
+                    $"AiModelResult: stateless inference optimizations failed; using the unoptimized model: {ex}");
                 _inferenceOptimizer = null;
                 _inferenceOptimizedNeuralModel = null;
                 _ownsInferenceOptimizedNeuralModel = false;
@@ -3466,12 +3467,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                             _sequenceOptimizedNeuralModel = kept;
                             _ownsSequenceModel = kept is not null && !ReferenceEquals(kept, model);
 
-                            // A clone the optimizer made and then found nothing to apply to is never used.
+                            // Two clones can be live here, and each is released on its own terms.
+                            // Chaining the second release behind else-if leaked one of them: when
+                            // SelectTask throws, modelForSequence is reset to the source model while
+                            // multiLoRACopy still holds the LoRA clone. The optimizer can then clone
+                            // the source model again and apply nothing -- an MHA layer satisfies its
+                            // clone predicate while non-causal masking disables the KV-cache rewrite
+                            // -- so kept is null, the first branch releases the optimizer's clone and
+                            // the LoRA clone never reaches the second, holding its layers' pooled
+                            // buffers until the garbage collector ran.
                             if (kept is null && !ReferenceEquals(optimizedModel, model))
                             {
                                 AiDotNet.Helpers.DisposeOnceGuard.TryDispose(optimizedModel);
                             }
-                            else if (multiLoRACopy is not null && !ReferenceEquals(multiLoRACopy, kept))
+
+                            if (multiLoRACopy is not null
+                                && !ReferenceEquals(multiLoRACopy, kept)
+                                && !ReferenceEquals(multiLoRACopy, model))
                             {
                                 AiDotNet.Helpers.DisposeOnceGuard.TryDispose(multiLoRACopy);
                             }

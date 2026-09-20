@@ -149,6 +149,103 @@ public partial class AiModelResultDerivedCopyDisposalTests
         Assert.Equal(1, best.DisposeCalls);
     }
 
+    [Fact]
+    public void A_sequence_releases_both_clones_when_multi_lora_task_selection_fails()
+    {
+        // Two clones are live during sequence setup: the Multi-LoRA copy, and the one the inference
+        // optimizer makes. When SelectTask throws, setup falls back to the source model, so the
+        // optimizer's clone is the one that ends up unused -- and releasing the two through a single
+        // if/else-if chain meant only ever releasing one of them, leaving the Multi-LoRA copy's
+        // layers holding their pooled weight buffers until the garbage collector ran.
+        var model = CreateCloneTrackingAttentionModel();
+        var result = CreateResult(model, new InferenceOptimizationConfig
+        {
+            EnableFlashAttention = false,
+            EnableKVCache = true,
+            EnablePagedKVCache = false,
+            // Not Auto: the sequence path rewrites Auto to Causal, and causal masking is what lets
+            // the KV-cache rewrite apply. Nothing must apply here, so the optimizer's clone is spare.
+            AttentionMasking = AttentionMaskingMode.Disabled,
+        });
+
+
+        using var session = result.BeginInferenceSession();
+        var sequence = session.CreateSequence("a-task-this-model-never-registered");
+        _ = sequence.Predict(Token());
+
+        // Premise: selection failed after its clone was taken, the optimizer cloned again, and
+        // neither clone was kept.
+        Assert.Equal(2, model.Clones.Count);
+        Assert.Null(ReadField(sequence, "_sequenceOptimizedNeuralModel"));
+
+        foreach (var clone in model.Clones)
+        {
+            AssertAllLayersReleased(clone, "a clone the failed sequence setup left behind");
+        }
+
+        sequence.Dispose();
+        result.Dispose();
+    }
+
+
+    /// <summary>A model that records every clone taken from it, so a leaked clone can be named.</summary>
+    private sealed class CloneTrackingNetwork : NeuralNetwork<float>
+    {
+        public CloneTrackingNetwork(NeuralNetworkArchitecture<float> architecture) : base(architecture)
+        {
+        }
+
+        public List<NeuralNetworkBase<float>> Clones { get; } = new();
+
+        public override IFullModel<float, Tensor<float>, Tensor<float>> Clone()
+        {
+            var clone = base.Clone();
+            if (clone is NeuralNetworkBase<float> network)
+            {
+                Clones.Add(network);
+            }
+
+            return clone;
+        }
+
+        // The clone plan is generated for library types, so rebuild by hand. The architecture
+        // carries explicit layers and models take those BY REFERENCE, so the copy must get its own.
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
+            => new NeuralNetwork<float>(Architecture.CloneForModelConstruction());
+    }
+
+    private static CloneTrackingNetwork CreateCloneTrackingAttentionModel()
+    {
+        // MultiLoRAAdapter needs its base layer's input dimension, and DenseLayer only learns that
+        // when a network resolves it. Build the plain model first and wrap its resolved dense layer.
+        var resolved = (NeuralNetworkBase<float>)CreateAttentionModel();
+        var dense = resolved.Layers[resolved.Layers.Count - 1];
+
+        var layers = new List<ILayer<float>>
+        {
+            new InputLayer<float>(FlatSize),
+            new ReshapeLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
+            new MultiHeadAttentionLayer<float>(HeadCount, EmbeddingDimension / HeadCount,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+            new FlattenLayer<float>(),
+            new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(
+                dense,
+                defaultTaskName: "base",
+                defaultRank: 2),
+        };
+
+        var model = new CloneTrackingNetwork(new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: FlatSize,
+            outputSize: FlatSize,
+            layers: layers));
+
+        _ = model.Predict(new Tensor<float>(new[] { 1, FlatSize }));
+        return model;
+    }
+
     private sealed partial class CountingNetwork : NeuralNetwork<float>
     {
         public CountingNetwork() : base(new NeuralNetworkArchitecture<float>(inputFeatures: 4, outputSize: 2))

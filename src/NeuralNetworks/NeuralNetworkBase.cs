@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -18286,11 +18286,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Ensures that the mixed-precision context is properly disposed if it was enabled.
     /// Calling it more than once is harmless: only the first call tears anything down. That
     /// holds for derived classes too, whose <see cref="Dispose(bool)"/> overrides are not
-    /// re-entered by a repeated call.
+    /// re-entered by a repeated call, and it holds when two threads dispose the same network at
+    /// once: the run of derived teardown is claimed atomically rather than by reading a field that
+    /// <see cref="Dispose(bool)"/> only sets once the override is already under way.
     /// </remarks>
     public void Dispose()
     {
-        if (_disposed) return;
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(true);
         GC.SuppressFinalize(this);
     }
@@ -18301,6 +18303,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// disposed network would evict the cache of whichever live model the thread trained since.
     /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown, zero until a caller wins it. Separate from
+    /// <see cref="_disposed"/>, which <see cref="Dispose(bool)"/> sets after the derived override
+    /// has already run and so cannot gate entry, and which must not be set beforehand or the base
+    /// cleanup below would be skipped.
+    /// </summary>
+    private int _disposeClaimed;
 
     /// <summary>
     /// Protected Dispose pattern implementation.

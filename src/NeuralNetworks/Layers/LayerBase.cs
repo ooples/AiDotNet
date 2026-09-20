@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Initialization;
@@ -494,6 +494,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown. Read and set under <c>_bufferRegistrationLock</c>,
+    /// so exactly one caller reaches the virtual <see cref="Dispose(bool)"/> dispatch.
+    /// </summary>
+    private bool _disposeClaimed;
 
     /// <summary>
     /// Collection of tensors that have been registered as persistent with the engine.
@@ -9385,9 +9391,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // teardown before calling base -- DenseLayer's, for one, re-invalidates the engine's GPU cache
         // entry for _weights/_biases, tensors whose pooled storage the first call already handed back
         // and a newer layer may now own. Only this entry point can keep that teardown to one run.
+        //
+        // _disposed cannot be that gate. Dispose(bool) sets it after the derived override has
+        // already run, so two concurrent callers both read false and both enter the override;
+        // setting it here instead would make Dispose(bool) skip the base cleanup altogether. A
+        // separate claim, taken under the same lock, keeps both properties.
         lock (_bufferRegistrationLock)
         {
-            if (_disposed) return;
+            if (_disposed || _disposeClaimed) return;
+            _disposeClaimed = true;
         }
 
         Dispose(disposing: true);
