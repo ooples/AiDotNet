@@ -122,6 +122,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// </summary>
     public async Task InitializeAsync()
     {
+        DiffusionNumericEnvironmentBanner.WriteOnce(DescribeNumericEnvironment());
+
         if (IsHeavyScale(InputShape))
         {
             await _heavyTestGate.WaitAsync().ConfigureAwait(false);
@@ -833,12 +835,39 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
             return "Numeric environment: DeterministicMode="
                 + $"{AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode}, "
                 + $"engine={AiDotNet.Tensors.Engines.AiDotNetEngine.Current?.GetType().Name ?? "null"}, "
-                + $"ProcessorCount={Environment.ProcessorCount}.";
+                + $"ProcessorCount={Environment.ProcessorCount}, "
+                + DescribeVectorIsa()
+                + ".";
         }
         catch (Exception ex)
         {
             return $"Numeric environment could not be read: {ex.GetType().FullName}: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// Reports the vector ISA the JIT actually selected, which the rest of the numeric environment
+    /// does not cover.
+    /// </summary>
+    /// <remarks>
+    /// This is the variable the diffusion clone divergence has always turned on, and the one
+    /// reading nobody has ever had. SimdGemm.SgemmWithCachedB abandons its cached path outright
+    /// when Avx512Sgemm.CanUse, so an AVX-512 runner sums the same products in a different order
+    /// from an AVX2 one -- and every local reproduction attempt has been on AVX2 hardware, where
+    /// the difference measures exactly zero. Without this line a green run cannot be told apart
+    /// from a run that simply never exercised the path under suspicion.
+    /// Vector&lt;float&gt;.Count is included because DOTNET_PreferredVectorBitWidth can narrow the
+    /// selected width on hardware that reports Avx512F.IsSupported = true.
+    /// </remarks>
+    private static string DescribeVectorIsa()
+    {
+#if NET8_0_OR_GREATER
+        return $"Avx512F={System.Runtime.Intrinsics.X86.Avx512F.IsSupported}, "
+            + $"Avx2={System.Runtime.Intrinsics.X86.Avx2.IsSupported}, "
+            + $"VectorFloatCount={System.Numerics.Vector<float>.Count}";
+#else
+        return "vector ISA unavailable on this target framework";
+#endif
     }
 
     private static double MaxAbsoluteDifference(Tensor<TNum> a, Tensor<TNum> b)
@@ -962,5 +991,37 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
             mse += diff * diff;
         }
         return mse / len;
+    }
+}
+
+/// <summary>
+/// Writes the numeric environment to the test host's console exactly once per process.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The clone diagnostic prints the environment only when an assertion FAILS, so a passing shard
+/// records nothing about the hardware it ran on. That is why a green diffusion shard has never
+/// been distinguishable from a shard that simply never exercised the kernel under suspicion:
+/// the AVX-512 path is the one the clone divergence turns on, and the log never said which path
+/// ran. Emitting the reading once, unconditionally, makes every shard log self-describing for
+/// the cost of a single line.
+/// </para>
+/// <para>
+/// Non-generic on purpose. <c>DiffusionModelTestBase{TNum}</c> is generic, so anything static on
+/// it exists once per closed type and would print once for float and again for double.
+/// </para>
+/// </remarks>
+internal static class DiffusionNumericEnvironmentBanner
+{
+    private static int _written;
+
+    internal static void WriteOnce(string description)
+    {
+        if (System.Threading.Interlocked.Exchange(ref _written, 1) != 0)
+        {
+            return;
+        }
+
+        Console.Out.WriteLine($"[numenv] {description}");
     }
 }
