@@ -206,12 +206,13 @@ jobs:
   verify:
     name: Model Performance Coverage and Regressions
     needs: [prepare, census]
-    # NOT always(): this job must still run when the census FAILS -- a failed run publishes real
-    # measurements and the baseline step below depends on reading them -- but it must NOT run when
-    # the census was CANCELLED. The workflow sets cancel-in-progress, so any push while a census is
-    # in flight cancels prepare and the shards, leaving no artifacts; verify then threw "Fixture
-    # inventory is missing: artifacts/model-performance/all/test-list.txt" and reported a red check
-    # that reflected the cancellation, not the code. That spurious failure was showing on 10 open PRs.
+    # NOT always(): this workflow sets concurrency.cancel-in-progress, so a superseding push
+    # cancels prepare/census mid-flight. Under always() this job still ran, found no shard
+    # records to verify, and reported a hard failure that had nothing to do with the code --
+    # the most common red check across the open PRs. !cancelled() keeps the gate running when
+    # the census genuinely FAILED (its records exist and are worth verifying) and skips it
+    # only when the run was cancelled. The concrete symptom was "Fixture inventory is missing:
+    # artifacts/model-performance/all/test-list.txt" on 10 open PRs.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
