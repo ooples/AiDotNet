@@ -850,14 +850,22 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// does not cover.
     /// </summary>
     /// <remarks>
-    /// This is the variable the diffusion clone divergence has always turned on, and the one
-    /// reading nobody has ever had. SimdGemm.SgemmWithCachedB abandons its cached path outright
-    /// when Avx512Sgemm.CanUse, so an AVX-512 runner sums the same products in a different order
-    /// from an AVX2 one -- and every local reproduction attempt has been on AVX2 hardware, where
-    /// the difference measures exactly zero. Without this line a green run cannot be told apart
-    /// from a run that simply never exercised the path under suspicion.
-    /// Vector&lt;float&gt;.Count is included because DOTNET_PreferredVectorBitWidth can narrow the
-    /// selected width on hardware that reports Avx512F.IsSupported = true.
+    /// <para>
+    /// AVX-512 is a SUSPECTED correlation here, not an established cause, and this reading exists
+    /// to test that suspicion rather than to assume it. What is actually known:
+    /// SimdGemm.SgemmWithCachedB abandons its cached path outright when Avx512Sgemm.CanUse, so an
+    /// AVX-512 runner can sum the same products in a different order from an AVX2 one. What is NOT
+    /// known is whether that explains the clone divergence: there has never been a failing AVX-512
+    /// reproduction, only one divergence observed on Linux CI whose ISA was never recorded, against
+    /// zero divergence on Windows/x64 and on AVX2 Linux. Other numeric or process-state causes --
+    /// DeterministicMode being flipped by a sibling test, for one -- remain equally unexcluded.
+    /// </para>
+    /// <para>
+    /// The point of capturing the ISA is that without it a green run cannot be told apart from a
+    /// run that never exercised the path under suspicion at all, so neither outcome moves the
+    /// question. Vector&lt;float&gt;.Count is included because DOTNET_PreferredVectorBitWidth can
+    /// narrow the selected width on hardware that still reports Avx512F.IsSupported = true.
+    /// </para>
     /// </remarks>
     private static string DescribeVectorIsa()
     {
@@ -1001,10 +1009,11 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
 /// <para>
 /// The clone diagnostic prints the environment only when an assertion FAILS, so a passing shard
 /// records nothing about the hardware it ran on. That is why a green diffusion shard has never
-/// been distinguishable from a shard that simply never exercised the kernel under suspicion:
-/// the AVX-512 path is the one the clone divergence turns on, and the log never said which path
-/// ran. Emitting the reading once, unconditionally, makes every shard log self-describing for
-/// the cost of a single line.
+/// been distinguishable from a shard that simply never exercised the kernel under suspicion --
+/// the log never said which GEMM path ran. AVX-512 is the leading suspect, not a confirmed
+/// cause; see DescribeVectorIsa for what is and is not established. Emitting the reading once,
+/// unconditionally, makes every shard log self-describing for the cost of a single line, which
+/// is what lets a future divergence be attributed instead of guessed at.
 /// </para>
 /// <para>
 /// Non-generic on purpose. <c>DiffusionModelTestBase{TNum}</c> is generic, so anything static on

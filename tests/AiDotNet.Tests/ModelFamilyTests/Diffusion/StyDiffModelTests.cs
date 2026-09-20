@@ -14,9 +14,15 @@ public class StyDiffModelTests : DiffusionModelTestBase<float>
     protected override int[] OutputShape => [1, 4, 16, 16];
 
     // This fixture used to override CloneOutputRelativeTolerance to 1.5e-5. Removed on the
-    // condition the override itself set: it holds at zero on CI now that the bit-identity check no
-    // longer runs BETWEEN the two forwards (see DiffusionModelTestBase). Every other diffusion
-    // fixture measures zero and so should this one.
+    // condition the override itself set: that the clone difference holds at zero once the
+    // bit-identity check no longer runs BETWEEN the two forwards (see DiffusionModelTestBase).
+    //
+    // Validation status. Clone_ShouldProduceIdenticalOutput passed in 5.52s on Linux CI with the
+    // default tolerance restored -- shard "ModelFamily - Diffusion Step-Sync", 65/65 -- and passes
+    // on Windows/x64 and on AVX2 Linux. That is one green CI observation, not a proof the
+    // divergence is gone: the ISA of that runner was not recorded, because the numeric-environment
+    // reading only printed on failure. It is emitted unconditionally from here on, so the next run
+    // will say. Every other diffusion fixture measures zero and so does this one.
     //
     // If a clone divergence returns here, it is NOT evidence that a difference is expected. The
     // history, for whoever picks it up: Linux CI once saw output[58] come back 9.179571E-002
