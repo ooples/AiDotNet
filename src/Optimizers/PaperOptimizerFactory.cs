@@ -137,7 +137,7 @@ internal static class PaperOptimizerFactory
 
         int warmupSteps = recipe.WarmupSteps > 0 ? recipe.WarmupSteps : 0;
         var scheduler = BuildScheduler(recipe, baseRate, warmupSteps, totalSteps: 0, modelDimension: 0);
-        return ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
+        return ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps: 0);
     }
 
     /// <summary>Constructs the declared optimizer, or <c>null</c> when this library has none for it.</summary>
@@ -877,7 +877,7 @@ internal static class PaperOptimizerFactory
     /// </remarks>
     private static ILearningRateScheduler? ComposeWarmup(
         ILearningRateScheduler? scheduler, PaperOptimizerAttribute recipe,
-        double baseRate, int warmupSteps)
+        double baseRate, int warmupSteps, int totalSteps)
     {
         if (scheduler is null || warmupSteps <= 0) return scheduler;
 
@@ -891,6 +891,29 @@ internal static class PaperOptimizerFactory
 
         try
         {
+            // Prefer one scheduler over two whenever LinearWarmupScheduler can express the whole
+            // curve, for two reasons.
+            //
+            // Faithfulness: SequentialLRScheduler restarts its child's step count at the milestone
+            // (localStep = step - schedulerStartStep), so a cosine built for TMax = totalSteps runs
+            // from the milestone out to totalSteps + warmupSteps and never reaches its declared
+            // floor inside the run. The collapsed form decays across exactly the post-warmup span,
+            // which is what "warm up over N steps, then cosine to zero" states.
+            //
+            // Cost: TryGetFusedLrSchedule has no case for SequentialLRScheduler, so composing one
+            // drops the optimizer off the fused path onto the eager tape. That roughly doubled
+            // allocation for every model declaring warmup alongside cosine decay -- ThreeDLLM's
+            // census went 35.8 MB to 95.9 MB, past the 2.5x regression gate.
+            if (CollapsibleDecayMode(recipe) is LinearWarmupScheduler.DecayMode decayMode
+                && totalSteps > warmupSteps)
+            {
+                return new LinearWarmupScheduler(
+                    baseRate, warmupSteps, totalSteps,
+                    warmupInitLr: FirstWarmupRate(baseRate, warmupSteps),
+                    decayMode: decayMode,
+                    endLr: double.IsNaN(recipe.MinLearningRate) ? 0.0 : recipe.MinLearningRate);
+            }
+
             // warmupInitLr defaults to 0, which makes the very first step a no-op: the update is
             // multiplied by a rate of exactly zero and the parameters come back bit-identical.
             // The two other places that build a warmup already start it one increment in, and
@@ -907,6 +930,27 @@ internal static class PaperOptimizerFactory
             return scheduler;
         }
     }
+
+    /// <summary>The decay mode expressing a recipe's post-warmup schedule, when one does.</summary>
+    /// <remarks>
+    /// Only the two shapes LinearWarmupScheduler decays in itself. Everything else -- step,
+    /// multi-step, exponential, cyclic, plateau, one-cycle, and any polynomial that is not of
+    /// degree one -- still needs the SequentialLRScheduler composition.
+    /// </remarks>
+    private static LinearWarmupScheduler.DecayMode? CollapsibleDecayMode(
+        PaperOptimizerAttribute recipe)
+        => recipe.Schedule switch
+        {
+            LearningRateSchedulerType.CosineAnnealing => LinearWarmupScheduler.DecayMode.Cosine,
+
+            // Degree one is a straight line from the peak to the floor, which is exactly what the
+            // Linear decay mode computes. A higher power curves, and has no mode here.
+            LearningRateSchedulerType.Polynomial
+                when double.IsNaN(recipe.DecayRate) || Math.Abs(recipe.DecayRate - 1.0) < 1e-12
+                => LinearWarmupScheduler.DecayMode.Linear,
+
+            _ => null,
+        };
 
     /// <summary>The model dimension, when the options expose one under a name we recognise.</summary>
     /// <remarks>
@@ -958,7 +1002,7 @@ internal static class PaperOptimizerFactory
 
         ILearningRateScheduler? scheduler = BuildScheduler(
             recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
-        scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
+        scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps);
         if (scheduler is not null)
         {
             schedulerProperty.SetValue(options, scheduler);
