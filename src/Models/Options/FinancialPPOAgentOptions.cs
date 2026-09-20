@@ -24,7 +24,8 @@ public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialPPOAgentOptions(FinancialPPOAgentOptions<T> other) : base(other)
     {
-        if (other is null) throw new ArgumentNullException(nameof(other));
+        // This used to chain to this() and copy only the two properties below, so a copy silently lost
+        // every base property — including PPOClipRange and GAELambda, the ones PPO itself trains with.
         NumEpochs = other.NumEpochs;
         NumMiniBatches = other.NumMiniBatches;
     }

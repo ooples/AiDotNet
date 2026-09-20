@@ -3146,6 +3146,55 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         Assert.True(anyChanged,
             "No parameters changed after training — gradients may all be zero.");
+
+        // ACTUALLY INSPECT THE GRADIENTS. Everything above this point compares PARAMETERS before and
+        // after a step — the identical check Training_ShouldChangeParameters performs — so despite its
+        // name this invariant never looked at a gradient, and the suite carried two movement tests and
+        // no gradient test. Parameter movement cannot distinguish "the gradient was right" from "some
+        // other term moved the weights": SAC's actor keeps moving on its entropy term alone while the
+        // Q term is detached from the tape.
+        //
+        // Deliberately narrow, because the gradient surface is known to manufacture zeros: most of the
+        // ~170 layer overrides of GetParameterGradients predate the autodiff tape and return a freshly
+        // allocated zero vector, so "every gradient is non-zero" would false-fail broadly and honestly
+        // tell us nothing. Asserting finiteness and not-uniformly-zero is what the surface can support.
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> gradientSource) return;
+
+        Vector<T> gradients;
+        try
+        {
+            gradients = gradientSource.GetParameterGradients();
+        }
+        catch (System.NotSupportedException)
+        {
+            // A streaming step that deliberately did not retain its full gradient set. Not a defect.
+            return;
+        }
+
+        if (gradients.Length == 0) return;
+
+        bool anyNonZero = false;
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            double g = ConvertToDouble(gradients[i]);
+            if (double.IsNaN(g) || double.IsInfinity(g))
+            {
+                Assert.False(double.IsNaN(g),
+                    $"Gradient[{i}] is NaN after training — the backward pass is producing garbage, "
+                    + "which the parameter scan above cannot see when the optimizer clips or skips it.");
+                Assert.False(double.IsInfinity(g),
+                    $"Gradient[{i}] is Infinity after training — gradient explosion in the backward pass.");
+            }
+
+            if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
+        }
+
+        Assert.True(anyNonZero,
+            $"Every one of the {gradients.Length} published gradients is exactly zero after training, "
+            + "yet parameters changed — so whatever moved them did not come from this loss. That is the "
+            + "signature of a severed tape: a term read through Predict (which runs inside a "
+            + "NoGradScope) or a tensor rebuilt element by element contributes no gradient, while an "
+            + "optimizer with momentum or weight decay still perturbs the weights.");
     }
 
     // =====================================================
@@ -5915,6 +5964,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // exact opposite of producing a worklist, and it would have polluted the CI error list this branch
         // exists to clean up. GradientCorrectnessInvariantApplicable is the declared opt-out, but it
         // cannot be relied on to have been set on every such family in advance.
+        // ONE budget for the whole probe, restarted here. See TargetDependenceRepeatBudgetSeconds.
+        _targetDependenceBudget.Restart();
         Vector<T> stepA, meanDeltaA;
         try
         {
@@ -6382,9 +6433,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int repeats = Math.Max(1, TargetDependenceRepeatCount);
         var accumulator = new double[start.Length];
 
-        // SELF-LIMITING, measured rather than declared per fixture. The first repeat is timed and the
-        // rest are only spent if they fit a wall-clock budget, so an expensive model reduces its own
-        // repeat count instead of waiting for someone to notice a red shard and add another override.
+        // SELF-LIMITING, measured rather than declared per fixture. The first repeat of each call is
+        // always spent; the rest are spent only while the PROBE-WIDE budget holds, so an expensive
+        // model reduces its own repeat count instead of waiting for someone to notice a red shard and
+        // add another override. The stopwatch is a field the test restarts once, not a local started
+        // here -- a per-call budget bounds nothing, because the probe calls this four to seven times.
         //
         // This exists because the hand-capped approach demonstrably does not hold. RealESRGANVideo and
         // SECBERT timed out because the generator capped TrainingIterations and MoreData* but never this
@@ -6397,7 +6450,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Adam step is sign(g), so two targets differing only in magnitude produce identical first steps
         // and the probe would report a FALSE FAILURE. Cutting the axis that costs the same but proves less
         // is the whole point.
-        var budget = System.Diagnostics.Stopwatch.StartNew();
+        var budget = _targetDependenceBudget;
         int spent = 0;
 
         for (int r = 0; r < repeats; r++)
@@ -6444,7 +6497,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double[]? accumulator = null;
         double lossAccumulator = 0.0;
         int spent = 0;
-        var budget = System.Diagnostics.Stopwatch.StartNew();
+        var budget = _targetDependenceBudget;
 
         try
         {
@@ -6854,15 +6907,39 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int TargetDependenceRepeatCount => 3;
 
     /// <summary>
-    /// Wall-clock seconds the target-dependence probe may spend on REPEATS beyond the first.
+    /// Wall-clock seconds the target-dependence probe may spend IN TOTAL on REPEATS beyond the first
+    /// of each averaging call.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The durable answer to per-fixture iteration caps: the model reports its own price by running,
     /// and the probe spends what fits. A cheap model gets every repeat; an expensive one averages fewer
     /// and says so. Nothing to update when a model gets slower, and no constant to forget when a new
     /// invariant is added.
+    /// </para>
+    /// <para>
+    /// <b>The budget is scoped to the PROBE, not to one averaging call</b>, and that distinction is the
+    /// whole guarantee. It was previously a fresh stopwatch inside each call, so the ceiling was this
+    /// value multiplied by however many calls the probe happened to make -- four in the ordinary path,
+    /// seven when the under-powered case escalates. At the old 20 s that ceiling was 80-140 s against a
+    /// 120 s per-test timeout, so the mechanism could not bound the thing it exists to bound and
+    /// Upscale4KAgent timed out under it. One stopwatch across the whole probe makes the ceiling this
+    /// value, whatever the probe's shape, which is what the paragraph above already claimed.
+    /// </para>
+    /// <para>
+    /// Raised from 20 s to 60 s with that change so no fixture that was completing its repeats loses
+    /// any: three calls that each fit 20 s still fit 60 s together. Only a model that was overrunning
+    /// the timeout is cut, which is the intent. The first repeat of every call is always spent, so
+    /// exhausting the budget reduces averaging and never removes a condition.
+    /// </para>
     /// </remarks>
-    protected virtual double TargetDependenceRepeatBudgetSeconds => 20.0;
+    protected virtual double TargetDependenceRepeatBudgetSeconds => 60.0;
+
+    /// <summary>
+    /// The single stopwatch <see cref="TargetDependenceRepeatBudgetSeconds"/> is measured against,
+    /// restarted once per target-dependence probe rather than once per averaging call.
+    /// </summary>
+    private readonly System.Diagnostics.Stopwatch _targetDependenceBudget = new System.Diagnostics.Stopwatch();
 
     /// <summary>
     /// Trains <see cref="TargetDependenceStepCount"/> steps from a known parameter vector and returns the

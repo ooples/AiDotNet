@@ -45,16 +45,21 @@ public class TradingAgentOptions<T> : ModelOptions
     }
 
     /// <summary>
-    /// Creates a copy of <paramref name="other"/>, every setting included.
+    /// Copies every property declared on this type, so a derived copy constructor only has to copy what it
+    /// adds.
     /// </summary>
     /// <remarks>
-    /// The derived options' copy constructors chain here. They used to copy only their own fields -- DQN's
-    /// and PPO's not even StateSize -- and SAC's hand-written copy of this class missed its temperature and
-    /// target settings. The hidden layer widths are copied, not shared, so editing a copy never edits the
-    /// original.
+    /// <para>
+    /// Each derived options type used to re-list the base properties by hand, and every one of them had
+    /// drifted: the agent-specific copy constructors between them dropped <c>SACAlpha</c>, <c>Tau</c>,
+    /// <c>AutoTuneAlpha</c>, <c>EntropyCoefficient</c>, <c>ValueCoefficient</c>, <c>GAELambda</c> and
+    /// <c>PPOClipRange</c>, and two of them copied nothing from the base at all — losing <c>StateSize</c>,
+    /// <c>ActionSize</c> and <c>Seed</c> on a copy. A hand-maintained list cannot stay correct as
+    /// properties are added, so there is now exactly one list and it lives with the properties it copies.
+    /// </para>
     /// </remarks>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public TradingAgentOptions(TradingAgentOptions<T> other) : this()
+    protected TradingAgentOptions(TradingAgentOptions<T> other) : this()
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
@@ -62,6 +67,10 @@ public class TradingAgentOptions<T> : ModelOptions
         DiscountFactor = other.DiscountFactor;
         LossFunction = other.LossFunction;
         Seed = other.Seed;
+        // TradingAgentOptions<T>.Seed HIDES ModelOptions.Seed, and `: this()` leaves the base property
+        // null. Without this, a configured base seed is lost and GetOptions(), which returns
+        // ModelOptions, reports the default instead of what the caller configured.
+        ((ModelOptions)this).Seed = ((ModelOptions)other).Seed;
         BatchSize = other.BatchSize;
         ReplayBufferSize = other.ReplayBufferSize;
         TargetUpdateFrequency = other.TargetUpdateFrequency;
@@ -72,7 +81,9 @@ public class TradingAgentOptions<T> : ModelOptions
         StateSize = other.StateSize;
         ActionSize = other.ActionSize;
         ContinuousActions = other.ContinuousActions;
-        HiddenLayers = other.HiddenLayers is null ? new int[0] : (int[])other.HiddenLayers.Clone();
+        // Clone: int[] is mutable, so sharing it would let a layer-width change on either options
+        // instance silently alter the other's network configuration.
+        HiddenLayers = (int[])other.HiddenLayers.Clone();
         InitialCapital = other.InitialCapital;
         TransactionCost = other.TransactionCost;
         MaxPositionSize = other.MaxPositionSize;
@@ -81,13 +92,13 @@ public class TradingAgentOptions<T> : ModelOptions
         UseRiskAdjustedReward = other.UseRiskAdjustedReward;
         VariancePenalty = other.VariancePenalty;
         RewardScale = other.RewardScale;
-        PPOClipRange = other.PPOClipRange;
-        EntropyCoefficient = other.EntropyCoefficient;
-        ValueCoefficient = other.ValueCoefficient;
-        GAELambda = other.GAELambda;
         SACAlpha = other.SACAlpha;
         AutoTuneAlpha = other.AutoTuneAlpha;
         Tau = other.Tau;
+        EntropyCoefficient = other.EntropyCoefficient;
+        ValueCoefficient = other.ValueCoefficient;
+        GAELambda = other.GAELambda;
+        PPOClipRange = other.PPOClipRange;
     }
 
     #region RL Parameters
@@ -129,11 +140,24 @@ public class TradingAgentOptions<T> : ModelOptions
     /// <summary>
     /// Batch size for training updates.
     /// </summary>
+    /// <value>64 transitions by default; must be positive.</value>
+    /// <remarks><para>For A2C this is the minimum current-rollout size, not a random replay sample count.
+    /// An eligible update consumes the complete bounded rollout in one actor/critic step.
+    /// Configure this no larger than <see cref="ReplayBufferSize"/> for autonomous replay/rollout
+    /// training; a larger minimum can never be reached by the bounded buffer. Explicit one-shot
+    /// supervised updates bypass this readiness requirement.</para>
+    /// <para><b>For Beginners:</b> This is how many observations the agent waits to collect for a normal
+    /// update. A2C then learns once from all observations in its current rollout.</para></remarks>
     public int BatchSize { get; set; } = 64;
 
     /// <summary>
     /// Size of the experience replay buffer.
     /// </summary>
+    /// <value>100000 transitions by default; must be positive.</value>
+    /// <remarks><para>For on-policy A2C this bounds pending current-policy transitions only; consumed
+    /// transitions are discarded, and the oldest pending transition is dropped at capacity.</para>
+    /// <para><b>For Beginners:</b> This limits how many observations an agent retains, so memory use
+    /// remains bounded. A2C does not reuse observations after changing its policy.</para></remarks>
     public int ReplayBufferSize { get; set; } = 100000;
 
     /// <summary>
@@ -142,23 +166,68 @@ public class TradingAgentOptions<T> : ModelOptions
     public int TargetUpdateFrequency { get; set; } = 1000;
 
     /// <summary>
-    /// Number of steps before training begins.
+    /// Number of environment steps (stored transitions) before training begins.
     /// </summary>
+    /// <value>1000 transitions by default; must be non-negative.</value>
+    /// <remarks>
+    /// <para>
+    /// Replay-based agents (DQN, SAC, market-making) apply no gradient update until their replay buffer
+    /// holds at least this many transitions (capped at <see cref="ReplayBufferSize"/>), in addition to
+    /// needing one full <see cref="BatchSize"/>. During warmup they still act with their initial exploration
+    /// (for DQN, epsilon stays at <see cref="EpsilonStart"/> because it only decays per update), so the
+    /// first updates sample from a diverse buffer. A one-shot supervised <c>Train(state, target)</c> call is
+    /// not gated. Set 0 to start updating as soon as a minibatch is available.
+    /// </para>
+    /// <para>
+    /// A2C applies this threshold only to its initial current-policy rollout, capped at
+    /// <see cref="ReplayBufferSize"/>. Later updates require a fresh <see cref="BatchSize"/> without
+    /// repeating initial warmup. Each update consumes that rollout once, even if the update fails.
+    /// </para>
+    /// <para><b>For Beginners:</b> Warmup lets an agent collect observations before its first lesson.
+    /// Zero removes this initial wait, but does not remove the normal batch-size requirement.</para>
+    /// <para>
+    /// The on-policy PPO agent learns only from the rollout it just collected and has no replay buffer to
+    /// warm up, so it does not use this option.
+    /// </para>
+    /// </remarks>
     public int WarmupSteps { get; set; } = 1000;
 
     /// <summary>
-    /// Initial exploration rate.
+    /// Initial exploration rate for epsilon-greedy agents (the financial DQN agent).
     /// </summary>
+    /// <value>1.0 by default; a finite probability in [0, 1], at least <see cref="EpsilonEnd"/>.</value>
+    /// <remarks>
+    /// <para>
+    /// The probability of taking a uniformly random action before any gradient update has been applied.
+    /// Epsilon then follows <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> At 1.0 every exploratory decision is random initially;
+    /// at 0.0 the agent always chooses its currently preferred action.</para>
+    /// </remarks>
     public double EpsilonStart { get; set; } = 1.0;
 
     /// <summary>
-    /// Final exploration rate.
+    /// Final (floor) exploration rate for epsilon-greedy agents; epsilon never decays below this value.
     /// </summary>
+    /// <value>0.01 by default; a finite probability in [0, 1], no greater than <see cref="EpsilonStart"/>.</value>
+    /// <remarks><para><b>For Beginners:</b> The default keeps a 1% chance of exploring even after
+    /// training has reduced the initial randomness. It is not a percentage-valued setting: use
+    /// 0.01, not 1, to request one percent.</para></remarks>
     public double EpsilonEnd { get; set; } = 0.01;
 
     /// <summary>
-    /// Exploration decay rate.
+    /// Multiplicative exploration decay applied once per gradient update, in (0, 1].
     /// </summary>
+    /// <value>0.995 by default; a finite factor in (0, 1].</value>
+    /// <remarks>
+    /// <para>
+    /// After <c>k</c> gradient updates epsilon is <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^k)</c> — the
+    /// same per-update schedule the library's <c>DQNAgent</c> uses. With the defaults (1.0, 0.01, 0.995)
+    /// epsilon reaches its floor after about 920 updates. 1.0 disables decay.
+    /// </para>
+    /// <para><b>For Beginners:</b> Each successful update multiplies the random-action probability by
+    /// this factor. Values closer to 1 reduce exploration more slowly; 1 leaves it unchanged.</para>
+    /// </remarks>
     public double EpsilonDecay { get; set; } = 0.995;
 
     #endregion
@@ -194,9 +263,31 @@ public class TradingAgentOptions<T> : ModelOptions
     public bool ContinuousActions { get; set; } = false;
 
     /// <summary>
-    /// Hidden layer sizes for the neural network.
+    /// Hidden layer sizes for the networks an agent builds itself.
     /// </summary>
-    public int[] HiddenLayers { get; set; } = new[] { 256, 128, 64 };
+    /// <value>Two layers of 64 neurons: <c>[64, 64]</c>. Empty is valid; every supplied width must be positive.</value>
+    /// <remarks>
+    /// <para>
+    /// When an actor / critic / Q-network architecture is passed with no layers, the agent builds a
+    /// multilayer perceptron with one hidden layer per entry (ReLU; Tanh for PPO) and a linear output layer.
+    /// Architectures that already contain layers are used as-is and this option does not change them.
+    /// An empty array builds a single linear layer. Every entry must be positive.
+    /// </para>
+    /// <para>
+    /// The default <c>[64, 64]</c> is the network the agents have always built by default; before this option
+    /// was honoured its documented default of <c>[256, 128, 64]</c> was never applied.
+    /// This is an AiDotNet compatibility default, not a universal architecture prescribed by the
+    /// DQN, asynchronous actor-critic, SAC or market-making papers. PPO's reported MuJoCo MLP used
+    /// 64-by-64 Tanh layers, whereas SAC's original experiments used 256-by-256 ReLU layers.
+    /// Select task-appropriate widths explicitly when reproducing a particular experiment.
+    /// </para>
+    /// <para><b>For Beginners:</b> Each number is one hidden layer's neuron count. For example,
+    /// <c>[128, 64]</c> builds a wider first layer and a smaller second layer; it does not modify
+    /// layers that you supplied yourself.</para>
+    /// </remarks>
+    /// <seealso href="https://arxiv.org/pdf/1707.06347">PPO, section 6.1 (MuJoCo policy architecture).</seealso>
+    /// <seealso href="https://proceedings.mlr.press/v80/haarnoja18b/haarnoja18b-supp.pdf">SAC, appendix D, table 1.</seealso>
+    public int[] HiddenLayers { get; set; } = new[] { 64, 64 };
 
     #endregion
 
@@ -216,16 +307,28 @@ public class TradingAgentOptions<T> : ModelOptions
     public required T InitialCapital { get; set; }
 
     /// <summary>
-    /// Transaction cost as a fraction of trade value.
+    /// Transaction cost as a fraction of trade value, as an OVERRIDE of the environment's own cost.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Cost to execute a trade (broker fees, slippage).
-    /// 0.001 means 0.1% of the trade value is lost to costs.
-    /// This discourages excessive trading.
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>transactionCost</c> constructor argument binds and this option changes nothing. When set, it
+    /// REPLACES the environment's value — it is not added to it — the moment the environment is handed these
+    /// options via <c>TradingEnvironment.ApplyAgentOverrides</c>. There is exactly one cost in force either
+    /// way, so a cost can never be charged twice.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Cost to execute a trade (broker fees, slippage). 0.001 means 0.1% of the trade
+    /// value is lost to costs, which discourages excessive trading. Leave it null to use whatever cost the
+    /// environment was built with; set it to run the same environment at a different cost.
     /// </para>
     /// </remarks>
-    public double TransactionCost { get; set; } = 0.001;
+    /// <value>
+    /// A fraction of trade value, not a percentage or a currency amount: <c>0.001</c> is 0.1%. Must be
+    /// non-negative and finite when set; <c>null</c> (the default) leaves the environment's own cost in
+    /// force. Typical retail equity costs land between <c>0.0005</c> and <c>0.002</c>.
+    /// </value>
+    public double? TransactionCost { get; set; }
 
     /// <summary>
     /// Maximum position size as a fraction of portfolio.
@@ -358,9 +461,27 @@ public class TradingAgentOptions<T> : ModelOptions
             throw new ArgumentException("BatchSize must be positive.", nameof(BatchSize));
         if (ReplayBufferSize <= 0)
             throw new ArgumentException("ReplayBufferSize must be positive.", nameof(ReplayBufferSize));
+        if (!(EpsilonStart >= 0.0 && EpsilonStart <= 1.0))
+            throw new ArgumentException("EpsilonStart must be a finite probability in [0, 1].", nameof(EpsilonStart));
+        if (!(EpsilonEnd >= 0.0 && EpsilonEnd <= 1.0))
+            throw new ArgumentException("EpsilonEnd must be a finite probability in [0, 1].", nameof(EpsilonEnd));
         if (EpsilonStart < EpsilonEnd)
             throw new ArgumentException("EpsilonStart must be >= EpsilonEnd.", nameof(EpsilonStart));
-        if (TransactionCost < 0)
-            throw new ArgumentException("TransactionCost cannot be negative.", nameof(TransactionCost));
+        if (!(EpsilonDecay > 0.0 && EpsilonDecay <= 1.0))
+            throw new ArgumentException("EpsilonDecay must be in (0, 1].", nameof(EpsilonDecay));
+        if (WarmupSteps < 0)
+            throw new ArgumentException("WarmupSteps cannot be negative.", nameof(WarmupSteps));
+        if (HiddenLayers is null || Array.Exists(HiddenLayers, size => size <= 0))
+            throw new ArgumentException("HiddenLayers must be non-null with positive widths.", nameof(HiddenLayers));
+        if (TransactionCost is double transactionCost
+            && (transactionCost < 0 || double.IsNaN(transactionCost) || double.IsInfinity(transactionCost)))
+            throw new ArgumentException(
+                "TransactionCost must be a non-negative, finite number when set.", nameof(TransactionCost));
+        if (RewardScale <= 0.0 || double.IsNaN(RewardScale) || double.IsInfinity(RewardScale))
+            throw new ArgumentException("RewardScale must be a positive, finite number.", nameof(RewardScale));
+        if (SACAlpha < 0.0 || double.IsNaN(SACAlpha) || double.IsInfinity(SACAlpha))
+            throw new ArgumentException("SACAlpha must be a non-negative, finite number.", nameof(SACAlpha));
+        if (!(Tau > 0.0 && Tau <= 1.0))
+            throw new ArgumentException("Tau must be in (0, 1].", nameof(Tau));
     }
 }
