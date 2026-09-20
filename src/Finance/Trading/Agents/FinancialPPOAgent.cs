@@ -121,8 +121,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, options.HiddenLayers);
-        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1, options.HiddenLayers);
+        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
+        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1);
 
         var actor = new NeuralNetwork<T>(
             actorArchitecture,
@@ -149,13 +149,10 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private void EnsurePpoDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
-        int expectedOutputSize,
-        IReadOnlyList<int> hiddenLayerSizes)
+        int expectedOutputSize)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
-        if (hiddenLayerSizes is null || hiddenLayerSizes.Count == 0)
-            throw new ArgumentException("PPO needs at least one hidden layer width.", nameof(hiddenLayerSizes));
 
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
