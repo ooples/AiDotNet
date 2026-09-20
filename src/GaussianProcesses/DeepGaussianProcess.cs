@@ -566,6 +566,80 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
     /// Gets the number of layers in the deep GP.
     /// </summary>
     public int NumLayers => _layers.Count;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The generated declarations cover <c>_X</c>, <c>_y</c> and <c>_yMean</c>. Everything else
+    /// <see cref="Fit"/> learns lives in the layers -- the inducing inputs and the variational
+    /// parameters -- and no member of this class holds it, so the classifier cannot place it.
+    /// Without these declarations a serialize/deserialize round trip, which is how both
+    /// <c>DeepCopy</c> and <c>LoadModel</c> rebuild a model, hands back a process whose layers are
+    /// still at the random initialisation the constructor gave them: it predicts, but it predicts
+    /// from an untrained function.
+    /// </para>
+    /// <para>
+    /// The layer count and widths come from the recorded constructor, so a restored model has the
+    /// same layers in the same order and the lists line up positionally. Kuu is scratch derived
+    /// from the inducing inputs and the kernel, so it is recomputed after the restore rather than
+    /// stored; only the training path reads it, but a model restored mid-experiment is allowed to
+    /// carry on training.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+
+        state.Declare(
+            "DeepGaussianProcess._layers.InducingInputs",
+            () => _layers.Select(layer => layer.InducingInputs).ToList(),
+            restored => RestoreLayerMatrices(restored, (layer, m) => layer.InducingInputs = m));
+
+        state.Declare(
+            "DeepGaussianProcess._layers.VariationalMean",
+            () => _layers.Select(layer => layer.VariationalMean).ToList(),
+            restored => RestoreLayerMatrices(restored, (layer, m) => layer.VariationalMean = m));
+
+        state.Declare(
+            "DeepGaussianProcess._layers.VariationalCovCholesky",
+            () => _layers.Select(layer => layer.VariationalCovCholesky).ToList(),
+            restored => RestoreLayerMatrices(restored, (layer, m) => layer.VariationalCovCholesky = m));
+
+        state.DeclareAfterRestore(
+            "DeepGaussianProcess._layers.Kuu",
+            () =>
+            {
+                foreach (var layer in _layers)
+                {
+                    if (!layer.InducingInputs.IsEmpty)
+                    {
+                        layer.ComputeKuu();
+                    }
+                }
+            });
+    }
+
+    /// <summary>Installs one restored matrix per layer, positionally.</summary>
+    /// <param name="restored">The restored list, or null when nothing was stored.</param>
+    /// <param name="install">Writes one matrix into one layer.</param>
+    /// <remarks>
+    /// A payload shorter or longer than the current architecture leaves the surplus layers alone
+    /// rather than throwing: the count is fixed by the recorded constructor, so a mismatch means a
+    /// checkpoint from a different architecture, which the base class reports on its own terms.
+    /// </remarks>
+    private void RestoreLayerMatrices(List<Matrix<T>>? restored, Action<DGPLayer<T>, Matrix<T>> install)
+    {
+        if (restored is null) return;
+
+        int count = Math.Min(_layers.Count, restored.Count);
+        for (int i = 0; i < count; i++)
+        {
+            if (restored[i] is not null)
+            {
+                install(_layers[i], restored[i]);
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -595,6 +669,27 @@ internal class DGPLayer<T>
     private Matrix<T> _Kuu;
 
     public int OutputDim => _outputDim;
+
+    /// <summary>The inducing inputs; learned state, exposed so the model can persist it.</summary>
+    internal Matrix<T> InducingInputs
+    {
+        get => _inducingInputs;
+        set => _inducingInputs = value;
+    }
+
+    /// <summary>The variational mean; learned state, exposed so the model can persist it.</summary>
+    internal Matrix<T> VariationalMean
+    {
+        get => _variationalMean;
+        set => _variationalMean = value;
+    }
+
+    /// <summary>The Cholesky factor of the variational covariance; learned state, exposed so the model can persist it.</summary>
+    internal Matrix<T> VariationalCovCholesky
+    {
+        get => _variationalCovCholesky;
+        set => _variationalCovCholesky = value;
+    }
 
     public DGPLayer(IKernelFunction<T> kernel, int outputDim, int numInducingPoints, INumericOperations<T> numOps)
     {
