@@ -16,6 +16,19 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NeuralNetworkOptions : ModelOptions
 {
+    /// <summary>Initializes the shared neural-network settings with their defaults.</summary>
+    public NeuralNetworkOptions()
+    {
+    }
+
+    /// <summary>Copies the shared neural-network and model settings.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public NeuralNetworkOptions(NeuralNetworkOptions other) : base(other)
+    {
+        EncoderLayerCount = other.EncoderLayerCount;
+    }
+
     /// <summary>
     /// When providing custom layers via Architecture.Layers, specifies where the encoder ends
     /// and the decoder begins. If null, defaults to half the total layer count.

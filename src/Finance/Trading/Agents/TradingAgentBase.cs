@@ -229,9 +229,19 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// <param name="architecture">The user-provided neural network architecture.</param>
     /// <param name="expectedInputSize">Expected input size for the agent network.</param>
     /// <param name="expectedOutputSize">Expected output size for the agent network.</param>
-    /// <param name="hiddenLayerCount">Number of hidden layers to create if none are provided.</param>
-    /// <param name="hiddenLayerSize">Hidden layer width to use when creating defaults.</param>
+    /// <param name="hiddenLayerCount">Optional uniform hidden-layer count (default 2 when only the width is
+    /// given). Passing either this or <paramref name="hiddenLayerSize"/> overrides
+    /// <see cref="TradingAgentOptions{T}.HiddenLayers"/> for this network.</param>
+    /// <param name="hiddenLayerSize">Optional uniform hidden-layer width (default 64 when only the count is
+    /// given); see <paramref name="hiddenLayerCount"/>.</param>
     /// <remarks>
+    /// <para>
+    /// When the architecture carries no layers, the agent builds a ReLU multilayer perceptron with one hidden
+    /// layer per entry of <see cref="TradingAgentOptions{T}.HiddenLayers"/> (default <c>[64, 64]</c>) and a
+    /// task-typed output layer (linear for the <c>Regression</c> task type every trading network uses).
+    /// Caller-supplied layers are used as-is. The network's weight-initialization seed is derived from
+    /// <see cref="TradingAgentOptions{T}.Seed"/> (see <see cref="ApplyNetworkSeed"/>).
+    /// </para>
     /// <para>
     /// <b>For Beginners:</b> Trading agents need a neural network with the right input and output sizes:
     /// </para>
@@ -241,18 +251,20 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// </para>
     /// <para>
     /// If you don't provide custom layers in the architecture, this method fills in a sensible
-    /// default multilayer perceptron so the agent can start learning immediately.
+    /// default multilayer perceptron, sized by <c>HiddenLayers</c>, so the agent can start learning immediately.
     /// </para>
     /// </remarks>
-    protected static void EnsureDefaultLayers(
+    protected void EnsureDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
         int expectedOutputSize,
-        int hiddenLayerCount = 2,
-        int hiddenLayerSize = 64)
+        int? hiddenLayerCount = null,
+        int? hiddenLayerSize = null)
     {
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenLayerCount), "Hidden-layer count cannot be negative.");
 
         if (architecture.CalculatedInputSize != expectedInputSize)
             throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
@@ -260,14 +272,100 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         if (architecture.OutputSize != expectedOutputSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
 
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.AddRange(LayerHelper<T>.CreateDefaultLayers(
+            // An explicit (legacy) uniform count/size from a derived agent wins; otherwise the option applies.
+            var hiddenSizes = hiddenLayerCount.HasValue || hiddenLayerSize.HasValue
+                ? Enumerable.Repeat(hiddenLayerSize ?? 64, hiddenLayerCount ?? 2).ToArray()
+                : GetHiddenLayerSizes();
+            AddSeededDefaultLayers(architecture, () => LayerHelper<T>.CreateFeedForwardLayers(
                 architecture,
-                hiddenLayerCount: hiddenLayerCount,
-                hiddenLayerSize: hiddenLayerSize,
-                outputSize: expectedOutputSize));
+                hiddenSizes,
+                expectedOutputSize));
         }
+    }
+
+    /// <summary>
+    /// The hidden-layer widths for agent-built networks, from <see cref="TradingAgentOptions{T}.HiddenLayers"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The option is null or contains a non-positive width.</exception>
+    protected int[] GetHiddenLayerSizes()
+    {
+        var sizes = TradingOptions.HiddenLayers
+            ?? throw new ArgumentException("TradingAgentOptions.HiddenLayers must not be null.", nameof(TradingOptions));
+        foreach (int size in sizes)
+        {
+            if (size <= 0)
+            {
+                throw new ArgumentException(
+                    $"TradingAgentOptions.HiddenLayers contains a non-positive width ({size}).", nameof(TradingOptions));
+            }
+        }
+
+        return (int[])sizes.Clone();
+    }
+
+    /// <summary>
+    /// Counts the networks this agent has seeded, so each one (actor, critic, Q-network, ...) derives a
+    /// distinct weight-initialization seed from the single options seed.
+    /// </summary>
+    private int _networkSeedOrdinal;
+
+    /// <summary>
+    /// Pins a reproducible weight-initialization seed on an agent network's architecture.
+    /// </summary>
+    /// <param name="architecture">The architecture the agent is about to build a network from.</param>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="TradingAgentOptions{T}.Seed"/> is set and the architecture carries no
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> of its own, the architecture gets a seed derived
+    /// from the options seed and the network's construction ordinal. Weight initialization then no longer
+    /// depends on the process-shared RNG, so two agents built with the same options seed start from
+    /// bit-identical weights. An explicit architecture seed always wins; with no seed at all the
+    /// production (non-reproducible) initialization is unchanged.
+    /// </para>
+    /// <para>
+    /// Call once per network, in construction order, before the network is created. Layers the caller
+    /// constructed before handing the architecture over were already initialized-or-seeded by the caller;
+    /// seed those through the architecture or the layers themselves if they must be reproducible.
+    /// </para>
+    /// </remarks>
+    protected void ApplyNetworkSeed(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        int ordinal = _networkSeedOrdinal++;
+        // An agent's own options seed is more specific than the process-wide fallback a test harness may set, so
+        // only a seed set on this architecture suppresses the derivation.
+        if (!architecture.HasExplicitRandomSeed && TradingOptions.Seed is int seed)
+        {
+            architecture.RandomSeed = unchecked((int)(((uint)seed * 2654435761u) ^ ((uint)(ordinal + 1) * 40503u)));
+        }
+    }
+
+    /// <summary>
+    /// Builds an agent's default layers under the architecture's weight-initialization seed and appends them.
+    /// </summary>
+    /// <remarks>
+    /// Layer constructors take their per-layer seed from the ambient initialization-seed scope, which a model
+    /// normally resets when IT is constructed. Default layers are built before the network exists, so without
+    /// resetting the scope here they would inherit whatever scope the previously constructed model left
+    /// behind — making their weights depend on unrelated, earlier work.
+    /// </remarks>
+    protected static void AddSeededDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Func<IEnumerable<ILayer<T>>> buildLayers)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+        if (buildLayers is null)
+            throw new ArgumentNullException(nameof(buildLayers));
+
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        architecture.Layers.AddRange(buildLayers().ToList());
     }
 
     /// <summary>
@@ -281,6 +379,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     private static ReinforcementLearningOptions<T> CreateBaseOptions(TradingAgentOptions<T> options)
     {
         if (options == null) throw new ArgumentNullException(nameof(options));
+        options.Validate();
 
         return new ReinforcementLearningOptions<T>
         {
@@ -550,6 +649,257 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         if (_totalTrades == 0) return NumOps.Zero;
 
         return NumOps.FromDouble((double)_winningTrades / _totalTrades);
+    }
+
+    #endregion
+
+    #region Warmup
+
+    /// <summary>
+    /// Whether a replay-based agent is still in its <see cref="TradingAgentOptions{T}.WarmupSteps"/> warmup and
+    /// must skip this gradient update.
+    /// </summary>
+    /// <param name="storedTransitions">Transitions currently held in the agent's replay buffer.</param>
+    /// <remarks>
+    /// The threshold is capped at <see cref="TradingAgentOptions{T}.ReplayBufferSize"/> so a warmup larger than
+    /// the buffer cannot block training forever. A one-shot supervised <c>Train(state, target)</c> update is
+    /// never gated, matching the library's other replay agents.
+    /// </remarks>
+    protected bool IsInWarmup(int storedTransitions)
+    {
+        if (SupervisedUpdateRequested)
+        {
+            return false;
+        }
+
+        int threshold = Math.Min(Math.Max(0, TradingOptions.WarmupSteps), Math.Max(1, TradingOptions.ReplayBufferSize));
+        return storedTransitions < threshold;
+    }
+
+    #endregion
+
+    #region Exploration
+
+    /// <summary>
+    /// Draws a standard-normal sample N(0, 1) from the agent's seeded <see cref="ReinforcementLearningAgentBase{T}.Random"/>
+    /// stream (Box-Muller), so exploration noise is zero-mean, symmetric, and reproducible under
+    /// <see cref="TradingAgentOptions{T}.Seed"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Exploration noise must be as likely to push a position down as up; a
+    /// one-sided draw (for example a uniform value in [0, 0.1)) silently biases every exploratory trade.</para>
+    /// </remarks>
+    protected double NextStandardNormal()
+    {
+        // 1 - U maps [0, 1) to (0, 1], so the logarithm is always finite.
+        double u1 = 1.0 - Random.NextDouble();
+        double u2 = Random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="action"/> plus independent zero-mean Gaussian noise with standard deviation
+    /// <paramref name="standardDeviation"/> in every component, drawn from the agent's seeded stream.
+    /// </summary>
+    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, double standardDeviation)
+    {
+        var noisy = new Vector<T>(action.Length);
+        for (int i = 0; i < action.Length; i++)
+        {
+            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviation * NextStandardNormal()));
+        }
+
+        return noisy;
+    }
+
+    /// <summary>
+    /// Returns <paramref name="action"/> plus independent zero-mean Gaussian noise whose standard deviation
+    /// is <paramref name="standardDeviations"/>[i] in component i, drawn from the agent's seeded stream.
+    /// </summary>
+    /// <remarks>
+    /// The per-component overload exists for agents whose exploration width is itself learned (the SAC
+    /// actor's state-independent log-std), where a single scalar sigma would throw that parameter away.
+    /// </remarks>
+    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, IReadOnlyList<double> standardDeviations)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (standardDeviations is null) throw new ArgumentNullException(nameof(standardDeviations));
+        if (standardDeviations.Count != action.Length)
+        {
+            throw new ArgumentException(
+                $"Expected {action.Length} standard deviations, got {standardDeviations.Count}.",
+                nameof(standardDeviations));
+        }
+
+        var noisy = new Vector<T>(action.Length);
+        for (int i = 0; i < action.Length; i++)
+        {
+            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviations[i] * NextStandardNormal()));
+        }
+
+        return noisy;
+    }
+
+    /// <summary>
+    /// Log-density of a diagonal Gaussian N(mean, diag(exp(logStd)^2)) at <paramref name="action"/>, summed
+    /// over action dimensions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the log-probability of the behaviour policy an agent with a deterministic actor head plus
+    /// Gaussian exploration actually follows, which is exactly the <c>log pi(a|s)</c> the SAC soft value
+    /// target needs. Computed in double precision so a float agent does not lose the tail.
+    /// </para>
+    /// </remarks>
+    protected double GaussianLogProbability(Vector<T> action, Vector<T> mean, IReadOnlyList<double> logStds)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (mean is null) throw new ArgumentNullException(nameof(mean));
+        if (logStds is null) throw new ArgumentNullException(nameof(logStds));
+
+        double total = 0.0;
+        for (int i = 0; i < action.Length; i++)
+        {
+            double logStd = logStds[i];
+            double std = Math.Exp(logStd);
+            double diff = NumOps.ToDouble(action[i]) - NumOps.ToDouble(mean[i]);
+            double z = diff / std;
+            total += (-0.5 * z * z) - logStd - (0.5 * Math.Log(2.0 * Math.PI));
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Differential entropy of a diagonal Gaussian with the given log standard deviations, summed over
+    /// action dimensions: <c>sum_i (logStd_i + 0.5*log(2*pi*e))</c>.
+    /// </summary>
+    protected static double GaussianEntropy(IReadOnlyList<double> logStds)
+    {
+        if (logStds is null) throw new ArgumentNullException(nameof(logStds));
+
+        double half = 0.5 * (1.0 + Math.Log(2.0 * Math.PI));
+        double total = 0.0;
+        for (int i = 0; i < logStds.Count; i++)
+        {
+            total += logStds[i] + half;
+        }
+
+        return total;
+    }
+
+    #endregion
+
+    #region Target Networks
+
+    /// <summary>
+    /// Polyak (soft) update of a target network: <c>target &lt;- tau*source + (1-tau)*target</c>.
+    /// </summary>
+    /// <param name="source">The online network being trained.</param>
+    /// <param name="target">The target network to move toward it.</param>
+    /// <param name="tau">Interpolation coefficient in [0, 1]; 1 is a hard copy.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A target network is a slowly-moving copy of the network being trained. It
+    /// supplies the bootstrap value in the temporal-difference target, and moving it slowly is what keeps
+    /// that target from chasing its own updates.</para>
+    /// </remarks>
+    protected void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target, double tau)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (tau < 0.0 || tau > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tau), tau, "Tau must be in [0, 1].");
+        }
+
+        var sourceParameters = source.GetParameters();
+        var targetParameters = target.GetParameters();
+        if (sourceParameters.Length != targetParameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Target network has {targetParameters.Length} parameters but the online network has "
+                + $"{sourceParameters.Length}; they must share an architecture.");
+        }
+
+        T tauT = NumOps.FromDouble(tau);
+        T oneMinusTau = NumOps.FromDouble(1.0 - tau);
+        var blended = new Vector<T>(targetParameters.Length);
+        for (int i = 0; i < blended.Length; i++)
+        {
+            blended[i] = NumOps.Add(
+                NumOps.Multiply(tauT, sourceParameters[i]),
+                NumOps.Multiply(oneMinusTau, targetParameters[i]));
+        }
+
+        target.UpdateParameters(blended);
+    }
+
+    #endregion
+
+    #region Reward Shaping
+
+    /// <summary>
+    /// Applies <see cref="TradingAgentOptions{T}.RewardScale"/> to a reward before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Trading rewards are fractional returns — often 1e-4 or smaller — which leaves a critic regressing on
+    /// targets far below the scale its initialization and learning rate assume. RewardScale multiplies the
+    /// reward so the value function trains in a sane numeric range. Scaling the reward rescales the value
+    /// function and the advantages by the same constant; it does not change which policy is optimal.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your rewards are tiny numbers the agent barely notices them. Turning
+    /// RewardScale up makes the same signal bigger without changing what counts as a good trade.</para>
+    /// </remarks>
+    protected T ScaleReward(T reward)
+    {
+        // Scaling unconditionally rather than short-circuiting an exactly-1.0 scale: RewardScale is
+        // validated positive and finite, and multiplying by one is an identity, so the guard only
+        // traded a negligible multiply for an exact floating-point comparison.
+        double scale = TradingOptions.RewardScale;
+        return NumOps.Multiply(reward, NumOps.FromDouble(scale));
+    }
+
+    /// <summary>
+    /// Rejects a transition whose vectors do not match the configured state and action widths, before it
+    /// can reach the replay buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ReplayBuffer"/> performs no shape validation, and every batched update derives its
+    /// dimensions from the FIRST sampled experience and then indexes every other row with those
+    /// dimensions. One short vector stored today therefore surfaces much later as an out-of-range index or
+    /// a network shape error inside an unrelated training step, with nothing pointing back at the call that
+    /// stored it. Validating at the public entry point keeps the failure at its cause.
+    /// </para>
+    /// <para><b>For Beginners:</b> This checks that the numbers you hand the agent are the size it was
+    /// built for, and complains immediately if not, instead of failing confusingly much later.</para>
+    /// </remarks>
+    protected void ValidateTransitionShape(Vector<T> state, Vector<T> action, Vector<T> nextState)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (nextState is null) throw new ArgumentNullException(nameof(nextState));
+
+        if (state.Length != TradingOptions.StateSize)
+        {
+            throw new ArgumentException(
+                $"State length {state.Length} must match StateSize {TradingOptions.StateSize}.", nameof(state));
+        }
+
+        if (nextState.Length != TradingOptions.StateSize)
+        {
+            throw new ArgumentException(
+                $"NextState length {nextState.Length} must match StateSize {TradingOptions.StateSize}.",
+                nameof(nextState));
+        }
+
+        if (action.Length != TradingOptions.ActionSize)
+        {
+            throw new ArgumentException(
+                $"Action length {action.Length} must match ActionSize {TradingOptions.ActionSize}.",
+                nameof(action));
+        }
     }
 
     #endregion

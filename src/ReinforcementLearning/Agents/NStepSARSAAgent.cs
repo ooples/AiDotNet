@@ -253,10 +253,31 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
 
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return GetParameters();
+        // Returned GetParameters() -- the WEIGHTS -- where this interface promises
+        // "gradients with respect to all model parameters". The vector length matches, so
+        // nothing downstream could detect the substitution: ApplyGradients would subtract the
+        // weights from themselves, and Elastic Weight Consolidation / Gradient Episodic Memory /
+        // Memory Aware Synapses would build Fisher-information estimates out of parameter
+        // magnitudes. A distributed trainer averaging these across workers was averaging
+        // parameters and calling the result a gradient.
+        //
+        // This agent is tabular: it owns no network and its update is a value backup, not a
+        // differentiable loss, so no parameter gradient exists here to return.
+        throw new NotSupportedException(
+            "NStepSARSAAgent is a tabular agent whose update is a value backup rather than a "
+            + "differentiable loss, so it has no parameter gradients for this interface to "
+            + "return. Call Train() instead.");
     }
 
-    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // An empty body silently accepted a gradient vector and did nothing with it, so a
+        // caller applying gradients believed the update landed. Refusing is the honest
+        // contract, and matches ComputeGradients above.
+        throw new NotSupportedException(
+            "NStepSARSAAgent is a tabular agent and does not apply gradient updates. "
+            + "Call Train() instead.");
+    }
 
     public override void SaveModel(string filepath)
     {

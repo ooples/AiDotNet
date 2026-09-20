@@ -1,3 +1,4 @@
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -61,6 +62,23 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
 
+    /// <summary>
+    /// The CURRENT exploration rate, annealed from <see cref="TradingAgentOptions{T}.EpsilonStart"/> toward
+    /// <see cref="TradingAgentOptions{T}.EpsilonEnd"/> by <see cref="TradingAgentOptions{T}.EpsilonDecay"/>.
+    ///
+    /// <para>This field did not exist. <c>SelectAction</c> compared its random draw against
+    /// <c>TradingOptions.EpsilonStart</c> — a constant — so the behaviour policy never annealed: at the
+    /// shipped default of 1.0 the agent chose uniformly at random on EVERY training step, for the whole run,
+    /// and its learning curve was pure noise. <c>EpsilonEnd</c> and <c>EpsilonDecay</c> were declared, were
+    /// validated against each other in <c>TradingAgentOptions.Validate</c>, were plumbed through
+    /// <c>TradingAgentBase.CreateBaseOptions</c>, and were read by nothing.</para>
+    ///
+    /// <para>Not part of serialized state, and deliberately so: exploration is a TRAINING concern. Every
+    /// serving path calls <c>SelectAction(state, training: false)</c>, which never consults epsilon, so a
+    /// reloaded checkpoint starting a fresh anneal changes no decision it makes. <see cref="DQNAgent{T}"/>
+    /// treats it the same way.</para>
+    /// </summary>
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -104,7 +122,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         _options = options;
         _architecture = architecture;
 
-        EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
+        EnsureDqnLayers(architecture, options);
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
@@ -114,22 +132,148 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         UpdateTargetNetwork();
     }
 
+    /// <summary>
+    /// Whether this agent decouples action SELECTION from action EVALUATION in the TD target
+    /// (<see cref="FinancialDQNAgentOptions{T}.UseDoubleDQN"/>). Plain <see cref="TradingAgentOptions{T}"/>
+    /// carries no such flag, so a non-DQN options object keeps the single-network maximum.
+    /// </summary>
+    private bool UsesDoubleDQN =>
+        _options is FinancialDQNAgentOptions<T> dqnOptions && dqnOptions.UseDoubleDQN;
+
+    /// <summary>
+    /// Whether the agent-built Q-network uses a dueling head
+    /// (<see cref="FinancialDQNAgentOptions{T}.UseDuelingNetwork"/>).
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful for a network this agent built: an architecture that arrived carrying its own layers
+    /// is used exactly as given, so the option cannot silently rebuild it.
+    /// </remarks>
+    internal bool UsesDuelingNetwork { get; private set; }
+
+    /// <summary>
+    /// Builds the Q-network's default layers, honouring
+    /// <see cref="FinancialDQNAgentOptions{T}.UseDuelingNetwork"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With dueling off this is the shared ReLU MLP every trading agent builds. With it on, the hidden
+    /// trunk is followed by a <see cref="DuelingCombinationLayer{T}"/>, which holds its own V(s) and
+    /// A(s,a) projections and emits Q(s,a) = V(s) + (A(s,a) - mean_a A(s,a)) — the identifiability form of
+    /// Wang et al. 2016, Eq. 9. The layer is a valid network output head, so the dueling network is still
+    /// an ordinary sequential <see cref="NeuralNetwork{T}"/> and every other code path is unchanged.
+    /// </para>
+    /// <para><b>For Beginners:</b> A dueling network learns "how good is this state" separately from "how
+    /// much better is each action than average", which learns faster in states where the action barely
+    /// matters — most bars of a price series.</para>
+    /// </remarks>
+    private void EnsureDqnLayers(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+
+        bool wantsDueling = options is FinancialDQNAgentOptions<T> dqnOptions && dqnOptions.UseDuelingNetwork;
+        if (!wantsDueling)
+        {
+            EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
+            return;
+        }
+
+        if (architecture.CalculatedInputSize != options.StateSize)
+        {
+            throw new ArgumentException(
+                $"Architecture input size {architecture.CalculatedInputSize} does not match expected {options.StateSize}.",
+                nameof(architecture));
+        }
+
+        if (architecture.OutputSize != options.ActionSize)
+        {
+            throw new ArgumentException(
+                $"Architecture output size {architecture.OutputSize} does not match expected {options.ActionSize}.",
+                nameof(architecture));
+        }
+
+        ApplyNetworkSeed(architecture);
+
+        if (architecture.Layers.Count != 0)
+        {
+            // Caller-supplied layers win, exactly as for the non-dueling path.
+            return;
+        }
+
+        var hiddenSizes = GetHiddenLayerSizes();
+        if (hiddenSizes.Length == 0)
+        {
+            throw new ArgumentException(
+                "UseDuelingNetwork requires at least one hidden layer: the dueling head projects TRUNK "
+                + "features into its value and advantage streams, so HiddenLayers must not be empty.",
+                nameof(options));
+        }
+
+        int trunkWidth = hiddenSizes[hiddenSizes.Length - 1];
+        AddSeededDefaultLayers(architecture, () =>
+        {
+            var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+            foreach (int width in hiddenSizes)
+            {
+                layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>()));
+            }
+
+            layers.Add(new DuelingCombinationLayer<T>(trunkWidth, options.ActionSize, architecture.RandomSeed));
+            return layers;
+        });
+
+        UsesDuelingNetwork = true;
+    }
+
     #endregion
 
     #region Action Selection
 
+    /// <summary>
+    /// Number of gradient updates this agent has applied. Drives the epsilon schedule (and, being
+    /// persisted with the agent, lets a reloaded agent resume its schedule instead of restarting it).
+    /// </summary>
+    private int _updateCount;
+    // Counts hard syncs, starting at 1 for the constructor's initial copy. Published so a test can
+    // check the SCHEDULE rather than just the total: TargetSyncCount == 1 + updates / frequency is an
+    // exact identity under a deterministic sync, and the old 1-in-N coin flip could not satisfy it.
+    private int _targetSyncCount;
+
+    /// <summary>
+    /// Current exploration rate: <c>max(EpsilonEnd, EpsilonStart * EpsilonDecay^updates)</c>, where
+    /// <c>updates</c> counts the gradient updates applied so far (the same per-update multiplicative
+    /// schedule as the library's <c>DQNAgent</c>). No decay happens during warmup, while nothing is learned.
+    /// </summary>
+    public double CurrentEpsilon
+    {
+        get
+        {
+            double start = TradingOptions.EpsilonStart;
+            double end = TradingOptions.EpsilonEnd;
+            double decayed = start * Math.Pow(TradingOptions.EpsilonDecay, _updateCount);
+            return Math.Max(end, decayed);
+        }
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, SelectAction performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
+    /// Epsilon-greedy: in training mode, with probability <see cref="CurrentEpsilon"/> a uniformly random
+    /// action is taken, otherwise the action with the highest Q-value. Both draws come from the agent's
+    /// seeded random stream. Epsilon decays from <see cref="TradingAgentOptions{T}.EpsilonStart"/> toward
+    /// <see cref="TradingAgentOptions{T}.EpsilonEnd"/> by <see cref="TradingAgentOptions{T}.EpsilonDecay"/> per
+    /// gradient update.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Early in training the agent mostly tries random trades to learn what they do;
+    /// as it learns, it increasingly trusts its own Q-value estimates.
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        if (training && RandomHelper.CreateSecureRandom().NextDouble() < TradingOptions.EpsilonStart)
+        if (training && Random.NextDouble() < CurrentEpsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
-            int randomAction = RandomHelper.CreateSecureRandom().Next(TradingOptions.ActionSize);
+            int randomAction = Random.Next(TradingOptions.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
         }
@@ -173,6 +317,9 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize)
             return NumOps.Zero;
 
+        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
+
         var batch = ReplayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
@@ -195,24 +342,57 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             }
         }
 
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
 
-        var currentQ = _qNetwork.Predict(states).ToVector();        // [n * actionCount], row-major
-        var nextQ = _targetNetwork.Predict(nextStates).ToVector();  // [n * actionCount]
+        // Predict returns an owned tensor; ToVector copies out of it, so the tensor itself has to be
+        // released or its pooled storage is held until finalization.
+        using var currentQTensor = _qNetwork.Predict(states);
+        var currentQ = currentQTensor.ToVector();                   // [n * actionCount], row-major
+        using var nextQTensor = _targetNetwork.Predict(nextStates);
+        var nextQ = nextQTensor.ToVector();                         // [n * actionCount]
         int actionCount = currentQ.Length / n;
 
-        // Targets = current Q with the taken-action slot overwritten by reward + gamma * max_a' Q'.
+        // Double DQN (van Hasselt et al. 2016) decouples selection from evaluation: the ONLINE network
+        // picks argmax_a' Q(s',a') and the TARGET network supplies that action's value. Plain DQN takes
+        // max_a' Q'(s',a') from the target alone, where the same network both picks and scores the action
+        // and its own positive noise is therefore systematically selected for — the overestimation bias.
+        bool doubleDqn = UsesDoubleDQN;
+        Vector<T>? onlineNextQ = null;
+        if (doubleDqn)
+        {
+            using var onlineNextQTensor = _qNetwork.Predict(nextStates);
+            onlineNextQ = onlineNextQTensor.ToVector();
+        }
+
+        // Targets = current Q with the taken-action slot overwritten by the TD target.
         var expectedData = currentQ.Clone();
         for (int i = 0; i < n; i++)
         {
-            T maxNextQ = nextQ[i * actionCount];
-            for (int a = 1; a < actionCount; a++)
+            T maxNextQ;
+            if (onlineNextQ is not null)
             {
-                var q = nextQ[i * actionCount + a];
-                if (NumOps.GreaterThan(q, maxNextQ))
+                int bestAction = 0;
+                for (int a = 1; a < actionCount; a++)
                 {
-                    maxNextQ = q;
+                    if (NumOps.GreaterThan(onlineNextQ[(i * actionCount) + a], onlineNextQ[(i * actionCount) + bestAction]))
+                    {
+                        bestAction = a;
+                    }
+                }
+
+                maxNextQ = nextQ[(i * actionCount) + bestAction];
+            }
+            else
+            {
+                maxNextQ = nextQ[i * actionCount];
+                for (int a = 1; a < actionCount; a++)
+                {
+                    var q = nextQ[(i * actionCount) + a];
+                    if (NumOps.GreaterThan(q, maxNextQ))
+                    {
+                        maxNextQ = q;
+                    }
                 }
             }
 
@@ -223,15 +403,34 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             expectedData[i * actionCount + GetActionIndex(exp.Action)] = target;
         }
 
-        var expected = new Tensor<T>([n, actionCount], expectedData);
+        using var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
 
-        if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
-        {
-            UpdateTargetNetwork();
-        }
+        CompleteGradientUpdate();
+
+
+        // Anneal AFTER a real update, never on the early-return paths above: those bail out because the
+        // replay buffer has not filled a minibatch yet, so nothing was learned and exploration has not
+        // earned a reduction. Same schedule and floor as DQNAgent.
 
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Trading metrics plus the CURRENT exploration rate.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>GetTradingMetrics</c> reports Sharpe, drawdown, cumulative return, win rate, trade count,
+    /// portfolio value and initial capital — every one an OUTCOME. None of them distinguishes a policy that
+    /// learned from one acting uniformly at random, which is how a never-annealing epsilon stayed invisible
+    /// while the agent produced noise. Publishing the rate makes the exploration schedule observable from
+    /// outside, so a regression in it fails a test instead of quietly degrading every result.</para>
+    /// </remarks>
+    public override Dictionary<string, T> GetMetrics()
+    {
+        var metrics = base.GetMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(CurrentEpsilon);
+        return metrics;
     }
 
     /// <summary>
@@ -242,8 +441,35 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, UpdateTargetNetwork updates internal parameters or state. This keeps the FinancialDQNAgent architecture aligned with the latest values.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Advances the schedules that one applied gradient update earns: the epsilon anneal and the
+    /// deterministic target sync.
+    /// </summary>
+    /// <remarks>
+    /// Shared by Train() and ApplyGradients() so a caller driving the network directly follows the same
+    /// schedule. ApplyGradients previously hard-synced on EVERY call, which kept the target identical to
+    /// the online network and erased the very lag that makes the TD target stable.
+    ///
+    /// The sync used to fire on an unseeded 1-in-N coin flip, so the target could go stale for arbitrarily
+    /// long stretches and two runs with the same seed synced at different steps.
+    /// </remarks>
+    private void CompleteGradientUpdate()
+    {
+        if (_updateCount < int.MaxValue)
+        {
+            _updateCount++;
+        }
+
+        int targetUpdateFrequency = Math.Max(1, TradingOptions.TargetUpdateFrequency);
+        if (_updateCount % targetUpdateFrequency == 0)
+        {
+            UpdateTargetNetwork();
+        }
+    }
+
     private void UpdateTargetNetwork()
     {
+        _targetSyncCount++;
         _targetNetwork.UpdateParameters(_qNetwork.GetParameters());
     }
 
@@ -326,7 +552,8 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var experience = new Experience<T>(state, action, reward, nextState, done);
+        ValidateTransitionShape(state, action, nextState);
+        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
         ReplayBuffer.Add(experience);
     }
 
@@ -337,6 +564,17 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     #endregion
 
     #region Model Metadata
+
+    /// <inheritdoc/>
+    /// <remarks>Adds the current exploration rate under the key <c>"Epsilon"</c>.</remarks>
+    public override Dictionary<string, T> GetTradingMetrics()
+    {
+        var metrics = base.GetTradingMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(CurrentEpsilon);
+        metrics["TargetSyncCount"] = NumOps.FromDouble(_targetSyncCount);
+        metrics["TrainingSteps"] = NumOps.FromDouble(_updateCount);
+        return metrics;
+    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -376,7 +614,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _qNetwork.ApplyGradients(gradients, learningRate);
-        UpdateTargetNetwork();
+        CompleteGradientUpdate();
     }
 
     #endregion

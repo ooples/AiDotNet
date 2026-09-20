@@ -5,7 +5,9 @@ using AiDotNet.Models.Parameters;
 
 return args.Length > 0 && string.Equals(args[0], "shape", StringComparison.Ordinal)
     ? ShapeConformanceWorker.Run(args.Skip(1).ToArray())
-    : ParameterSweepWorker.Run(args);
+    : args.Length > 0 && string.Equals(args[0], "observe", StringComparison.Ordinal)
+        ? ShapeObservationWorker.Run(args.Skip(1).ToArray())
+        : ParameterSweepWorker.Run(args);
 
 internal static class ParameterSweepWorker
 {

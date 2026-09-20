@@ -68,6 +68,13 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
+    /// <inheritdoc/>
+    protected override void InvalidateLayoutState()
+    {
+        base.InvalidateLayoutState();
+        _computedGradients = null;
+    }
+
     /// <summary>
     /// Creates a new ZeRO-1 model wrapping an existing model.
     /// </summary>
@@ -99,6 +106,7 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
+        EnsureShardingInitialized();
         if (_computedGradients == null)
         {
             throw new InvalidOperationException(
@@ -124,11 +132,16 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
         // ZeRO-1 is like DDP for the model - full parameters and gradients on each process.
         // The difference is that ZeRO-1 pairs with ZeRO1Optimizer which shards optimizer states.
 
+        // Refresh the layout BEFORE restoring LocalShard. If the wrapped model was resized since the last
+        // step, writing the stale shard back would return it to the old count and hide the resize from the
+        // layout check that follows gradient computation.
+        EnsureShardingInitialized();
+
         // Set full parameters for gradient computation
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 
         // Compute TRUE gradients using the model's gradient computation
-        _computedGradients = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+        _computedGradients = ComputeGradientsForCurrentLayout(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {

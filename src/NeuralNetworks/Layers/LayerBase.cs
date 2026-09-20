@@ -7098,6 +7098,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal int ParameterVectorLength => FillParameters(null, 0);
 
     /// <summary>
+    /// Enumerates live persistent parameter/buffer storage identities and mutation versions without
+    /// producing parameter values, projected sparse payloads, or fp16 conversion snapshots.
+    /// </summary>
+    /// <remarks>
+    /// Policy ownership checks use this declaration walk rather than the checkpoint value stream.
+    /// Registered running statistics are included because they affect inference; scratch state is not
+    /// declared as persistent storage. Opaque non-LayerBase children expose no reliable storage
+    /// identity and retain their explicit owner-update contract. Repeated aliases may be enumerated;
+    /// callers compare by reference identity, not declaration order.
+    /// </remarks>
+    internal IEnumerable<(object Storage, int Version)> GetParameterStorageVersions()
+    {
+        EnsureParametersMaterialized();
+        foreach (var component in GetOrderedParameterComponents())
+        {
+            if (component.Kind is DeclaredParameterComponentKind.Trainable or DeclaredParameterComponentKind.Buffer)
+            {
+                if (component.LowPrecisionTensor is { } half)
+                    yield return (half, half.Version);
+                else if (component.Tensor is { } tensor)
+                    yield return (tensor, tensor.Version);
+            }
+            else if (component.Layer is LayerBase<T> child)
+            {
+                foreach (var storage in child.GetParameterStorageVersions())
+                    yield return storage;
+            }
+        }
+    }
+
+    /// <summary>
     /// Enumerates the exact state walk used by <see cref="GetParameters"/>, preserving trainable
     /// tensors, persistent buffers, sparse payloads, legacy flat storage, and child-layer order.
     /// </summary>
