@@ -76,9 +76,9 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The HDBSCAN options.</param>
     public HDBSCAN(HDBSCANOptions<T>? options = null)
-        : base(options ?? new HDBSCANOptions<T>())
+        : base(options ??= new HDBSCANOptions<T>())
     {
-        _options = options ?? new HDBSCANOptions<T>();
+        _options = options;
     }
 
     /// <summary>

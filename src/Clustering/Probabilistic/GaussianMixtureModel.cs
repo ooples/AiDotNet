@@ -76,9 +76,9 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The GMM options.</param>
     public GaussianMixtureModel(GMMOptions<T>? options = null)
-        : base(options ?? new GMMOptions<T>())
+        : base(options ??= new GMMOptions<T>())
     {
-        _options = options ?? new GMMOptions<T>();
+        _options = options;
         NumClusters = _options.NumComponents;
     }
 

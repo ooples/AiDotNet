@@ -66,9 +66,9 @@ public partial class KMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The KMeans configuration options.</param>
     public KMeans(KMeansOptions<T>? options = null)
-        : base(options ?? new KMeansOptions<T>())
+        : base(options ??= new KMeansOptions<T>())
     {
-        _options = options ?? new KMeansOptions<T>();
+        _options = options;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);

@@ -63,9 +63,9 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The spectral clustering options.</param>
     public SpectralClustering(SpectralOptions<T>? options = null)
-        : base(options ?? new SpectralOptions<T>())
+        : base(options ??= new SpectralOptions<T>())
     {
-        _options = options ?? new SpectralOptions<T>();
+        _options = options;
         NumClusters = _options.NumClusters;
     }
 

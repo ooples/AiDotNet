@@ -82,9 +82,9 @@ public partial class OPTICS<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The OPTICS options.</param>
     public OPTICS(OPTICSOptions<T>? options = null)
-        : base(options ?? new OPTICSOptions<T>())
+        : base(options ??= new OPTICSOptions<T>())
     {
-        _options = options ?? new OPTICSOptions<T>();
+        _options = options;
     }
 
     /// <summary>

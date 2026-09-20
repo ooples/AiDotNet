@@ -67,9 +67,9 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The clustering options.</param>
     public AgglomerativeClustering(HierarchicalOptions<T>? options = null)
-        : base(options ?? new HierarchicalOptions<T>())
+        : base(options ??= new HierarchicalOptions<T>())
     {
-        _options = options ?? new HierarchicalOptions<T>();
+        _options = options;
 
         if (_options.DistanceMetric is null)
         {

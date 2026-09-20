@@ -90,9 +90,9 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="options">Configuration options for DeepAR.</param>
     public DeepARModel(DeepAROptions<T>? options = null)
-        : base(options ?? new DeepAROptions<T>())
+        : base(options ??= new DeepAROptions<T>())
     {
-        _options = options ?? new DeepAROptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _lstmLayers = new List<DeepARLstmCellTape<T>>();

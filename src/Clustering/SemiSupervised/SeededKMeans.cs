@@ -72,9 +72,9 @@ public partial class SeededKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The Seeded K-Means options.</param>
     public SeededKMeans(SeededKMeansOptions<T>? options = null)
-        : base(options ?? new SeededKMeansOptions<T>())
+        : base(options ??= new SeededKMeansOptions<T>())
     {
-        _options = options ?? new SeededKMeansOptions<T>();
+        _options = options;
     }
 
     /// <inheritdoc />

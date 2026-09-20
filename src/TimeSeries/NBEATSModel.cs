@@ -124,9 +124,9 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// If you don't provide options, sensible defaults will be used.
     /// </para>
     /// </remarks>
-    public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ?? new NBEATSModelOptions<T>())
+    public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ??= new NBEATSModelOptions<T>())
     {
-        _options = options ?? new NBEATSModelOptions<T>();
+        _options = options;
         Options = _options;
         _blocks = new List<NBEATSBlock<T>>();
 

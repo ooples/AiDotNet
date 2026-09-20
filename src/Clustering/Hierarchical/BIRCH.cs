@@ -70,9 +70,9 @@ public partial class BIRCH<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The BIRCH options.</param>
     public BIRCH(BIRCHOptions<T>? options = null)
-        : base(options ?? new BIRCHOptions<T>())
+        : base(options ??= new BIRCHOptions<T>())
     {
-        _options = options ?? new BIRCHOptions<T>();
+        _options = options;
     }
 
     /// <summary>

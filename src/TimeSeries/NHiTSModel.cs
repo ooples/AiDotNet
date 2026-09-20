@@ -114,9 +114,9 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     /// </summary>
     /// <param name="options">Configuration options for N-HiTS.</param>
     public NHiTSModel(NHiTSOptions<T>? options = null)
-        : base(options ?? new NHiTSOptions<T>())
+        : base(options ??= new NHiTSOptions<T>())
     {
-        _options = options ?? new NHiTSOptions<T>();
+        _options = options;
         Options = _options;
         _stacks = new List<NHiTSStackTensor<T>>();
         _random = RandomHelper.CreateSeededRandom(42);
