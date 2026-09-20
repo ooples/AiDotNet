@@ -215,6 +215,12 @@ public sealed class FinancialDqnExplorationScheduleTests
             BatchSize = BatchSize,
             ReplayBufferSize = 512,
             Seed = 7,
+            // These tests are about the ANNEAL, not about the warmup gate. At the shipped default of
+            // 1000 (capped to ReplayBufferSize) every Train() below returns at TradingAgentBase.IsInWarmup,
+            // _updateCount stays 0, and CurrentEpsilon reports EpsilonStart forever -- which looks exactly
+            // like the defect these tests exist to catch. The batch gate is still in force and is covered
+            // on its own by A_train_call_that_does_not_update_does_not_decay.
+            WarmupSteps = 0,
             EpsilonStart = epsilonStart,
             EpsilonEnd = epsilonEnd,
             EpsilonDecay = epsilonDecay,

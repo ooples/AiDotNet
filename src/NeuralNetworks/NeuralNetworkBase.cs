@@ -1382,7 +1382,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         foreach (var (source, destination) in pairs)
+        {
             source.AsSpan().CopyTo(destination.AsWritableSpan());
+            // AsWritableSpan deliberately does not publish a mutation. Consumers of live
+            // chunks and resident GPU buffers rely on this version, while CPU packed-weight
+            // caches key the backing array. Invalidate only the tensor/array actually written.
+            destination.IncrementVersion();
+            AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
+            Engine.InvalidatePersistentTensor(destination);
+            GpuEngine?.InvalidateResidentWeightBuffer(destination);
+        }
     }
 
     #region GPU Training Methods
@@ -5150,7 +5159,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (tape is null) throw new ArgumentNullException(nameof(tape));
         if (loss is null) throw new ArgumentNullException(nameof(loss));
 
-        var gradients = tape.ComputeGradients(loss, sources, createGraph);
+        // Reachability probe (tests only; inert unless armed). Every training entry point funnels
+        // through here, so this is the one place that can answer "is tensor X connected to this
+        // loss?" — the question torch.autograd.grad(loss, params) answers by raising when a
+        // parameter is unused. Nothing else can: a caller outside the model never sees this tape,
+        // and the published gradient surface cannot distinguish "no gradient" from a layer accessor
+        // that manufactures zeros.
+        var probe = TapeReachabilityProbe<T>.Current;
+        var effectiveSources = sources;
+        if (probe is not null && probe.Requested.Count > 0)
+        {
+            // A null `sources` means "every trainable tensor this model owns", so the probe cannot
+            // simply substitute its own list: that would NARROW what the step differentiates and
+            // starve the real update, turning an armed probe into a behaviour change. Materialize the
+            // implied set and append to it instead, so arming the probe only ever adds questions.
+            var baseline = sources ?? CollectModelTrainableTensors();
+            var widened = new List<Tensor<T>>(baseline.Count + probe.Requested.Count);
+            widened.AddRange(baseline);
+            widened.AddRange(probe.Requested);
+            effectiveSources = widened;
+        }
+
+        var gradients = tape.ComputeGradients(loss, effectiveSources, createGraph);
+        // Tag the observation with the owning network: one agent step runs several backward passes,
+        // and a tensor reached by its OWN network's update must not be credited to a later, different
+        // update that never reached it.
+        probe?.Record(this, gradients);
         PublishParameterGradients(gradients);
         return gradients;
     }
