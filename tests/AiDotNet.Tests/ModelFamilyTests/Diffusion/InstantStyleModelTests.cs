@@ -27,22 +27,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// </remarks>
 public class InstantStyleModelTests : DiffusionModelTestBase<float>
 {
-    // Same accommodation, and the same open question, as its sibling StyDiffModelTests -- read the
-    // comment there for the evidence. Linux CI observed 1.86e-5 against a 1.60e-5 allowance on an
-    // output of magnitude 4.63: about 4e-6 relative, roughly 39 float ulp. The "cold versus warm
-    // packed-weight path" story both fixtures used to tell is contradicted by
-    // Predict_ShouldBeDeterministic, which makes exactly that cold-then-warm comparison on a
-    // single instance and matches to 12 decimals.
+    // This fixture used to override CloneOutputRelativeTolerance to 1.5e-5, on the same grounds as
+    // its sibling StyDiffModelTests. Removed on the condition both overrides set: delete once the
+    // clone difference holds at zero on CI, which it now does since the bit-identity check stopped
+    // running BETWEEN the two forwards (see DiffusionModelTestBase).
     //
-    // Measured here, this fixture's clone difference is exactly zero on Windows/x64 -- with the
-    // bit-identity check running, which is the case that matters, since that check is what the
-    // widened tolerance switches on.
-    //
-    // The widening is not taken on trust: it makes DiffusionModelTestBase demand that the clone's
-    // parameters be BIT-IDENTICAL to the source's before the wider bound is honoured, so a lossy
-    // copy is still reported as a copy defect. It is retained only until the CI-only divergence is
-    // explained, and should be deleted once this holds at zero there.
-    protected override double CloneOutputRelativeTolerance => 1.5e-5;
+    // Unlike StyDiff's, this override was load-bearing: Linux CI observed 1.86e-5 against a
+    // 1.60e-5 allowance on an output of magnitude 4.63 -- about 4e-6 relative, roughly 39 float
+    // ulp -- so at that magnitude the widened relative term dominated the bound. If it returns,
+    // that is the measurement to reproduce, and the history is in StyDiffModelTests: the "cold
+    // versus warm packed-weight path" story is contradicted by Predict_ShouldBeDeterministic,
+    // which makes exactly that cold-then-warm comparison on one instance and matches to 12
+    // decimals, and the divergence has never reproduced on AVX2 hardware.
 
     protected override int[] InputShape => [1, 4, 8, 8];
     protected override int[] OutputShape => [1, 4, 8, 8];
