@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,6 +7,7 @@ using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -101,7 +102,18 @@ public partial class S4<T> : ForecastingModelBase<T>
 
     #region Shared Fields
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Start index of each residual sub-block in <see cref="NeuralNetworkBase{T}.Layers"/>, or null
+    /// when the caller supplied their own layers (their graph is theirs to define, so Forward then
+    /// runs a plain chain).
+    /// </summary>
+    private int[]? _residualBlockStarts;
+
+    /// <summary>
+    /// Layer count of each residual sub-block, positionally paired with <see cref="_residualBlockStarts"/>.
+    /// </summary>
+    private int[]? _residualBlockLengths;    private readonly ILossFunction<T> _lossFunction;
     private readonly S4Options<T> _options;
 
     /// <inheritdoc/>
@@ -235,7 +247,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         _options = options ?? new S4Options<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, BuildDefaultOptimizerOptions(_options));
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -275,7 +287,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         _options = options ?? new S4Options<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, BuildDefaultOptimizerOptions(_options));
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -335,10 +347,97 @@ public partial class S4<T> : ForecastingModelBase<T>
                 _lowRankRank,
                 _numFeatures));
 
+            BuildResidualBlockLayout();
             ExtractLayerReferences();
         }
     }
 
+    /// <summary>
+    /// Records where the residual sub-blocks of the default topology start and how long they are.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// S4 (Gu, Goel and Re, ICLR 2022) wraps every S4 layer and the feed-forward block in a
+    /// residual connection around a pre-norm sub-block. Running the emitted layers as one plain
+    /// chain instead leaves a 50-layer dense stack with no identity path: the untrained output is
+    /// large, and a single Adam step perturbs all fifty transforms at once, so the loss jumps an
+    /// order of magnitude on the first update and cannot recover inside a short training budget.
+    /// </para>
+    /// <para>
+    /// The layout is derived from the same options that produced the layers. If the arithmetic ever
+    /// disagrees with what <see cref="LayerHelper{T}.CreateDefaultS4Layers"/> emitted, the layout is
+    /// discarded and Forward falls back to the plain chain rather than adding tensors of
+    /// mismatched shape.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Builds the option set for the optimizer the model creates when the caller supplies none.
+    /// </summary>
+    /// <remarks>
+    /// Constructed with no options at all, Adam ran at the framework default rate and started at its
+    /// peak immediately. Adam's first update displaces every parameter by exactly the learning rate
+    /// whatever the gradient magnitude (the bias-corrected m/sqrt(v) is +/-1 on step one), and across
+    /// the stack of pre-norm residual blocks this model emits that one coordinated move compounds
+    /// layer over layer: the loss rose by more than an order of magnitude on the first step and only
+    /// recovered several steps later. Ramping the rate in over the first few steps is the standard
+    /// remedy for deep residual sequence models and is what the reference S4 implementation does.
+    /// Both the peak rate and the ramp length come from <see cref="S4Options{T}"/>, so a caller who
+    /// wants the paper's long warmup for a full training run, or none at all, can say so.
+    /// </remarks>
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> BuildDefaultOptimizerOptions(S4Options<T> options)
+    {
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = options.LearningRate,
+        };
+
+        if (options.WarmupSteps > 0)
+        {
+            // The ramp starts at one increment rather than at zero. LinearWarmupScheduler publishes its
+            // starting rate before the first update and only advances afterwards, so a zero start makes
+            // the very first optimizer step a no-op: parameters do not move at all and anything checking
+            // that training changed the model, or that gradients reached the parameters, sees nothing.
+            adamOptions.LearningRateScheduler = new LinearWarmupScheduler(
+                options.LearningRate,
+                options.WarmupSteps,
+                warmupInitLr: options.LearningRate / options.WarmupSteps);
+            adamOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
+        }
+
+        return adamOptions;
+    }
+
+    private void BuildResidualBlockLayout()
+    {
+        const int EmbeddingLayers = 1;        // Dense(features -> modelDim)
+        const int FeedForwardLayers = 4;      // LayerNorm, Dense(2H), Dense(H), Dropout
+        const int HeadLayers = 4;             // LayerNorm, Dense(-> 1), Flatten, Dense(-> horizon)
+        int ssmBlockLayers = _useLowRankCorrection ? 8 : 6; // LN, B, A, [P, Q], C, D, Dropout
+
+        int expected = EmbeddingLayers + (_numLayers * ssmBlockLayers) + FeedForwardLayers + HeadLayers;
+        if (expected != Layers.Count)
+        {
+            _residualBlockStarts = null;
+            _residualBlockLengths = null;
+            return;
+        }
+
+        var starts = new int[_numLayers + 1];
+        var lengths = new int[_numLayers + 1];
+        int cursor = EmbeddingLayers;
+        for (int block = 0; block < _numLayers; block++)
+        {
+            starts[block] = cursor;
+            lengths[block] = ssmBlockLayers;
+            cursor += ssmBlockLayers;
+        }
+
+        starts[_numLayers] = cursor;
+        lengths[_numLayers] = FeedForwardLayers;
+
+        _residualBlockStarts = starts;
+        _residualBlockLengths = lengths;
+    }
     /// <summary>
     /// Extracts references to key layers for efficient access.
     /// </summary>
@@ -685,11 +784,44 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        var current = ReshapeToSequence(input);
 
-        foreach (var layer in Layers)
+        if (_residualBlockStarts is null || _residualBlockLengths is null)
         {
-            current = layer.Forward(current);
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        }
+
+        int index = 0;
+        for (int block = 0; block < _residualBlockStarts.Length; block++)
+        {
+            // Anything between blocks (the embedding, and the head at the end) runs straight through.
+            while (index < _residualBlockStarts[block])
+            {
+                current = Layers[index].Forward(current);
+                index++;
+            }
+
+            // y = x + SubBlock(LayerNorm(x)): the pre-norm residual block of the S4 paper.
+            var residual = current;
+            int end = index + _residualBlockLengths[block];
+            while (index < end)
+            {
+                current = Layers[index].Forward(current);
+                index++;
+            }
+
+            current = Engine.TensorAdd(current, residual);
+        }
+
+        while (index < Layers.Count)
+        {
+            current = Layers[index].Forward(current);
+            index++;
         }
 
         return current;
@@ -759,6 +891,50 @@ public partial class S4<T> : ForecastingModelBase<T>
     #endregion
 
     #region Model-Specific Processing
+
+    /// <summary>
+    /// Reshapes the input tensor to the [batch, sequence, features] layout the layer stack expects.
+    /// </summary>
+    /// <param name="input">Input tensor holding whole time steps of <see cref="_numFeatures"/> values.</param>
+    /// <returns>A rank-3 view of the same values.</returns>
+    /// <remarks>
+    /// <para>
+    /// The dense layers that stand in for the SSM recurrence apply position-wise, so the sequence
+    /// has to stay a real tensor axis. Collapsing it into one flat vector instead is what forced
+    /// every weight to be sized by the context length, and a default S4 then declared 9.2e11
+    /// parameters. This is a reshape through the engine, so it keeps the autodiff tape intact.
+    /// </para>
+    /// <para><b>For Beginners:</b> the model reads a list of time steps, each holding one value per
+    /// feature. This just re-labels the flat buffer as that grid; no numbers move or change.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ReshapeToSequence(Tensor<T> input)
+    {
+        int totalSize = 1;
+        foreach (var dim in input._shape)
+        {
+            totalSize *= dim;
+        }
+
+        int features = _numFeatures > 0 ? _numFeatures : 1;
+        int batchSize = input.Rank >= 3 ? input.Shape[0] : 1;
+        if (batchSize <= 0)
+        {
+            batchSize = 1;
+        }
+
+        int perSample = totalSize / batchSize;
+        if (perSample <= 0 || perSample % features != 0)
+        {
+            throw new ArgumentException(
+                $"S4 received {totalSize} values across {batchSize} sample(s), which is not a whole " +
+                $"number of time steps of {features} feature(s). Supply complete time steps or set " +
+                "S4Options.NumFeatures to match the data.",
+                nameof(input));
+        }
+
+        return Engine.Reshape(input, [batchSize, perSample / features, features]);
+    }
 
     /// <summary>
     /// Flattens the input tensor for processing through dense layers.
