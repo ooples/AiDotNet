@@ -315,16 +315,22 @@ public sealed class CustomObjectiveTrainingContractTests
             NonzeroGradients = context.Gradients.Values.Sum(gradient => gradient.AsSpan().ToArray().Count(value => value != 0));
             Assert.NotEmpty(context.Parameters);
             var first = context.Parameters[0];
-            var before = first.AsSpan().ToArray();
+            var beforeOptimizerStep = first.AsSpan().ToArray();
             if (Reevaluate)
             {
                 ReevaluationSupported = context.SupportsReevaluation;
                 InitialLoss = context.Loss;
                 first[0] += 0.5;
                 ReevaluatedLoss = context.Reevaluate();
+
+                // The perturbation above is this test's, not the optimizer's. Re-snapshot after it so
+                // ParameterChanged reports whether base.Step moved anything; measured against the
+                // pre-perturbation state it would read true even for an optimizer that did nothing.
+                beforeOptimizerStep = first.AsSpan().ToArray();
             }
+
             base.Step(context);
-            ParameterChanged = !before.SequenceEqual(first.AsSpan().ToArray());
+            ParameterChanged = !beforeOptimizerStep.SequenceEqual(first.AsSpan().ToArray());
         }
     }
 }

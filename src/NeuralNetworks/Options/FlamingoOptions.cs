@@ -97,6 +97,15 @@ public class FlamingoOptions : VisionLanguageModelOptions
         Require(NumHeads, nameof(NumHeads));
         Require(VocabSize, nameof(VocabSize));
         Require(NumPerceiverLayers, nameof(NumPerceiverLayers));
+        if (!Enum.IsDefined(typeof(LanguageModelBackbone), LanguageModelBackbone))
+        {
+            // An undefined value reaches the tokenizer factory as a backbone it has no case for,
+            // so reject it here rather than at construction.
+            throw new ArgumentException(
+                $"{GetType().Name}.{nameof(LanguageModelBackbone)} is not a defined backbone.",
+                OptionsParameterName);
+        }
+
         if (NumLmLayers < 4)
         {
             throw new ArgumentException(

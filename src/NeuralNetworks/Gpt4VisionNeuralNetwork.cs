@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
@@ -1571,8 +1571,16 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     [nameof(OnnxConfiguration)] = configuration,
-                    ["input_shape"] = new[] { 3, _imageSize, _imageSize },
-                    ["output_shape"] = new[] { _embeddingDimension },
+                    // The canonical keys BlipOnnxContractTests pins for an ONNX branch. ModelMetadata<T>
+                    // has no ModelType/ParameterCount/InputShape/OutputShape of its own, so a consumer
+                    // that reads a model's type or shapes reads them from here and finds nothing under a
+                    // snake_case spelling.
+                    ["ModelType"] = nameof(Gpt4VisionNeuralNetwork<T>),
+                    ["TaskType"] = Architecture.TaskType.ToString(),
+                    ["ParameterCount"] = ParameterCount,
+                    ["Architecture"] = "GPT-4V style vision-language model",
+                    ["InputShape"] = new[] { 3, _imageSize, _imageSize },
+                    ["OutputShape"] = new[] { _embeddingDimension },
                     ["embedding_dimension"] = _embeddingDimension,
                     ["vision_embedding_dim"] = _visionEmbeddingDim,
                     ["max_sequence_length"] = _maxSequenceLength,

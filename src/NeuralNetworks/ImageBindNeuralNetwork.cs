@@ -1568,6 +1568,15 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     [nameof(OnnxConfiguration)] = configuration,
+                    // The canonical keys BlipOnnxContractTests pins for an ONNX branch; ModelMetadata<T>
+                    // carries none of them as properties, so this dictionary is the only place a consumer
+                    // can read the model's type, size or shapes.
+                    ["ModelType"] = nameof(ImageBindNeuralNetwork<T>),
+                    ["TaskType"] = Architecture.TaskType.ToString(),
+                    ["ParameterCount"] = ParameterCount,
+                    ["Architecture"] = "ImageBind multimodal embedding model",
+                    ["InputShape"] = new[] { 3, _imageSize, _imageSize },
+                    ["OutputShape"] = new[] { _embeddingDimension },
                     ["EmbeddingDimension"] = _embeddingDimension,
                     ["MaxSequenceLength"] = _maxSequenceLength,
                     ["ImageSize"] = _imageSize,

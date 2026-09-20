@@ -285,12 +285,38 @@ public sealed class AudioVisualCorrespondenceExecutionTests
                 Assert.InRange(confidence, 0.0f, 1.00001f);
                 break;
             case PairTask.SceneClassification:
+                // Both labels must be taught a scene of their own. Training them on the same audio
+                // and frames leaves the head unable to tell the labels apart, and a constant 0.5/0.5
+                // then satisfies a count, a sum and a range -- so the assertions pass whether or not
+                // the fusion path reached the head at all.
+                var speechAudio = new Tensor<float>(audio.Shape.ToArray());
+                for (int index = 0; index < speechAudio.Length; index++)
+                {
+                    speechAudio[index] = -audio[index];
+                }
+
+                var speechFrame = new Tensor<float>(frames[0].Shape.ToArray());
+                for (int index = 0; index < speechFrame.Length; index++)
+                {
+                    speechFrame[index] = 1.0f - frames[0][index];
+                }
+
+                var speechFrames = new[] { speechFrame };
                 model.LearnScene(audio, frames, "music");
-                model.LearnScene(audio, frames, "speech");
-                var classes = model.ClassifyScene(audio, frames, new[] { "music", "speech" });
+                model.LearnScene(speechAudio, speechFrames, "speech");
+
+                var labels = new[] { "music", "speech" };
+                var classes = model.ClassifyScene(audio, frames, labels);
+                var speechClasses = model.ClassifyScene(speechAudio, speechFrames, labels);
                 Assert.Equal(2, classes.Count);
                 Assert.InRange(classes.Values.Sum(), 0.99999f, 1.00001f);
+                Assert.InRange(speechClasses.Values.Sum(), 0.99999f, 1.00001f);
                 Assert.All(classes.Values, probability => Assert.InRange(probability, 0.0f, 1.0f));
+                Assert.All(speechClasses.Values, probability => Assert.InRange(probability, 0.0f, 1.0f));
+                Assert.True(classes["music"] > classes["speech"],
+                    $"The scene taught as music scored {classes["music"]} against {classes["speech"]} for speech.");
+                Assert.True(speechClasses["speech"] > speechClasses["music"],
+                    $"The scene taught as speech scored {speechClasses["speech"]} against {speechClasses["music"]} for music.");
                 break;
             case PairTask.Separation:
                 var separated = model.SeparateAudioByVisual(audio, frames[0]);
