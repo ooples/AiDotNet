@@ -11,7 +11,13 @@ on:
     paths:
       - '.github/workflows/sonar-build-probe.yml'
 
-permissions: read-all
+# Only the checkout needs the GITHUB_TOKEN, and it only needs to read. Nothing here writes to the
+# repository: SonarCloud's `begin` authenticates with secrets.SONAR_TOKEN, `end` is never called,
+# and actions/upload-artifact v4 uploads through the runtime artifact service rather than the
+# GITHUB_TOKEN. Declaring one scope zeroes the rest, so this is read on contents and none of
+# everything else, replacing the read-all that granted every read scope the repository has.
+permissions:
+  contents: read
 
 concurrency:
   group: sonar-build-probe-${{ github.event.pull_request.number }}
