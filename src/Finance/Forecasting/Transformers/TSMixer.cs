@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -65,6 +65,12 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Forward mixes time and features by permuting [0, 2, 1], so the external tensor is always
+// [batch, sequence, features]. Without this declaration a caller that only knows the architecture's
+// flat inputSize hands the model a rank-1 or rank-2 tensor and Engine.TensorPermute throws
+// "Axes length must match tensor rank". Only the rank is declared: the Dense layers resolve their
+// input widths lazily on the first forward, so any positive sequence and feature count is accepted.
+[ModelInputShapeConstraint(ExactRank = 3)]
 [ResearchPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
 public partial class TSMixer<T> : ForecastingModelBase<T>
 {
