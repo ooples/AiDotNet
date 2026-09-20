@@ -80,7 +80,7 @@ public sealed class LLaVAOnnxContractTests
         using var image = new Tensor<float>(batchedInput ? new[] { 1, 3, 16, 16 } : new[] { 3, 16, 16 });
         image.Fill(2f);
         using var features = model.ExtractVisualFeatures(image);
-        Assert.Equal(new[] { 2, 4 }, features.Shape);
+        Assert.Equal(new[] { 2, 4 }, features.Shape.ToArray());
         double sum = image.Length * 2;
         for (int token = 0; token < 2; token++)
             for (int column = 0; column < 4; column++)
@@ -131,7 +131,7 @@ public sealed class LLaVAOnnxContractTests
         using var image = new Tensor<float>(new[] { 3, 16, 16 });
         image.Fill(2f);
         using var features = model.ExtractVisualFeatures(image);
-        Assert.Equal(new[] { 16, 4 }, features.Shape);
+        Assert.Equal(new[] { 16, 4 }, features.Shape.ToArray());
         for (int token = 0; token < 16; token++)
             for (int column = 0; column < 4; column++)
                 Assert.Equal(96 + column + 1, features[token, column]);
@@ -146,7 +146,7 @@ public sealed class LLaVAOnnxContractTests
         using var image = new Tensor<float>(new[] { 3, 16, 16 });
         image.Fill(2f);
         using var features = model.ExtractVisualFeatures(image);
-        Assert.Equal(new[] { 1, 4 }, features.Shape);
+        Assert.Equal(new[] { 1, 4 }, features.Shape.ToArray());
         Assert.Equal(1, model.NumVisualTokens);
         AssertNormalizedFixtureEmbedding(model.GetImageEmbedding(image), image.Length * 2, firstOffset: 1);
         Assert.NotNull(model.OnnxConfiguration);

@@ -90,7 +90,7 @@ public sealed class Blip2OnnxContractTests
         using var model = Create(fixture, Options(), dynamicInputs: dynamicInputs);
         using var image = Image(14, 2);
         using var features = model.ExtractQFormerFeatures(image);
-        Assert.Equal(new[] { 2, 4 }, features.Shape);
+        Assert.Equal(new[] { 2, 4 }, features.Shape.ToArray());
         double visionSum = 8 * image.Length * 2 + 36;
         for (int index = 0; index < features.Length; index++) Assert.Equal(visionSum + index + 1, features[index]);
         AssertNormalized(model.GetImageEmbedding(image), Enumerable.Range(0, 4).Select(i => visionSum + i + 3).ToArray());
@@ -127,7 +127,7 @@ public sealed class Blip2OnnxContractTests
         AssertTextEmbedding(model);
         using var image = Image(14, 2);
         using var features = model.ExtractQFormerFeatures(image);
-        Assert.Equal(new[] { 2, 4 }, features.Shape);
+        Assert.Equal(new[] { 2, 4 }, features.Shape.ToArray());
         Assert.Equal(8 * image.Length * 2 + 37, features[0]);
         var configuration = Assert.IsType<OnnxMultimodalConfiguration>(model.OnnxConfiguration);
         Assert.True(configuration.Graphs[OnnxModelRole.QueryTransformer].Inputs["encoder_hidden_states"].HasDefaultValue);
@@ -180,7 +180,7 @@ public sealed class Blip2OnnxContractTests
         using var model = Create(fixture, options);
         using var image = Image(7, 1);
         using var features = model.ExtractQFormerFeatures(image);
-        Assert.Equal(new[] { 2, 4 }, features.Shape);
+        Assert.Equal(new[] { 2, 4 }, features.Shape.ToArray());
     }
 
     [Theory]
