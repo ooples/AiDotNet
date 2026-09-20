@@ -17,15 +17,11 @@ function Invoke-GateCase {
         [string] $ReuseScope = 'None',
         [string] $RequiresValidation = 'true',
         [string] $RequiresTests = 'true',
-        [string] $RequiresSweeps = 'true',
-        [string] $RequiresShapes = 'true',
         [string] $Source = 'success',
         [string] $Select = 'success',
         [string] $Build = 'success',
         [string] $BuildCompat = 'success',
         [string] $Tests = 'success',
-        [string] $ParameterSweep = 'success',
-        [string] $ModelShape = 'success',
         [string] $Regression = 'success',
         [string] $Verdict = 'true',
         [string] $Aggregate = 'success',
@@ -39,9 +35,8 @@ function Invoke-GateCase {
 
     & $Gate -Stage $Stage -ReuseScope $ReuseScope -SourceResult $Source `
         -RequiresValidation $RequiresValidation -SelectResult $Select `
-        -RequiresTests $RequiresTests -RequiresSweeps $RequiresSweeps -RequiresShapes $RequiresShapes `
+        -RequiresTests $RequiresTests `
         -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
-        -ParameterSweepResult $ParameterSweep -ModelShapeResult $ModelShape `
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
         -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
         -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
@@ -53,14 +48,12 @@ function Invoke-GateCase {
 
 # Validation evidence is independent of quality jobs.
 Invoke-GateCase -Name validation_runtime_success -Stage Validation -ExpectedExit 0
-Invoke-GateCase -Name validation_selective_auxiliary_skip -Stage Validation `
-    -RequiresSweeps false -RequiresShapes false -ParameterSweep skipped -ModelShape skipped -ExpectedExit 0
-Invoke-GateCase -Name validation_required_sweep_missing -Stage Validation -ParameterSweep skipped -ExpectedExit 1
-Invoke-GateCase -Name validation_required_shape_missing -Stage Validation -ModelShape skipped -ExpectedExit 1
-Invoke-GateCase -Name validation_unexpected_sweep_failure -Stage Validation `
-    -RequiresSweeps false -ParameterSweep failure -ExpectedExit 1
-Invoke-GateCase -Name validation_unexpected_shape_cancel -Stage Validation `
-    -RequiresShapes false -ModelShape cancelled -ExpectedExit 1
+Invoke-GateCase -Name validation_selective_auxiliary_skip -Stage Validation -ExpectedExit 0
+# The parameter-enumeration sweep and the model-shape conformance windows used to be bespoke jobs
+# the gate required by name. They are shards now, so a missing or failed one is caught where every
+# other shard is: Import-PullRequestShardArtifacts reports a listed shard with no artifact, and
+# New-ShardMapCertificate refuses outcomes that do not cover the map's shard universe. Both land on
+# test-regression-analysis, which this gate still requires to succeed.
 Invoke-GateCase -Name validation_auxiliary_only -Stage Validation `
     -RequiresTests false -Tests skipped -Verdict false -ExpectedExit 0
 Invoke-GateCase -Name validation_required_tests_missing -Stage Validation `
@@ -73,20 +66,27 @@ Invoke-GateCase -Name validation_unenforced_test_failure -Stage Validation `
     -Tests failure -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_build_failure -Stage Validation -Build failure -ExpectedExit 1
 Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidation false `
-    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
 
-# No reuse requires both current validation and current quality.
+# No reuse requires current validation and current CodeQL.
 Invoke-GateCase -Name complete_current_success -ExpectedExit 0
 Invoke-GateCase -Name complete_current_validation_failure -ValidationGate failure -ExpectedExit 1
 Invoke-GateCase -Name complete_current_codeql_failure -CodeQL failure -ExpectedExit 1
-Invoke-GateCase -Name complete_current_sonar_failure -Sonar failure -ExpectedExit 1
+Invoke-GateCase -Name complete_current_codeql_cancelled -CodeQL cancelled -ExpectedExit 1
+# SonarCloud is advisory: no Sonar outcome may block, and none may stand in for a required job.
+foreach ($sonarOutcome in 'failure', 'cancelled', 'timed_out', 'skipped') {
+    Invoke-GateCase -Name "complete_current_sonar_$sonarOutcome" -Sonar $sonarOutcome -ExpectedExit 0
+}
+Invoke-GateCase -Name complete_current_sonar_success_does_not_cover_codeql -CodeQL failure -ExpectedExit 1
 
-# Validation-only reuse skips the matrix but still requires quality and runtime promotion.
+# Validation-only reuse skips the matrix but still requires CodeQL and runtime promotion.
 Invoke-GateCase -Name partial_reuse_success -ReuseScope Validation -Promotion success `
     -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name partial_reuse_quality_failure -ReuseScope Validation -Promotion success `
-    -ValidationGate skipped -Sonar failure -ExpectedExit 1
+    -ValidationGate skipped -CodeQL failure -ExpectedExit 1
+Invoke-GateCase -Name partial_reuse_sonar_failure_is_advisory -ReuseScope Validation -Promotion success `
+    -ValidationGate skipped -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name partial_reuse_missing_promotion -ReuseScope Validation -Promotion skipped `
     -ValidationGate skipped -ExpectedExit 1
 Invoke-GateCase -Name partial_non_runtime_reuse -ReuseScope Validation -RequiresValidation false `
@@ -103,7 +103,7 @@ Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source 
     -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 
 Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
-    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
     -ValidationGate skipped -ExpectedExit 1
 

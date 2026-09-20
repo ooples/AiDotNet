@@ -417,7 +417,18 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return GetParameters();
+        // Returned GetParameters() — the WEIGHTS — where the contract promises "gradients with
+        // respect to all model parameters". The lengths match, so nothing downstream could detect
+        // the substitution: ApplyGradients would subtract the weights from themselves, and any
+        // Fisher-information consumer would build its estimate out of parameter magnitudes.
+        //
+        // REINFORCE accumulates its policy-gradient episode-wise inside Train() against returns that
+        // are only known at episode end, so a single (input, target) pair does not define a gradient
+        // here at all.
+        throw new NotSupportedException(
+            "REINFORCE computes its policy gradient over a completed episode's returns inside the "
+            + "Train() method, so a single input/target pair does not define a parameter gradient "
+            + "for this interface to return. Call Train() instead.");
     }
 
     /// <inheritdoc/>

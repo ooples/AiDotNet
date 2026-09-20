@@ -411,7 +411,12 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
         {
-            var criticScore = Critic.Predict(genOutput);
+            // ForwardForTraining, not Predict: Predict wraps its forward in a NoGradScope, so the
+            // critic's score came back detached and this loss had no gradient path to the generator
+            // at all -- the generator was trained against a constant and never learned to reduce the
+            // Wasserstein distance. TrainWithCustomLoss collects only the generator's tensors, so the
+            // critic supplies the signal here without being updated by the generator's step.
+            var criticScore = Critic.ForwardForTraining(genOutput);
             // WGAN generator loss = -mean(critic(fake))
             var negScore = Engine.TensorNegate(criticScore);
             var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();

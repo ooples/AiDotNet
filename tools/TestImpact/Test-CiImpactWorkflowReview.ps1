@@ -13,6 +13,8 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/sonarcloud.yml'
 $contractPath = Join-Path $PSScriptRoot 'Test-CiImpactWorkflow.ps1'
 $workflow = Get-Content -LiteralPath $workflowPath -Raw
+$manifestPath = Join-Path $repositoryRoot '.github/test-shards.yml'
+$manifest = Get-Content -LiteralPath $manifestPath -Raw
 $mapHeadLine = '(?m)^[ \t]+-PullRequestHeadSha \$env:PR_HEAD_SHA `[ \t]*\r?$'
 if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
     throw 'The fixture must identify exactly one map-backed PR-head argument, excluding the classifier.'
@@ -178,24 +180,75 @@ foreach ($pair in @(
         Content = $workflow.Replace($import, $import.Replace($invocation, '          # ./tools/TestImpact/Import-PullRequestShardArtifacts.ps1'))
     }
 }
-foreach ($binding in @(
-    @{ Job = 'parameter-enumeration-sweep'; Flag = 'requires_sweeps' },
-    @{ Job = 'model-shape-conformance-windows'; Flag = 'requires_shapes' }
-)) {
-    $job = [regex]::Match($workflow, '(?ms)^  ' + $binding.Job + ':\r?\n.*?(?=^  [a-z][a-z0-9-]*:|\z)').Value
-    $flag = "fromJSON(needs.select-shards.outputs.$($binding.Flag))"
-    foreach ($mutation in @(
-        @{ Name = 'gate-removed'; Content = $job.Replace(" && $flag", '') },
-        @{ Name = 'gate-comment-decoy'; Content = $job.Replace(" && $flag", '') + "`n    # $flag`n" },
-        @{ Name = 'worker-link-commented'; Content = $job.Replace('          ./tools/TestImpact/Connect-WorkerCoverage.ps1', '          # ./tools/TestImpact/Connect-WorkerCoverage.ps1') }
-    )) {
+$surveyPattern = '(?ms)^  - name: Sweep - Layer and Model Contract Surveys\r?\n.*?(?=^  - name:|\z)'
+$survey = [regex]::Match($manifest, $surveyPattern).Value
+if (-not $survey) { throw 'Missing contract survey shard for negative controls.' }
+foreach ($mutation in @(
+        @{ Name = 'survey-heavy-removed'; Before = '    heavy: true'; After = '    heavy: false'; Reason = 'contract-survey shard.*heavy' },
+        @{ Name = 'survey-timeout-default'; Before = '    hangTimeout: 35min'; After = '    hangTimeout: 5min'; Reason = 'contract-survey shard.*35-minute' })) {
+    $cases += [pscustomobject]@{
+        Name = $mutation.Name; Reason = $mutation.Reason; Content = $workflow
+        ManifestContent = $manifest.Replace($survey, $survey.Replace($mutation.Before, $mutation.After))
+    }
+}
+$cases += [pscustomobject]@{
+    Name = 'inventory-timeout-default'; Reason = 'inventory shard.*greater than.*5-minute'; Content = $workflow
+    ManifestContent = $manifest.Replace('    hangTimeout: 20min', '    hangTimeout: 5min')
+}
+
+# The two repaired model-shape sweeps run their models in the ParameterSweepWorker child process, so the
+# fields that keep them honest are the same four the other worker-backed sweeps rely on. Strip each one
+# from each shard and the contract must reject it, naming that shard and that field: without these
+# controls a silent edit could stop either shard from ever being selected again.
+foreach ($shape in @('Sweep - Model shape law', 'Sweep - Model shape discovery')) {
+    $shapePattern = '(?ms)^  - name: ' + [regex]::Escape($shape) + '\r?\n.*?(?=^  - name:|\z)'
+    $shapeBlock = [regex]::Match($manifest, $shapePattern).Value
+    if (-not $shapeBlock) { throw "Missing '$shape' shard for negative controls." }
+    foreach ($strip in @(
+            @{ Field = 'heavy'; Pattern = '(?m)^    heavy: true\r?\n'
+                Reason = "inventory shard '$shape' is not on the heavy path" },
+            @{ Field = 'mustCover'; Pattern = '(?m)^    mustCover: \[[^\r\n]*\]\r?\n'
+                Reason = "inventory shard '$shape' can become selectable" },
+            @{ Field = 'coverageIncludeDirectory'; Pattern = '(?m)^    coverageIncludeDirectory: [^\r\n]+\r?\n'
+                Reason = "inventory shard '$shape' does not instrument the worker" },
+            @{ Field = 'env'; Pattern = "(?m)^      ADNSHAPE_WORKERS: '2'\r?\n"
+                Reason = "inventory shard '$shape' lost its env" })) {
+        $strippedBlock = [regex]::Replace($shapeBlock, $strip.Pattern, '')
+        if ($strippedBlock -ceq $shapeBlock) { throw "$shape/$($strip.Field): negative control stripped nothing." }
         $cases += [pscustomobject]@{
-            Name = "$($binding.Job)-$($mutation.Name)"
-            Reason = 'selected workload partition|parent-only coverage'
-            Content = $workflow.Replace($job, $mutation.Content)
+            Name = ($shape -replace '[^A-Za-z0-9]+', '-') + '-' + $strip.Field + '-removed'
+            Reason = $strip.Reason; Content = $workflow
+            ManifestContent = $manifest.Replace($shapeBlock, $strippedBlock)
         }
     }
 }
+
+# The inventory list is closed (see Test-CiImpactWorkflow.ps1). Prove it two ways: an unknown 'Sweep - '
+# or 'Conformance - ' entry must be rejected by name, and the contract-survey exemption must be an exact
+# name match rather than a blanket escape hatch, so renaming that shard has to make the check fire.
+$surveyAnchor = '  - name: Sweep - Layer and Model Contract Surveys'
+if (-not $manifest.Contains($surveyAnchor)) { throw 'Missing survey shard anchor for closed-list controls.' }
+foreach ($fake in @('Sweep - Something', 'Conformance - Something')) {
+    $fakeEntry = "  - name: $fake" + [Environment]::NewLine +
+        '    project: tests/AiDotNet.Tests/AiDotNetTests.csproj' + [Environment]::NewLine +
+        '    framework: net10.0' + [Environment]::NewLine +
+        "    filter: 'FullyQualifiedName~SomethingTests'" + [Environment]::NewLine +
+        '    heavy: true' + [Environment]::NewLine +
+        '    hangTimeout: 35min' + [Environment]::NewLine
+    $cases += [pscustomobject]@{
+        Name = ($fake -replace '[^A-Za-z0-9]+', '-') + '-not-in-expected-inventory'
+        Reason = "inventory shard '$fake' is not in the contract's expected inventory list"
+        Content = $workflow
+        ManifestContent = $manifest.Replace($surveyAnchor, $fakeEntry + $surveyAnchor)
+    }
+}
+$cases += [pscustomobject]@{
+    Name = 'survey-shard-renamed-loses-exemption'
+    Reason = "inventory shard 'Sweep - Layer and Model Contract Surveys RENAMED' is not in the contract's expected inventory list"
+    Content = $workflow
+    ManifestContent = $manifest.Replace($surveyAnchor, $surveyAnchor + ' RENAMED')
+}
+
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ('aidotnet-ci-contract-review-' + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
@@ -206,13 +259,20 @@ try {
         $baseline = @(& pwsh -NoProfile -File $contractPath 2>&1)
         if ($LASTEXITCODE -ne 0) { throw "The unmodified workflow must pass first: $($baseline -join [Environment]::NewLine)" }
         foreach ($case in $cases) {
-            if ($case.Content -ceq $workflow) { throw "$($case.Name): negative control did not mutate the workflow" }
+            $hasManifestMutation = $null -ne $case.PSObject.Properties['ManifestContent']
+            if ($case.Content -ceq $workflow -and -not $hasManifestMutation) { throw "$($case.Name): negative control did not mutate the workflow" }
             if (-not $case.Content.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) {
                 throw 'A map-scoping negative control accidentally changed the classifier.'
             }
             $path = Join-Path $fixture ($case.Name + '.yml')
             Set-Content -LiteralPath $path -Value $case.Content -Encoding utf8
-            $output = @(& pwsh -NoProfile -File $contractPath -ValidationWorkflow $path 2>&1)
+            $caseManifest = $manifestPath
+            if ($hasManifestMutation) {
+                if ($case.ManifestContent -ceq $manifest) { throw "$($case.Name): negative control did not mutate the manifest" }
+                $caseManifest = Join-Path $fixture ($case.Name + '.shards.yml')
+                Set-Content -LiteralPath $caseManifest -Value $case.ManifestContent -Encoding utf8
+            }
+            $output = @(& pwsh -NoProfile -File $contractPath -ValidationWorkflow $path -ShardManifest $caseManifest 2>&1)
             if ($LASTEXITCODE -eq 0) {
                 [void] $failures.Add("$($case.Name): unsafe workflow wiring passed the contract")
             }

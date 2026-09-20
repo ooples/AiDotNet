@@ -471,7 +471,11 @@ internal static class FinanceModelTestFactory
             var reward = numOps.FromDouble(0.01);
             var pnl = numOps.FromDouble(0.02);
 
-            agent.StoreTradingExperience(state, action, reward, nextState, done: false, pnl: pnl);
+            // A stored transition must carry an action the agent chose while training: on-policy agents
+            // (A2C) only learn from actions sampled from their current policy, never an evaluation action.
+            var trainingAction = agent.SelectTradingAction(state, training: true);
+            Assert.Equal(result.ActionSize, trainingAction.Length);
+            agent.StoreTradingExperience(state, trainingAction, reward, nextState, done: false, pnl: pnl);
             _ = agent.TrainOnExperiences();
 
             var metrics = agent.GetTradingMetrics();
