@@ -206,7 +206,13 @@ jobs:
   verify:
     name: Model Performance Coverage and Regressions
     needs: [prepare, census]
-    if: always()
+    # NOT always(): this workflow sets concurrency.cancel-in-progress, so a superseding push
+    # cancels prepare/census mid-flight. Under always() this job still ran, found no shard
+    # records to verify, and reported a hard failure that had nothing to do with the code --
+    # the most common red check across the open PRs. !cancelled() keeps the gate running when
+    # the census genuinely FAILED (its records exist and are worth verifying) and skips it
+    # only when the run was cancelled.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

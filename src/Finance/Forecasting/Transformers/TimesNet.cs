@@ -349,7 +349,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
         else if (_useNativeMode)
         {
@@ -600,7 +600,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 

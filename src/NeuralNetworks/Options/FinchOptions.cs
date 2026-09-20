@@ -98,7 +98,7 @@ public class FinchOptions : SequenceModelOptions
     /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative.
     /// </exception>
-    internal void Validate()
+    public void Validate()
     {
         ValidateCore(requiresHeads: true, requiresState: false);
     }

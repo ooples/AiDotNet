@@ -198,7 +198,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         m.AdditionalInfo["LayerCount"] = Layers.Count;
         if (_useNativeMode)
         {
-            m.ModelData = this.Serialize();
+            m.SetModelDataProvider(() => this.Serialize());
         }
         return m;
     }

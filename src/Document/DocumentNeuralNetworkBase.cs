@@ -487,6 +487,15 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
         {
             return Array.Empty<byte>();
         }
+        catch (AiDotNet.Exceptions.LicenseRequiredException)
+        {
+            // #1830: AiModelResult's constructor captures metadata for every model it wraps, so an
+            // eager serialization here turned AiModelBuilder.BuildAsync into a licensed operation and
+            // threw out of the primary training entry point on an expired trial. Degrade to empty
+            // model bytes exactly as NeuralNetworkBase.SerializeForMetadata already does -- metadata
+            // without the serialized weights is still useful, a failed build is not.
+            return Array.Empty<byte>();
+        }
     }
 
     protected void ValidateImageShape(Tensor<T> image)

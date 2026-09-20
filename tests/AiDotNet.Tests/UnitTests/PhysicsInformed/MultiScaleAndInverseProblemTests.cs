@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.Tensors.LinearAlgebra;
+using Moq;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -327,6 +328,60 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             // Assert
             Assert.Single(initialParams);
             Assert.Equal(5.0, initialParams[0]); // Should match initial guess
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemPINN_DeferredModelDataRefreshesIdentifiedParameters()
+        {
+            await Task.Yield();
+            var observations = new List<(double[] location, double[] value)>
+            {
+                (new double[] { 0.5, 0.1 }, new double[] { 0.8 })
+            };
+            var inverseProblem = new DiffusionParameterIdentification(observations, initialGuess: 5.0);
+            var boundaryConditions = new IBoundaryCondition<double>[]
+            {
+                new SimpleDirichletBC(position: 0.0, value: 1.0)
+            };
+            var architecture = new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1);
+            var optimizer = new Mock<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>();
+            var pinn = new InverseProblemPINN<double>(
+                architecture,
+                inverseProblem,
+                boundaryConditions,
+                numCollocationPoints: 10,
+                optimizer: optimizer.Object);
+
+            var metadata = pinn.GetModelMetadata();
+            var captured = Assert.IsType<Dictionary<string, object>>(
+                metadata.AdditionalInfo["IdentifiedParameters"]);
+            Assert.Equal(5.0, Assert.IsType<double>(captured["diffusion_coefficient"]));
+
+            pinn.Solve(epochs: 1, learningRate: 0.001, verbose: false);
+            double updatedCoefficient = pinn.Parameters[0];
+            Assert.NotEqual(5.0, updatedCoefficient);
+
+            byte[] modelData = metadata.ModelData;
+            var refreshed = Assert.IsType<Dictionary<string, object>>(
+                metadata.AdditionalInfo["IdentifiedParameters"]);
+            Assert.Equal(updatedCoefficient, Assert.IsType<double>(refreshed["diffusion_coefficient"]));
+
+            var restoredArchitecture = new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1);
+            var restored = new InverseProblemPINN<double>(
+                restoredArchitecture,
+                inverseProblem,
+                boundaryConditions,
+                numCollocationPoints: 10);
+            restored.Deserialize(modelData);
+            Assert.Equal(updatedCoefficient, restored.Parameters[0]);
         }
 
         #endregion

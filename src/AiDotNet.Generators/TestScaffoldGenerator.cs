@@ -2388,12 +2388,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        Assert.NotNull(mutableSource);");
-        sb.AppendLine("        Assert.NotNull(mutableClone);");
-        sb.AppendLine("        float sourceValue = mutableSource![0];");
-        sb.AppendLine("        mutableClone![0] = sourceValue + 1.0f;");
-        sb.AppendLine("        Assert.Equal(sourceValue, mutableSource[0]);");
-        sb.AppendLine("        Assert.NotEqual(mutableSource[0], mutableClone[0]);");
+        sb.AppendLine("        var sourceToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableSource);");
+        sb.AppendLine("        var cloneToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableClone);");
+        sb.AppendLine("        float sourceValue = sourceToMutate[0];");
+        sb.AppendLine("        cloneToMutate[0] = sourceValue + 1.0f;");
+        sb.AppendLine("        Assert.Equal(sourceValue, sourceToMutate[0]);");
+        sb.AppendLine("        Assert.NotEqual(sourceToMutate[0], cloneToMutate[0]);");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    [Fact(Timeout = 120000)]");
@@ -14595,6 +14595,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool TrainsViaSingleTransitionAdapter => false;");
             }
+
+            // Agents whose Train() CANNOT be driven by a single-agent store-then-Train loop at all,
+            // because they consume joint multi-agent transitions through a different API. Both throw
+            // rather than under-train: MADDPG reports "requires joint transitions stored via
+            // StoreMultiAgentExperience ... expected 8/4/8" for a 4/2/4 single-agent transition.
+            // - MADDPG (Lowe et al. 2017): centralised critic over the joint observation/action.
+            // - QMIX (Rashid et al. 2018): value decomposition over a joint observation.
+            if (model.ClassName == "MADDPGAgent"
+                || model.ClassName == "QMIXAgent")
+            {
+                sb.AppendLine("    protected override bool SupportsSingleAgentOnlineLoop => false;");
+            }
+
+            // Agents that DO run the online loop but cannot be expected to shift their greedy action
+            // toward whichever action was just rewarded, so the reward-following OUTCOME invariant does
+            // not apply. This is about the learning signal, not about state-conditionality, so it is a
+            // separate flag from IsStateConditional (whose membership is different).
+            // - A2C / PPO / TRPO: on-policy actor-critic; the update needs whole trajectories with
+            //   advantages, so a stream of isolated transitions yields a near-zero policy step.
+            // - REINFORCE (Williams 1992): Monte-Carlo policy gradient; it needs COMPLETE episodes,
+            //   as the return is only defined at episode end.
+            // - SARSA(lambda): on-policy with eligibility traces; it evaluates the action actually
+            //   taken by the behaviour policy rather than the one that was paid.
+            // - CQL / IQL: OFFLINE RL by construction -- they learn from a fixed dataset and add a
+            //   conservative (CQL) or expectile (IQL) penalty that deliberately resists moving toward
+            //   actions not supported by that dataset.
+            // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
+            //   value, so it follows the learned world model's reward head rather than the reward
+            //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            if (model.ClassName == "A2CAgent"
+                || model.ClassName == "PPOAgent"
+                || model.ClassName == "TRPOAgent"
+                || model.ClassName == "REINFORCEAgent"
+                || model.ClassName == "SARSALambdaAgent"
+                || model.ClassName == "CQLAgent"
+                || model.ClassName == "IQLAgent"
+                || model.ClassName == "DreamerAgent")
+            {
+                sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
+            }
         }
         else if (family == TestFamily.Forecasting)
         {
@@ -14980,6 +15020,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
             sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GatedDeltaNetLanguageModel" ? 100 : 15)};");
+            // TrainingStep_ShouldDependOnTheTarget was never capped here, so every class in this set
+            // stayed exposed to the very timeout the set exists to prevent -- the same gap the heavy
+            // branch above records for RealESRGANVideo, repeated on the OTHER set. It is the heaviest
+            // training probe in the suite: three conditions (target A, an A repeat as the noise
+            // control, target B), each averaged over TargetDependenceRepeatCount runs of
+            // TargetDependenceStepCount steps, on top of its own single-step preamble. At the ~2.8 s
+            // per update measured on Upscale4KAgent above, the default 3 repeats are 3*3*3 = 27 updates
+            // plus the preamble -- around 110 s inside a 120 s bound, which is why that fixture passed
+            // one local run and timed out on the next two. Capping the probe's own per-call wall-clock
+            // budget cannot fix it: that budget is per call and the test makes four of them, so its
+            // ceiling is already above the timeout it is meant to respect.
+            //
+            // Cap the REPEATS, not the steps, for the reason the heavy branch documents: repeats only
+            // average the model's own stochasticity away, so dropping them costs sensitivity (a noisy
+            // model reports INCONCLUSIVE instead of certifying) and never correctness, while a 1-step
+            // comparison would measure nothing at all. 1*3 = 3 updates per condition.
+            //
+            // Seven classes are in BOTH sets; DropDuplicateOverrides keeps the FIRST occurrence, which
+            // is the heavy branch's identical cap, so this cannot conflict.
+            sb.AppendLine("    protected override int TargetDependenceRepeatCount => 1;");
             if (model.ClassName is "GatedDeltaNetLanguageModel" or "GLALanguageModel")
             {
                 // The bounded recurrent-language-model trajectories decrease by about
@@ -16338,6 +16398,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        finally");
             sb.AppendLine("        {");
             sb.AppendLine("            global::AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+        }
+
+        if (layer.ClassName == "QuantumLayer")
+        {
+            // A parameter update reconstructs the complete circuit from its angles. If it applies
+            // those angles to the already-rotated circuit instead, a zero-sized update still changes
+            // predictions. Emit this with the layer scaffold so the invariant follows QuantumLayer's
+            // generated fixture and cannot drift into a separate hand-maintained test.
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public void ZeroLearningRateUpdate_PreservesCircuitBehavior()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var arena = global::AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var layer = CreateLayer();");
+            sb.AppendLine($"        using var input = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<{numericType}>(InputShape);");
+            sb.AppendLine("        for (int i = 0; i < input.Length; i++) input[i] = ToT((i + 1) * 0.125);");
+            sb.AppendLine("        var before = layer.Forward(input).ToArray();");
+            sb.AppendLine("        layer.UpdateParameters(NumOps.Zero);");
+            sb.AppendLine("        var after = layer.Forward(input).ToArray();");
+            sb.AppendLine("        Assert.Equal(before.Length, after.Length);");
+            sb.AppendLine("        for (int i = 0; i < before.Length; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            double delta = global::System.Math.Abs(ToD(before[i]) - ToD(after[i]));");
+            sb.AppendLine("            Assert.True(delta <= Tolerance,");
+            sb.AppendLine("                $\"A zero-learning-rate update changed circuit output {i} by {delta:R}.\");");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
         }

@@ -678,7 +678,7 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
                 { "LossFunction", LossFunction.GetType().Name },
                 { "Optimizer", _optimizer.GetType().Name }
             },
-            ModelData = Serialize()
+            ModelDataProvider = () => Serialize()
         };
     }
 

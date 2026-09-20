@@ -798,23 +798,41 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()
         {
-            var paramDict = new Dictionary<string, object>();
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                paramDict[_inverseProblem.ParameterNames[i]] = _parameters[i]!;
-            }
-
-            return new ModelMetadata<T>
+            var metadata = new ModelMetadata<T>
             {
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "NetworkType", "InverseProblemPINN" },
                     { "NumberOfParameters", _inverseProblem.NumberOfParameters },
-                    { "IdentifiedParameters", paramDict },
+                    { "IdentifiedParameters", GetIdentifiedParameterSnapshot() },
                     { "Regularization", _options.Regularization.ToString() }
-                },
-                ModelData = Serialize()
+                }
             };
+
+            metadata.SetModelDataProvider(() =>
+            {
+                byte[] modelData = Serialize();
+                metadata.AdditionalInfo["IdentifiedParameters"] = GetIdentifiedParameterSnapshot();
+                return modelData;
+            });
+            return metadata;
+        }
+
+        private Dictionary<string, object> GetIdentifiedParameterSnapshot()
+        {
+            var paramDict = new Dictionary<string, object>();
+            for (int i = 0; i < _parameters.Length; i++)
+            {
+                object? value = _parameters[i];
+                if (value is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Identified parameter '{_inverseProblem.ParameterNames[i]}' cannot be null.");
+                }
+                paramDict[_inverseProblem.ParameterNames[i]] = value;
+            }
+
+            return paramDict;
         }
 
         /// <inheritdoc/>

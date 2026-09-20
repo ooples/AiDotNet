@@ -14,9 +14,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// big each of the two networks is and how they are trained.
 /// </para>
 /// <para>
-/// Consumers that derive from this base must assign their own required dimensions and rates.
-/// This base does not construct a GAN or replace the separate options and scalar constructor
-/// parameters used by existing GAN models.
+/// Derived options classes assign their paper's values in their parameterless constructor.
 /// See <see cref="ModelHyperparameterOptions"/> for why these properties are non-nullable.
 /// </para>
 /// </remarks>
@@ -35,7 +33,6 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// <summary>
     /// Gets or sets the base channel count of the generator. Layers scale up from this.
     /// </summary>
-    /// <value>A positive channel count supplied by the consumer. This abstract base has no model-specific default.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Roughly how wide the image-making network is. Bigger means
     /// more detail and slower training.</para>
@@ -45,11 +42,6 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// <summary>
     /// Gets or sets the base channel count of the discriminator or critic.
     /// </summary>
-    /// <value>A positive channel count supplied by the consumer. This abstract base has no model-specific default.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the width of the network judging generated images.
-    /// It is independent of the generator's width and must be configured by the model using these options.</para>
-    /// </remarks>
     public int DiscriminatorChannels { get; set; }
 
     /// <summary>
@@ -81,17 +73,15 @@ public abstract class GanOptions : ModelHyperparameterOptions
     public double InitialLearningRate { get; set; }
 
     /// <summary>
-    /// Validates the required dimensions and initial rate for callers of this shared base.
+    /// Throws if a dimension every GAN requires has been left unset.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a required dimension is zero or negative, or the initial learning rate is
-    /// non-finite or nonpositive. Required values must be supplied by the concrete consumer.
+    /// Thrown when a required dimension is zero or negative, which means the derived options
+    /// class did not assign its paper defaults.
     /// </exception>
     protected void ValidateCore()
     {
         Require(LatentSize, nameof(LatentSize));
-        Require(GeneratorChannels, nameof(GeneratorChannels));
-        Require(DiscriminatorChannels, nameof(DiscriminatorChannels));
         Require(ImageChannels, nameof(ImageChannels));
         Require(InitialLearningRate, nameof(InitialLearningRate));
     }
