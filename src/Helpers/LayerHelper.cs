@@ -1,4 +1,4 @@
-﻿using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Initialization;
@@ -15769,77 +15769,104 @@ public static partial class LayerHelper<T>
         int numFeatures = 1)
     {
 
-        // === Input Embedding ===
+        // S4 (Gu, Goel and Re, ICLR 2022) keeps its parameter count independent of the sequence
+        // length: a layer holds H independent single-input single-output state space models of
+        // state size N, so it costs O(H * N) whatever L is. Sizing these dense stand-ins by
+        // modelDim * contextLength instead made a default S4 (H=256, N=64, L=1024) declare
+        // 921,679,114,336 parameters. That crosses the 500M foundation-scale threshold in
+        // NeuralNetworkBase.TryAutoEnableWeightStreaming, which switches the weight store to an
+        // int4 inference encoding, and the first dense forward then throws "Cannot mutate a
+        // streaming tensor stored with a quantized inference encoding".
+        //
+        // The widths below are per time step and every dense layer applies position-wise, with the
+        // sequence kept as a real tensor axis ([batch, sequence, channels]) the way the paper's
+        // per-position mixing does.
+
+        // === Input Embedding === [batch, sequence, features] -> [batch, sequence, modelDim]
         yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
+            outputSize: modelDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>();
-
         // === S4 Layers ===
+        // Each block is pre-norm and is wrapped in a residual connection by S4.Forward, which is the
+        // block the paper uses. S4.Forward relies on the exact layer counts emitted here; keep
+        // S4.BuildResidualBlockLayout in step with any change to the shape of a block.
         for (int layer = 0; layer < numLayers; layer++)
         {
+            // Pre-norm: the block reads a normalized copy and its output is added back to the input.
+            yield return new LayerNormalizationLayer<T>();
+
             // === SSM Block (simulated with dense layers) ===
 
             // B projection (input to state)
             // In S4, B projects input u into the state space
             yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
+                outputSize: stateDim,
                 activationFunction: null);
 
             // Diagonal component of A (discretized)
             // This simulates A_bar_diagonal * x where A_bar = discrete(A)
             yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
+                outputSize: stateDim,
                 activationFunction: new TanhActivation<T>()); // Tanh for stability (SSM eigenvalues)
 
             if (useLowRankCorrection)
             {
                 // Low-rank correction: P projection
                 yield return new DenseLayer<T>(
-                    outputSize: lowRankRank * contextLength,
+                    outputSize: lowRankRank,
                     activationFunction: null);
 
                 // Low-rank correction: Q^T projection (reconstructs contribution to state)
                 yield return new DenseLayer<T>(
-                    outputSize: stateDim * contextLength,
+                    outputSize: stateDim,
                     activationFunction: null);
             }
 
             // C projection (state to output)
             // In S4, C projects the state x back to the output
             yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
+                outputSize: modelDim,
                 activationFunction: null);
 
             // D (direct feedthrough)
             // Skip connection from input to output (simulated via residual)
             yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
+                outputSize: modelDim,
                 activationFunction: new GELUActivation<T>());
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>();
 
             // Dropout for regularization
             yield return new DropoutLayer<T>(0.1);
         }
 
         // === FFN Block (post-SSM processing) ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength * 2,
-            activationFunction: new GELUActivation<T>());
-
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: null);
-
+        // Also pre-norm, and also residual-wrapped by S4.Forward.
         yield return new LayerNormalizationLayer<T>();
 
-        // === Output Projection ===
         yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
+            outputSize: modelDim * 2,
             activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            outputSize: modelDim,
+            activationFunction: null);
+
+        yield return new DropoutLayer<T>(0.1);
+
+        // === Output Projection ===
+        // Collapse the channel axis first ([batch, sequence, modelDim] -> [batch, sequence, 1]), then
+        // read the whole horizon off the time axis with one linear map. Flattening straight off
+        // sequence * modelDim activations instead gives the head a fan-in of 131,072 at the default
+        // configuration, and the effective step size scales with that fan-in. A single linear map
+        // over the time axis is the standard long-horizon head (DLinear, and PatchTST's flatten head
+        // once patching has already reduced the length).
+        yield return new LayerNormalizationLayer<T>();
+
+        yield return new DenseLayer<T>(
+            outputSize: 1,
+            activationFunction: null);
+
+        yield return new FlattenLayer<T>();
 
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,

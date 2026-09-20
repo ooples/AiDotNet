@@ -83,7 +83,41 @@ public class S4Options<T> : TimeSeriesRegressionOptions<T>
         DiscretizationMethod = other.DiscretizationMethod;
         UseLowRankCorrection = other.UseLowRankCorrection;
         LowRankRank = other.LowRankRank;
+        LearningRate = other.LearningRate;
+        WarmupSteps = other.WarmupSteps;
     }
+
+    /// <summary>
+    /// Gets or sets the peak learning rate for the model's default Adam optimizer.
+    /// </summary>
+    /// <value>The learning rate, defaulting to 0.001 — the value used throughout the S4 paper.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the optimizer takes each update. Larger is faster
+    /// but less stable; the paper's 0.001 is a good starting point.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets the number of optimizer steps over which the learning rate ramps linearly from
+    /// zero to <see cref="LearningRate"/>. Set to 0 to start at the peak rate immediately.
+    /// </summary>
+    /// <value>The warmup length in optimizer steps, defaulting to 32.</value>
+    /// <remarks>
+    /// <para>
+    /// Adam's first update moves every parameter by exactly the learning rate, whatever the gradient
+    /// magnitude, because the bias-corrected ratio m/sqrt(v) is +/-1 on step one. Across a deep
+    /// pre-norm residual stack that single coordinated move compounds layer over layer, so the loss
+    /// spikes by more than an order of magnitude before descending again. Ramping the rate in is the
+    /// standard remedy and is what the reference S4 implementation does (its configs ship a
+    /// warmup schedule); this ramp is applied through
+    /// <see cref="AiDotNet.LearningRateSchedulers.LinearWarmupScheduler"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Start slow, then speed up. The first few updates are gentle so the
+    /// model does not get knocked out of shape before it has learned anything.
+    /// </para>
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 32;
 
     /// <summary>
     /// Gets or sets the context length (input sequence length).
