@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -121,8 +121,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, options.HiddenLayers);
-        EnsureDefaultLayers(criticArchitecture, options.StateSize, 1, options.HiddenLayers);
+        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
+        EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
