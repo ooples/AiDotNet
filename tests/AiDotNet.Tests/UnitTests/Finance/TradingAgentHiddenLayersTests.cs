@@ -87,11 +87,15 @@ public class TradingAgentHiddenLayersTests
     public async Task Defaults_FollowEachPaper()
     {
         await Task.Yield();
-        // Schulman et al. 2017: two hidden layers of 64. Haarnoja et al. 2018: two of 256. The generic trading
-        // default stays the declared 256 / 128 / 64.
+        // Schulman et al. 2017, section 6.1: two hidden layers of 64. Haarnoja et al. 2018, table 1: two of 256.
+        // Mnih et al. 2015 prescribes a convolutional stack plus one 512-unit fully-connected layer for 84x84
+        // Atari frames and gives no MLP width for a low-dimensional state vector, which is what this agent
+        // builds, so DQN has no paper width to declare and inherits the framework default. That default is
+        // 64 / 64, matching the network the agents have always built and Stable-Baselines3's own DQNPolicy
+        // net_arch default; see TradingAgentOptions.HiddenLayers.
         Assert.Equal(new[] { 64, 64 }, new FinancialPPOAgentOptions<double>().HiddenLayers);
         Assert.Equal(new[] { 256, 256 }, new FinancialSACAgentOptions<double>().HiddenLayers);
-        Assert.Equal(new[] { 256, 128, 64 }, new FinancialDQNAgentOptions<double>().HiddenLayers);
+        Assert.Equal(new[] { 64, 64 }, new FinancialDQNAgentOptions<double>().HiddenLayers);
     }
 
     [Fact(Timeout = 60000)]
