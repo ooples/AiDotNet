@@ -257,6 +257,63 @@ public class ActionMaskingTests
         Assert.All(seen, s => Assert.True(s));
     }
 
+    // ---- validation at every entry point -------------------------------------------------------
+
+    /// <summary>
+    /// The production agents happen to call <see cref="ActionMasking.Validate"/> before reaching a helper, but
+    /// all five methods are public, so that ordering is a CONVENTION and nothing enforces it on an external
+    /// caller. Each helper therefore validates for itself.
+    ///
+    /// <para>An all-false mask is the dangerous shape: before this, <c>ArgMaxLegal</c> and <c>RandomLegal</c>
+    /// both fell back to index <c>0</c> — a silently ILLEGAL action, indistinguishable downstream from a
+    /// deliberate one, which is precisely the failure this class exists to prevent.</para>
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void Every_helper_refuses_an_all_masked_state()
+    {
+        var none = new[] { false, false, false };
+
+        Assert.Throws<InvalidOperationException>(() => ActionMasking.ArgMaxLegal(Vec(1.0, 2.0, 3.0), none, Ops));
+        Assert.Throws<InvalidOperationException>(() => ActionMasking.MaskLogits(Vec(1.0, 2.0, 3.0), none, Ops));
+        Assert.Throws<InvalidOperationException>(() => ActionMasking.MaskProbabilities(Vec(0.2, 0.3, 0.5), none, Ops));
+        Assert.Throws<InvalidOperationException>(() => ActionMasking.RandomLegal(new Random(1), none, 3));
+    }
+
+    /// <summary>
+    /// A mask shorter than the action space used to throw <see cref="IndexOutOfRangeException"/> from deep
+    /// inside a loop, or — for <c>RandomLegal</c>, which iterates the MASK rather than the space — not
+    /// throw at all while quietly making the trailing actions unreachable. Both are now the same explicit
+    /// refusal the agents already got: the caller and the environment disagree about the action space.
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void Every_helper_refuses_a_wrong_length_mask()
+    {
+        var tooShort = new[] { true, true };
+
+        Assert.Throws<ArgumentException>(() => ActionMasking.ArgMaxLegal(Vec(1.0, 2.0, 3.0), tooShort, Ops));
+        Assert.Throws<ArgumentException>(() => ActionMasking.MaskLogits(Vec(1.0, 2.0, 3.0), tooShort, Ops));
+        Assert.Throws<ArgumentException>(() => ActionMasking.MaskProbabilities(Vec(0.2, 0.3, 0.5), tooShort, Ops));
+        Assert.Throws<ArgumentException>(() => ActionMasking.RandomLegal(new Random(1), tooShort, 3));
+    }
+
+    /// <summary>
+    /// Validating on entry must not disturb the null path, which is the ordinary unmasked case every existing
+    /// caller in the library takes.
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void Validation_on_entry_leaves_the_unmasked_path_alone()
+    {
+        var logits = Vec(1.0, 5.0, 3.0);
+
+        Assert.Equal(1, ActionMasking.ArgMaxLegal(logits, null, Ops));
+        Assert.Same(logits, ActionMasking.MaskLogits(logits, null, Ops));
+        Assert.Same(logits, ActionMasking.MaskProbabilities(logits, null, Ops));
+        Assert.InRange(ActionMasking.RandomLegal(new Random(3), null, 3), 0, 2);
+    }
+
     // ---- helpers -------------------------------------------------------------------------------
 
     /// <summary>The max-subtracting softmax the agents use, so the -inf behaviour is tested as it is shipped.</summary>

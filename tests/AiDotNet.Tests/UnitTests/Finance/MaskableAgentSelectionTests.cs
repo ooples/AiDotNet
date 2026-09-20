@@ -243,6 +243,48 @@ public class MaskableAgentSelectionTests
         ContinuousActions = true,
     };
 
+    /// <summary>
+    /// <see cref="FinancialPPOAgent{T}"/> implements <see cref="IMaskableAgent{T}"/> unconditionally, but
+    /// honours a mask only when configured for DISCRETE actions. Configured continuous, it emits a real-valued
+    /// vector with no index set to restrict — so it refuses the mask instead of returning an
+    /// unconstrained action that a caller holding the interface would read as masked.
+    ///
+    /// <para>The silent-drop version of this passed every other test in this file, because they all pass a
+    /// discrete configuration. That is what makes it worth pinning: the interface, not the configuration, is
+    /// what a caller sees.</para>
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void A_continuous_PPO_refuses_a_mask_it_cannot_honour()
+    {
+        var options = PpoOptions();
+        options.ContinuousActions = true;
+        var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ((IMaskableAgent<double>)agent).SelectAction(FixedState(), training: true, OnlyAction2));
+
+        Assert.Contains("ContinuousActions", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the null mask still goes through, because "no restriction asked for" is not the same as "a
+    /// restriction this agent cannot apply". A refusal that also blocked null would break every existing
+    /// continuous caller, since the two-argument overload forwards null.
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void A_continuous_PPO_still_accepts_a_null_mask()
+    {
+        var options = PpoOptions();
+        options.ContinuousActions = true;
+        var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
+
+        var action = ((IMaskableAgent<double>)agent).SelectAction(FixedState(), training: false, legalActions: null);
+
+        Assert.Equal(ActionSize, action.Length);
+    }
+
     private static IMaskableAgent<double> Maskable(string agentName) => (IMaskableAgent<double>)Agent(agentName);
 
     /// <summary>The concrete agent, so the unmasked overload can be bound statically.</summary>
@@ -303,18 +345,33 @@ public class MaskableAgentSelectionTests
         return state;
     }
 
-    /// <summary>The set index of a one-hot action vector.</summary>
+    /// <summary>
+    /// The set index of a one-hot action vector — ASSERTING the one-hot shape rather than assuming it.
+    /// </summary>
+    /// <remarks>
+    /// An argmax alone would pass on a raw logit vector, and that distinction is live here: the masked paths
+    /// build their result as <c>action[index] = One</c> over a zeroed vector, while the continuous path returns
+    /// the actor's logits directly. A branch that confused the two would still put its largest component at a
+    /// legal index and satisfy every assertion in this file. Checking the shape at the single point all of
+    /// those assertions pass through closes the hole for all of them at once, rather than in one extra test.
+    /// </remarks>
     private static int SelectedIndex(Vector<double> action)
     {
-        var best = 0;
-        for (var i = 1; i < action.Length; i++)
+        var best = -1;
+        for (var i = 0; i < action.Length; i++)
         {
-            if (action[i] > action[best])
+            if (action[i] == 1.0)
             {
+                Assert.True(best < 0, $"action is not one-hot: indices {best} and {i} are both 1");
                 best = i;
+            }
+            else
+            {
+                Assert.True(action[i] == 0.0, $"action is not one-hot: index {i} is {action[i]}, not 0 or 1");
             }
         }
 
+        Assert.True(best >= 0, "action is not one-hot: no component is 1");
         return best;
     }
 }

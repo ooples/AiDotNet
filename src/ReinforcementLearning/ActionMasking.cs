@@ -84,11 +84,19 @@ public static class ActionMasking
     /// The index of the highest-valued LEGAL entry — the masked argmax.
     /// </summary>
     /// <remarks>
-    /// Skips illegal indices outright rather than lowering their value, so the result cannot depend on how
-    /// negative "very negative" happens to be for the numeric type in play.
+    /// <para>Skips illegal indices outright rather than lowering their value, so the result cannot depend on
+    /// how negative "very negative" happens to be for the numeric type in play.</para>
+    ///
+    /// <para>Validates on entry. This is a public entry point, so it cannot assume a caller reached it through
+    /// <see cref="Validate"/> first: an all-false or wrong-length mask has to be refused HERE, or the only
+    /// thing standing between an external caller and an illegal action is a call-order convention.</para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="values"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
     public static int ArgMaxLegal<T>(Vector<T> values, bool[]? mask, INumericOperations<T> ops)
     {
+        mask = Validate(mask, values.Length);
+
         int best = -1;
         for (int i = 0; i < values.Length; i++)
         {
@@ -103,9 +111,8 @@ public static class ActionMasking
             }
         }
 
-        // Only reachable when the mask is all-false, which Validate refuses; guard anyway rather than return
-        // -1 into an indexer.
-        return best < 0 ? 0 : best;
+        // Validate guarantees at least one in-range legal index, so the loop always assigned.
+        return best;
     }
 
     /// <summary>
@@ -120,9 +127,15 @@ public static class ActionMasking
     /// silently stops working when logits grow, and "how negative is negative enough" is not a question a
     /// correctness property should depend on. The softmax here subtracts the max logit before exponentiating,
     /// which keeps <c>-inf</c> well-behaved.</para>
+    ///
+    /// <para>Validates on entry, for the reason given on <see cref="ArgMaxLegal"/>. An all-false mask here
+    /// would drive EVERY logit to negative infinity, and the softmax downstream would divide zero by zero.</para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="logits"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
     public static Vector<T> MaskLogits<T>(Vector<T> logits, bool[]? mask, INumericOperations<T> ops)
     {
+        mask = Validate(mask, logits.Length);
         if (mask is null)
         {
             return logits;
@@ -149,9 +162,16 @@ public static class ActionMasking
     ///
     /// <para>If the legal entries sum to zero — a degenerate policy output — the legal set is made uniform
     /// rather than left at zero, because a zero-sum distribution has the same fall-through failure.</para>
+    ///
+    /// <para>Validates on entry, for the reason given on <see cref="ArgMaxLegal"/>. That is also what makes the
+    /// uniform fallback below safe: it divides by the legal count, which an all-false mask would leave at
+    /// zero.</para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="probabilities"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
     public static Vector<T> MaskProbabilities<T>(Vector<T> probabilities, bool[]? mask, INumericOperations<T> ops)
     {
+        mask = Validate(mask, probabilities.Length);
         if (mask is null)
         {
             return probabilities;
@@ -203,12 +223,19 @@ public static class ActionMasking
     /// A uniformly-random LEGAL action index — the exploration counterpart to <see cref="ArgMaxLegal"/>.
     /// </summary>
     /// <remarks>
-    /// The site most often missed. An epsilon-greedy agent that masks only its greedy branch still explores
-    /// into illegal actions at rate epsilon, and early in training epsilon is near one — so almost every
-    /// action taken is one the environment cannot honour.
+    /// <para>The site most often missed. An epsilon-greedy agent that masks only its greedy branch still
+    /// explores into illegal actions at rate epsilon, and early in training epsilon is near one — so almost
+    /// every action taken is one the environment cannot honour.</para>
+    ///
+    /// <para>Validates on entry, for the reason given on <see cref="ArgMaxLegal"/>. An all-false mask used to
+    /// return index <c>0</c> here — a silent illegal action, which is the exact failure this class exists to
+    /// prevent, and worse than an exception because nothing downstream can tell it apart from a real choice.</para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="actionSpaceSize"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
     public static int RandomLegal(Random random, bool[]? mask, int actionSpaceSize)
     {
+        mask = Validate(mask, actionSpaceSize);
         if (mask is null)
         {
             return random.Next(actionSpaceSize);
@@ -223,11 +250,6 @@ public static class ActionMasking
             }
         }
 
-        if (legalCount == 0)
-        {
-            return 0;
-        }
-
         int target = random.Next(legalCount);
         for (int i = 0; i < mask.Length; i++)
         {
@@ -237,6 +259,7 @@ public static class ActionMasking
             }
         }
 
-        return 0;
+        throw new InvalidOperationException(
+            "Unreachable: the draw is bounded by the legal count counted from the same mask.");
     }
 }

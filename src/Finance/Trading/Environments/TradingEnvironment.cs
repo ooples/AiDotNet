@@ -209,10 +209,16 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
         // holding only the step result can read it without a reference to the environment. The property
         // remains the authority; this is the PettingZoo/Shimmy/RLlib convention, and the entry is simply
         // absent when the environment does not restrict actions.
+        //
+        // CLONED, not aliased. LegalActionMask is an overridable property, and the natural override returns a
+        // reusable bool[] field recomputed in place each step. Storing that reference would leave every info
+        // dictionary ever returned pointing at the SAME array, so a replay buffer or trajectory log would find
+        // every past step wearing the CURRENT step's legality — a corruption that reads as a plausible mask
+        // rather than as an error. An info entry is a snapshot of one step by construction, so it owns a copy.
         var mask = LegalActionMask;
         if (mask is not null)
         {
-            info[ActionMasking.ActionMaskKey] = mask;
+            info[ActionMasking.ActionMaskKey] = (bool[])mask.Clone();
         }
 
         return (nextState, reward, done, info);

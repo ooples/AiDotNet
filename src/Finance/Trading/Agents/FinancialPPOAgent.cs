@@ -344,9 +344,17 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// PPO update, so masking after the softmax would take that log-probability against a distribution whose
     /// entries no longer sum to one — making the importance ratio silently wrong rather than merely worse.</para>
     ///
-    /// <para>The continuous branch returns before any masking. A real-valued action vector has no index set to
-    /// restrict, so a mask there is not a narrower choice, it is a category error.</para>
+    /// <para>The continuous branch REFUSES a mask rather than returning before applying it. A real-valued
+    /// action vector has no index set to restrict, so a mask there is not a narrower choice, it is a category
+    /// error — and this agent advertises <see cref="IMaskableAgent{T}"/> regardless of the
+    /// <c>ContinuousActions</c> setting, so a caller holding the interface cannot tell which shape it got.
+    /// Dropping the mask silently would hand back an unconstrained action that LOOKS masked, which is the
+    /// failure this whole feature exists to prevent; <c>FinRLAgent</c> refuses the same case for the same
+    /// reason.</para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// A non-null mask was supplied to a continuous-action policy.
+    /// </exception>
     public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
         var normalizedState = NormalizeObservation(state, updateStatistics: training);
@@ -354,6 +362,16 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         if (_options.ContinuousActions)
         {
+            if (legalActions is not null)
+            {
+                throw new InvalidOperationException(
+                    "A legal-action mask was supplied, but this FinancialPPOAgent is configured with "
+                    + "ContinuousActions = true and emits a real-valued action vector, which has no index set "
+                    + "to restrict. Constraining a continuous action is projection onto a feasible region, not "
+                    + "masking. Either configure the agent for discrete actions, or apply the constraint in "
+                    + "the environment.");
+            }
+
             CacheSelectedAction(state, normalizedState, logits, NumOps.Zero);
             return logits;
         }

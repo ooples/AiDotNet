@@ -22,8 +22,14 @@ namespace AiDotNet.Interfaces;
 ///
 /// <para><b>Opt-in, so nothing existing changes.</b> This is a separate interface rather than a new member on
 /// <see cref="IEnvironment{T}"/>: an environment with no notion of illegal actions implements nothing, and the
-/// 60-odd agents that cannot use a mask are untouched. A consumer tests for the interface and falls back to
-/// the unmasked path.</para>
+/// 60-odd agents that cannot use a mask are untouched.</para>
+///
+/// <para><b>What a consumer may do with the result.</b> The unmasked path is permitted when there is no
+/// restriction to honour — the environment does not implement this interface, or it does and
+/// <see cref="LegalActionMask"/> is <see langword="null"/>. It is NOT permitted once a non-null mask is in
+/// hand: an agent that cannot apply one must refuse, because selecting unmasked returns an illegal action
+/// while the caller believes it asked for a legal one. See
+/// <see cref="AiDotNet.Finance.Interfaces.IMaskableAgent{T}"/>.</para>
 ///
 /// <para><b>Convention for the info dictionary.</b> Implementations SHOULD also publish the same array under
 /// <see cref="AiDotNet.ReinforcementLearning.ActionMasking.ActionMaskKey"/> (spelled <c>action_mask</c>) in the
