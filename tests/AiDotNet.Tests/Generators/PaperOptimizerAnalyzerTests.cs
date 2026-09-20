@@ -253,7 +253,7 @@ public sealed class CacheOwner
     private readonly object cache = new CacheOptimizer(new object());
 }";
 
-        Diagnostic diagnostic = Assert.Single((await RunAsync(source)).Where(item => item.Id == "AIDN101"));
+        Diagnostic diagnostic = Assert.Single((await RunAsync(source)).Where(item => item.Id == "AIDN106"));
         Assert.Contains("RealModel", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
@@ -269,7 +269,7 @@ public sealed class Model
     private readonly object optimizer = new RealOptimizer(new object(), new object());
 }";
 
-        Assert.Empty((await RunAsync(source)).Where(item => item.Id is "AIDN101" or "AIDN104"));
+        Assert.Empty((await RunAsync(source)).Where(item => item.Id is "AIDN106" or "AIDN104"));
     }
 
     [Fact]

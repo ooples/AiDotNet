@@ -16,6 +16,8 @@ if (-not $? -or $LASTEXITCODE -ne 0) { throw 'Review fixture cleanup controls fa
 if ($LASTEXITCODE -ne 0) { throw 'Certificate evidence controls failed.' }
 & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-NoCoverageShardPolicy.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'No-coverage parser controls failed.' }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-ShardManifestDrift.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Shard manifest drift proof failed.' }
 
 foreach ($review in 'Test-CertificateEvidenceReview', 'Test-ReviewFixtureCleanup') {
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot "$review.ps1")

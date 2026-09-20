@@ -486,66 +486,31 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             _options.PriorityAlpha,
             _beta);
 
-        T totalLoss = NumOps.Zero;
-        var priorities = new List<double>();
+        int stateSize = _options.StateSize;
+        int n = batch.Count;
 
-        for (int i = 0; i < batch.Count; i++)
+        // n-step discount gamma^NSteps, shared by both update paths.
+        T nStepDiscount = NumOps.One;
+        for (int k = 0; k < _options.NSteps; k++)
         {
-            var experience = batch[i];
-            var weight = NumOps.FromDouble(weights[i]);
-
-            // Double Q-learning: use online network to select, target to evaluate
-            var nextQValuesOnline = ComputeQValues(experience.nextState);
-            int bestActionIndex = ArgMax(nextQValuesOnline);
-
-            var nextQValuesTarget = ComputeQValuesFromNetwork(_targetNetwork, experience.nextState);
-            var targetQ = nextQValuesTarget[bestActionIndex];
-
-            T target;
-            if (experience.done)
-            {
-                target = experience.reward;
-            }
-            else
-            {
-                var nStepDiscount = NumOps.One;
-                for (int n = 0; n < _options.NSteps; n++)
-                {
-                    nStepDiscount = NumOps.Multiply(nStepDiscount, DiscountFactor);
-                }
-                target = NumOps.Add(experience.reward, NumOps.Multiply(nStepDiscount, targetQ));
-            }
-
-            // Current Q-value
-            var currentQValues = ComputeQValues(experience.state);
-            int actionIndex = ArgMax(experience.action);
-            var currentQ = currentQValues[actionIndex];
-
-            // TD error
-            var tdError = NumOps.Subtract(target, currentQ);
-            var loss = NumOps.Multiply(tdError, tdError);
-            loss = NumOps.Multiply(weight, loss);  // Importance sampling weight
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Update priority
-            double priority = Math.Abs(NumOps.ToDouble(tdError));
-            priorities.Add(priority);
-
-            // Backpropagate
-            var gradient = new Vector<T>(_options.ActionSize);
-            gradient[actionIndex] = tdError;
-            var gradTensor = Tensor<T>.FromVector(gradient);
-
-            // Update weights using learning rate
-            var parameters = _onlineNetwork.GetParameters();
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                var update = NumOps.Multiply(LearningRate, gradient[j % gradient.Length]);
-                parameters[j] = NumOps.Subtract(parameters[j], update);
-            }
-            _onlineNetwork.UpdateParameters(parameters);
+            nStepDiscount = NumOps.Multiply(nStepDiscount, DiscountFactor);
         }
+
+        // One batched states tensor: the whole minibatch goes through the tape in a single
+        // forward/backward pass, exactly as DQNAgent.Train does.
+        var states = new Tensor<T>([n, stateSize]);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < stateSize; j++)
+            {
+                states[i, j] = batch[i].state[j];
+            }
+        }
+
+        var priorities = new List<double>(n);
+        T totalLoss = _options.UseDistributional
+            ? TrainDistributional(states, batch, weights, nStepDiscount, priorities)
+            : TrainExpected(states, batch, weights, nStepDiscount, priorities);
 
         // Update priorities in replay buffer
         _replayBuffer.UpdatePriorities(indices, priorities, _options.PriorityEpsilon);
@@ -558,7 +523,201 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
         _updateCount++;
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Non-distributional Rainbow update: a Double-DQN TD target written into the taken action's
+    /// slot, then ONE batched tape-based training step on the online network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The previous implementation built a gradient vector, discarded it, and then subtracted
+    /// <c>LearningRate * gradient[j % ActionSize]</c> from every parameter. That is not
+    /// backpropagation: it moves only the parameters whose flat index is congruent to the taken
+    /// action index modulo ActionSize, so a single-element trainable component -- for example the
+    /// dueling head's scalar value bias -- was updated only when its index happened to line up.
+    /// <see cref="ApplyGradients"/> already documents and corrects the identical
+    /// <c>gradients[i % length]</c> defect.
+    /// </para>
+    /// </remarks>
+    private T TrainExpected(
+        Tensor<T> states,
+        List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch,
+        IReadOnlyList<double> weights,
+        T nStepDiscount,
+        List<double> priorities)
+    {
+        int actionSize = _options.ActionSize;
+        int n = batch.Count;
+
+        // Targets are built OUTSIDE the tape: the target network must not be tape-tracked.
+        var currentQBatch = _onlineNetwork.Predict(states);
+        var targetQ = new Tensor<T>([n, actionSize]);
+
+        for (int i = 0; i < n; i++)
+        {
+            var experience = batch[i];
+            int actionIndex = ArgMax(experience.action);
+
+            for (int a = 0; a < actionSize; a++)
+            {
+                targetQ[i, a] = currentQBatch[(i * actionSize) + a];
+            }
+
+            T target;
+            if (experience.done)
+            {
+                target = experience.reward;
+            }
+            else
+            {
+                // Double Q-learning: the ONLINE network selects the next action, the TARGET
+                // network evaluates it (van Hasselt et al. 2016).
+                int bestActionIndex = ArgMax(ComputeQValues(experience.nextState));
+                var nextQValuesTarget = ComputeQValuesFromNetwork(_targetNetwork, experience.nextState);
+                target = NumOps.Add(
+                    experience.reward,
+                    NumOps.Multiply(nStepDiscount, nextQValuesTarget[bestActionIndex]));
+            }
+
+            T tdError = NumOps.Subtract(target, targetQ[i, actionIndex]);
+
+            // Importance-sampling weighting belongs on the sample's contribution to the loss, and
+            // the priority is the unweighted magnitude of the TD error (Schaul et al. 2016).
+            priorities.Add(Math.Abs(NumOps.ToDouble(tdError)));
+
+            targetQ[i, actionIndex] = target;
+        }
+
+        // Single batched training step -- tape-based forward + loss + optimizer update.
+        _onlineNetwork.Train(states, targetQ);
+        return _onlineNetwork.GetLastLoss();
+    }
+
+    /// <summary>
+    /// Distributional (C51) Rainbow update: project the n-step return onto the fixed support and
+    /// minimise the cross-entropy between the projected target distribution and the online
+    /// network's distribution for the action that was actually taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Follows Bellemare et al. 2017 (Algorithm 1), with the Double-Q action selection and the
+    /// importance-sampling weighting of Hessel et al. 2018 (Rainbow, sections 3.2-3.5). The
+    /// projection is ordinary arithmetic on constants, so it runs outside the tape; only the
+    /// cross-entropy against the network's own logits is differentiated.
+    /// </para>
+    /// </remarks>
+    private T TrainDistributional(
+        Tensor<T> states,
+        List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch,
+        IReadOnlyList<double> weights,
+        T nStepDiscount,
+        List<double> priorities)
+    {
+        if (_onlineNetwork is not NeuralNetworkBase<T> trainable)
+        {
+            throw new NotSupportedException(
+                "Distributional Rainbow requires an online network deriving from NeuralNetworkBase<T> "
+                + "so the categorical cross-entropy can be differentiated through the gradient tape.");
+        }
+
+        int actionSize = _options.ActionSize;
+        int numAtoms = _options.NumAtoms;
+        int n = batch.Count;
+        double vMin = _options.VMin;
+        double vMax = _options.VMax;
+        double deltaZ = (vMax - vMin) / (numAtoms - 1);
+        double discount = NumOps.ToDouble(nStepDiscount);
+
+        // Rows are (sample, action) pairs so the softmax below reduces over each action's atom
+        // slice -- the same per-action normalisation ComputeQValues uses. A softmax over the flat
+        // ActionSize*NumAtoms row would couple actions that C51 keeps independent.
+        var coefficients = new Tensor<T>([n * actionSize, numAtoms]);
+        double lossSum = 0.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            var experience = batch[i];
+            int actionIndex = ArgMax(experience.action);
+            double weight = weights[i];
+            double reward = NumOps.ToDouble(experience.reward);
+
+            // Double Q-learning: the ONLINE network picks the next action, the TARGET network
+            // supplies the distribution that gets projected.
+            int bestActionIndex = ArgMax(ComputeQValues(experience.nextState));
+            var nextLogits = _targetNetwork.Predict(Tensor<T>.FromVector(experience.nextState)).ToVector();
+            var nextProbs = SoftmaxAtomSlice(nextLogits, bestActionIndex * numAtoms, numAtoms);
+
+            // Categorical projection: shift the support by the n-step return, clamp it back into
+            // [VMin, VMax], and split each atom's mass between its two neighbouring supports. When
+            // the transition is terminal every atom maps to the reward, so the projected
+            // distribution collapses to a point mass there -- which is what C51 requires.
+            var projected = new double[numAtoms];
+            for (int atom = 0; atom < numAtoms; atom++)
+            {
+                double tz = experience.done
+                    ? reward
+                    : reward + (discount * (vMin + (atom * deltaZ)));
+                tz = Math.Max(vMin, Math.Min(vMax, tz));
+
+                double b = (tz - vMin) / deltaZ;
+                int lower = (int)Math.Floor(b);
+                int upper = (int)Math.Ceiling(b);
+                double mass = NumOps.ToDouble(nextProbs[atom]);
+
+                if (lower == upper)
+                {
+                    projected[lower] += mass;
+                }
+                else
+                {
+                    projected[lower] += mass * (upper - b);
+                    projected[upper] += mass * (b - lower);
+                }
+            }
+
+            // Rainbow section 3.5 prioritises transitions by the KL loss, which for a fixed target
+            // distribution is this cross-entropy up to a constant.
+            var currentLogits = _onlineNetwork.Predict(Tensor<T>.FromVector(experience.state)).ToVector();
+            var currentProbs = SoftmaxAtomSlice(currentLogits, actionIndex * numAtoms, numAtoms);
+
+            double crossEntropy = 0.0;
+            for (int atom = 0; atom < numAtoms; atom++)
+            {
+                if (projected[atom] <= 0.0)
+                {
+                    continue;
+                }
+
+                crossEntropy -= projected[atom]
+                    * Math.Log(Math.Max(NumOps.ToDouble(currentProbs[atom]), 1e-8));
+            }
+
+            priorities.Add(crossEntropy);
+            lossSum += weight * crossEntropy;
+
+            // -w_i * m_k / n on the taken action's row; every other row stays zero, so only the
+            // action that was actually taken receives gradient.
+            int row = (i * actionSize) + actionIndex;
+            for (int atom = 0; atom < numAtoms; atom++)
+            {
+                coefficients[row, atom] = NumOps.FromDouble(-weight * projected[atom] / n);
+            }
+        }
+
+        trainable.TrainWithCustomLoss(states, logits =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var perAction = engine.Reshape(logits, [n * actionSize, numAtoms]);
+            var probs = engine.Softmax(perAction);
+            var safeProbs = engine.TensorAddScalar(probs, NumOps.FromDouble(1e-8));
+            var logProbs = engine.TensorLog(safeProbs);
+            var weighted = engine.TensorMultiply(logProbs, coefficients);
+            return engine.ReduceSum(weighted, [0, 1], keepDims: false);
+        });
+
+        return NumOps.FromDouble(lossSum / n);
     }
 
     /// <inheritdoc/>

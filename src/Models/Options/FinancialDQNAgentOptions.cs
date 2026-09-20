@@ -17,9 +17,11 @@ public class FinancialDQNAgentOptions<T> : TradingAgentOptions<T>
     public FinancialDQNAgentOptions() { }
 
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinancialDQNAgentOptions(FinancialDQNAgentOptions<T> other) : this()
+    public FinancialDQNAgentOptions(FinancialDQNAgentOptions<T> other) : base(other)
     {
-        if (other is null) throw new ArgumentNullException(nameof(other));
+        // This used to chain to this() and copy only the two properties below, so a copy silently lost
+        // every base property — StateSize, ActionSize, Seed and the rest — and produced an agent of a
+        // different shape than the one copied.
         UseDoubleDQN = other.UseDoubleDQN;
         UseDuelingNetwork = other.UseDuelingNetwork;
     }

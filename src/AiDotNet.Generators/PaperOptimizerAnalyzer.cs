@@ -18,7 +18,7 @@ namespace AiDotNet.Generators;
 public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
 {
     private static readonly DiagnosticDescriptor MissingPaperOptimizer = new(
-        "AIDN101",
+        "AIDN106",
         "Model cites a paper but does not declare the optimizer settings that paper specifies",
         "'{0}' has [ResearchPaper] but no [PaperOptimizer], so it trains at the optimizer class's "
             + "generic defaults rather than its paper's. Add [PaperOptimizer(...)] with a Source "
