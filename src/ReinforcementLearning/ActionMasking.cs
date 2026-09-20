@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning;
 
@@ -261,5 +262,41 @@ public static class ActionMasking
 
         throw new InvalidOperationException(
             "Unreachable: the draw is bounded by the legal count counted from the same mask.");
+    }
+
+    /// <summary>
+    /// <see cref="MaskProbabilities{T}(Vector{T}, bool[], INumericOperations{T})"/> for a policy that has
+    /// already reduced its distribution to <see cref="double"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>An actor that emits LOGITS should be masked with <see cref="MaskLogits{T}"/> before its softmax,
+    /// which is both cheaper and exact. This overload is for the case where it cannot be: a softmax that
+    /// refuses a non-finite logit as evidence of a diverged actor would reject the negative infinities
+    /// <see cref="MaskLogits{T}"/> introduces, so the mask has to be applied to the distribution instead.
+    /// The two are equivalent — renormalising a softmax over the legal set gives the same numbers as a
+    /// softmax over the legal logits — so nothing is lost by masking on this side of it.</para>
+    ///
+    /// <para>Delegates to the generic implementation rather than restating it, so the zeroing, the
+    /// renormalisation and the uniform fallback for a zero-sum legal set cannot drift between the two.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="probabilities"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
+    public static double[] MaskProbabilities(double[] probabilities, bool[]? mask)
+    {
+        Guard.NotNull(probabilities);
+        return MaskProbabilities(
+            new Vector<double>(probabilities), mask, MathHelper.GetNumericOperations<double>()).ToArray();
+    }
+
+    /// <summary>
+    /// <see cref="ArgMaxLegal{T}(Vector{T}, bool[], INumericOperations{T})"/> for values already reduced to
+    /// <see cref="double"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The mask length does not match <paramref name="values"/>.</exception>
+    /// <exception cref="InvalidOperationException">Every action is masked out.</exception>
+    public static int ArgMaxLegal(double[] values, bool[]? mask)
+    {
+        Guard.NotNull(values);
+        return ArgMaxLegal(new Vector<double>(values), mask, MathHelper.GetNumericOperations<double>());
     }
 }
