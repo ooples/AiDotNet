@@ -387,14 +387,34 @@ public class PrivBayesDifferentialPrivacyTests
     }
 
     /// <summary>
-    /// A budget entirely allocated to one phase must not break the other. At fraction 1.0 the marginal
-    /// phase gets zero budget, and at 0.0 the structure phase does; both must degrade gracefully
-    /// instead of dividing by zero.
+    /// A budget split that starves either phase is REJECTED, not degraded. At 1.0 the conditional
+    /// distributions would be published with no privacy noise while differential privacy still
+    /// reported as enabled; at 0.0 the structure would be learned non-privately. Both look like
+    /// working configurations, which is why BayesianNetworkSynthOptions refuses them outright.
     /// </summary>
+    /// <remarks>
+    /// This test originally asserted the opposite (graceful degradation at the endpoints). It never
+    /// ran in CI - no shard filter selected this class - so it went stale when the option began
+    /// validating its range. The graceful-degradation intent is kept at the extremes that remain
+    /// legal, below.
+    /// </remarks>
     [Theory]
     [InlineData(0.0)]
     [InlineData(1.0)]
-    public void DegenerateBudgetSplit_DoesNotProduceNaN(double fraction)
+    public void DegenerateBudgetSplit_IsRejected(double fraction)
+    {
+        var options = new BayesianNetworkSynthOptions<double>();
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.StructureBudgetFraction = fraction);
+    }
+
+    /// <summary>
+    /// The most lopsided splits that ARE allowed must still leave both phases a usable budget:
+    /// no division by zero, no NaN in the synthetic output.
+    /// </summary>
+    [Theory]
+    [InlineData(0.001)]
+    [InlineData(0.999)]
+    public void ExtremeLegalBudgetSplit_DoesNotProduceNaN(double fraction)
     {
         var m = FitAndGenerate(new BayesianNetworkSynthOptions<double>
         {

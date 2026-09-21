@@ -361,10 +361,13 @@ public class ActiveLearningIntegrationTests
         var strategy2 = new RandomSampling<double>(seed: 123);
         var selected2 = strategy2.SelectSamples(model, pool, 10);
 
-        // Assert - Different seeds should (very likely) produce different selections
+        // Assert - Different seeds must produce different selections. Both seeds are fixed, so this
+        // is deterministic, not a probabilistic "very likely": until the seed was mixed into the
+        // score hash every seed selected the identical ten samples, and this test (which then only
+        // checked the lengths) could not tell.
         Assert.Equal(10, selected1.Length);
         Assert.Equal(10, selected2.Length);
-        // Note: There's a tiny chance they could be equal, but extremely unlikely with 100 samples
+        Assert.NotEqual(selected1, selected2);
     }
 
     [Fact(Timeout = 120000)]
@@ -385,24 +388,33 @@ public class ActiveLearningIntegrationTests
         Assert.Equal(selected1, selected2);
     }
 
+    /// <summary>
+    /// Random sampling scores are pseudo-random draws in [0, 1], stable for one seed and pool.
+    /// </summary>
+    /// <remarks>
+    /// This test used to assert that every score was EQUAL. RandomSampling deliberately stopped doing
+    /// that: with equal scores the top-k order is arbitrary, so a k=1 selection was not guaranteed to
+    /// be inside the k=5 selection. It never ran in CI (no shard filter selected this class), so the
+    /// stale assertion went unnoticed.
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task RandomSampling_InformativenessScores_AreUniform()
+    public async Task RandomSampling_InformativenessScores_AreStableDrawsInTheUnitInterval()
     {
-        // Random sampling should assign uniform scores (all equal)
-        var strategy = new RandomSampling<double>();
         var model = CreateMockModel(3);
         var pool = CreateUnlabeledPool(20, 5);
 
-        // Act
-        var scores = strategy.ComputeInformativenessScores(model, pool);
+        var scores = new RandomSampling<double>(seed: 7).ComputeInformativenessScores(model, pool);
+        var sameSeed = new RandomSampling<double>(seed: 7).ComputeInformativenessScores(model, pool);
+        var otherSeed = new RandomSampling<double>(seed: 8).ComputeInformativenessScores(model, pool);
 
-        // Assert - All scores should be the same (or very close due to implementation)
-        var firstScore = scores[0];
-        // Random sampling typically assigns equal informativeness
-        foreach (var score in scores)
+        Assert.Equal(pool.Shape[0], scores.Length);
+        for (int i = 0; i < scores.Length; i++)
         {
-            Assert.Equal(firstScore, score, 1e-10);
+            Assert.InRange(scores[i], 0.0, 1.0);
+            Assert.Equal(scores[i], sameSeed[i]);
         }
+        Assert.True(scores.Distinct().Count() > 1, "random sampling produced a constant score");
+        Assert.NotEqual(scores.ToArray(), otherSeed.ToArray());
     }
 
     #endregion

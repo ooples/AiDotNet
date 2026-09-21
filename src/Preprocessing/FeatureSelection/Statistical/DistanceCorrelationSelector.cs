@@ -149,9 +149,9 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             }
         }
 
-        dCovSq /= n * n;
-        dVarASq /= n * n;
-        dVarBSq /= n * n;
+        dCovSq /= (double)n * n;
+        dVarASq /= (double)n * n;
+        dVarBSq /= (double)n * n;
 
         if (dVarASq < 1e-10 || dVarBSq < 1e-10) return 0;
 
