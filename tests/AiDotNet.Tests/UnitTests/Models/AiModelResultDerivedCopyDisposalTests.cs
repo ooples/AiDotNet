@@ -218,8 +218,21 @@ public partial class AiModelResultDerivedCopyDisposalTests
     {
         // MultiLoRAAdapter needs its base layer's input dimension, and DenseLayer only learns that
         // when a network resolves it. Build the plain model first and wrap its resolved dense layer.
+        // Take an owned copy of the dense layer before the temporary network goes away.
+        // MultiLoRAAdapter retains its base layer BY REFERENCE, so handing it a layer that the
+        // temporary network still owns forces a choice between two leaks: dispose the network and
+        // the adapter's base layer dies with it, or skip the dispose and every other layer in the
+        // temporary network stays alive until garbage collection.
         var resolved = (NeuralNetworkBase<float>)CreateAttentionModel();
-        var dense = resolved.Layers[resolved.Layers.Count - 1];
+        ILayer<float> dense;
+        try
+        {
+            dense = ((LayerBase<float>)resolved.Layers[resolved.Layers.Count - 1]).Clone();
+        }
+        finally
+        {
+            resolved.Dispose();
+        }
 
         var layers = new List<ILayer<float>>
         {
