@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using AiDotNet.Diffusion;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
@@ -29,6 +31,51 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
 {
+    /// <summary>
+    /// Spatial extent of the fixture latent. A latent U-Net has four resolution levels (three
+    /// stride-2 downsamples), and 16 is the smallest square that traverses every one of them
+    /// while keeping each skip merge on an even resolution.
+    /// </summary>
+    private const int LatentFixtureSpatialSize = 16;
+
+    /// <summary>Probe result per concrete fixture type; deriving it constructs a model.</summary>
+    private static readonly ConcurrentDictionary<Type, int[]> DerivedLatentShapes = new ConcurrentDictionary<Type, int[]>();
+
+    /// <summary>
+    /// A latent fixture shaped from the model's own <c>LatentChannels</c>.
+    /// </summary>
+    /// <remarks>
+    /// These models denoise a LATENT, not an image, so a fixture must be latent-shaped. Several of
+    /// them also declare <c>ModelDomain.Vision</c>, and a generated fixture that takes the generic
+    /// vision shape hands a [3, 128, 128] RGB image to a latent-space denoiser - 64x the spatial
+    /// elements of the real pipeline, which runs the image through the U-Net at full resolution
+    /// instead of at image / VAE.DownsampleFactor. That is what made SmartEdit's
+    /// <c>DenoisingProgress_Monotonic</c> exceed its 120-second budget.
+    /// <para>
+    /// The depth is read from the model rather than restated here so it stays correct for a model
+    /// whose <c>LatentChannels</c> is a field the scaffold generator cannot resolve, and for any
+    /// latent model added later. A fixture that pins its own shape still wins: this is only the
+    /// family default.
+    /// </para>
+    /// </remarks>
+    protected override int[] InputShape => DerivedLatentShape;
+
+    /// <inheritdoc cref="InputShape"/>
+    protected override int[] OutputShape => DerivedLatentShape;
+
+    private int[] DerivedLatentShape => DerivedLatentShapes.GetOrAdd(GetType(), _ => ProbeLatentShape());
+
+    private int[] ProbeLatentShape()
+    {
+        using var probe = CreateModel();
+        if (probe is LatentDiffusionModelBase<double> latent)
+        {
+            return new[] { latent.LatentChannels, LatentFixtureSpatialSize, LatentFixtureSpatialSize };
+        }
+
+        return base.InputShape;
+    }
+
     // =====================================================
     // LATENT DIFFUSION INVARIANT: Denoising Progress Monotonic
     // More denoising steps (less noise in input) should produce

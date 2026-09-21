@@ -13181,6 +13181,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MemorizationTaskAbsoluteLossFloor => 1.0;");
             sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
         }
+        else if (family == TestFamily.LatentDiffusion)
+        {
+            // Emit no shape override: LatentDiffusionTestBase derives { LatentChannels, 16, 16 }
+            // from the model itself.
+            //
+            // A latent diffusion model denoises a LATENT. Most of these classes also declare
+            // ModelDomain.Vision (SmartEdit and EmuEdit edit images) and several declare
+            // ModelDomain.Video, so without this branch they fall through to the generic vision or
+            // temporal-video routing below and are handed a raw [3, 128, 128] RGB frame. That runs
+            // the denoiser at full image resolution instead of at image / VAE.DownsampleFactor --
+            // 64x the spatial elements of the real pipeline -- which is why SmartEdit's
+            // DenoisingProgress_Monotonic (2 x DefaultInferenceSteps U-Net forwards in fp64)
+            // exceeded its 120-second budget even after its geometry was bounded.
+            //
+            // Deriving the depth in the test base rather than writing a literal here keeps it
+            // correct for UniVSTModel, whose LatentChannels is a field this generator cannot read,
+            // and for any latent model added later. A per-class shape for a latent model must be
+            // placed ABOVE this branch; UniVSTModel and DiffusionAutoMLModel already are.
+            sb.AppendLine("    // InputShape/OutputShape come from LatentDiffusionTestBase:");
+            sb.AppendLine("    // { LatentChannels, 16, 16 }, derived from this model's own latent depth.");
+        }
         else if (isTemporalVideoModel)
         {
             // Temporal video: [frames, channels, height, width]. Dims must
