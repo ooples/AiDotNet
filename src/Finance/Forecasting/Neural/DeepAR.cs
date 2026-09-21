@@ -137,12 +137,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     [Scratch]
     private Tensor<T>? _lastSigma;
 
-    /// <summary>
-    /// Instance normalization scale for denormalization.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _scaleStd;
-
     #endregion
 
     #region Shared Fields
@@ -292,7 +286,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         _dropout = options.DropoutRate;
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
-        _useScaling = true;
+        _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
         _usePaperLikelihood = lossFunction is null;
 
         // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
@@ -357,7 +351,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         _dropout = options.DropoutRate;
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
-        _useScaling = true;
+        _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
         _usePaperLikelihood = lossFunction is null;
 
         // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
@@ -589,13 +583,11 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         // returns Forward(input)). DeepAR (Salinas et al. 2020): the point
         // forecast is the predicted mean.
         //
-        // The previous ApplyScaling → base.Forecast → ReverseScaling round-trip
-        // is intentionally NOT used on the point-forecast path: it mutated the
-        // per-instance _scaleStd state, so a model and its clone diverged on the
-        // SAME input (Clone_ShouldProduceIdenticalOutput: original=0 vs
-        // clone=0.16), and it was applied on inference but not on training — an
-        // inconsistency. The mean here is fully deterministic and depends only on
-        // the (cloned-faithfully) layer weights.
+        // Forward itself applies the paper's section 3.3 scale, recomputed from the input on every
+        // call, so the forecast and training paths rescale identically. An earlier round-trip kept
+        // the factor in a mutable field instead, and a model and its clone then disagreed on the
+        // SAME input (Clone_ShouldProduceIdenticalOutput: original=0 vs clone=0.16) while training
+        // saw no rescaling at all. The mean here depends only on the cloned-faithfully weights.
         var mean = Forward(historicalData);
 
         // Probabilistic forecast: sample the requested quantiles from the
@@ -703,7 +695,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        return ApplyScaling(input);
+        return DivideBySeriesScale(input, ComputeSeriesScale(input));
     }
 
     /// <summary>
@@ -747,7 +739,13 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var current = input;
+        // Paper section 3.3: divide the series by its own scale before the trunk, and multiply the
+        // likelihood parameters by that same scale on the way out, so a series' magnitude never
+        // reaches the network. The factor is recomputed from the input on every call and stored
+        // nowhere, which is what lets a model and its clone agree on the same input - the earlier
+        // round-trip kept it in a mutable _scaleStd field and they diverged.
+        var scale = ComputeSeriesScale(input);
+        var current = DivideBySeriesScale(input, scale);
 
         // Recurrent trunk, front to back (paper section 3.1: h_{i,t} = RNN(h_{i,t-1}, z_{i,t-1}, x_{i,t})).
         foreach (var layer in _trunkLayers)
@@ -767,13 +765,121 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         if (_sigmaProjection is not null)
         {
             sigma = _sigmaProjection.Forward(current);
-            // Store sigma for use in SampleQuantiles
-            _lastSigma = sigma;
+            // Both parameters are scaled: mu is a value in the series' units and sigma a spread in
+            // the same units, so both carry the factor back (paper section 3.3).
+            _lastSigma = MultiplyBySeriesScale(sigma, scale);
         }
 
         // Combine mu and sigma into output
         // For simplicity, return mu as point forecast; sigma used in sampling
-        return mu;
+        return MultiplyBySeriesScale(mu, scale);
+    }
+
+    /// <summary>
+    /// Computes one scale factor per series in the batch from the conditioning range.
+    /// </summary>
+    /// <param name="input">Conditioning range, whose leading axis indexes the series.</param>
+    /// <returns>One factor per batch element, or an empty array when scaling is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// DeepAR is a univariate model - one series per batch element - so the paper's nu_i is a
+    /// single number per series, not one per feature column. Keeping it that way also makes the
+    /// factor unambiguous to apply to an output whose shape differs from the input's.
+    /// </para>
+    /// <para>
+    /// A factor at or below zero would flip the sign of the whole series, so a series whose mean
+    /// drives nu non-positive is left unscaled rather than inverted. The paper's definition
+    /// assumes non-negative data and does not address the case.
+    /// </para>
+    /// </remarks>
+    private T[] ComputeSeriesScale(Tensor<T> input)
+    {
+        var handling = _options.ScaleHandling;
+        if (handling == DeepARScaleHandling.None || input.Length == 0)
+        {
+            return Array.Empty<T>();
+        }
+
+        int series = input.Shape[0];
+        int stride = input.Length / Math.Max(1, series);
+        if (stride == 0)
+        {
+            return Array.Empty<T>();
+        }
+
+        var scales = new T[series];
+        var minimum = NumOps.FromDouble(1e-5);
+        for (int s = 0; s < series; s++)
+        {
+            var total = NumOps.Zero;
+            for (int i = 0; i < stride; i++)
+            {
+                var value = input[(s * stride) + i];
+                total = NumOps.Add(
+                    total, handling == DeepARScaleHandling.MeanAbsolute ? NumOps.Abs(value) : value);
+            }
+
+            var mean = NumOps.Divide(total, NumOps.FromDouble(stride));
+            var scale = handling == DeepARScaleHandling.PaperMean
+                ? NumOps.Add(NumOps.One, mean)
+                : mean;
+
+            scales[s] = NumOps.LessThan(scale, minimum) ? NumOps.One : scale;
+        }
+
+        return scales;
+    }
+
+    /// <summary>Divides each series in <paramref name="tensor"/> by its own scale factor.</summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <returns>The rescaled tensor, or the original when scaling is disabled.</returns>
+    private Tensor<T> DivideBySeriesScale(Tensor<T> tensor, T[] scales)
+        => ApplySeriesScale(tensor, scales, multiply: false);
+
+    /// <summary>Multiplies each series in <paramref name="tensor"/> by its own scale factor.</summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <returns>The rescaled tensor, or the original when scaling is disabled.</returns>
+    private Tensor<T> MultiplyBySeriesScale(Tensor<T> tensor, T[] scales)
+        => ApplySeriesScale(tensor, scales, multiply: true);
+
+    /// <summary>
+    /// Broadcasts the per-series factors to <paramref name="tensor"/>'s shape and applies them
+    /// through the engine, so the operation stays on the autodiff tape.
+    /// </summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <param name="multiply">True to multiply, false to divide.</param>
+    /// <returns>The rescaled tensor, or the original when there is nothing to apply.</returns>
+    /// <remarks>
+    /// <para>
+    /// The factors are constants with respect to the parameters, so building the broadcast tensor
+    /// by hand costs nothing; what matters is that the division and multiplication themselves go
+    /// through Engine, because writing the result element by element would hand the tape a
+    /// constant and the trunk would stop receiving gradient.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ApplySeriesScale(Tensor<T> tensor, T[] scales, bool multiply)
+    {
+        if (scales.Length == 0 || tensor.Length == 0 || tensor.Shape[0] != scales.Length)
+        {
+            return tensor;
+        }
+
+        int stride = tensor.Length / scales.Length;
+        var broadcast = new Tensor<T>(tensor.Shape.ToArray());
+        for (int s = 0; s < scales.Length; s++)
+        {
+            for (int i = 0; i < stride; i++)
+            {
+                broadcast[(s * stride) + i] = scales[s];
+            }
+        }
+
+        return multiply
+            ? Engine.TensorMultiply(tensor, broadcast)
+            : Engine.TensorDivide(tensor, broadcast);
     }
 
     /// <summary>
@@ -781,7 +887,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// </summary>
     /// <remarks>
     /// The base <c>ForwardNativeForTraining</c> routes through <see cref="Forecast"/>, whose
-    /// <c>ApplyScaling</c> / sampling steps build new tensors by manual indexing — that detaches
+    /// sampling step builds new tensors by manual indexing — that detaches
     /// the autodiff graph, so the gradient tape saw a constant and no weight gradients ever flowed
     /// (params never changed, loss never moved). Training instead runs the differentiable layer
     /// stack straight to the distribution mean head (<see cref="Forward"/>): per DeepAR (Salinas
@@ -953,7 +1059,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// </remarks>
     protected override void ValidateInputShape(Tensor<T> input)
     {
-        // Currently only rank-3 is properly supported by ApplyScaling, ReverseScaling, and ShiftInputWithPredictions
+        // Currently only rank-3 is properly supported by ShiftInputWithPredictions
         // TODO: Add rank-2 support to helper methods if unbatched input is needed
         if (input.Rank != 3)
             throw new ArgumentException("Input tensor must be 3D [batch_size, context_length, num_features].", nameof(input));
@@ -971,103 +1077,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
 
     #region Model-Specific Processing
 
-    /// <summary>
-    /// Applies scaling by dividing by mean absolute value.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Scaled tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Scaling helps DeepAR handle time series with different
-    /// magnitudes. Each series is divided by its mean absolute value, bringing
-    /// everything to a similar scale. This makes training more stable.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyScaling(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
-
-        // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
-        _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-        var scaled = new Tensor<T>(input._shape);
-        T epsilon = NumOps.FromDouble(1e-5);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                // Compute mean absolute value
-                T sumAbs = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < input.Length)
-                        sumAbs = NumOps.Add(sumAbs, NumOps.Abs(input.Data.Span[idx]));
-                }
-                T scale = NumOps.Divide(sumAbs, NumOps.FromDouble(seqLen));
-                scale = NumOps.Add(scale, epsilon); // Avoid division by zero
-
-                // Store scale for reverse
-                int scaleIdx = b * features + f;
-                if (scaleIdx < _scaleStd.Length)
-                    _scaleStd.Data.Span[scaleIdx] = scale;
-
-                // Apply scaling
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < input.Length && idx < scaled.Length)
-                        scaled.Data.Span[idx] = NumOps.Divide(input.Data.Span[idx], scale);
-                }
-            }
-        }
-
-        return scaled;
-    }
-
-    /// <summary>
-    /// Reverses the scaling applied during preprocessing.
-    /// </summary>
-    /// <param name="output">Scaled output tensor.</param>
-    /// <returns>Unscaled tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> After making predictions on scaled data, we need to
-    /// multiply by the original scale to get predictions in the original units.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ReverseScaling(Tensor<T> output)
-    {
-        if (_scaleStd is null)
-            return output;
-
-        int batchSize = output.Shape[0];
-        int seqLen = output.Shape.Length > 1 ? output.Shape[1] : 1;
-        int features = output.Shape.Length > 2 ? output.Shape[2] : 1;
-
-        var unscaled = new Tensor<T>(output._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                int scaleIdx = b * features + f;
-                T scale = scaleIdx < _scaleStd.Length ? _scaleStd.Data.Span[scaleIdx] : NumOps.One;
-
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < output.Length && idx < unscaled.Length)
-                        unscaled.Data.Span[idx] = NumOps.Multiply(output.Data.Span[idx], scale);
-                }
-            }
-        }
-
-        return unscaled;
-    }
 
     /// <summary>
     /// Samples quantiles from the forecast distribution.
@@ -1109,16 +1118,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
                     T sigma;
                     if (_lastSigma is not null && muIdx < _lastSigma.Length)
                     {
+                        // Forward already multiplied sigma by the series scale (paper section 3.3),
+                        // so it is in the same units as mu and must not be rescaled again here.
                         sigma = _lastSigma.Data.Span[muIdx];
-                        // If scaling was applied, unscale sigma to match unscaled mu
-                        if (_useScaling && _scaleStd is not null)
-                        {
-                            int scaleIdx = b * features + f;
-                            if (scaleIdx < _scaleStd.Length)
-                            {
-                                sigma = NumOps.Multiply(sigma, _scaleStd.Data.Span[scaleIdx]);
-                            }
-                        }
                     }
                     else
                     {
