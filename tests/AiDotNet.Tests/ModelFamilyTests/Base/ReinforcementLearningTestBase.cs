@@ -29,6 +29,50 @@ public abstract class ReinforcementLearningTestBase<T>
 
     protected abstract IFullModel<T, Vector<T>, Vector<T>> CreateModel();
 
+    /// <summary>Seed used to make repeated <see cref="CreateModel"/> calls produce the same agent.</summary>
+    private const int FixedInitialisationSeed = 1337;
+
+    /// <summary>
+    /// How far along the A-B axis swapping the reward must move the greedy action, expressed as a
+    /// fraction of the distance between the two probe actions (which is exactly 1 by the
+    /// normalisation of the projection).
+    /// </summary>
+    /// <remarks>
+    /// A discrete agent whose greedy action is one-hot scores exactly 1.0 here and a continuous one
+    /// that saturates at its clamp scores several times that, so a quarter of the probe separation
+    /// is a floor the reward signal clears comfortably, while a policy that is indifferent to the
+    /// reward scores 0 because the two runs it is measured over differ in nothing else.
+    /// </remarks>
+    private const double MinimumRewardSeparation = 0.25;
+
+    /// <summary>
+    /// Builds the fixture's model inside a fixed deterministic-initialisation scope, so that two
+    /// calls produce the same agent.
+    /// </summary>
+    /// <remarks>
+    /// The generated fixtures construct their agent with no seed, so both its weight initialisation
+    /// and its exploration/replay stream came from process entropy and every call produced a
+    /// different agent. <see cref="Policy_ShouldFollowTheReward"/> compares two training runs that
+    /// must differ ONLY in which action was paid, so an unseeded agent turned that comparison into a
+    /// draw from two unrelated policies rather than a measurement of the reward's effect.
+    /// </remarks>
+    private IFullModel<T, Vector<T>, Vector<T>> CreateModelWithFixedInitialisation()
+    {
+        int? previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        var previousScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        try
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = FixedInitialisationSeed;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(FixedInitialisationSeed);
+            return CreateModel();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(previousScope);
+        }
+    }
+
     /// <summary>Fallback state width, used only for an agent that does not report its own.</summary>
     protected virtual int StateDim => 4;
 
@@ -519,8 +563,8 @@ public abstract class ReinforcementLearningTestBase<T>
         // DIRECTIONAL, not "the two runs differ". Any two training runs differ by initialisation and
         // sampling noise, so a magnitude threshold is nearly vacuous — it passes for a policy that
         // ignores the reward entirely. The real question is whether the policy moved TOWARDS the
-        // action that was paid: the run rewarding A must end up on A's side of the two probe
-        // actions, and the run rewarding B on B's side.
+        // action that was paid, which is why the two runs below are built to differ in nothing but
+        // that and are compared by SIGNED displacement rather than by how far apart they landed.
         //
         // MEASURED ALONG THE AXIS THAT SEPARATES THE TWO ACTIONS, not as a distance in the full
         // action space. A and B differ in some coordinates and are near-identical in the rest, so
@@ -529,15 +573,13 @@ public abstract class ReinforcementLearningTestBase<T>
         // free to drift wherever it likes. A max-abs distance over EVERY coordinate is dominated by
         // exactly that free drift. Measured on MarketMakingAgent, the trained policy saturates at
         // its own +/-MaxPositionSize clamp about 1.5 away from both probe actions in the coordinates
-        // neither of them distinguishes -- while landing on precisely the correct side of the
-        // midpoint along the one coordinate that does. Six runs out of six were correct along the
-        // axis and decided by coin-flip without it, which is what the intermittent failures were.
+        // neither of them distinguishes -- while separating the two runs cleanly along the one
+        // coordinate that does.
         //
-        // Projecting first does not relax the invariant. A policy that ignores the reward still
-        // lands on either side of the midpoint at chance, exactly as before; what changes is that
-        // the answer is no longer decided by movement that carries no signal. For a discrete agent
-        // the axis is e_A - e_B and the projection is just "how much more probability mass A has
-        // than B", which is the same question the distance form was asking.
+        // Projecting first does not relax the invariant: it removes movement that carries no signal
+        // and leaves the coordinate that does. For a discrete agent the axis is e_A - e_B and the
+        // projection is just "how much more probability mass A has than B", which is the same
+        // question the distance form was asking.
         var axis = new double[Math.Min(actionA!.Length, actionB!.Length)];
         double axisNormSquared = 0.0;
         for (int i = 0; i < axis.Length; i++)
@@ -558,16 +600,33 @@ public abstract class ReinforcementLearningTestBase<T>
             return dot / axisNormSquared;
         }
 
-        double midpoint = (Along(actionA) + Along(actionB)) / 2.0;
-        double towardsA = midpoint - Along(favouringA!);
-        double towardsB = Along(favouringB!) - midpoint;
+        // DIFFERENTIAL, not "each run on its own side of the probe midpoint". The midpoint of the two
+        // probe actions is an arbitrary point in action space: the reward used here pays +1 for one
+        // action and -1 for the other at a single state, which fixes the policy's PREFERENCE between
+        // them and says nothing about where along the axis the greedy action should end up. A trained
+        // policy leaves the probe neighbourhood entirely -- MarketMakingAgent saturates at its own
+        // +/-MaxPositionSize clamp, several axis units past both probes -- so both runs carry a large
+        // common-mode offset from the midpoint, and the absolute form failed whenever that shared
+        // offset exceeded the half-unit window. Measured on master over 40 runs of the fixture, the
+        // 3 failures separated the two runs by 6.0, 7.5 and 7.8 axis units in the CORRECT order every
+        // time; the only thing that failed was the offset they shared (+4.9, -4.3, -5.0).
+        //
+        // Swapping which action is paid is the ONLY difference between the two runs -- they share a
+        // state, a transition stream, a step budget and, through CreateModelWithFixedInitialisation,
+        // an initialisation -- so the difference between their outcomes is the reward's effect with
+        // that shared drift cancelled. This does not relax the invariant, it sharpens it: a policy
+        // that never sees the value signal has no input that differs between the two runs, so it
+        // produces the SAME greedy action twice and the separation collapses to zero, where the
+        // absolute form let such a policy through whenever its drift happened to straddle the
+        // midpoint.
+        double separation = Along(favouringA!) - Along(favouringB!);
 
-        Assert.True(towardsA < 0 && towardsB < 0,
-            "The policy did not move towards whichever action was rewarded. Along the A-B axis, "
-            + $"rewarding A left the greedy action {(towardsA < 0 ? "on" : "off")} A's side of the "
-            + $"midpoint (margin {-towardsA:E3}), and rewarding B left it {(towardsB < 0 ? "on" : "off")} "
-            + $"B's side (margin {-towardsB:E3}); both margins must be positive. Reached after "
-            + $"{stepsA} and {stepsB} training steps.\n\n"
+        Assert.True(separation >= MinimumRewardSeparation,
+            "The policy did not move towards whichever action was rewarded. Along the A-B axis -- on "
+            + "which the two probe actions are exactly 1 apart -- rewarding A instead of B moved the "
+            + $"greedy action by {separation:E3}, where at least {MinimumRewardSeparation:E3} in that "
+            + "direction is required. A negative value means the policy moved towards the action it "
+            + $"was punished for. Reached after {stepsA} and {stepsB} training steps.\n\n"
             + "A policy can fail this while passing every parameter-movement invariant in the suite: "
             + "SAC's actor keeps moving on its entropy term alone when min(Q1,Q2) is detached from "
             + "the tape, so its weights change every step without ever following the reward. That is "
@@ -580,7 +639,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// </summary>
     private (Vector<T>?, Vector<T>?) TwoDistinctActions(Vector<T> state)
     {
-        using var model = CreateModel();
+        using var model = CreateModelWithFixedInitialisation();
         if (model is not IRLAgent<T> agent) return (null, null);
 
         var first = agent.SelectAction(state, explore: false);
@@ -684,7 +743,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// </summary>
     private (Vector<T>?, int) PolicyAfterRewarding(Vector<T> state, Vector<T> rewarded, Vector<T> punished)
     {
-        using var model = CreateModel();
+        using var model = CreateModelWithFixedInitialisation();
         if (model is not IRLAgent<T> agent) return (null, 0);
 
         // Open the agent's own warmup/batch gate first, or the budget below measures an agent that
