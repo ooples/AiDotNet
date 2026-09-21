@@ -1057,28 +1057,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 new WarmupIterationOverride(deterministicMemorizationLoss: true)
             },
 
-            // TSDiff and CCDM are denoising-diffusion forecasters. Following Ho et al. 2020
-            // Algorithm 1, each Train call draws a diffusion step t uniformly and a fresh epsilon,
-            // so GetLastLoss() is the epsilon-MSE at ONE randomly chosen noise level: the endpoint
-            // comparison is between two different objectives, not two points on one trajectory.
-            // That is a stronger form of the stochastic-forward case NaturalSpeech and VMamba
-            // document - it is structural, not a dropout mask - so the probe is judged on the
-            // deterministic evaluation loss. Both models declare their objective through
-            // ITrainingObjectiveProvider, so that measurement is L_simple over a FIXED (timestep,
+            // TSDiff, CCDM and TimeDiff are denoising-diffusion forecasters. Following Ho et al.
+            // 2020 Algorithm 1, each Train call draws a diffusion step t uniformly and a fresh
+            // epsilon, so GetLastLoss() is the objective at ONE randomly chosen noise level: the
+            // endpoint comparison is between two different objectives, not two points on one
+            // trajectory. That is a stronger form of the stochastic-forward case NaturalSpeech and
+            // VMamba document - it is structural, not a dropout mask - so the probe is judged on
+            // the deterministic evaluation loss. All three declare their objective through
+            // ITrainingObjectiveProvider, so that measurement is taken over a FIXED (timestep,
             // noise) quadrature - the quantity the optimizer descends - and not the sampler's
-            // median forecast, which divides by sqrt(alpha_bar_T) and therefore magnifies the bias
-            // a partially trained noise predictor still carries. The strict-decrease threshold is
-            // unchanged. CSDI trains the same way and is a candidate for the same entry if its
-            // stochastic probe ever reverses.
+            // forecast, whose reverse chain magnifies the bias a partially trained denoiser still
+            // carries. The strict-decrease threshold is unchanged. CSDI trains the same way and is
+            // a candidate for the same entry if its stochastic probe ever reverses.
             // The 200-step count is measured under that objective, not assumed: at the emitted 20
             // steps CCDM reads 0.996003 -> 1.006925, which is Adam's warm-up rather than a
-            // training defect, and at 200 both models pass 3 runs of 3.
+            // training defect, and at 200 the models pass 3 runs of 3. TimeDiff predicts x_0
+            // rather than epsilon (Shen and Kwok 2023 Equation 19), which changes what is
+            // measured but not that it has to be the trained objective.
             {
                 "TSDiff",
                 new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
             },
             {
                 "CCDM",
+                new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
+            },
+            {
+                "TimeDiff",
                 new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
             },
         };
