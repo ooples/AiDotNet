@@ -1187,6 +1187,43 @@ function Test-TestFilter {
     }
 }
 
+function Skip-CSharpHoleToken {
+    <#
+        Advances one token inside an interpolation hole, where the text is CODE. Returns the new
+        index and adjusts hole depth through the reference.
+
+        Comments count here: `$"{/* } " */ 0}"` is valid C#, and treating the brace and quote
+        inside that comment as code ends the literal early, which surfaces as 'unbalanced braces'
+        and escalates selection to the full matrix. Nested literals recurse so their own quotes
+        and braces cannot be mistaken for the enclosing literal's.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Text,
+        [Parameter(Mandatory)] [int] $Index,
+        [Parameter(Mandatory)] [ref] $HoleDepth
+    )
+
+    $n = $Text.Length
+    $i = $Index
+    $ch = $Text[$i]
+
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+        $e = $Text.IndexOf("`n", $i)
+        return $(if ($e -lt 0) { $n } else { $e })
+    }
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+        $e = $Text.IndexOf('*/', $i + 2)
+        return $(if ($e -lt 0) { $n } else { $e + 2 })
+    }
+    if ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+        $inner = Get-CSharpLiteralEnd -Text $Text -Start $i
+        if ($inner -gt $i) { return $inner }
+    }
+    if ($ch -eq '{') { $HoleDepth.Value++ }
+    elseif ($ch -eq '}') { $HoleDepth.Value-- }
+    return $i + 1
+}
+
 function Get-CSharpLiteralEnd {
     <#
         Returns the index one past the end of the C# string or character literal starting at
@@ -1216,38 +1253,53 @@ function Get-CSharpLiteralEnd {
         return $n
     }
 
-    $interpolated = $false
+    $dollars = 0
     $verbatim = $false
     while ($i -lt $n -and ($Text[$i] -eq '$' -or $Text[$i] -eq '@')) {
-        if ($Text[$i] -eq '$') { $interpolated = $true } else { $verbatim = $true }
+        if ($Text[$i] -eq '$') { $dollars++ } else { $verbatim = $true }
         $i++
     }
+    $interpolated = $dollars -gt 0
     if ($i -ge $n -or $Text[$i] -ne '"') { return $Start }
 
     $quotes = 0
     while ($i + $quotes -lt $n -and $Text[$i + $quotes] -eq '"') { $quotes++ }
+    $holeDepth = 0
     if ($quotes -ge 3) {
-        $fence = [string]::new('"', $quotes)
-        $close = $Text.IndexOf($fence, $i + $quotes)
-        if ($close -lt 0) { return $n }
-        return $close + $quotes
+        # Raw literal. Scanning rather than IndexOf on the fence: in a raw INTERPOLATED literal a
+        # hole is code and may itself contain a fence, so `$"""{ """ }"""` would otherwise end at
+        # the inner one. C# opens a hole with as many braces as there are leading '$'.
+        $i += $quotes
+        while ($i -lt $n) {
+            $ch = $Text[$i]
+            if ($holeDepth -gt 0) {
+                $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
+                continue
+            }
+            if ($interpolated -and $ch -eq '{') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '{') { $run++ }
+                if ($run -ge $dollars) { $holeDepth++; $i += $dollars } else { $i += $run }
+                continue
+            }
+            if ($ch -eq '"') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '"') { $run++ }
+                if ($run -ge $quotes) { return $i + $quotes }
+                $i += $run
+                continue
+            }
+            $i++
+        }
+        return $n
     }
 
     $i++
-    $holeDepth = 0
     while ($i -lt $n) {
         $ch = $Text[$i]
 
         if ($holeDepth -gt 0) {
-            # Inside an interpolation hole the text is code: recurse through nested literals so
-            # their quotes and braces cannot be mistaken for the outer literal's.
-            if ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
-                $inner = Get-CSharpLiteralEnd -Text $Text -Start $i
-                if ($inner -gt $i) { $i = $inner; continue }
-            }
-            if ($ch -eq '{') { $holeDepth++ }
-            elseif ($ch -eq '}') { $holeDepth-- }
-            $i++
+            $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
             continue
         }
 
@@ -2240,6 +2292,35 @@ file class Private { }
 '@
     $shape = Get-CSharpTestShape -Text $source
     Assert-True ($null -eq $shape.ParseError) "valid C# was reported unparseable: $($shape.ParseError)"
+
+    # An interpolation hole is CODE, so it may hold a comment or a nested literal whose braces and
+    # quotes are not the enclosing literal's. Getting either wrong reports 'unbalanced braces',
+    # which fails Get-TestFileRoutes closed and escalates to the full 164-shard matrix. Neither
+    # form occurs in the repo today (0 of 11,928 sources), so these guard the scanner, not a
+    # current failure - the nested-quote form did occur, and did exactly that.
+    $q = [string][char]34
+    $holeCases = @(
+        @{ Name = 'nested string in a hole'
+           Body = 'var s = $"a{string.Join(", ", xs)}b";' },
+        @{ Name = 'block comment in a hole'
+           Body = 'var s = $"a{/* } ' + $q + ' */ 0}b";' },
+        @{ Name = 'line comment in a hole'
+           Body = "var s = `$`"a{ 0 // } $q`n }b`";" },
+        @{ Name = 'raw interpolated hole containing a fence'
+           Body = 'var s = $' + ($q * 3) + 'a{ ' + ($q * 3) + 'x' + ($q * 3) + ' }b' + ($q * 3) + ';' },
+        @{ Name = 'doubled braces are literal, not a hole'
+           Body = 'var s = $"{{ not a hole }}";' }
+    )
+    foreach ($case in $holeCases) {
+        $text = "namespace N { public class C { public void M() { $($case.Body) } } }"
+        $masked = ConvertTo-CodeOnlyCSharp -Text $text
+        $open = ([regex]::Matches($masked, '\{')).Count
+        $close = ([regex]::Matches($masked, '\}')).Count
+        Assert-True ($open -eq $close) `
+            "masking left braces unbalanced ($open open, $close close) for: $($case.Name)"
+        Assert-True ($null -eq (Get-CSharpTestShape -Text $text).ParseError) `
+            "a literal was misparsed and reported unbalanced braces for: $($case.Name)"
+    }
     $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
     $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
         'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
