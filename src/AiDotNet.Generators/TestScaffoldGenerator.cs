@@ -110,6 +110,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "NVLM", "Ovis", "VILA", "VILAU", "PathVLM", "RadFM",
         "QVQ72B", "SkyworkR1V", "SkyworkR1V2",
         "GeoChat", "RSGPT", "SkyEyeGPT",
+        // SmartEdit pairs a 7B MLLM with the full Stable Diffusion U-Net (320 base channels,
+        // {1,2,4,4}), so its fixture built ~860M fp64 weights and both LatentDiffusion invariants
+        // hit the 120-second watchdog before the first denoising step returned.
+        "SmartEdit",
     };
 
     // Formerly a list of diffusion variants with non-standard UNet input
@@ -3239,7 +3243,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Fail closed: a foundation-scale VLM whose options type has no generated test-scale bound
                 // would otherwise get a fixture that builds it at paper scale (~12 GB of fp64 weights).
                 if (FoundationScaleVisionLanguageModels.Contains(model.ClassName)
-                    && model.ScaledDimensionOptionsTypeName is null)
+                    && model.BoundedOptionsTypeName is null)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
@@ -3837,6 +3841,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             && HasPublicParameterlessConstructor(declaredOptionsType)
                 ? RenderClosedOptionsType(declaredOptionsType)
                 : null;
+        string? boundedOptionsTypeName = declaredOptionsType is not null
+            && HasDeclaredWidthProperty(declaredOptionsType)
+            && HasPublicParameterlessConstructor(declaredOptionsType)
+                ? RenderClosedOptionsType(declaredOptionsType)
+                : null;
         string? constrainedOptionsTypeName = declaredOptionsType is not null
             && HasDeclaredDimensionConstraint(declaredOptionsType)
                 ? RenderClosedOptionsType(declaredOptionsType)
@@ -3885,6 +3894,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
             ScaledDimensionOptionsTypeName = scaledDimensionOptionsTypeName,
+            BoundedOptionsTypeName = boundedOptionsTypeName,
             NativeJointEditingOptionsTypeName = declaredOptionsType is not null && HasNativeJointEditingSurface(modelClass)
                 ? RenderClosedOptionsType(declaredOptionsType) : null,
             ScaledDimensionProperties = scaledDimensionProperties,
@@ -12613,7 +12623,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
                     // Foundation-scale VLMs: generated test-scale options (see FoundationScaleVisionLanguageModels).
                     _ when FoundationScaleVisionLanguageModels.Contains(model.ClassName)
-                           && model.ScaledDimensionOptionsTypeName is { } boundedOptions =>
+                           && model.BoundedOptionsTypeName is { } boundedOptions =>
                         $", options: ({boundedOptions})global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({boundedOptions}))",
                     _ => ""
                 };
@@ -18898,6 +18908,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return properties;
     }
 
+    /// <summary>
+    /// Whether the options type declares a width the test-scale generator will bound.
+    /// </summary>
+    /// <remarks>
+    /// TestScaleOptionsGenerator keys on "*Options"/"*Configuration" types and divides every
+    /// settable int above its divisor, so one declared width is sufficient evidence that
+    /// <c>CreateBoundedOptions</c> returns a scaled instance rather than null. The repo spells a
+    /// width both ways - "EmbeddingDimension" and the shorter "VisionDim"/"DecoderDim" on
+    /// GenerativeVLMOptions - and accepting only the long form made the foundation-scale gate reject
+    /// every model whose options derive from it, so GeoChat, RSGPT, SkyEyeGPT and SmartEdit had no
+    /// fixture generated at all. Neither suffix appears on the scale generator's semantically-fixed
+    /// deny list, so a match is always a real knob.
+    /// </remarks>
+    private static bool HasDeclaredWidthProperty(INamedTypeSymbol optionsType)
+    {
+        for (var walk = optionsType; walk is not null; walk = walk.BaseType)
+        {
+            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (property.Type.SpecialType != SpecialType.System_Int32) continue;
+                if (property.DeclaredAccessibility != Accessibility.Public) continue;
+                if (property.SetMethod?.DeclaredAccessibility != Accessibility.Public) continue;
+                if (property.Name.EndsWith("Dimension", System.StringComparison.Ordinal)
+                    || property.Name.EndsWith("Dim", System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Whether generated code can construct the options type directly.</summary>
     private static bool HasPublicParameterlessConstructor(INamedTypeSymbol optionsType)
         => optionsType.InstanceConstructors.Any(constructor =>
@@ -19270,6 +19313,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Options type whose declared dimensions must be bounded by the test scaler.</summary>
         public string? ScaledDimensionOptionsTypeName { get; set; }
+
+        /// <summary>
+        /// Options type the foundation-scale fixture builds through
+        /// <c>ModelTestScale.CreateBoundedOptions</c>. Wider than
+        /// <see cref="ScaledDimensionOptionsTypeName"/> because the declared-dimension invariant is
+        /// emitted only for the long "...Dimension" spelling, while the scale generator bounds a
+        /// "...Dim" width just the same.
+        /// </summary>
+        public string? BoundedOptionsTypeName { get; set; }
 
         /// <summary>Options of a model exposing the typed native joint-edit guidance boundary.</summary>
         public string? NativeJointEditingOptionsTypeName { get; set; }
