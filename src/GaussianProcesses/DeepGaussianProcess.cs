@@ -609,12 +609,14 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
             "DeepGaussianProcess._layers.Kuu",
             () =>
             {
-                foreach (var layer in _layers)
+                ValidateRestoredLayerState();
+
+                // Only fitted layers have inducing inputs to rebuild Kuu from; an unfitted shell
+                // restores as empties and is skipped. Filtered with Where so that the condition
+                // is part of the sequence rather than hidden in the loop body.
+                foreach (var layer in _layers.Where(layer => !layer.InducingInputs.IsEmpty))
                 {
-                    if (!layer.InducingInputs.IsEmpty)
-                    {
-                        layer.ComputeKuu();
-                    }
+                    layer.ComputeKuu();
                 }
             });
     }
@@ -623,20 +625,121 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
     /// <param name="restored">The restored list, or null when nothing was stored.</param>
     /// <param name="install">Writes one matrix into one layer.</param>
     /// <remarks>
-    /// A payload shorter or longer than the current architecture leaves the surplus layers alone
-    /// rather than throwing: the count is fixed by the recorded constructor, so a mismatch means a
-    /// checkpoint from a different architecture, which the base class reports on its own terms.
+    /// <para>
+    /// A payload whose length differs from the current architecture is rejected rather than
+    /// partially applied. Restoring only the overlapping prefix leaves the model holding
+    /// constructor state in some layers and checkpoint state in others, and nothing downstream
+    /// can tell the halves apart: <c>ComputeKuu</c> rebuilds happily from whichever inducing
+    /// inputs it finds, and <c>Forward</c> then indexes <c>VariationalMean</c> using the
+    /// destination layer's dimensions — so the mixture surfaces as an index error deep inside a
+    /// matrix multiply, or as silently wrong predictions when the shapes happen to line up.
+    /// </para>
+    /// <para>
+    /// An unfitted or legacy shell is not a mismatch. A null payload, or one holding only null
+    /// and empty matrices, means there was no fitted state to store, so it is left alone.
+    /// </para>
     /// </remarks>
     private void RestoreLayerMatrices(List<Matrix<T>>? restored, Action<DGPLayer<T>, Matrix<T>> install)
     {
         if (restored is null) return;
 
-        int count = Math.Min(_layers.Count, restored.Count);
-        for (int i = 0; i < count; i++)
+        // An unfitted shell stores empties. That is the absence of state, not a disagreement
+        // about shape, so it must keep loading as it always has.
+        bool carriesFittedState = false;
+        foreach (var matrix in restored)
+        {
+            if (matrix is not null && !matrix.IsEmpty)
+            {
+                carriesFittedState = true;
+                break;
+            }
+        }
+
+        if (!carriesFittedState) return;
+
+        if (restored.Count != _layers.Count)
+        {
+            throw new InvalidOperationException(
+                $"This checkpoint holds fitted state for {restored.Count} Deep Gaussian Process "
+                + $"layer(s) but the model was constructed with {_layers.Count}. Restoring the "
+                + "overlapping prefix would leave the model holding constructor state in some "
+                + "layers and checkpoint state in others, which later surfaces as an index error "
+                + "inside Forward rather than as a load failure. Construct the model with the "
+                + "same layer configuration the checkpoint was saved from.");
+        }
+
+        for (int i = 0; i < restored.Count; i++)
         {
             if (restored[i] is not null)
             {
                 install(_layers[i], restored[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rejects restored layer state whose matrices cannot describe the same layer, before
+    /// <c>ComputeKuu</c> builds on it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// When a layer carries a partially restored or shape-incompatible triple.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// The three matrices are declared independently, so a checkpoint can disagree with itself.
+    /// Within one fitted layer the inducing-point count <c>m</c> ties them together:
+    /// <c>InducingInputs</c> is <c>[m, inputDim]</c>, <c>VariationalMean</c> is
+    /// <c>[m, OutputDim]</c>, and <c>VariationalCovCholesky</c> is <c>[m, m]</c>.
+    /// <c>ComputeKuu</c> checks none of it — it reads only <c>InducingInputs</c> — so an
+    /// inconsistent triple survives the load and fails later, somewhere that no longer mentions
+    /// deserialization.
+    /// </para>
+    /// </remarks>
+    private void ValidateRestoredLayerState()
+    {
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            bool hasInducing = !layer.InducingInputs.IsEmpty;
+            bool hasMean = !layer.VariationalMean.IsEmpty;
+            bool hasCholesky = !layer.VariationalCovCholesky.IsEmpty;
+
+            // An untouched layer is legitimate; a half-populated one is not.
+            if (!hasInducing && !hasMean && !hasCholesky) continue;
+
+            if (!hasInducing || !hasMean || !hasCholesky)
+            {
+                throw new InvalidOperationException(
+                    $"Deep Gaussian Process layer {i} was restored with only part of its fitted "
+                    + $"state (inducing inputs: {hasInducing}, variational mean: {hasMean}, "
+                    + $"covariance Cholesky: {hasCholesky}). All three are needed to describe the "
+                    + "layer, and rebuilding Kuu from an incomplete triple produces a model that "
+                    + "loads cleanly and predicts nonsense.");
+            }
+
+            int m = layer.InducingInputs.Rows;
+
+            if (layer.VariationalMean.Rows != m
+                || layer.VariationalCovCholesky.Rows != m
+                || layer.VariationalCovCholesky.Columns != m)
+            {
+                throw new InvalidOperationException(
+                    $"Deep Gaussian Process layer {i} has {m} inducing point(s) but a variational "
+                    + $"mean of {layer.VariationalMean.Rows}x{layer.VariationalMean.Columns} and "
+                    + $"a covariance Cholesky of {layer.VariationalCovCholesky.Rows}x"
+                    + $"{layer.VariationalCovCholesky.Columns}. All three are indexed by the same "
+                    + "inducing-point count, so the mean must have m rows and the Cholesky factor "
+                    + "must be m by m.");
+            }
+
+            if (layer.VariationalMean.Columns != layer.OutputDim)
+            {
+                throw new InvalidOperationException(
+                    $"Deep Gaussian Process layer {i} produces {layer.OutputDim} output(s) but "
+                    + $"its restored variational mean has {layer.VariationalMean.Columns} "
+                    + "column(s). Forward indexes the mean by the destination layer's output "
+                    + "dimension, so this mismatch would throw inside a matrix multiply rather "
+                    + "than here.");
             }
         }
     }
