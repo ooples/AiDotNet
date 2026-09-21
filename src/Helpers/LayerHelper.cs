@@ -13864,44 +13864,54 @@ public static partial class LayerHelper<T>
         if (numLstmLayers < 1)
             throw new ArgumentOutOfRangeException(nameof(numLstmLayers), "Number of LSTM layers must be at least 1.");
 
-        // Input size includes features + optional embedding for categorical covariates
-        int inputProjectionSize = numFeatures + embeddingDim;
+        // DeepAR (Salinas et al. 2020), section 3.1: the network is h_{i,t} = RNN(h_{i,t-1}, z_{i,t-1}, x_{i,t}),
+        // a plain stacked LSTM whose hidden state feeds two affine heads. The paper places NO projection and NO
+        // normalization around that stack - equation 3 reads mu(h) = w_mu^T h + b_mu, straight off the LSTM state.
+        //
+        // Two non-paper layers used to sit here and made training unstable on the memorization invariant (loss
+        // oscillating 1.68 -> 3.16 -> 1.23 -> 2.02 over 20 Adam steps at the paper's own 1e-3 learning rate):
+        //   * a ReLU Dense "input projection". The LSTM input weight matrix already IS the affine map from
+        //     [z_{t-1}, x_t] into the cell, so the extra layer only added a rectifier that zeroes half the
+        //     signal - and with it half the gradient - before the recurrence ever sees the series.
+        //   * a LayerNormalization between the stack and the heads. Normalizing h to unit scale forces the
+        //     linear mean head to carry the whole magnitude of the target, which is precisely the
+        //     ill-conditioning the paper avoids by dividing through its scale factor nu_i instead.
+        // embeddingDim stays in the signature because categorical covariates are embedded into the covariate
+        // tensor by the caller, not by a layer in this stack.
 
-        // Input projection: project combined input to LSTM input size
-        yield return new DenseLayer<T>(
-            outputSize: hiddenSize,
-            activationFunction: new ReLUActivation<T>());
-
-        // Stacked LSTM layers for autoregressive modeling
+        // Stacked LSTM layers for autoregressive modeling (paper Table 3: 3 layers of 40 nodes).
         for (int i = 0; i < numLstmLayers; i++)
         {
-            int lstmInputSize = i == 0 ? hiddenSize : hiddenSize;
-
-            // LSTM layer with explicit type disambiguation
+            // Null activations select the defaults, which are the paper's "standard LSTM cells":
+            // tanh cell/output activation with sigmoid gates.
             yield return new LSTMLayer<T>(
                 hiddenSize: hiddenSize,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: null);
 
-            // Dropout between LSTM layers (except after last layer)
+            // Dropout between LSTM layers (except after the last one).
             if (i < numLstmLayers - 1 && dropout > 0)
             {
                 yield return new DropoutLayer<T>(dropout);
             }
         }
 
-        // Layer normalization for stable training
-        yield return new LayerNormalizationLayer<T>();
-
-        // Distribution parameter layers - outputs mu and sigma for Gaussian distribution
-        // Mu (mean) projection
+        // Distribution heads (paper eq. 3): affine mean, softplus standard deviation.
+        // Mu (mean) projection - affine, no activation.
         yield return new DenseLayer<T>(
             outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : predictionLength,
             activationFunction: null);  // Linear for mean
 
-        // Sigma (std) projection - uses softplus implicitly in forward pass for positivity
+        // Sigma (std) projection - softplus for positivity, per paper eq. 3:
+        // sigma(h) = log(1 + exp(w_sigma^T h + b_sigma)).
+        //
+        // This must emit the SAME width as the mean head above. Paper eq. 3 gives one mean and one
+        // standard deviation per time step, so the two heads describe the same Gaussian and have to
+        // line up elementwise. Emitting predictionLength here instead made sigma a different shape
+        // from mu whenever architecture.OutputSize differed from the horizon, so the likelihood
+        // could not be formed at all.
         yield return new DenseLayer<T>(
-            outputSize: predictionLength,
+            outputSize: architecture.OutputSize > 0 ? architecture.OutputSize : predictionLength,
             activationFunction: new SoftPlusActivation<T>());  // Ensures positive std
     }
 
