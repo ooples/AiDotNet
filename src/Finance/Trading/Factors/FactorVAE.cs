@@ -825,6 +825,28 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
     #endregion
 
+    /// <summary>Runs the feature extractor and the prior head, returning its two halves.</summary>
+
+    private (Tensor<T> Mean, Tensor<T> LogVariance) RunPriorHead(Tensor<T> input)
+    {
+        var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
+        return SplitMeanAndLogVariance(RunSpan(features, PriorSpanStart, PriorSpanEnd));
+    }
+
+    /// <summary>
+    /// Guards an analytic that reads the paper's heads directly against a custom architecture.
+    /// </summary>
+    private void RequireFactorSpans(string member)
+    {
+        if (!HasFactorSpans)
+        {
+            throw new InvalidOperationException(
+                $"{member} reads the prior, alpha and beta heads directly, which requires the "
+                + $"default layer layout of {DecoderSpanEnd} layers; this model was built with "
+                + $"{Layers.Count}. Use the default architecture to enable the factor analytics.");
+        }
+    }
+
     #region IFactorModel Implementation
 
     /// <summary>
@@ -834,19 +856,33 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <returns>Factor representation tensor.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This passes the data through the encoder to obtain
-    /// the compact factor representation.
+    /// <b>For Beginners:</b> This reads the factors the model believes are driving the market
+    /// right now - the same values its own predictions are built on.
+    /// </para>
+    /// <para>
+    /// The factors are the mean of the prior p(z | x), which is the head <see cref="PredictCore"/>
+    /// itself decodes from. Returning the feature extractor's output instead - as this did - hands
+    /// back the hidden representation the heads read, which is hiddenDimension wide rather than
+    /// numFactors wide, and is not what a caller of a factor model means by a factor.
     /// </para>
     /// </remarks>
     public Tensor<T> ExtractFactors(Tensor<T> returns)
     {
-        var current = returns;
-        int encoderEnd = Math.Min(5, Layers.Count - 3);
-        for (int i = 0; i < encoderEnd; i++)
+        if (!HasFactorSpans)
         {
-            current = Layers[i].Forward(current);
+            // A caller-supplied architecture has no prior head to read, so the encoder prefix this
+            // method has always returned stays the best available answer.
+            var current = returns;
+            int encoderEnd = Math.Min(FeatureSpanEnd, Layers.Count - 3);
+            for (int i = 0; i < encoderEnd; i++)
+            {
+                current = Layers[i].Forward(current);
+            }
+
+            return current;
         }
-        return current;
+
+        return InInferenceMode(() => RunPriorHead(returns).Mean);
     }
 
     /// <summary>
@@ -858,10 +894,24 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <para>
     /// <b>For Beginners:</b> Factor loadings show how much each asset depends on each factor.
     /// </para>
+    /// <para>
+    /// These are the paper's beta(e) from equations 18-19: the decoder's exposure head, read off
+    /// the stock latent features and reshaped to [numAssets, numFactors]. They are conditional on
+    /// the input, so a panel carrying several observations is averaged into the single matrix this
+    /// contract returns. Returning an all-zero matrix - as this did - says every asset is immune
+    /// to every factor, which nothing downstream can tell apart from a real answer.
+    /// </para>
     /// </remarks>
     public Tensor<T> GetFactorLoadings(Tensor<T> returns)
     {
-        return new Tensor<T>(new[] { _numAssets, _numFactors });
+        RequireFactorSpans(nameof(GetFactorLoadings));
+
+        return InInferenceMode(() =>
+        {
+            var features = RunSpan(returns, FeatureSpanStart, FeatureSpanEnd);
+            var betaFlat = RunSpan(features, BetaSpanStart, BetaSpanEnd);
+            return AverageHeadOverSamples(betaFlat, new[] { _numAssets, _numFactors });
+        });
     }
 
     /// <summary>
@@ -888,10 +938,79 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <para>
     /// <b>For Beginners:</b> This tells you how factors move together, which matters for risk.
     /// </para>
+    /// <para>
+    /// The prior head emits a diagonal Gaussian per observation, so no single observation can
+    /// express how two factors co-move. The law of total covariance recovers it across the panel:
+    /// Cov(z) = E[diag(var)] + Cov(mean), the first term the average within-observation variance
+    /// and the second the spread of the means themselves. One observation therefore yields the
+    /// diagonal alone, which is the honest answer for a single point in time.
+    /// </para>
     /// </remarks>
     public Tensor<T> GetFactorCovariance(Tensor<T> returns)
     {
-        return new Tensor<T>(new[] { _numFactors, _numFactors });
+        RequireFactorSpans(nameof(GetFactorCovariance));
+
+        return InInferenceMode(() =>
+        {
+            var (mean, logVariance) = RunPriorHead(returns);
+            var variance = Engine.TensorExp(logVariance);
+            int samples = Math.Max(1, mean.Length / _numFactors);
+            var scale = NumOps.FromDouble(1.0 / samples);
+
+            var factorMean = new T[_numFactors];
+            var withinVariance = new T[_numFactors];
+            for (int k = 0; k < _numFactors; k++)
+            {
+                factorMean[k] = NumOps.Zero;
+                withinVariance[k] = NumOps.Zero;
+            }
+
+            for (int i = 0; i < samples; i++)
+            {
+                for (int k = 0; k < _numFactors; k++)
+                {
+                    factorMean[k] = NumOps.Add(factorMean[k], mean[(i * _numFactors) + k]);
+                    withinVariance[k] = NumOps.Add(
+                        withinVariance[k], variance[(i * _numFactors) + k]);
+                }
+            }
+
+            for (int k = 0; k < _numFactors; k++)
+            {
+                factorMean[k] = NumOps.Multiply(factorMean[k], scale);
+                withinVariance[k] = NumOps.Multiply(withinVariance[k], scale);
+            }
+
+            var covariance = new Tensor<T>(new[] { _numFactors, _numFactors });
+            for (int i = 0; i < samples; i++)
+            {
+                for (int j = 0; j < _numFactors; j++)
+                {
+                    var centeredJ = NumOps.Subtract(mean[(i * _numFactors) + j], factorMean[j]);
+                    for (int k = 0; k < _numFactors; k++)
+                    {
+                        var centeredK = NumOps.Subtract(mean[(i * _numFactors) + k], factorMean[k]);
+                        int cell = (j * _numFactors) + k;
+                        covariance[cell] = NumOps.Add(
+                            covariance[cell], NumOps.Multiply(centeredJ, centeredK));
+                    }
+                }
+            }
+
+            for (int j = 0; j < _numFactors; j++)
+            {
+                for (int k = 0; k < _numFactors; k++)
+                {
+                    int cell = (j * _numFactors) + k;
+                    covariance[cell] = NumOps.Multiply(covariance[cell], scale);
+                }
+
+                int diagonal = (j * _numFactors) + j;
+                covariance[diagonal] = NumOps.Add(covariance[diagonal], withinVariance[j]);
+            }
+
+            return covariance;
+        });
     }
 
     /// <summary>
@@ -904,10 +1023,26 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <para>
     /// <b>For Beginners:</b> Alpha is the portion of returns not explained by factors.
     /// </para>
+    /// <para>
+    /// Here alpha is not a regression residual to be computed against realized factor returns: the
+    /// decoder is defined as y = alpha + beta * z (equations 18-19), so alpha is already the part
+    /// of the return the factors do not explain, and it is read off the stock latent features by
+    /// its own head. <paramref name="factorReturns"/> is accepted for the
+    /// <see cref="IFactorModel{T}"/> contract but not consumed - residualizing against it would
+    /// also be ill-posed here, because this model's input is a market-feature panel rather than an
+    /// asset return panel and the two need not even share a width.
+    /// </para>
     /// </remarks>
     public Tensor<T> ComputeAlpha(Tensor<T> returns, Tensor<T> factorReturns)
     {
-        return new Tensor<T>(new[] { _numAssets });
+        RequireFactorSpans(nameof(ComputeAlpha));
+
+        return InInferenceMode(() =>
+        {
+            var features = RunSpan(returns, FeatureSpanStart, FeatureSpanEnd);
+            var alpha = RunSpan(features, AlphaSpanStart, AlphaSpanEnd);
+            return AverageHeadOverSamples(alpha, new[] { _numAssets });
+        });
     }
 
     /// <summary>

@@ -523,6 +523,113 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     #endregion
 
+    #region Analytics Helpers
+
+    /// <summary>
+    /// Runs an analytic with dropout and batch normalization in inference mode, restoring the
+    /// previous mode afterwards.
+    /// </summary>
+    /// <typeparam name="TResult">Type the analytic produces.</typeparam>
+    /// <param name="analytic">The analytic to run.</param>
+    /// <returns>Whatever the analytic returns.</returns>
+    /// <remarks>
+    /// <para>
+    /// An analytic that reports on a trained model - factor loadings, a factor covariance - has to
+    /// read the same network a caller would predict with. Left in training mode, dropout would
+    /// zero a different subset of units on every call and batch normalization would fold the
+    /// probe's own statistics into the answer, so the reported number would move between calls
+    /// without anything about the model having changed.
+    /// </para>
+    /// </remarks>
+    protected TResult InInferenceMode<TResult>(Func<TResult> analytic)
+    {
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining)
+        {
+            SetTrainingMode(false);
+        }
+
+        try
+        {
+            return analytic();
+        }
+        finally
+        {
+            if (wasTraining)
+            {
+                SetTrainingMode(true);
+            }
+        }
+    }
+
+    /// <summary>Runs the layers in <c>[start, end)</c> sequentially.</summary>
+    /// <param name="input">Tensor to feed to the first layer of the span.</param>
+    /// <param name="start">Inclusive index of the first layer.</param>
+    /// <param name="end">Exclusive index of the last layer.</param>
+    /// <returns>The output of the final layer in the span.</returns>
+    protected Tensor<T> RunLayerSpan(Tensor<T> input, int start, int end)
+    {
+        var current = input;
+        for (int i = start; i < end; i++)
+        {
+            current = Layers[i].Forward(current);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Averages a head output over every leading observation axis, reshaping one observation's
+    /// worth of values to <paramref name="perSampleShape"/>.
+    /// </summary>
+    /// <param name="head">Head output, whose trailing axis holds one observation's values.</param>
+    /// <param name="perSampleShape">Shape of a single observation's result.</param>
+    /// <returns>The averaged result, shaped as <paramref name="perSampleShape"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// A head reads off the input, so it emits one answer per observation, while a reporting
+    /// contract such as a loadings matrix asks for one answer for the whole panel. Averaging is
+    /// the reduction that keeps a linear head's meaning intact: the mean of beta over the panel
+    /// is the beta of the panel's mean exposure.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> AverageHeadOverSamples(Tensor<T> head, int[] perSampleShape)
+    {
+        int width = 1;
+        foreach (int size in perSampleShape)
+        {
+            width *= size;
+        }
+
+        int trailing = head.Shape[head.Shape.Length - 1];
+        if (trailing != width)
+        {
+            throw new InvalidOperationException(
+                $"Expected a head {width} values wide but got {trailing}; the layer layout and the "
+                + "configured output counts disagree.");
+        }
+
+        int samples = Math.Max(1, head.Length / width);
+        var averaged = new Tensor<T>(perSampleShape);
+        for (int i = 0; i < samples; i++)
+        {
+            for (int k = 0; k < width; k++)
+            {
+                averaged[k] = NumOps.Add(averaged[k], head[(i * width) + k]);
+            }
+        }
+
+        var scale = NumOps.FromDouble(1.0 / samples);
+        for (int k = 0; k < width; k++)
+        {
+            averaged[k] = NumOps.Multiply(averaged[k], scale);
+        }
+
+        return averaged;
+    }
+
+    #endregion
+
     #region ONNX Inference
 
     /// <summary>
