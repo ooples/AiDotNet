@@ -3846,6 +3846,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             && HasPublicParameterlessConstructor(declaredOptionsType)
                 ? RenderClosedOptionsType(declaredOptionsType)
                 : null;
+        string? boundedOptionsParameterName = boundedOptionsTypeName is not null
+            ? FindDeclaredModelOptionsParameterName(modelClass)
+            : null;
         string? constrainedOptionsTypeName = declaredOptionsType is not null
             && HasDeclaredDimensionConstraint(declaredOptionsType)
                 ? RenderClosedOptionsType(declaredOptionsType)
@@ -3895,6 +3898,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ArchitectureParamTypeName = architectureParamTypeName,
             ScaledDimensionOptionsTypeName = scaledDimensionOptionsTypeName,
             BoundedOptionsTypeName = boundedOptionsTypeName,
+            BoundedOptionsParameterName = boundedOptionsParameterName,
             NativeJointEditingOptionsTypeName = declaredOptionsType is not null && HasNativeJointEditingSurface(modelClass)
                 ? RenderClosedOptionsType(declaredOptionsType) : null,
             ScaledDimensionProperties = scaledDimensionProperties,
@@ -12149,14 +12153,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && model.ClassName is not ("RAFT" or "DPFlow" or "FlashVSR" or
                                                 "FlowFormer" or "FlowFormerPlusPlus" or "FILM"))
             {
-                // Zero-arg constructor: simple instantiation
+                // Zero-arg constructor: simple instantiation. A foundation-scale VLM whose constructor
+                // parameters are all optional reaches this branch instead of the architecture branch
+                // above, so its bounded options have to be supplied here as a named argument - without
+                // it the fixture silently builds the paper-scale network the list exists to avoid.
+                string boundedArgs =
+                    FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    && model.BoundedOptionsTypeName is { } zeroArgBoundedOptions
+                    && model.BoundedOptionsParameterName is { } zeroArgOptionsParameter
+                        ? $"{zeroArgOptionsParameter}: ({zeroArgBoundedOptions})"
+                          + "global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions("
+                          + $"typeof({zeroArgBoundedOptions}))"
+                        : string.Empty;
                 if (model.TypeParameterCount == 0)
                 {
-                    constructorExpr = $"new {typeName}()";
+                    constructorExpr = $"new {typeName}({boundedArgs})";
                 }
                 else if (model.TypeParameterCount == 1)
                 {
-                    constructorExpr = $"new {typeName}<double>()";
+                    constructorExpr = $"new {typeName}<double>({boundedArgs})";
                 }
                 else
                 {
@@ -18870,6 +18885,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    /// <summary>Names the public constructor parameter that configures a model, if there is one.</summary>
+    /// <remarks>
+    /// Mirrors <see cref="FindDeclaredModelOptionsType"/> exactly so the two cannot disagree about which
+    /// parameter was found. The name matters because a model whose every constructor parameter is
+    /// optional is emitted through the zero-argument branch, where the options can only be supplied as a
+    /// named argument.
+    /// </remarks>
+    private static string? FindDeclaredModelOptionsParameterName(INamedTypeSymbol modelType)
+    {
+        foreach (var constructor in modelType.InstanceConstructors
+                     .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+                     .OrderBy(c => c.Parameters.Length))
+        {
+            foreach (var parameter in constructor.Parameters)
+            {
+                if (parameter.Type is not INamedTypeSymbol candidate) continue;
+                for (var walk = candidate; walk is not null; walk = walk.BaseType)
+                {
+                    if (walk.ToDisplayString() == "AiDotNet.Models.Options.ModelOptions")
+                        return parameter.Name;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Whether an options type or one of its bases declares a generated relationship.</summary>
     private static bool HasDeclaredDimensionConstraint(INamedTypeSymbol optionsType)
     {
@@ -19322,6 +19364,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// "...Dim" width just the same.
         /// </summary>
         public string? BoundedOptionsTypeName { get; set; }
+
+        /// <summary>
+        /// Name of the constructor parameter that carries <see cref="BoundedOptionsTypeName"/>, so a
+        /// fixture built through an all-optional constructor can pass the bounded options by name.
+        /// </summary>
+        public string? BoundedOptionsParameterName { get; set; }
 
         /// <summary>Options of a model exposing the typed native joint-edit guidance boundary.</summary>
         public string? NativeJointEditingOptionsTypeName { get; set; }
