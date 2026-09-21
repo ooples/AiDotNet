@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -202,4 +203,23 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int EmbeddingDimension { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets how the conditioning range is rescaled before the recurrent trunk sees it.
+    /// </summary>
+    /// <value>The scale-handling rule, defaulting to the paper's <c>1 + mean(z)</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Series arrive on very different magnitudes. DeepAR divides each
+    /// one by a single number summarizing its own level, learns on the result, and multiplies the
+    /// prediction back, so the network is not spending its capacity on magnitudes.
+    /// </para>
+    /// <para>
+    /// Salinas et al. 2020, section 3.3 defines that number as <c>nu = 1 + mean(z)</c>, which is
+    /// the default here. That definition assumes non-negative data, so a signed series centered on
+    /// zero - a return series, say - is better served by
+    /// <see cref="DeepARScaleHandling.MeanAbsolute"/>, and data the caller has already normalized
+    /// by <see cref="DeepARScaleHandling.None"/>.
+    /// </para>
+    /// </remarks>
+    public DeepARScaleHandling ScaleHandling { get; set; } = DeepARScaleHandling.PaperMean;
 }
