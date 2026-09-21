@@ -1296,6 +1296,12 @@ jobs:
           # `coverageIncludeDirectory`: a directory whose assemblies coverlet should also instrument when this
           # shard collects coverage - the child worker's own AiDotNet copy, for shards that run models there.
           SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}
+          # Passed as env, not interpolated into the script: a step's templated run block has a
+          # 21000-character expression limit, and inlining these two tipped it over (HTTP 422
+          # "Exceeded max expression length" on dispatch). yq does not catch that - it validates
+          # YAML, not GitHub's expression limits.
+          SHARD_PROJECT: ${{ matrix.shard.project }}
+          SHARD_FRAMEWORK: ${{ matrix.shard.framework }}
         # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
         # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
@@ -1545,30 +1551,15 @@ jobs:
               $runSettings = Join-Path $results 'coverlet.shard.runsettings'
               & ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings -IncludeDirectory (Join-Path (Get-Location).Path $env:SHARD_COVERAGE_INCLUDE) -OutFile $runSettings
               if ($LASTEXITCODE -ne 0) { throw "coverage runsettings for '$shardName' could not be written" }
-              # IncludeDirectory on its own does NOT instrument the worker: coverlet deduplicates
-              # modules by filename, so the worker's own AiDotNet.dll is skipped. That is exactly
-              # what Connect-WorkerCoverage.ps1 exists for, and it was written, self-tested
-              # (Test-WorkerCoverage.ps1, run above) and policy-guarded (CiPolicyImpact.ps1) but
-              # never invoked by a test run. Consequence: every mustCover shard's digest failed to
-              # reach the model code it exists to exercise, so the map kept it always-run for ever -
-              # 46 of the certified map's 51 always-run entries are these shards, and they are why a
-              # one-file change still selects 52 shards instead of the 1 the map actually implicates.
-              # Hard-linking makes the worker's path the same inode as the shard's instrumented copy,
-              # so coverlet's in-place rewrite and its hit counters are shared across the process.
-              $shardProjectDirectory = Split-Path -Parent '${{ matrix.shard.project }}'
-              $parentOutput = Join-Path $shardProjectDirectory 'bin/Release/${{ matrix.shard.framework }}'
-              # Degrade, never abort. Connect-WorkerCoverage throws on a hash mismatch or an
-              # unsupported link, and this runs inside the map-feeding run: aborting would lose the
-              # whole map, which is strictly worse than today's map that merely keeps these shards
-              # always-run. mustCover already degrades safely - "a coverage gap costs runs, never a
-              # miss" - and the map audit reports the shard as "always-run until its coverage
-              # reaches its subject", so the failure stays visible where it matters.
+              # IncludeDirectory alone does not instrument the worker; see Connect-WorkerCoverage.ps1.
+              # Degrade, never abort: losing the whole map is worse than one always-run shard.
               try {
-                & ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory $parentOutput -WorkerDirectory $env:SHARD_COVERAGE_INCLUDE
+                $parentOut = Join-Path (Split-Path -Parent $env:SHARD_PROJECT) "bin/Release/$($env:SHARD_FRAMEWORK)"
+                & ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory $parentOut -WorkerDirectory $env:SHARD_COVERAGE_INCLUDE
                 if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
               }
               catch {
-                Write-Host "::warning::worker coverage could not be linked for '$shardName' ($($_.Exception.Message)); its digest will not reach the worker and the shard stays always-run"
+                Write-Host "::warning::worker coverage not linked for '$shardName': $($_.Exception.Message)"
               }
             }
             $dotnetArgs += @(
