@@ -67,6 +67,10 @@ public partial class AiModelResultDerivedCopyDisposalTests
             AttentionMasking = AttentionMaskingMode.Auto,
         });
 
+        // Baseline taken before the session exists, so the comparison isolates the effect of
+        // releasing the sequence's copy rather than anything session setup did.
+        var baseline = result.Predict(Token());
+
         var session = result.BeginInferenceSession();
         var sequence = session.CreateSequence();
         _ = sequence.Predict(Token());
@@ -79,8 +83,10 @@ public partial class AiModelResultDerivedCopyDisposalTests
 
         AssertAllLayersReleased(copy, "the sequence's copy");
 
-        // The sequence only borrowed the model; the result still owns it and it must still work.
-        Assert.NotNull(result.Predict(Token()));
+        // The sequence only borrowed the model; the result still owns it. It is not enough that
+        // Predict returns SOMETHING -- releasing the copy must not have perturbed the borrowed
+        // model, so the same input must still produce the same output.
+        AssertSamePrediction(baseline, result.Predict(Token()));
         result.Dispose();
     }
 
@@ -271,6 +277,27 @@ public partial class AiModelResultDerivedCopyDisposalTests
         {
             DisposeCalls++;
             base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
+    /// Asserts two predictions are bit-identical.
+    /// </summary>
+    /// <remarks>
+    /// Exact equality rather than a tolerance is deliberate: this compares the same model against
+    /// the same input with no training in between, so the only thing that can move a value is the
+    /// disposal under test perturbing the borrowed model. A tolerance would hide exactly the
+    /// defect the assertion exists to catch.
+    /// </remarks>
+    private static void AssertSamePrediction(Tensor<float> baseline, Tensor<float> actual)
+    {
+        Assert.Equal(baseline.Length, actual.Length);
+        for (int i = 0; i < baseline.Length; i++)
+        {
+            Assert.True(
+                baseline[i].Equals(actual[i]),
+                $"Releasing the sequence's copy changed the borrowed model's output at index {i}: "
+                + $"was {baseline[i]}, now {actual[i]}.");
         }
     }
 
