@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
@@ -616,7 +616,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, TrainingOptimizer);
+            RunTrainingStep(input, expectedOutput);
         }
         finally
         {
@@ -635,6 +635,22 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         if (_lossHistory.Count > 1000)
             _lossHistory.RemoveAt(0);
     }
+
+    /// <summary>
+    /// Runs one gradient step for this model.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="expectedOutput">The supervised target.</param>
+    /// <remarks>
+    /// The default is ordinary supervised backpropagation of the configured loss against
+    /// <paramref name="expectedOutput"/>. A model whose paper defines a different objective
+    /// overrides this and routes to <c>TrainWithCustomLoss</c> instead - DeepAR, for one,
+    /// maximizes the Gaussian log-likelihood of the observed series rather than minimizing
+    /// squared error on the predicted mean. Overriding here rather than <see cref="Train"/>
+    /// keeps the training-mode toggle and the loss history in one place.
+    /// </remarks>
+    protected virtual void RunTrainingStep(Tensor<T> input, Tensor<T> expectedOutput)
+        => TrainWithTape(input, expectedOutput, TrainingOptimizer);
 
     /// <summary>
     /// Core training implementation for derived classes.
