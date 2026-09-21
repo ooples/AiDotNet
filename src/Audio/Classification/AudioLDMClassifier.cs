@@ -219,8 +219,12 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // The head emits logits, which are routinely negative. A caller reads this output as a
+        // per-label score, so the activation belongs here rather than in the detection helpers
+        // alone - the same routing PANNs and AST use, and what lets the detection paths call
+        // Predict once instead of postprocessing a second time.
+        if (IsOnnxMode && OnnxEncoder is not null) return PostprocessOutput(OnnxEncoder.Run(input));
+        var c = input; foreach (var l in Layers) c = l.Forward(c); return PostprocessOutput(c);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -246,13 +250,14 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> o)
     {
-        // Softmax via Engine — single SIMD-vectorised call handles
-        // the max-subtract, exp, and divide stages internally. Drop the
-        // hand-rolled three-loop scalar implementation; the base behaviour
-        // is identical because Engine.Softmax operates on the last axis by
-        // default which matches the rank-1 [classes] tensor this method
-        // produces.
-        return Engine.Softmax(o);
+        // Per-class sigmoid, not softmax. This detector tags AudioSet labels
+        // (BEATs<T>.AudioSetLabels) and Detect reports every label above a fixed threshold, so
+        // several sounds can be present in one window and must not compete. Softmax made them
+        // compete: it forces 527 classes to sum to 1, which both suppresses simultaneous events
+        // and leaves almost no score able to clear a threshold like 0.5. Every sibling detector
+        // on this label set - PANNs (Kong et al. 2020), AST (Gong et al. 2021), HTS-AT, FDY-SED,
+        // CRNNEventDetector - emits per-class sigmoid probabilities for the same reason.
+        return Engine.Sigmoid(o);
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -280,8 +285,8 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
     private Tensor<T> ClassifyWindow(Tensor<T> windowAudio)
     {
         var features = PreprocessAudio(windowAudio);
-        var output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        return PostprocessOutput(output);
+        // Predict already applies the sigmoid for both the native and the ONNX path.
+        return Predict(features);
     }
 
     private List<(Tensor<T> Data, int StartSample)> SplitIntoWindows(Tensor<T> audio)
