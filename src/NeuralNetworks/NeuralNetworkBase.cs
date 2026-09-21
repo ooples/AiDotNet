@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -13885,7 +13885,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// scheduler. Closes review-comment #1270.zKjB.
     /// </summary>
     /// <param name="optimizer">The optimizer that just finished a batch.</param>
-    private static void StepSchedulerIfSupported(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    protected static void StepSchedulerIfSupported(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
         {

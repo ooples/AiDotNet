@@ -302,25 +302,39 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
-        // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
-        // by host-sampling a fresh (t, ε) pair and copying values into the
-        // slot tensors — the compiled forward reads the CURRENT slot data on
-        // every replay. See ooples/AiDotNet#1846.
-        if (trainableParams.Length > 0
-            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                out var mfsEps, out var mfsWd, out _, out _))
+        // One draw of (t, epsilon) feeds whichever path runs below. Hoisting it out of the
+        // fused branch is what lets the eager path reuse DenoiserForwardFromSlots, so the two
+        // paths share ONE denoiser graph instead of two hand-written ones that can drift
+        // apart. Null means a degenerate (zero-length) target, so there is nothing to train.
+        var slots = BuildCsdiSlots(input, target);
+        if (slots is null)
+            return;
+
+        // Every training entry point on the base puts the layers in training mode for the
+        // duration of the step. This override is a training entry point too, and without
+        // the call the residual stack's DropoutLayer stayed in inference mode for the whole
+        // of training, so the configured DropoutRate (0.1 by default, the rate Tashiro et
+        // al. 2021 report) was silently inert and the model trained an architecture the
+        // caller never asked for.
+        SetTrainingMode(true);
+        try
         {
-            var slots = BuildCsdiSlots(input, target);
-            if (slots is not null)
+            // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
+            // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
+            // by host-sampling a fresh (t, eps) pair and copying values into the
+            // slot tensors -- the compiled forward reads the CURRENT slot data on
+            // every replay. See ooples/AiDotNet#1846.
+            if (trainableParams.Length > 0
+                && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
+                    out var mfsEps, out var mfsWd, out _, out _))
             {
                 using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
                 Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                 {
-                    // s[1] = ε_true (noise slot). Loss = MSE(ε_pred, ε_true) via
+                    // s[1] = eps_true (noise slot). Loss = MSE(eps_pred, eps_true) via
                     // the model's LossFunctionBase so custom losses are respected.
                     return loss.ComputeTapeLoss(pred, s[1]);
                 }
@@ -342,63 +356,50 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
                     return;
                 }
             }
+
+            // Eager fallback: runs the same denoiser graph on the tape. Used when the fused
+            // path cannot engage (non-fuse-able optimizer, non-GPU host, etc.).
+            using var tape = new GradientTape<T>();
+            var epsilonPred = DenoiserForwardFromSlots(slots);
+            var epsilonTarget = slots[1];
+
+            // Use the model's registered loss (defaults to MSE) so custom
+            // loss functions are respected -- the denoising-objective shape
+            // matches any per-element loss.
+            var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
+
+            // Publish through the base instead of calling tape.ComputeGradients directly.
+            // GetParameterGradients() answers from the published surface, and with nothing
+            // published it falls back to the layer accessors, which fabricate a zero for every
+            // parameter -- 184804 of them here. A caller then cannot tell a genuinely zero
+            // gradient from one that was never written, and a gradient-flow check reads the
+            // whole model as severed while the weights visibly move.
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            // The optimizer handed to the constructor drives the update. The hand-rolled
+            // `param -= 0.001 * grad` this replaces ignored it outright, so an Adam, a
+            // configured learning rate, a schedule and any weight decay a caller passed all
+            // had no effect whatsoever. Recomputation is pinned to THIS draw of (t, eps):
+            // a line-searching optimizer that re-sampled would be comparing losses from two
+            // different diffusion timesteps and would read the difference as progress.
+            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) => DenoiserForwardFromSlots(slots);
+            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) => loss.ComputeTapeLoss(pred, epsilonTarget);
+
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, target, ComputeForward, RecomputeLoss);
+
+            MarkTrainMutationStarted();
+            _optimizer.Step(context);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            StepSchedulerIfSupported(_optimizer);
         }
-
-        // Eager fallback: samples (t, ε) inline and runs the denoising pair on
-        // the tape. Same objective; used when the fused path can't engage
-        // (non-fuse-able optimizer, non-GPU host, etc.).
-        using var tape = new GradientTape<T>();
-        var (epsilonPred, epsilonTarget) = ComputeDenoisingPairTape(input, target);
-
-        // Use the model's registered loss (defaults to MSE) so custom
-        // loss functions are respected — the denoising-objective shape
-        // matches any per-element loss.
-        var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
-
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var param in trainableParams)
+        finally
         {
-            if (allGrads.TryGetValue(param, out var grad))
-                grads[param] = grad;
-        }
-
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        LastLoss = lossValue;
-
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                // Reshape gradient to match parameter shape when element
-                // counts agree but ranks differ (matches AdamOptimizer.Step's
-                // safety path). When element counts truly disagree that
-                // indicates a layer-contract bug (e.g. a 3D BN gradient
-                // dropping the seq axis from a 2D-sized gamma/beta), so fail
-                // loudly rather than silently no-oping — a silent skip would
-                // mean this parameter never trains while the optimizer step
-                // still reports success.
-                if (!param._shape.SequenceEqual(grad._shape))
-                {
-                    if (param.Length == grad.Length)
-                    {
-                        grad = Engine.Reshape(grad, param._shape);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException(
-                            $"CSDI optimizer: gradient/parameter element counts disagree ("
-                            + $"param shape=[{string.Join(",", param._shape)}], length={param.Length}; "
-                            + $"grad shape=[{string.Join(",", grad._shape)}], length={grad.Length}). "
-                            + "This is a layer-contract bug — the producing layer's backward returned a "
-                            + "gradient with the wrong element count for this parameter.");
-                    }
-                }
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
+            SetTrainingMode(false);
         }
     }
 
@@ -506,108 +507,6 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
             eps = Engine.Reshape(eps, epsilonTrue._shape);
         return eps;
-    }
-
-    /// <summary>
-    /// Builds the (predicted-noise, true-noise) pair for one DDPM
-    /// training step. Samples a timestep and a fresh noise tensor,
-    /// forms the noised version of the target, runs it through the
-    /// denoiser conditioned on the observed input + sin(t) embedding,
-    /// and returns <c>(ε_pred, ε_true)</c> — both tape-tracked so the
-    /// caller can compute MSE and backprop through the denoiser.
-    /// </summary>
-    private (Tensor<T> epsilonPred, Tensor<T> epsilonTrue) ComputeDenoisingPairTape(Tensor<T> input, Tensor<T> target)
-    {
-        var rand = RandomHelper.CreateSecureRandom();
-
-        // 1. Sample timestep t uniformly.
-        int t = rand.Next(_numDiffusionSteps);
-
-        // 2. Sample noise matching target shape.
-        int targetLen = target.Length;
-        var noiseData = new T[targetLen];
-        for (int i = 0; i < targetLen; i++)
-            noiseData[i] = SampleStandardNormal(rand);
-        var epsilonTrue = new Tensor<T>(target._shape, new Vector<T>(noiseData));
-
-        // 3. Form x_t = sqrt(α̅_t) * target + sqrt(1-α̅_t) * ε. The
-        // target and noise tensors are treated as constants here
-        // (user-supplied target + freshly-sampled noise), so the
-        // tape sees x_t as a constant feeding the denoiser. That's
-        // fine — we want gradients only for denoiser parameters.
-        T sqrtAlphaBar = NumOps.Sqrt(_alphasCumprod[t]);
-        T sqrtOneMinus = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-        var scaledTarget = Engine.TensorMultiplyScalar(target, sqrtAlphaBar);
-        var scaledNoise = Engine.TensorMultiplyScalar(epsilonTrue, sqrtOneMinus);
-        var xt = Engine.TensorAdd(scaledTarget, scaledNoise);
-
-        // 4. Condition on the raw instance-normalized observed input. As in the
-        // inference path, the conditioning is NOT pre-projected: it is packed raw
-        // into the per-step denoiser input, and _inputProjection projects the
-        // WHOLE packed vector to hidden width (its intended role). This keeps the
-        // training and inference denoiser graphs identical so the residual stack
-        // (BatchNorm channels = hiddenDimension) always receives a hidden-width
-        // input on both paths.
-        var conditioned = ApplyInstanceNormalization(input);
-        if (conditioned.Rank == 1)
-            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-        var condFlat = conditioned.Rank == 2
-            ? conditioned
-            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-
-        // Flatten xt to rank-2 [1, targetLen] for packing.
-        var xt2d = xt.Rank == 1 ? Engine.Reshape(xt, new[] { 1, targetLen }) : xt;
-        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-
-        // Build the [xt | conditioning[0:condLen] | sin(t)] packed denoiser
-        // input. xt, the conditioning slice, and the sin(t) scalar are all
-        // constants here; gradients flow through the denoiser (_inputProjection
-        // + residual stack + _outputProjection), whose tape-aware Forward passes
-        // run on this packed tensor.
-        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
-        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
-        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condFlat[i];
-        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
-            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-
-        // 5. Predict noise: project packed input to hidden width, run the
-        // residual stack, then the output projection. All Forward passes are
-        // tape-aware so gradients flow back to every denoiser parameter.
-        var eps = (Tensor<T>)denoisingInput;
-        if (_inputProjection is not null)
-            eps = _inputProjection.Forward(eps);
-        foreach (var layer in _residualLayers)
-            eps = layer.Forward(eps);
-        if (_outputProjection is not null)
-            eps = _outputProjection.Forward(eps);
-
-        // The output projection emits the flat score vector
-        // (sequenceLength × numFeatures); the denoised target here is the
-        // univariate series of length targetLen, so take the leading targetLen
-        // scores (tape-safe) to align with the true-noise tensor.
-        if (eps.Rank == 2 && eps.Shape[1] > epsilonTrue.Length)
-            eps = Engine.TensorNarrow(eps, dim: 1, start: 0, length: epsilonTrue.Length);
-
-        // Align predicted-noise shape with true-noise shape so the loss
-        // operates element-wise without a broadcast fallback. By construction
-        // the denoiser head emits one value per target element, so lengths
-        // MUST match — if they don't, that's a head-contract bug and the loss
-        // would silently train against the wrong slice. Fail loudly; then
-        // reshape once so ranks agree (Engine.Reshape is tape-recorded).
-        if (eps.Length != epsilonTrue.Length)
-        {
-            throw new InvalidOperationException(
-                $"CSDI denoising pair: predicted-noise length ({eps.Length}, shape=["
-                + $"{string.Join(",", eps._shape)}]) does not match true-noise length ("
-                + $"{epsilonTrue.Length}, shape=[{string.Join(",", epsilonTrue._shape)}]). "
-                + "This is a denoiser head bug — the residual stack should emit exactly "
-                + "one prediction per target element.");
-        }
-
-        if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
-            eps = Engine.Reshape(eps, epsilonTrue._shape);
-
-        return (eps, epsilonTrue);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
