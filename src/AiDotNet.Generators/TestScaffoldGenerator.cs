@@ -114,6 +114,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // {1,2,4,4}), so its fixture built ~860M fp64 weights and both LatentDiffusion invariants
         // hit the 120-second watchdog before the first denoising step returned.
         "SmartEdit",
+        // EmuEdit is the same shape of problem one step larger: a 16-channel Emu latent through the
+        // same 320-channel four-level U-Net, so its fixture built the denoiser at paper scale on the
+        // zero-argument constructor path and never finished a denoising step either.
+        "EmuEdit",
     };
 
     // Formerly a list of diffusion variants with non-standard UNet input
