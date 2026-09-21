@@ -479,8 +479,8 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        var residual = input;
-        int batchSize = input.Shape[0];
+        var residual = FoldUnitFeatureAxis(input);
+        int batchSize = residual.Shape[0];
         // totalForecast starts as a zero tensor. It isn't a tape
         // variable, but TensorAdd below makes the result tape-aware on
         // first add because the `forecast` operand is tape-tracked.
@@ -544,6 +544,37 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         if (_outputProjection is not null)
             totalForecast = _outputProjection.Forward(totalForecast);
         return totalForecast;
+    }
+
+    /// <summary>
+    /// Folds the trailing feature axis of a conforming [batch, time, 1] input onto [batch, time].
+    /// </summary>
+    /// <remarks>
+    /// N-HiTS is defined over a univariate lookback window (Challu et al. 2022 section 3.2), which
+    /// is why <see cref="NumFeatures"/> is fixed at 1 and both forward paths document a
+    /// [batch, lookback_window] input. The pooling helpers fold that unit axis away as a side
+    /// effect of the reshape they perform - but only when the stack actually pools, so the stack
+    /// whose kernel size is 1 passed the third axis straight through and every dense layer below
+    /// it read the feature width as 1 rather than as the lookback window, producing
+    /// [batch, time, coefficients] where the interpolator requires [batch, coefficients]. Fold it
+    /// once, up front, so every stack sees the same geometry. Engine.Reshape keeps the tape live.
+    /// </remarks>
+    private Tensor<T> FoldUnitFeatureAxis(Tensor<T> input)
+    {
+        if (input.Rank != 3)
+        {
+            return input;
+        }
+
+        if (input.Shape[2] != 1)
+        {
+            throw new ArgumentException(
+                "N-HiTS models a univariate series, so a rank-3 input must carry a single feature; " +
+                $"got [{string.Join(", ", input.Shape)}]. Forecast each series separately.",
+                nameof(input));
+        }
+
+        return Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] });
     }
 
     /// <summary>
@@ -801,8 +832,8 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var residual = input;
-        var totalForecast = new Tensor<T>(new[] { input.Shape[0], _forecastHorizon });
+        var residual = FoldUnitFeatureAxis(input);
+        var totalForecast = new Tensor<T>(new[] { residual.Shape[0], _forecastHorizon });
 
         for (int stackIdx = 0; stackIdx < _stackBlocks.Count; stackIdx++)
         {
