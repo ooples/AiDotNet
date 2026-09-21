@@ -1309,6 +1309,11 @@ jobs:
         # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
           & ./.github/scripts/Invoke-Shard.ps1
+
+      # Surface the COMPLETE per-shard failure list on the run's Summary page.
+      # Runs only when the shard is red, parses the TRX the run already wrote,
+      # and groups failures by error so a single root cause behind many tests
+      # reads as one line. Pure reporter (exits 0) — never changes the outcome.
       - name: Report failed tests
         if: failure()
         shell: pwsh

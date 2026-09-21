@@ -581,7 +581,12 @@ foreach ($job in $artifactConsumers) {
         "artifact consumer '$job' lacks actions:read for the archive endpoint"
 }
 
-$testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+# The shard step's script lives in .github/scripts/Invoke-Shard.ps1: inline it was 25,578
+# characters against GitHub's 21,000-character expression limit, which made the workflow
+# undispatchable (HTTP 422). Every assertion below is about what the shard job DOES, not about
+# which file the text sits in, so the job block and the script it calls are checked as one.
+$testConsumer = (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') +
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw)
 Assert-Contract ($testConsumer.Contains('enum CoverageDisposition')) `
     'coverage execution state is represented by string comparisons instead of a closed enum'
 Assert-Contract ($testConsumer.Contains(
@@ -607,17 +612,19 @@ $testRunStep = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) 
 Assert-Contract ([bool] $testRunStep) `
     'the sharded test execution step is absent'
 $testStepLines = [Regex]::Split($testRunStep, '\r?\n')
+$shardScriptPath = '.github/scripts/Invoke-Shard.ps1'
 $testRunLine = [Array]::IndexOf($testStepLines, '        run: |')
 Assert-Contract ($testRunLine -ge 0) `
     'the sharded test step has no literal PowerShell run block to validate'
+Assert-Contract (Test-Path -LiteralPath $shardScriptPath) `
+    'the sharded test step calls no extracted shard script'
 if ($testRunLine -ge 0) {
-    $testRunBody = [System.Collections.Generic.List[string]]::new()
-    for ($i = $testRunLine + 1; $i -lt $testStepLines.Count; $i++) {
-        $line = $testStepLines[$i]
-        if ($line -and -not $line.StartsWith('          ', [StringComparison]::Ordinal)) { break }
-        [void] $testRunBody.Add($(if ($line.Length -ge 10) { $line.Substring(10) } else { '' }))
-    }
-    $testRunScript = $testRunBody -join "`n"
+    # Read the script file rather than slicing it back out of the YAML. Inline, this block was
+    # 25,578 characters against GitHub's 21,000-character expression limit and the workflow could
+    # not be dispatched at all. The file is also the text CI actually runs, and using it drops the
+    # indentation-stripping this extraction relied on - which is precisely what silently corrupted
+    # four comment lines the first time the block was moved out.
+    $testRunScript = Get-Content -LiteralPath $shardScriptPath -Raw
     $testRunScript = [Regex]::Replace($testRunScript, '\$\{\{[^\r\n]*?\}\}', 'placeholder')
     $parseTokens = $null
     $parseErrors = $null
@@ -637,8 +644,11 @@ if ($testRunLine -ge 0) {
         'the executable coverage-decision block could not be isolated from the workflow'
     if ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) {
         $decisionBody = $testRunScript.Substring($decisionStart, $decisionEnd - $decisionStart)
-        $decisionBody = $decisionBody.Replace("'placeholder' -eq 'true'", "'true' -eq 'true'")
+        # The forced-coverage flag used to be a ${{ }} interpolation the parse step rewrote to
+        # 'placeholder', which this then swapped for 'true'. The script reads the real env var now,
+        # so drive that instead - the proof exercises the actual input rather than a rewritten one.
         $decisionProof = @"
+`$env:SHARD_FORCE_COVERAGE = 'true'
 `$shardName = 'Integration D'
 `$env:COVERAGE_CARRIED = '[]'
 `$env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION = '["Integration D"]'
@@ -769,7 +779,9 @@ foreach ($inventoryEntry in $shardEntries) {
          'coverageIncludeDirectory and env stay guarded like every other inventory shard.')
 }
 
-$shardRun = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+# Get-StepBlock cuts at the next step, so the copy appended to $testConsumer is not in this slice.
+$shardRun = (Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage') +
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw)
 Assert-Contract ($shardRun.Contains('SHARD_ENV: ${{ toJSON(matrix.shard.env) }}')) `
     'the shard step does not receive the entry env as data'
 Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `

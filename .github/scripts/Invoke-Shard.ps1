@@ -1,8 +1,6 @@
 ﻿<# Sharded test execution, extracted from sonarcloud.yml.
-
-   The inline run block reached 25,578 characters against GitHub's 21,000-character expression
-   limit, so the workflow could not be dispatched at all (HTTP 422 'Exceeded max expression
-   length'). Matrix values arrive as SHARD_* environment variables instead of being interpolated.
+   The inline run block hit GitHub's 21000-character expression limit (HTTP 422 on dispatch).
+   Matrix values arrive as SHARD_* environment variables instead of being interpolated.
 #>
 Set-StrictMode -Version Latest
 
@@ -84,7 +82,7 @@ $heavyShards = @(
   'ModelFamily - NeuralNetworks U-Z',
   # TimeSeries/Activation/Loss: the double-precision Transformer/CNN forecasters
   # (Autoformer, Chronos, DeepANT, LSTM-VAE, ...) each fit the 60 s [Fact] budget in
-  # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism â€”
+  # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism —
   # their managed-engine forward parallelizes over all cores, so N classes in flight
   # oversubscribe the runner's 4 cores and stall well past 60 s. Serialize so each runs
   # uncontended with the whole machine (the contention is CPU, not paper-scale heaviness, so
@@ -114,7 +112,7 @@ $heavyShards = @(
   'Unit - 03d8 Diffusion New Conditioners',
   # Integration shards that instantiate paper-scale models (Document AI,
   # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
-  # etc.) â€” serialize like the ModelFamily shards to stay under the runner
+  # etc.) — serialize like the ModelFamily shards to stay under the runner
   # memory envelope. The light integration letter-shards run parallel.
   'Integration C - ComputerVision Detection',
   'Integration C - ComputerVision Segmentation Models',
@@ -200,7 +198,7 @@ if ($carriedSet.Contains($shardName) -and $runWithoutInstrumentationSet.Contains
 }
 
 $coverageDisposition = [CoverageDisposition]::Instrument
-if ('$($env:SHARD_FORCE_COVERAGE)' -eq 'true') {
+if ("$($env:SHARD_FORCE_COVERAGE)" -eq 'true') {
   if ($carriedSet.Contains($shardName)) {
     $coverageDisposition = [CoverageDisposition]::Carried
   }
@@ -214,7 +212,7 @@ if ($coverageDisposition -ne [CoverageDisposition]::Instrument -and
   throw "coverage disposition '$coverageDisposition' is invalid for coverage-producing shard '$shardName'"
 }
 
-$forcedCoverageRun = '$($env:SHARD_FORCE_COVERAGE)' -eq 'true'
+$forcedCoverageRun = "$($env:SHARD_FORCE_COVERAGE)" -eq 'true'
 $collectCoverage = if ($forcedCoverageRun) {
   $coverageDisposition -eq [CoverageDisposition]::Instrument
 } else {
@@ -239,9 +237,9 @@ Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $
 # token splitter parsed `--` as a standalone switch that MSBuild
 # then rejected with `MSB1001: Unknown switch`.
 $dotnetArgs = @(
-  'test', '$($env:SHARD_PROJECT)',
+  'test', "$($env:SHARD_PROJECT)",
   '-c', 'Release',
-  '--framework', '$($env:SHARD_FRAMEWORK)',
+  '--framework', "$($env:SHARD_FRAMEWORK)",
   '--no-build', '--no-restore',
   # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
   '--filter', '($($env:SHARD_FILTER))&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
@@ -311,13 +309,13 @@ New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
 $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $diagDir 'gpu-diagnostics.txt'
 # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
 if ($serializeShard) {
-  $projDir = Split-Path -Parent '$($env:SHARD_PROJECT)'
+  $projDir = Split-Path -Parent "$($env:SHARD_PROJECT)"
   $runnerJson = Join-Path $projDir 'bin/Release/$($env:SHARD_FRAMEWORK)/xunit.runner.json'
   if (Test-Path $runnerJson) {
     $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
     $cfg.parallelizeTestCollections = $false
     $cfg.maxParallelThreads = 1
-    # Don't materialize every [Theory]'s data rows at discovery time â€”
+    # Don't materialize every [Theory]'s data rows at discovery time —
     # the assembly discovers ~64k cases and pre-enumeration inflates the
     # retained-case baseline before a single test even runs.
     $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
@@ -327,7 +325,7 @@ if ($serializeShard) {
     # case" line each. That output alone exceeds GitHub's per-job log cap: the
     # "NeuralNetworks A-F" job (90049783747) produced 57,102 discovery lines and its
     # entire 16.9 MB log covered just the first 2m44s of a 55-minute job, with ZERO test
-    # results retained â€” the shard became impossible to diagnose from CI. The messages
+    # results retained — the shard became impossible to diagnose from CI. The messages
     # are pure noise for a filtered shard run; keep them off here and leave the default
     # (on) in the checked-in xunit.runner.json for local debugging.
     $cfg.diagnosticMessages = $false
@@ -338,16 +336,16 @@ if ($serializeShard) {
     # These shards are flagged heavy precisely because they OOM without
     # serialization. If the rewrite can't be applied, fail fast rather
     # than fall through to a parallel run that will OOM and waste the runner.
-    Write-Host "ERROR: runner config not found at $runnerJson â€” cannot serialize heavy shard"
+    Write-Host "ERROR: runner config not found at $runnerJson — cannot serialize heavy shard"
     exit 1
   }
   # The global Server GC (DOTNET_gcServer=1) reserves a heap segment per
-  # core and collects lazily â€” high steady-state footprint chosen for
+  # core and collects lazily — high steady-state footprint chosen for
   # throughput under PARALLEL collections. This shard is now serial, so
   # we don't need that throughput; switch it to Workstation GC, which has
   # a much smaller footprint and collects eagerly under memory pressure.
   # (Confirmed necessary: with serialization alone the shard still OOM'd
-  # ~70s into serial execution â€” the footprint, not parallelism, was the
+  # ~70s into serial execution — the footprint, not parallelism, was the
   # remaining cause.)
   $env:DOTNET_gcServer = '0'
   Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
@@ -440,8 +438,3 @@ free -h
 Write-Host "Disk:"
 df -h /
 exit $exitCode
-
-rface the COMPLETE per-shard failure list on the run's Summary page.
-ns only when the shard is red, parses the TRX the run already wrote,
-d groups failures by error so a single root cause behind many tests
-ads as one line. Pure reporter (exits 0) â€” never changes the outcome.
