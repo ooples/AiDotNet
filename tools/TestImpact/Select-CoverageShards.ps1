@@ -71,6 +71,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ChangedFiles,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $AllShards,
     [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $NoCoverageShards,
+    [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ReattemptShards = @(),
     [Parameter(ParameterSetName = 'Select')] [string[]] $GlobalDirtyPrefixes = @('tests/'),
     [Parameter(ParameterSetName = 'Select')] [string] $CarryForwardDirectory,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
@@ -96,6 +97,7 @@ function Split-CoverageWork {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $ChangedFiles,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllShards,
         [AllowEmptyCollection()] [string[]] $NoCoverageShards,
+        [AllowEmptyCollection()] [string[]] $ReattemptShards = @(),
         [switch] $DisableCarry
     )
 
@@ -130,6 +132,13 @@ function Split-CoverageWork {
         foreach ($s in @($Map.alwaysRun)) { if ($s) { [void] $alwaysRun.Add([string] $s) } }
     }
 
+    $reattempt = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($s in $ReattemptShards) {
+        if (-not $s) { continue }
+        if ($s -cnotin $AllShards) { throw "ReattemptShards names unknown shard '$s'" }
+        [void] $reattempt.Add([string] $s)
+    }
+
     $noCoverage = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
         foreach ($s in $NoCoverageShards) { if ($s) { [void] $noCoverage.Add([string] $s) } }
@@ -145,10 +154,17 @@ function Split-CoverageWork {
         $name = [string] $s
         $disposition = [CoverageDisposition]::Instrument
 
-        if ($noCoverage.Contains($name) -and $alwaysRun.Contains($name)) {
+        if ($noCoverage.Contains($name) -and $alwaysRun.Contains($name) -and -not $reattempt.Contains($name)) {
             # The preceding complete map run already proved this no-coverage shard could not
             # produce a digest. Repeating the same memory-hungry instrumentation cannot teach the
             # map anything: execute its complete correctness suite and retain alwaysRun instead.
+            #
+            # That justification only holds where instrumentation was actually ATTEMPTED and
+            # failed. Nothing records the attempt, and a heavy shard is never instrumented on an
+            # ordinary run either, so this latches on the first map and the shard can never earn
+            # the digest that would release it - the same self-perpetuating shape as the
+            # certification deadlock. ReattemptShards is the deliberate escape hatch: name a shard
+            # to instrument it once more and find out, rather than assuming it cannot.
             $disposition = [CoverageDisposition]::RunWithoutCoverage
         }
         elseif ($noCoverage.Contains($name) -and -not $DisableCarry -and
@@ -295,6 +311,26 @@ if ($SelfTest) {
     Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
         'the typed coverage dispositions must cover every shard exactly once'
 
+    # 8b. ReattemptShards releases the latch for one named shard. Without an escape hatch a
+    #     no-coverage shard that is already always-run can never be instrumented again, so it can
+    #     never earn the digest that would let it leave always-run - it is latched on assumption,
+    #     not on a recorded failed attempt.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy') -ReattemptShards @('Heavy')
+    Assert-True ($r.Instrument -contains 'Heavy') `
+        'a reattempted no-coverage shard must be instrumented instead of latched'
+    Assert-True ($r.RunWithoutCoverage.Count -eq 0) `
+        'reattempting the only latched shard must leave nothing running without coverage'
+    Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
+        'the dispositions must still cover every shard exactly once when one is reattempted'
+    $rejected = $false
+    try {
+        Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+            -NoCoverageShards @('Alpha', 'Heavy') -ReattemptShards @('NoSuchShard') | Out-Null
+    }
+    catch { $rejected = $true }
+    Assert-True $rejected 'ReattemptShards naming a shard outside the catalog must be rejected'
+
     # 9. alwaysRun alone is not permission to suppress instrumentation. The shard must also be in
     #    the explicit workflow-derived no-coverage boundary; otherwise it remains Instrument and
     #    gets another opportunity to produce a digest.
@@ -391,10 +427,11 @@ foreach ($path in $ChangedFiles) {
 }
 
 $splitArgs = @{
-    Map          = $map
-    ChangedFiles = $ChangedFiles
-    AllShards    = $AllShards
-    DisableCarry = $disableCarry
+    Map             = $map
+    ChangedFiles    = $ChangedFiles
+    AllShards       = $AllShards
+    ReattemptShards = $ReattemptShards
+    DisableCarry    = $disableCarry
 }
 if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
     $splitArgs.NoCoverageShards = $NoCoverageShards
