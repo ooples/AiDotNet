@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
@@ -171,6 +171,69 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// </para>
     /// </remarks>
     public virtual int NumFeatures => _baseNumFeatures;
+
+    /// <summary>
+    /// Declares the [batch, sequence, features] geometry this model actually accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A financial model is constructed with a sequence length and a feature count of its own -
+    /// NeuralGARCH's lookback window, RealizedVolatilityTransformer's realized-variance horizon -
+    /// and <c>ValidateInputShape</c> rejects anything else. The architecture it is handed carries
+    /// only a flat <c>InputSize</c>, which says nothing about how that width splits across time and
+    /// features, so a generic caller reading the architecture alone builds an input the model
+    /// refuses. Publishing the split here is what lets serving, shape discovery and the family
+    /// fixtures construct a conforming probe without knowing any individual model.
+    /// </para>
+    /// <para>
+    /// Only stated when the sequence contract is known: the architecture-only constructor leaves
+    /// <see cref="SequenceLength"/> at zero, and those models keep whatever contract their own
+    /// ports declare.
+    /// </para>
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+    {
+        int sequenceLength = SequenceLength;
+        int featureCount = NumFeatures;
+        if (sequenceLength < 1 || featureCount < 1)
+            return base.GetInputShapeConstraint();
+
+        // Axis 0 is the batch axis and is left free; the caller picks its own batch size.
+        return new ModelInputShapeConstraint(
+            MinimumRank: 0,
+            MinimumElementCount: 0,
+            ExactRank: 3,
+            MaximumRank: 0,
+            MinimumAxisSizes: null,
+            AxisDivisors: null,
+            ExactAxisSizes: new[] { 0, sequenceLength, featureCount });
+    }
+
+    /// <summary>
+    /// Gets the value domain of this model's public output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A volatility model forecasts a standard deviation or a variance, which is non-negative by
+    /// definition - Bollerslev 1986 states the GARCH conditional variance as a strictly positive
+    /// quantity, and the native heads in this family end in an activation whose range matches.
+    /// The base implementation reads the final layer's declared output port, which carries no
+    /// opinion about the activation in front of it and so reports continuous values.
+    /// </para>
+    /// <para>
+    /// The difference is not cosmetic. A caller that believes the output is continuous builds a
+    /// target containing negative values; no parameter setting reaches it, training drives the
+    /// head onto its lower bound, and every input then maps to the same saturated output. Stating
+    /// the domain here lets a generic caller build a reachable objective instead.
+    /// </para>
+    /// </remarks>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape)
+    {
+        if (this is IVolatilityModel<T>)
+            return NonNegativeTensorDomain.Value;
+
+        return base.GetOutputDomain(outputShape);
+    }
 
     /// <summary>
     /// Gets the last recorded training loss.
