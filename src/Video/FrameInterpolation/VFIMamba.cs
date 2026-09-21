@@ -46,6 +46,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create a VFIMamba model for state-space based frame interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new VFIMambaOptions();
 /// var vfiMamba = new VFIMamba&lt;double&gt;(architecture, options);

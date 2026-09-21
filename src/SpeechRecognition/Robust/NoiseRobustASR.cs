@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// // Create a Noise-Robust ASR model for adverse acoustic conditions
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new NoiseRobustASR&lt;double&gt;(architecture);
 ///

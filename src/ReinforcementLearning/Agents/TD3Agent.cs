@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 /// <example>
 /// <code>
 /// // Create a TD3 agent for stable continuous control
-/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2, PolicyDelay = 2 };
+/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2};
 /// var agent = new TD3Agent&lt;double&gt;(options);
 ///
 /// // Select a continuous action with target policy smoothing

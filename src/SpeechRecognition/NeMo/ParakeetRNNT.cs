@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// // Create a Parakeet-RNNT model with RNN-Transducer for streaming ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
 /// var model = new ParakeetRNNT&lt;double&gt;(architecture);
 ///

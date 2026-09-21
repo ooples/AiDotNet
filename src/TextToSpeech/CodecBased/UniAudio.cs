@@ -19,7 +19,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// // Create a UniAudio model for universal audio generation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 24000);
 ///

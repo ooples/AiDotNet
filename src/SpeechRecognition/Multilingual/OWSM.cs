@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// // Create an OWSM model for open-source Whisper-style multilingual ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new OWSM&lt;double&gt;(architecture);
 ///

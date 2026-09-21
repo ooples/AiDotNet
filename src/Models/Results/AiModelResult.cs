@@ -7219,7 +7219,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new AiModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
     ///     .BuildAsync();
     /// model.ExportToOnnx("model.onnx");
@@ -7261,7 +7261,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new AiModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync();
     /// model.ExportToTensorRT("model.trt");
@@ -7306,7 +7306,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new AiModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync();
     /// model.ExportToCoreML("model.mlmodel");
@@ -7348,7 +7348,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new AiModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
     ///     .BuildAsync();
     /// model.ExportToTFLite("model.tflite");

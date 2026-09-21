@@ -18,7 +18,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// // Create AudioPaLM for multimodal text-to-speech
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 16000);
 ///

@@ -60,6 +60,8 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputHeight: 128, inputWidth: 128, inputDepth: 3);
 ///
 /// var model = new Figan&lt;double&gt;(arch, new FiganOptions { NumScales = 3 });
+/// var frame0 = Tensor&lt;double&gt;.CreateRandom(1, 3, 128, 128);
+/// var frame1 = Tensor&lt;double&gt;.CreateRandom(1, 3, 128, 128);
 /// var middle = model.Interpolate(frame0, frame1);
 /// </code>
 /// </example>

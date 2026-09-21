@@ -28,7 +28,7 @@ namespace AiDotNet.Finance.Risk;
 /// // Define architecture for tabular risk assessment (50 features, binary classification)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputSize: 50, outputSize: 2);
 ///
 /// // Training mode: self-attention over features + intersample attention over rows

@@ -45,6 +45,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create a ToonCrafter model for cartoon frame interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new ToonCrafterOptions();
 /// var toonCrafter = new ToonCrafter&lt;double&gt;(architecture, options);

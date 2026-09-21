@@ -61,10 +61,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphIsomorphismNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 5 };
-/// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 16 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphIsomorphismNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]

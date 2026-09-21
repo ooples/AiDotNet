@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// // Create a Canary-Flash model for fast multilingual ASR with hybrid CTC/attention
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new CanaryFlash&lt;double&gt;(architecture);
 ///
