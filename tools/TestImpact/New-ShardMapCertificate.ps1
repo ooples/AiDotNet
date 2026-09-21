@@ -109,6 +109,25 @@ function Get-CertificationDecision {
     }
     if ($universe.Count -lt 2) { throw 'map must contain at least two shards to prove reduction' }
 
+    # A shard retired from the manifest keeps its slot in knownShards, because the file index
+    # addresses shards by position and renumbering would invalidate every recorded line range.
+    # No job runs it, so it can never produce an outcome. Demanding one deadlocks certification
+    # permanently: the previous map only advances when something certifies, so the first
+    # retirement freezes every later map in full-matrix mode. Exclude retired slots from the
+    # coverage requirement instead, and require that they stay silent.
+    $retired = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if ($Map.PSObject.Properties['retiredShards']) {
+        if ($Map.retiredShards -isnot [array]) { throw 'map retiredShards must be an array' }
+        foreach ($nameValue in @($Map.retiredShards)) {
+            $name = [string] $nameValue
+            if (-not $universe.Contains($name)) { throw "retiredShards names unknown shard '$name'" }
+            if (-not $retired.Add($name)) { throw "map retiredShards contains duplicate '$name'" }
+        }
+    }
+    $expected = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]] @($universe | Where-Object { -not $retired.Contains($_) }), [StringComparer]::Ordinal)
+    if ($expected.Count -eq 0) { throw 'every shard in the map is retired' }
+
     $outcomeNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $failed = 0
     foreach ($outcome in $Outcomes) {
@@ -117,6 +136,7 @@ function Get-CertificationDecision {
         }
         $name = [string] $outcome.shard
         if (-not $universe.Contains($name)) { throw "outcome names unknown shard '$name'" }
+        if ($retired.Contains($name)) { throw "retired shard '$name' produced an outcome" }
         if (-not $outcomeNames.Add($name)) { throw "duplicate outcome for shard '$name'" }
         $conclusion = [string] $outcome.outcome
         if ($conclusion -notin @('success', 'failure')) {
@@ -124,9 +144,9 @@ function Get-CertificationDecision {
         }
         if ($conclusion -eq 'failure') { $failed++ }
     }
-    if ($outcomeNames.Count -ne $universe.Count) {
-        $missing = @($universe | Where-Object { -not $outcomeNames.Contains($_) } | Sort-Object)
-        throw "outcomes do not cover the map shard universe (missing: $($missing -join ', '))"
+    if ($outcomeNames.Count -ne $expected.Count) {
+        $missing = @($expected | Where-Object { -not $outcomeNames.Contains($_) } | Sort-Object)
+        throw "outcomes do not cover the live map shard universe (missing: $($missing -join ', '))"
     }
 
     $runNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -294,6 +314,34 @@ if ($SelfTest) {
     $noReduction.WouldRunShards = @('A', 'B', 'Always'); $noReduction.WouldSkipShards = @()
     $decision = Get-CertificationDecision $map $noReduction $outcomes 10 11 $sha 12
     Assert-True (-not $decision.Eligible) 'an audit that skips nothing was certifiable'
+
+    # A shard retired from the manifest keeps its indexed slot but no longer has a job. Demanding
+    # an outcome for it froze certification permanently on 2026-09-17 and every pull request ran
+    # the full matrix from 09-20 on. Retirement must stay certifiable.
+    $retiredMap = [pscustomobject]@{
+        schemaVersion = 1; sha = $sha
+        knownShards = @('A', 'B', 'Retired'); alwaysRun = @('Always'); retiredShards = @('Retired')
+    }
+    $retiredAudit = [pscustomobject]@{
+        Escalated = $false; TotalShards = 4; WouldRun = 2; WouldSkip = 2
+        WouldRunShards = @('A', 'Always'); WouldSkipShards = @('B', 'Retired')
+        Failed = 0; Missed = @(); MissCount = 0
+    }
+    $decision = Get-CertificationDecision $retiredMap $retiredAudit $outcomes 10 11 $sha 12
+    Assert-True $decision.Eligible 'a retired indexed shard blocked certification'
+    Assert-True ($decision.Disposition -eq [ShardMapAuditDisposition]::Certified) `
+        'a map carrying a retirement did not produce the Certified disposition'
+    $retiredOutcomes = @($outcomes | ForEach-Object { $_.PSObject.Copy() }) +
+        [pscustomobject]@{ shard = 'Retired'; outcome = 'success' }
+    Assert-Rejected { Get-CertificationDecision $retiredMap $retiredAudit $retiredOutcomes 10 11 $sha 12 } `
+        'a retired shard reporting an outcome was accepted'
+    $unknownRetired = $retiredMap.PSObject.Copy(); $unknownRetired.retiredShards = @('Absent')
+    Assert-Rejected { Get-CertificationDecision $unknownRetired $retiredAudit $outcomes 10 11 $sha 12 } `
+        'retiredShards naming a shard outside the map universe was accepted'
+    $allRetired = $retiredMap.PSObject.Copy()
+    $allRetired.retiredShards = @('A', 'B', 'Retired', 'Always')
+    Assert-Rejected { Get-CertificationDecision $allRetired $retiredAudit $outcomes 10 11 $sha 12 } `
+        'a map whose every shard is retired was certifiable'
 
     Assert-Rejected { Get-CertificationDecision $map $audit @($outcomes[0..1]) 10 11 $sha 12 } `
         'incomplete outcomes were accepted'

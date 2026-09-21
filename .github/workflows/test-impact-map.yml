@@ -421,9 +421,12 @@ jobs:
             $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
             $extension = Complete-CiMapWorkloads -Map $previousMap -Manifest $auditShards
             $historicalMapFile = 'prevmap/shard-map.json'
-            if ($extension.Added.Count -gt 0) {
+            if ($extension.Added.Count -gt 0 -or $extension.RetiredIndexed.Count -gt 0) {
               # Replay ordinary historical coverage with new auxiliary workloads mandatory.
               # Do not claim that the old source measured these newly introduced workloads.
+              # A retirement must go through here too: the completed map is the only one carrying
+              # retiredShards, and without it certification demands an outcome from a shard that
+              # no longer has a job and can never report one.
               $extension.Map | ConvertTo-Json -Depth 12 -Compress | Set-Content prevmap/selection-map.json
               $historicalMapFile = 'prevmap/selection-map.json'
             }
