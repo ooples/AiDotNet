@@ -157,6 +157,18 @@ public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskMod
     public abstract T CalculateRisk(Tensor<T> input);
 
     /// <summary>
+    /// Declares the cross-sectional geometry a risk model accepts.
+    /// </summary>
+    /// <remarks>
+    /// A risk model reads one market state - a row of per-asset returns - and reports a number
+    /// for it; a matrix of historical returns is a batch of such rows, not a window this model
+    /// convolves over. The tabular members of this family (TabNet, SAINT, TabTransformer) take
+    /// exactly that geometry from their own papers.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+        => CrossSectionalInputConstraint;
+
+    /// <summary>
     /// Adjusts a proposed action to satisfy risk constraints.
     /// </summary>
     /// <param name="action">The proposed trading action (e.g., portfolio weights).</param>

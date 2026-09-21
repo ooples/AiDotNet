@@ -84,6 +84,18 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>
+    /// Declares the cross-sectional geometry a factor model accepts.
+    /// </summary>
+    /// <remarks>
+    /// Factor exposures are a cross-sectional matrix - one row per asset, one column per
+    /// factor - not a window of observations over time, which is why <see cref="PredictReturns"/>
+    /// forwards its argument to Predict unchanged. Publishing the sequence split of the numeric
+    /// base handed a generic caller a third axis this surface has no value to supply.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+        => CrossSectionalInputConstraint;
+
     private int _numFactors;
     private int _numAssets;
     private int _numFeatures;

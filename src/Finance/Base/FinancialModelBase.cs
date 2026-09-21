@@ -210,6 +210,21 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     }
 
     /// <summary>
+    /// The [batch, features] geometry a cross-sectional model accepts: one observation per row,
+    /// rather than a window of observations over time.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetInputShapeConstraint"/> publishes the sequence split a forecasting model
+    /// needs. A risk, factor or language model is handed a sequence length for unrelated reasons
+    /// and never reads one - FactorVAE rejects a rank-3 input in as many words, NeuralStressTest
+    /// raises a bare feature vector to [1, features] before predicting, and an NLP model is given
+    /// token ids - so publishing that split for them handed every generic caller an axis the
+    /// model itself refuses. Such a model states this instead.
+    /// </remarks>
+    protected static ModelInputShapeConstraint CrossSectionalInputConstraint { get; } =
+        new(MinimumRank: 1, MinimumElementCount: 0, ExactRank: 0, MaximumRank: 2);
+
+    /// <summary>
     /// Gets the value domain of this model's public output.
     /// </summary>
     /// <remarks>

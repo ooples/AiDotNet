@@ -125,6 +125,17 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>
+    /// Declares the cross-sectional geometry a factor model accepts.
+    /// </summary>
+    /// <remarks>
+    /// The decoder rejects a third axis in as many words - "FactorVAE supports unbatched
+    /// [assets] or batched [batch, assets] features; got rank 3" - so publishing the sequence
+    /// split of the numeric base handed a generic caller a geometry this model throws on.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+        => CrossSectionalInputConstraint;
+
     private int _numFactors;
     private int _numAssets;
     private int _numFeatures;
