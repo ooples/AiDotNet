@@ -77,11 +77,10 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;
         DiffusionSteps = other.DiffusionSteps;
+        NumSamples = other.NumSamples;
         DropoutRate = other.DropoutRate;
         BetaStart = other.BetaStart;
         BetaEnd = other.BetaEnd;
-        SigmaMin = other.SigmaMin;
-        SigmaMax = other.SigmaMax;
     }
 
     /// <summary>
@@ -144,6 +143,21 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     public int DiffusionSteps { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets the number of sample paths drawn per forecast.
+    /// </summary>
+    /// <value>Defaults to 100.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A diffusion forecaster is generative: every call draws a random
+    /// path, so a single path carries the full spread of the predictive distribution rather than
+    /// its centre. Drawing several paths and reporting the per-position median gives the point
+    /// forecast, and the spread across paths gives the uncertainty.</para>
+    /// <para><b>Provenance:</b> 100 is the number of samples Tashiro et al. (CSDI, NeurIPS 2021)
+    /// draw before taking the median, and the sibling <see cref="CSDIOptions.NumSamples"/> in this
+    /// library uses the same default. Lower it to trade forecast stability for inference time.</para>
+    /// </remarks>
+    public int NumSamples { get; set; } = 100;
+
+    /// <summary>
     /// Gets or sets the dropout rate for regularization.
     /// </summary>
     /// <value>Defaults to 0.1 (10%).</value>
@@ -166,35 +180,16 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the ending beta value for the linear noise schedule.
     /// </summary>
-    /// <value>Defaults to 0.5.</value>
+    /// <value>Defaults to 0.02.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Controls how much noise is added at the final diffusion step.
     /// A larger value means more aggressive noise at the end of the schedule.</para>
+    /// <para><b>Provenance:</b> 0.02 is the endpoint Ho et al., "Denoising Diffusion Probabilistic
+    /// Models" (NeurIPS 2020) Section 4 give for a LINEAR beta schedule, and this model uses a
+    /// linear schedule. The previous 0.5 was borrowed from Tashiro et al. (CSDI, NeurIPS 2021),
+    /// where it is the endpoint of a QUADRATIC schedule over 50 steps; applied linearly over the
+    /// 100 steps used here it drives the cumulative alpha product to ~5e-14, so the reverse
+    /// process amplifies its input by ~5e6 before the denoiser has learned anything.</para>
     /// </remarks>
-    public double BetaEnd { get; set; } = 0.5;
-
-    /// <summary>
-    /// Gets or sets the minimum noise level for the continuous diffusion schedule.
-    /// </summary>
-    /// <value>Defaults to 0.002.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The smallest noise scale used in the continuous
-    /// diffusion process. Lower values preserve more detail at the finest level.</para>
-    /// </remarks>
-    public double SigmaMin { get; set; } = 0.002;
-
-    /// <summary>
-    /// Gets or sets the maximum noise level for the continuous diffusion schedule.
-    /// </summary>
-    /// <value>Defaults to 80.0 (from Song et al., "Score-Based Generative Modeling through SDEs", ICLR 2021).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The largest noise scale used. Higher values mean the
-    /// model learns to recover signal from more aggressive corruption.</para>
-    /// <para><b>Provenance:</b> Default noise schedule parameters (BetaStart=0.0001, BetaEnd=0.5,
-    /// SigmaMin=0.002, SigmaMax=80.0) follow standard continuous diffusion practice from
-    /// Song et al. (2021) and Ho et al. "Denoising Diffusion Probabilistic Models" (NeurIPS 2020).
-    /// Architecture defaults (HiddenDimension=128, NumLayers=4, NumHeads=8, DiffusionSteps=100)
-    /// are common baselines for time series diffusion models.</para>
-    /// </remarks>
-    public double SigmaMax { get; set; } = 80.0;
+    public double BetaEnd { get; set; } = 0.02;
 }
