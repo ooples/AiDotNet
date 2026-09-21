@@ -52,6 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
           ./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-ShardMapCertificate self-test failed' }
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Selection reduction self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -322,6 +324,15 @@ jobs:
           Write-Host "map: $files file(s), $size MB"
           "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # Correctness proofs cannot see a map that skips nothing: the 2026-09-21 map was correct and
+      # still left 51 of 164 shards always-run. This is the only gate on how much the map can
+      # actually save, and it only ever ratchets down.
+      - name: Ratchet on selection reduction
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json
+          if ($LASTEXITCODE -ne 0) { throw 'the candidate map skips less than the recorded baseline' }
 
       - name: Upload candidate map
         if: steps.source.outputs.found == 'true'

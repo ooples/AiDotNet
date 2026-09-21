@@ -118,9 +118,19 @@ function Get-CertificationDecision {
     $retired = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     if ($Map.PSObject.Properties['retiredShards']) {
         if ($Map.retiredShards -isnot [array]) { throw 'map retiredShards must be an array' }
+        # Only an INDEXED shard can legitimately be retired-but-present. Complete-CiMapWorkloads
+        # drops a retired always-run entry outright and keeps a retired indexed one solely because
+        # the file index addresses shards by position. Accepting any universe member would let the
+        # exemption shield a LIVE always-run shard from the coverage requirement - precisely what
+        # that requirement exists to catch.
+        $indexed = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]] @(@($Map.knownShards) | ForEach-Object { [string] $_ }), [StringComparer]::Ordinal)
         foreach ($nameValue in @($Map.retiredShards)) {
             $name = [string] $nameValue
             if (-not $universe.Contains($name)) { throw "retiredShards names unknown shard '$name'" }
+            if (-not $indexed.Contains($name)) {
+                throw "retiredShards names '$name', which is not an indexed shard"
+            }
             if (-not $retired.Add($name)) { throw "map retiredShards contains duplicate '$name'" }
         }
     }
@@ -352,6 +362,24 @@ if ($SelfTest) {
     $unknownRetired = $retiredMap.PSObject.Copy(); $unknownRetired.retiredShards = @('Absent')
     Assert-Rejected { Get-CertificationDecision $unknownRetired $retiredAudit $outcomes 10 11 $sha 12 } `
         'retiredShards naming a shard outside the map universe was accepted'
+    # An always-run entry is DROPPED on retirement rather than kept, so naming one here could only
+    # exempt a shard that is still live. The fixture has to isolate that: give the falsely-retired
+    # always-run shard NO outcome, so without the indexed check it is silently exempted and the
+    # map certifies while the shard the requirement exists to police reported nothing. Asserting it
+    # with an outcome present proves nothing - the "retired shard produced an outcome" guard throws
+    # first and the case passes whether or not the indexed check is there.
+    $falselyRetired = [pscustomobject]@{
+        schemaVersion = 1; sha = $sha
+        knownShards = @('A', 'B'); alwaysRun = @('Always'); retiredShards = @('Always')
+    }
+    $twoLiveAudit = [pscustomobject]@{
+        Escalated = $false; TotalShards = 2; WouldRun = 1; WouldSkip = 1
+        WouldRunShards = @('A'); WouldSkipShards = @('B')
+        Failed = 0; Missed = @(); MissCount = 0
+    }
+    $withoutAlways = @($outcomes | Where-Object { $_.shard -cne 'Always' })
+    Assert-Rejected { Get-CertificationDecision $falselyRetired $twoLiveAudit $withoutAlways 10 11 $sha 12 } `
+        'retiredShards naming a live always-run shard exempted it from the coverage requirement'
     $allRetired = $retiredMap.PSObject.Copy()
     $allRetired.retiredShards = @('A', 'B', 'Retired', 'Always')
     Assert-Rejected { Get-CertificationDecision $allRetired $retiredAudit $outcomes 10 11 $sha 12 } `
