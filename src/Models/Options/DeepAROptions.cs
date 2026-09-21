@@ -97,8 +97,9 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the number of LSTM layers.
     /// </summary>
-    /// <value>The number of layers, defaulting to 2.</value>
-    public int NumLayers { get; set; } = 2;
+    /// <value>The number of layers, defaulting to 3, the value DeepAR (Salinas et al. 2020) table 3
+    /// reports for every dataset in the paper alongside 40 LSTM nodes, batch size 64 and learning rate 1e-3.</value>
+    public int NumLayers { get; set; } = 3;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.
@@ -127,7 +128,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the batch size for training.
     /// </summary>
     /// <value>The batch size, defaulting to 32.</value>
-    public int BatchSize { get; set; } = 32;
+    public int BatchSize { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of samples to draw for probabilistic forecasts.
