@@ -149,21 +149,27 @@ function Get-CertificationDecision {
         throw "outcomes do not cover the live map shard universe (missing: $($missing -join ', '))"
     }
 
+    # The audit partitions the shards the selector can actually dispatch, which Measure-SelectionMiss
+    # takes from the shard manifest ($AllShards.Count -> TotalShards). A retired slot is not in the
+    # manifest, so it appears in neither partition: compare against the live set, not the raw
+    # universe, or every retirement fails this check instead of the outcome check above.
     $runNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($nameValue in @($Audit.WouldRunShards)) {
         $name = [string] $nameValue
         if (-not $universe.Contains($name)) { throw "audit WouldRunShards names unknown shard '$name'" }
+        if ($retired.Contains($name)) { throw "audit WouldRunShards names retired shard '$name'" }
         if (-not $runNames.Add($name)) { throw "audit WouldRunShards contains duplicate '$name'" }
     }
     $skipNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($nameValue in @($Audit.WouldSkipShards)) {
         $name = [string] $nameValue
         if (-not $universe.Contains($name)) { throw "audit WouldSkipShards names unknown shard '$name'" }
+        if ($retired.Contains($name)) { throw "audit WouldSkipShards names retired shard '$name'" }
         if ($runNames.Contains($name)) { throw "audit shard partitions overlap at '$name'" }
         if (-not $skipNames.Add($name)) { throw "audit WouldSkipShards contains duplicate '$name'" }
     }
-    if ($runNames.Count + $skipNames.Count -ne $universe.Count) {
-        throw 'audit shard partitions do not cover the map shard universe'
+    if ($runNames.Count + $skipNames.Count -ne $expected.Count) {
+        throw 'audit shard partitions do not cover the live map shard universe'
     }
 
     $total = ConvertTo-RequiredInteger $Audit.TotalShards 'audit TotalShards' 1
@@ -171,7 +177,7 @@ function Get-CertificationDecision {
     $wouldSkip = ConvertTo-RequiredInteger $Audit.WouldSkip 'audit WouldSkip'
     $auditFailed = ConvertTo-RequiredInteger $Audit.Failed 'audit Failed'
     $missCount = ConvertTo-RequiredInteger $Audit.MissCount 'audit MissCount'
-    if ($total -ne $universe.Count) { throw 'audit TotalShards does not match the map shard universe' }
+    if ($total -ne $expected.Count) { throw 'audit TotalShards does not match the live map shard universe' }
     if ($auditFailed -ne $failed) { throw 'audit Failed does not match the source outcomes' }
     if ($missCount -ne @($Audit.Missed).Count) { throw 'audit MissCount does not match audit Missed' }
     if ($wouldRun + $wouldSkip -ne $total) {
@@ -180,7 +186,7 @@ function Get-CertificationDecision {
     if ($wouldRun -ne $runNames.Count -or $wouldSkip -ne $skipNames.Count) {
         throw 'audit shard partition counts do not match their shard arrays'
     }
-    if ([bool] $Audit.Escalated -and ($runNames.Count -ne $universe.Count -or $skipNames.Count -ne 0)) {
+    if ([bool] $Audit.Escalated -and ($runNames.Count -ne $expected.Count -or $skipNames.Count -ne 0)) {
         throw 'an escalated audit must run the complete shard universe'
     }
 
@@ -322,9 +328,12 @@ if ($SelfTest) {
         schemaVersion = 1; sha = $sha
         knownShards = @('A', 'B', 'Retired'); alwaysRun = @('Always'); retiredShards = @('Retired')
     }
+    # Measure-SelectionMiss partitions the SHARD MANIFEST (TotalShards = $AllShards.Count), so a
+    # retired slot appears in neither partition and in no total. Asserting it the other way is what
+    # let the first attempt at this fix pass locally and still fail CI at the partition check.
     $retiredAudit = [pscustomobject]@{
-        Escalated = $false; TotalShards = 4; WouldRun = 2; WouldSkip = 2
-        WouldRunShards = @('A', 'Always'); WouldSkipShards = @('B', 'Retired')
+        Escalated = $false; TotalShards = 3; WouldRun = 2; WouldSkip = 1
+        WouldRunShards = @('A', 'Always'); WouldSkipShards = @('B')
         Failed = 0; Missed = @(); MissCount = 0
     }
     $decision = Get-CertificationDecision $retiredMap $retiredAudit $outcomes 10 11 $sha 12
@@ -335,6 +344,11 @@ if ($SelfTest) {
         [pscustomobject]@{ shard = 'Retired'; outcome = 'success' }
     Assert-Rejected { Get-CertificationDecision $retiredMap $retiredAudit $retiredOutcomes 10 11 $sha 12 } `
         'a retired shard reporting an outcome was accepted'
+    $retiredInPartition = $retiredAudit.PSObject.Copy()
+    $retiredInPartition.WouldSkipShards = @('B', 'Retired'); $retiredInPartition.WouldSkip = 2
+    $retiredInPartition.TotalShards = 4
+    Assert-Rejected { Get-CertificationDecision $retiredMap $retiredInPartition $outcomes 10 11 $sha 12 } `
+        'an audit partitioning a retired shard was accepted'
     $unknownRetired = $retiredMap.PSObject.Copy(); $unknownRetired.retiredShards = @('Absent')
     Assert-Rejected { Get-CertificationDecision $unknownRetired $retiredAudit $outcomes 10 11 $sha 12 } `
         'retiredShards naming a shard outside the map universe was accepted'
