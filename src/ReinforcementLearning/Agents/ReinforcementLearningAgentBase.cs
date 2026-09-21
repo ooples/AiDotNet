@@ -4,6 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
@@ -150,7 +151,18 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         Guard.NotNull(options);
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        // An explicit Seed always wins. Failing that, honour the ambient deterministic-initialisation
+        // scope the surrounding code may have opened: an agent built inside one is expected to be
+        // reproducible, and its exploration draws and replay sampling are as much a part of that as
+        // its layer weights. Reading AmbientFallbackSeed does NOT consume the scope's per-layer seed
+        // stream, so the weights an agent's networks receive are unchanged either way. The property
+        // is null unless a caller sets it, so an agent constructed normally still gets secure entropy.
+        int? ambientSeed = LayerInitializationSeedScope.AmbientFallbackSeed;
+        Random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : ambientSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(ambientSeed.Value)
+                : RandomHelper.CreateSecureRandom();
 
         // Apply sensible defaults for required properties per facade pattern.
         // For unconstrained generic T, `options.LearningRate` is annotated `T?` but
