@@ -1557,10 +1557,19 @@ jobs:
               # so coverlet's in-place rewrite and its hit counters are shared across the process.
               $shardProjectDirectory = Split-Path -Parent '${{ matrix.shard.project }}'
               $parentOutput = Join-Path $shardProjectDirectory 'bin/Release/${{ matrix.shard.framework }}'
-              & ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory $parentOutput -WorkerDirectory $env:SHARD_COVERAGE_INCLUDE
-              # Fail loudly. A silent gap here is the defect being fixed: the map-feeding run would
-              # otherwise complete and publish a map that still cannot select these 46 shards.
-              if ($LASTEXITCODE -ne 0) { throw "worker coverage could not be linked for '$shardName'" }
+              # Degrade, never abort. Connect-WorkerCoverage throws on a hash mismatch or an
+              # unsupported link, and this runs inside the map-feeding run: aborting would lose the
+              # whole map, which is strictly worse than today's map that merely keeps these shards
+              # always-run. mustCover already degrades safely - "a coverage gap costs runs, never a
+              # miss" - and the map audit reports the shard as "always-run until its coverage
+              # reaches its subject", so the failure stays visible where it matters.
+              try {
+                & ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory $parentOutput -WorkerDirectory $env:SHARD_COVERAGE_INCLUDE
+                if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+              }
+              catch {
+                Write-Host "::warning::worker coverage could not be linked for '$shardName' ($($_.Exception.Message)); its digest will not reach the worker and the shard stays always-run"
+              }
             }
             $dotnetArgs += @(
               '--collect:XPlat Code Coverage',
