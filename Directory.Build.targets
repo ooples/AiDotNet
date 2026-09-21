@@ -29,11 +29,17 @@
     cannot hide a missing file from any other package), self-correcting (it does nothing
     once a future release stops declaring the item, or starts shipping it again), and needs
     no dependency surgery.
+
+    The match is anchored to the package directory, with a path separator required on both
+    sides, rather than being a bare substring test. A plain Contains('sqlitepclraw') would
+    also match sqlitepclraw.bundle_e_sqlite3, sqlitepclraw.core and sqlitepclraw.provider.*,
+    as well as any repository path that happens to contain the token — so a genuinely missing
+    file from one of those would be swallowed here instead of reported as MSB3030.
   -->
   <Target Name="RemoveMissingSqlitePclRawNativeContent" BeforeTargets="AssignTargetPaths">
     <ItemGroup>
       <Content Remove="@(Content)"
-               Condition="$([System.String]::Copy('%(Content.Identity)').ToLowerInvariant().Contains('sqlitepclraw')) AND !Exists('%(Content.Identity)')" />
+               Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Content.Identity)', '(?i)[\\/]sqlitepclraw\.lib\.e_sqlite3[\\/]')) AND !Exists('%(Content.Identity)')" />
     </ItemGroup>
   </Target>
 
