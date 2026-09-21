@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Diffusion Variational Autoencoder for Tackling Stochasticity in Multi-Step Regression Stock Price Prediction", "https://arxiv.org/abs/2309.00073")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
+public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Fields
 
@@ -81,6 +81,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
     private int _numHeads;
     private int _diffusionSteps;
     private int _numSamples;
+    private int _trainingBatchSize;
     private double _dropout;
     private double _betaStart;
     private double _betaEnd;
@@ -129,7 +130,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
         // bubbling up a bare InvalidCastException on first Train().
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate }); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
     }
 
@@ -139,7 +140,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
     {
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate }); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options); InitializeLayers();
     }
 
@@ -150,6 +151,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
         _numHeads = options.NumHeads; _diffusionSteps = options.DiffusionSteps;
         _dropout = options.DropoutRate; _betaStart = options.BetaStart;
         _betaEnd = options.BetaEnd; _numSamples = options.NumSamples;
+        _trainingBatchSize = options.TrainingBatchSize;
         ComputeNoiseSchedule();
     }
 
@@ -257,24 +259,37 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
             // would bake and then reject on the next call.
             int outputLen = _forecastHorizon;
             var rand = RandomHelper.CreateSecureRandom();
-            int t = rand.Next(_diffusionSteps);
 
-            var epsilonTrue = new Tensor<T>(new[] { 1, outputLen });
-            var xt = new Tensor<T>(new[] { 1, outputLen });
-            T sqrtAlphaBar = _sqrtAlphasCumprod[t];
-            T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[t];
-            for (int i = 0; i < outputLen; i++)
+            // One row per (timestep, noise) draw. Ho et al. 2020 Algorithm 1 draws a single t per
+            // EXAMPLE and averages the step over a minibatch (128 in their Section 4); a caller
+            // here hands us one example, so the minibatch is taken over the noise process instead.
+            // Without it the gradient is a one-sample estimate of an expectation over
+            // DiffusionSteps noise levels, so consecutive steps are dominated by which t came up
+            // rather than by what the model learned - and the reported loss is too, which is what
+            // made the training probes read as noise.
+            int batch = Math.Max(1, _trainingBatchSize);
+            var timesteps = new int[batch];
+            var epsilonTrue = new Tensor<T>(new[] { batch, outputLen });
+            var xt = new Tensor<T>(new[] { batch, outputLen });
+            for (int b = 0; b < batch; b++)
             {
-                T noise = SampleStandardNormal(rand);
-                T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
-                epsilonTrue.Data.Span[i] = noise;
-                xt.Data.Span[i] = NumOps.Add(
-                    NumOps.Multiply(sqrtAlphaBar, y),
-                    NumOps.Multiply(sqrtOneMinus, noise));
+                int tb = rand.Next(_diffusionSteps);
+                timesteps[b] = tb;
+                T sqrtAlphaBar = _sqrtAlphasCumprod[tb];
+                T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[tb];
+                for (int i = 0; i < outputLen; i++)
+                {
+                    T noise = SampleStandardNormal(rand);
+                    T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
+                    int flat = b * outputLen + i;
+                    epsilonTrue.Data.Span[flat] = noise;
+                    xt.Data.Span[flat] = NumOps.Add(
+                        NumOps.Multiply(sqrtAlphaBar, y),
+                        NumOps.Multiply(sqrtOneMinus, noise));
+                }
             }
-
             using var tape = new GradientTape<T>();
-            var epsilonPred = DenoiserForward(xt, conditioned, t, samples: 1, outputLen: outputLen);
+            var epsilonPred = DenoiserForward(xt, conditioned, timesteps, batch, outputLen);
             var lossTensor = _lossFunction.ComputeTapeLoss(epsilonPred, epsilonTrue);
 
             // Publish through the base rather than calling tape.ComputeGradients directly.
@@ -290,7 +305,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
             // that re-drew them would be comparing losses from two different noise levels and
             // reading the difference as progress.
             Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) =>
-                DenoiserForward(xt, conditioned, t, samples: 1, outputLen: outputLen);
+                DenoiserForward(xt, conditioned, timesteps, batch, outputLen);
             Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) =>
                 _lossFunction.ComputeTapeLoss(pred, epsilonTrue);
 
@@ -480,15 +495,22 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
     /// timestep encoding is a constant. Only the layer chain below needs the tape.
     /// </remarks>
     private Tensor<T> DenoiserForward(Tensor<T> xt, Tensor<T> conditioned, int t, int samples, int outputLen)
+        => DenoiserForward(xt, conditioned, new[] { t }, samples, outputLen);
+
+    /// <summary>
+    /// The batched denoiser: one row per (x_t, timestep) pair. A <paramref name="timesteps"/> of
+    /// length one means every row shares that step, which is what the sampler needs; one entry
+    /// per row is what a training step needs, since each draw sits at its own noise level.
+    /// </summary>
+    private Tensor<T> DenoiserForward(Tensor<T> xt, Tensor<T> conditioned, IReadOnlyList<int> timesteps, int samples, int outputLen)
     {
         var condFlat = conditioned.Rank == 1
             ? conditioned
             : Engine.Reshape(conditioned, new[] { conditioned.Length });
         int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-        int rowLen = outputLen + condLen + 1;
+        int rowLen = outputLen + condLen + DiffusionTimestepEmbeddingDim;
 
         var packed = new Tensor<T>(new[] { samples, rowLen });
-        T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
         var din = packed.Data.Span;
         for (int s = 0; s < samples; s++)
         {
@@ -499,7 +521,9 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
                 din[baseIdx + i] = flat < xt.Length ? xt[flat] : NumOps.Zero;
             }
             for (int i = 0; i < condLen; i++) din[baseIdx + outputLen + i] = condFlat[i];
-            din[baseIdx + outputLen + condLen] = sinT;
+            int stepS = timesteps.Count == 1 ? timesteps[0] : timesteps[s];
+            WriteDiffusionTimestepEmbedding(
+                din.Slice(baseIdx + outputLen + condLen, DiffusionTimestepEmbeddingDim), stepS);
         }
 
         var eps = packed;
@@ -511,5 +535,53 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
 
+
+    #region ITrainingObjectiveProvider
+
+    /// <summary>
+    /// The learner is denoising diffusion, not supervised regression of the forecast onto the
+    /// target: <see cref="Train"/> minimizes the noise-prediction error of Ho et al. 2020
+    /// Algorithm 1, and <see cref="Predict"/> is a 100-step ancestral sampler run on top of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declaring the objective is what lets a loss-trajectory probe measure the quantity training
+    /// actually descends. Judging these models on the sampler instead measures something the
+    /// optimizer never sees: the reverse chain divides by sqrt(alpha_bar_T) overall, about 16x on
+    /// the T=100, beta_T=0.1 schedule, so it magnifies whatever bias a partially trained noise
+    /// predictor still has. Early in training that magnified bias moves the sampled path around by
+    /// far more than a handful of optimizer steps improve it, which reads as a model getting worse
+    /// while its own objective is falling.
+    /// </para>
+    /// </remarks>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind =>
+        TrainingObjectiveKind.DiffusionDenoising;
+
+    /// <summary>The supplied forecast target IS the x_0 the denoiser learns to recover.</summary>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => proposedTarget;
+
+    /// <summary>
+    /// Evaluates L_simple over a fixed (timestep, noise) quadrature, through the configured loss
+    /// function so a caller who overrides it is scored on what the model is optimizing.
+    /// </summary>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("The training objective is only defined in native mode.");
+
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1)
+            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+
+        int outputLen = _forecastHorizon;
+        var (noisy, noise, timesteps) = BuildDeterministicDenoisingBatch(
+            target, outputLen, _diffusionSteps, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod);
+
+        var predicted = DenoiserForward(noisy, conditioned, timesteps, timesteps.Length, outputLen);
+        return _lossFunction.ComputeLoss(predicted, noise);
+    }
+
+    #endregion
     #endregion
 }

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -1055,6 +1055,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 "OpenVoiceV2",
                 new WarmupIterationOverride(deterministicMemorizationLoss: true)
+            },
+
+            // TSDiff and CCDM are denoising-diffusion forecasters. Following Ho et al. 2020
+            // Algorithm 1, each Train call draws a diffusion step t uniformly and a fresh epsilon,
+            // so GetLastLoss() is the epsilon-MSE at ONE randomly chosen noise level: the endpoint
+            // comparison is between two different objectives, not two points on one trajectory.
+            // That is a stronger form of the stochastic-forward case NaturalSpeech and VMamba
+            // document - it is structural, not a dropout mask - so the probe is judged on the
+            // deterministic evaluation loss. Both models declare their objective through
+            // ITrainingObjectiveProvider, so that measurement is L_simple over a FIXED (timestep,
+            // noise) quadrature - the quantity the optimizer descends - and not the sampler's
+            // median forecast, which divides by sqrt(alpha_bar_T) and therefore magnifies the bias
+            // a partially trained noise predictor still carries. The strict-decrease threshold is
+            // unchanged. CSDI trains the same way and is a candidate for the same entry if its
+            // stochastic probe ever reverses.
+            // The 200-step count is measured under that objective, not assumed: at the emitted 20
+            // steps CCDM reads 0.996003 -> 1.006925, which is Adam's warm-up rather than a
+            // training defect, and at 200 both models pass 3 runs of 3.
+            {
+                "TSDiff",
+                new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
+            },
+            {
+                "CCDM",
+                new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
             },
         };
 

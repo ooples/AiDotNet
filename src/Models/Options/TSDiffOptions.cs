@@ -91,6 +91,9 @@ public class TSDiffOptions<T> : TimeSeriesRegressionOptions<T>
         BetaSchedule = other.BetaSchedule;
         NumSamples = other.NumSamples;
         GuidanceScale = other.GuidanceScale;
+        UnconditionalProbability = other.UnconditionalProbability;
+        TrainingBatchSize = other.TrainingBatchSize;
+        LearningRate = other.LearningRate;
         UseSelfGuidance = other.UseSelfGuidance;
         UseObservationGuidance = other.UseObservationGuidance;
         DropoutRate = other.DropoutRate;
@@ -134,24 +137,24 @@ public class TSDiffOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the hidden dimension for the denoising network.
     /// </summary>
-    /// <value>The hidden dimension, defaulting to 128.</value>
+    /// <value>The hidden dimension, defaulting to 64 - the paper's residual width.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> The internal representation size of the network.
     /// Larger values can capture more complex patterns.
     /// </para>
     /// </remarks>
-    public int HiddenDimension { get; set; } = 128;
+    public int HiddenDimension { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of residual blocks in the denoising network.
     /// </summary>
-    /// <value>The number of residual blocks, defaulting to 8.</value>
+    /// <value>The number of residual blocks, defaulting to 3 - the paper's backbone depth.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Residual blocks are the building blocks of the network.
     /// More blocks = deeper network = more capacity for complex patterns.
     /// </para>
     /// </remarks>
-    public int NumResidualBlocks { get; set; } = 8;
+    public int NumResidualBlocks { get; set; } = 3;
 
     /// <summary>
     /// Gets or sets the number of diffusion steps.
@@ -178,13 +181,25 @@ public class TSDiffOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the ending noise level (beta_T).
     /// </summary>
-    /// <value>The ending beta, defaulting to 0.02.</value>
+    /// <value>The ending beta, defaulting to 0.1.</value>
     /// <remarks>
+    /// <para>
+    /// Kollovieh et al. 2023 Appendix: "The number of timesteps in the diffusion process was set
+    /// to T = 100 and we used a linear scheduler with beta_1 = 0.0001 and beta_100 = 0.1."
+    /// </para>
+    /// <para>
+    /// The value belongs WITH the step count. Ho et al. 2020 pair beta_T = 0.02 with T = 1000,
+    /// where the cumulative product alphaBar_T lands near 4e-5 - x_T is then indistinguishable
+    /// from pure noise, which is what the sampler starts from. Carrying 0.02 over to T = 100
+    /// leaves alphaBar_T near 0.37, so the forward process still retains ~61% of the signal
+    /// while the sampler still starts at pure noise: the two ends no longer meet, and no amount
+    /// of training closes that gap.
+    /// </para>
     /// <para><b>For Beginners:</b> Final variance of noise. By the last step,
     /// data should be approximately standard Gaussian.
     /// </para>
     /// </remarks>
-    public double BetaEnd { get; set; } = 0.02;
+    public double BetaEnd { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the noise schedule type.
@@ -225,6 +240,59 @@ public class TSDiffOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the probability of dropping the conditioning during a training step.
+    /// </summary>
+    /// <value>Defaults to 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Sampling can blend a conditioned forecast with an
+    /// unconditional one to sharpen it (see <see cref="GuidanceScale"/>). For that blend to mean
+    /// anything, the model has to have been trained to forecast without the conditioning some of
+    /// the time. This is how often that happens.</para>
+    /// <para><b>Provenance:</b> 0.1 is the conditioning dropout rate Ho and Salimans,
+    /// "Classifier-Free Diffusion Guidance" (2022) Section 3 use to train one network jointly on
+    /// the conditional and unconditional objectives. Set it to 0 to train a purely conditional
+    /// denoiser, in which case leave <see cref="GuidanceScale"/> at 1.0.</para>
+    /// </remarks>
+    public double UnconditionalProbability { get; set; } = 0.1;
+
+    /// <summary>
+    /// Number of (timestep, noise) draws averaged into a single training step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ho et al. (2020), "Denoising Diffusion Probabilistic Models", Algorithm 1 draws one
+    /// timestep per example and averages the step over a minibatch - 128 examples in their
+    /// Section 4. A caller here supplies one example at a time, so the averaging has to happen
+    /// over the noise process instead: without it, a step's gradient (and its reported loss) is a
+    /// one-sample estimate of an expectation taken over every noise level, and successive steps
+    /// differ mostly by which timestep came up.
+    /// </para>
+    /// <para><b>For Beginners:</b> Diffusion training asks "given this partly noised series, what
+    /// noise was added?" at a randomly chosen noise level. Asking once gives a very jumpy answer;
+    /// asking 32 times at different levels and averaging gives a steady one. Raise this for
+    /// smoother training at proportionally more work per step, lower it to train faster.</para>
+    /// </remarks>
+    public int TrainingBatchSize { get; set; } = 32;
+
+    /// <summary>
+    /// Learning rate for the default Adam optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kollovieh et al. (2023), "Predict, Refine, Synthesize: Self-Guiding Diffusion Models for
+    /// Probabilistic Time Series Forecasting", train TSDiff with Adam at 1e-3, the same rate
+    /// Tashiro et al. (2021) use for CSDI. Without this the model fell back to
+    /// <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.InitialLearningRate"/>'s
+    /// generic 0.01, which is 10x that rate and 50x the 2e-4 of Ho et al. (2020) Section 4 - at
+    /// that step size the epsilon-prediction loss rises instead of falling.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how big a step training takes each time it learns
+    /// something. Too big and the model overshoots and gets worse; too small and it barely moves.
+    /// 0.001 is the value the papers in this family use.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
 
     /// <summary>
     /// Gets or sets whether to use self-guidance during sampling.

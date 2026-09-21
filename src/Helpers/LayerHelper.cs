@@ -37587,8 +37587,8 @@ public static partial class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int sequenceLength = 192, int forecastHorizon = 24, int hiddenDimension = 128,
-        int numResidualBlocks = 8, int numAttentionHeads = 4, double dropout = 0.1)
+        int sequenceLength = 192, int forecastHorizon = 24, int hiddenDimension = 64,
+        int numResidualBlocks = 3, int numAttentionHeads = 4, double dropout = 0.1)
     {
         if (sequenceLength < 1) throw new ArgumentOutOfRangeException(nameof(sequenceLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
