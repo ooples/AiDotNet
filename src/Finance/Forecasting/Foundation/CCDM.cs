@@ -328,7 +328,13 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
             : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
-        var rand = RandomHelper.CreateSecureRandom();
+        // Restart the noise stream at the configured seed so Predict called twice on the same
+        // input returns the same answer. ForwardNative draws ONE path, so seeding here does not
+        // collapse a sample set -- there is none to collapse. With Seed null the draw is secure
+        // and deliberately not reproducible.
+        var rand = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Start from noise at highest sigma level
         var xt = new Tensor<T>(new[] { 1, outputLen });
