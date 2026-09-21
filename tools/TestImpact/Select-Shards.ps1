@@ -1187,24 +1187,143 @@ function Test-TestFilter {
     }
 }
 
+function Get-CSharpLiteralEnd {
+    <#
+        Returns the index one past the end of the C# string or character literal starting at
+        $Start, or $Start when nothing starts there. Understands raw ("""), verbatim (@"),
+        interpolated ($") and combined forms.
+
+        Interpolation holes are CODE, not text: `$"{string.Join(", ", xs)}"` contains a nested
+        string whose quotes must not end the outer literal. A regex cannot express that, and the
+        one this replaced ended the literal at the first inner quote - which swallowed the hole's
+        opening brace, left its closing brace as code, and made Get-CSharpTestShape report
+        'unbalanced braces' for NeuralNetworkModelTestBase.cs. That is an escalation to the full
+        matrix for every change that reaches it.
+    #>
+    param([Parameter(Mandatory)] [string] $Text, [Parameter(Mandatory)] [int] $Start)
+
+    $n = $Text.Length
+    $i = $Start
+
+    if ($Text[$i] -eq "'") {
+        $i++
+        while ($i -lt $n) {
+            if ($Text[$i] -eq '\') { $i += 2; continue }
+            if ($Text[$i] -eq "'") { return $i + 1 }
+            if ($Text[$i] -eq "`n") { return $i }
+            $i++
+        }
+        return $n
+    }
+
+    $interpolated = $false
+    $verbatim = $false
+    while ($i -lt $n -and ($Text[$i] -eq '$' -or $Text[$i] -eq '@')) {
+        if ($Text[$i] -eq '$') { $interpolated = $true } else { $verbatim = $true }
+        $i++
+    }
+    if ($i -ge $n -or $Text[$i] -ne '"') { return $Start }
+
+    $quotes = 0
+    while ($i + $quotes -lt $n -and $Text[$i + $quotes] -eq '"') { $quotes++ }
+    if ($quotes -ge 3) {
+        $fence = [string]::new('"', $quotes)
+        $close = $Text.IndexOf($fence, $i + $quotes)
+        if ($close -lt 0) { return $n }
+        return $close + $quotes
+    }
+
+    $i++
+    $holeDepth = 0
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+
+        if ($holeDepth -gt 0) {
+            # Inside an interpolation hole the text is code: recurse through nested literals so
+            # their quotes and braces cannot be mistaken for the outer literal's.
+            if ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+                $inner = Get-CSharpLiteralEnd -Text $Text -Start $i
+                if ($inner -gt $i) { $i = $inner; continue }
+            }
+            if ($ch -eq '{') { $holeDepth++ }
+            elseif ($ch -eq '}') { $holeDepth-- }
+            $i++
+            continue
+        }
+
+        if ($verbatim) {
+            if ($ch -eq '"') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '"') { $i += 2; continue }
+                return $i + 1
+            }
+        }
+        else {
+            if ($ch -eq '\') { $i += 2; continue }
+            if ($ch -eq '"') { return $i + 1 }
+            if ($ch -eq "`n") { return $i }
+        }
+
+        if ($interpolated) {
+            if ($ch -eq '{') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '{') { $i += 2; continue }
+                $holeDepth++; $i++; continue
+            }
+            if ($ch -eq '}' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '}') { $i += 2; continue }
+        }
+
+        $i++
+    }
+    return $n
+}
+
 function ConvertTo-CodeOnlyCSharp {
     <#
         Blanks the CONTENT of comments, strings and character literals (newlines are kept, so
         offsets and line numbers survive), leaving only code. Brace matching and declaration
         matching then cannot be fooled by '{' in a string or 'class X' in a comment.
+
+        Scanned rather than pattern-matched: see Get-CSharpLiteralEnd for why a regex cannot
+        classify an interpolation hole correctly.
     #>
     param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [switch] $PreserveStrings)
 
-    $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
-    # A managed replacement avoids repeatedly logging/Stringifying an ever-growing
-    # StringBuilder under PowerShell member-invocation logging (quadratic on generators).
-    return [regex]::Replace($Text, $pattern, [System.Text.RegularExpressions.MatchEvaluator] {
-        param($match)
-        if ($PreserveStrings -and -not ($match.Value.StartsWith('//') -or $match.Value.StartsWith('/*'))) {
-            return $match.Value
+    $n = $Text.Length
+    if ($n -eq 0) { return $Text }
+    $chars = $Text.ToCharArray()
+    $i = 0
+
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+        $from = $i
+        $to = -1
+        $isComment = $false
+
+        if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+            $isComment = $true
+            $to = $Text.IndexOf("`n", $i)
+            if ($to -lt 0) { $to = $n }
         }
-        return ($match.Value -replace '[^\r\n]', ' ')
-    })
+        elseif ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+            $isComment = $true
+            $to = $Text.IndexOf('*/', $i + 2)
+            $to = if ($to -lt 0) { $n } else { $to + 2 }
+        }
+        elseif ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+            $end = Get-CSharpLiteralEnd -Text $Text -Start $i
+            if ($end -gt $i) { $to = $end }
+        }
+
+        if ($to -lt 0) { $i++; continue }
+        if (-not ($PreserveStrings -and -not $isComment)) {
+            for ($k = $from; $k -lt $to; $k++) {
+                $c = $chars[$k]
+                if ($c -ne "`r" -and $c -ne "`n") { $chars[$k] = ' ' }
+            }
+        }
+        $i = $to
+    }
+
+    return [string]::new($chars)
 }
 
 function Get-CSharpTestShape {
