@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class DocumentAnalysisTests
 {
-    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = DocumentTestScale.ImageSize)
     {
         return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
@@ -41,7 +41,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<float>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: DocumentTestScale.ImageSize);
         Assert.NotNull(model);
     }
 
@@ -49,7 +49,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<float>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -61,7 +61,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<float>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocBank", meta.Name);
     }
@@ -74,7 +74,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<float>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: DocumentTestScale.ImageSize);
         Assert.NotNull(model);
     }
 
@@ -82,7 +82,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<float>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -94,7 +94,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<float>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var meta = model.GetModelMetadata();
         Assert.Equal("TableTransformer", meta.Name);
     }

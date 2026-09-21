@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class PixelToSequenceDocumentTests
 {
-    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = DocumentTestScale.ImageSize)
     {
         return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
@@ -73,7 +73,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<float>(arch, imageSize: 64);
+        var model = new Nougat<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         Assert.NotNull(model);
     }
 
@@ -81,7 +81,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<float>(arch, imageSize: 64);
+        var model = new Nougat<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -93,7 +93,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<float>(arch, imageSize: 64);
+        var model = new Nougat<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         var meta = model.GetModelMetadata();
         Assert.Equal("Nougat", meta.Name);
     }
@@ -106,7 +106,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<float>(arch, imageSize: 64);
+        var model = new Pix2Struct<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         Assert.NotNull(model);
     }
 
@@ -114,7 +114,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<float>(arch, imageSize: 64);
+        var model = new Pix2Struct<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -126,7 +126,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<float>(arch, imageSize: 64);
+        var model = new Pix2Struct<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim);
         var meta = model.GetModelMetadata();
         Assert.Equal("Pix2Struct", meta.Name);
     }
@@ -139,7 +139,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<float>(arch, imageSize: 64);
+        var model = new Dessurt<float>(arch, imageSize: DocumentTestScale.ImageSize);
         Assert.NotNull(model);
     }
 
@@ -147,7 +147,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<float>(arch, imageSize: 64);
+        var model = new Dessurt<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -159,7 +159,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<float>(arch, imageSize: 64);
+        var model = new Dessurt<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var meta = model.GetModelMetadata();
         Assert.Equal("Dessurt", meta.Name);
     }
@@ -172,7 +172,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<float>(arch, imageSize: 64);
+        var model = new MATCHA<float>(arch, imageSize: DocumentTestScale.ImageSize);
         Assert.NotNull(model);
     }
 
@@ -180,7 +180,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<float>(arch, imageSize: 64);
+        var model = new MATCHA<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -192,7 +192,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<float>(arch, imageSize: 64);
+        var model = new MATCHA<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var meta = model.GetModelMetadata();
         Assert.Equal("MATCHA", meta.Name);
     }
@@ -208,10 +208,10 @@ public class PixelToSequenceDocumentTests
         var models = new DocumentNeuralNetworkBase<float>[]
         {
             new Donut<float>(arch, imageHeight: 64, imageWidth: 64),
-            new Nougat<float>(arch, imageSize: 64),
-            new Pix2Struct<float>(arch, imageSize: 64),
-            new Dessurt<float>(arch, imageSize: 64),
-            new MATCHA<float>(arch, imageSize: 64),
+            new Nougat<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim),
+            new Pix2Struct<float>(arch, imageSize: DocumentTestScale.ImageSize, hiddenDim: DocumentTestScale.HiddenDim),
+            new Dessurt<float>(arch, imageSize: DocumentTestScale.ImageSize),
+            new MATCHA<float>(arch, imageSize: DocumentTestScale.ImageSize),
         };
 
         foreach (var model in models)

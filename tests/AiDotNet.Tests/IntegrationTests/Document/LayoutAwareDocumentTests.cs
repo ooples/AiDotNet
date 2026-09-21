@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class LayoutAwareDocumentTests
 {
-    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = DocumentTestScale.ImageSize)
     {
         return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
@@ -217,7 +217,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: DocumentTestScale.ImageSize);
         Assert.NotNull(model);
     }
 
@@ -225,7 +225,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -237,7 +237,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: DocumentTestScale.ImageSize);
         var meta = model.GetModelMetadata();
         Assert.Equal("DiT", meta.Name);
     }
@@ -309,7 +309,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: DocumentTestScale.ImageSize);
         // DiT is vision-only, does not require OCR
         Assert.False(model.RequiresOCR);
     }
@@ -337,7 +337,7 @@ public class LayoutAwareDocumentTests
     }
 
     private static LiLT<float> CreateSmallLiLT()
-        => new LiLT<float>(CreateArchitecture(imageSize: 32), numClasses: 4, maxSequenceLength: 64,
+        => new LiLT<float>(CreateArchitecture(imageSize: DocumentTestScale.ImageSize), numClasses: 4, maxSequenceLength: 64,
             hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
 
     [Fact(Timeout = 120000)]
@@ -409,12 +409,12 @@ public class LayoutAwareDocumentTests
     }
 
     private static LayoutXLM<float> CreateSmallLayoutXLM()
-        => new LayoutXLM<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
+        => new LayoutXLM<float>(CreateArchitecture(imageSize: DocumentTestScale.ImageSize), numClasses: 7, imageSize: DocumentTestScale.ImageSize,
             maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100,
             visualBackboneChannels: 32);
 
     private static LayoutLMv2<float> CreateSmallLayoutLMv2()
-        => new LayoutLMv2<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
+        => new LayoutLMv2<float>(CreateArchitecture(imageSize: DocumentTestScale.ImageSize), numClasses: 7, imageSize: DocumentTestScale.ImageSize,
             maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100,
             visualBackboneChannels: 32);
 
@@ -576,7 +576,7 @@ public class LayoutAwareDocumentTests
     #region DocFormer Tests
 
     private static DocFormer<float> CreateSmallDocFormer()
-        => new DocFormer<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
+        => new DocFormer<float>(CreateArchitecture(imageSize: DocumentTestScale.ImageSize), numClasses: 7, imageSize: DocumentTestScale.ImageSize,
             maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
 
     /// <summary>

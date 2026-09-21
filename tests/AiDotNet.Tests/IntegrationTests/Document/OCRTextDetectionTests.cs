@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class OCRTextDetectionTests
 {
-    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = DocumentTestScale.ImageSize)
     {
         return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
@@ -40,7 +40,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<float>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, upscaleChannels: DocumentTestScale.UpscaleChannels);
         Assert.NotNull(model);
     }
 
@@ -48,7 +48,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<float>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, upscaleChannels: DocumentTestScale.UpscaleChannels);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +60,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<float>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, upscaleChannels: DocumentTestScale.UpscaleChannels);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRAFT", meta.Name);
         Assert.NotNull(meta.AdditionalInfo);
@@ -70,7 +70,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<float>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, upscaleChannels: DocumentTestScale.UpscaleChannels);
         var summary = model.GetModelSummary();
         Assert.Contains("CRAFT", summary);
     }
@@ -83,7 +83,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<float>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels);
         Assert.NotNull(model);
     }
 
@@ -91,7 +91,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<float>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -103,7 +103,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<float>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels);
         var meta = model.GetModelMetadata();
         Assert.Equal("DBNet", meta.Name);
     }
@@ -116,7 +116,7 @@ public class OCRTextDetectionTests
     public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<float>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         Assert.NotNull(model);
     }
 
@@ -124,7 +124,7 @@ public class OCRTextDetectionTests
     public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<float>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -136,7 +136,7 @@ public class OCRTextDetectionTests
     public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<float>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         var meta = model.GetModelMetadata();
         Assert.Equal("EAST", meta.Name);
     }
@@ -149,7 +149,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<float>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         Assert.NotNull(model);
     }
 
@@ -157,7 +157,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<float>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -169,7 +169,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<float>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels);
         var meta = model.GetModelMetadata();
         Assert.Equal("PSENet", meta.Name);
     }
@@ -184,10 +184,10 @@ public class OCRTextDetectionTests
         var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new CRAFT<float>(arch, imageSize: 64),
-            new DBNet<float>(arch, imageSize: 64),
-            new EAST<float>(arch, imageSize: 64),
-            new PSENet<float>(arch, imageSize: 64),
+            new CRAFT<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, upscaleChannels: DocumentTestScale.UpscaleChannels),
+            new DBNet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels),
+            new EAST<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels),
+            new PSENet<float>(arch, imageSize: DocumentTestScale.ImageSize, backboneChannels: DocumentTestScale.BackboneChannels, featureChannels: DocumentTestScale.FeatureChannels),
         };
 
         foreach (var model in models)
