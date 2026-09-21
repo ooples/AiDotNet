@@ -231,7 +231,14 @@ internal static class FinanceModelTestFactory
                 // production validates instead of teaching this factory a list of tokenized models.
                 if (model is NeuralNetworkBase<T> contractOwner)
                 {
-                    var contract = contractOwner.BindInputContract(input.Shape.ToArray());
+                    // The split above assigns the architecture width to time and features by
+                    // interface, and a model whose contract pins those axes rejects that outright -
+                    // binding throws before the synthesis below ever runs. Conform the proposed
+                    // geometry to the constraint the model publishes for this purpose first.
+                    var requested = InputContractShapeResolver.Conform(
+                        input.Shape.ToArray(),
+                        contractOwner.GetInputShapeConstraint());
+                    var contract = contractOwner.BindInputContract(requested);
                     input = InputContractTensorFactory.CreateValid<T>(
                         contract,
                         RandomHelper.CreateSeededRandom(42));
