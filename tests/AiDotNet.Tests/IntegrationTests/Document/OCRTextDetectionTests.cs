@@ -14,9 +14,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class OCRTextDetectionTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputHeight: imageSize,
@@ -25,13 +25,13 @@ public class OCRTextDetectionTests
             outputSize: 2);
     }
 
-    private static Tensor<double> CreateSmallImage(int channels = 3, int size = 64)
+    private static Tensor<float> CreateSmallImage(int channels = 3, int size = 64)
     {
         int totalSize = 1 * channels * size * size;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, channels, size, size }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, channels, size, size }, data);
     }
 
     #region CRAFT Tests
@@ -40,7 +40,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -48,7 +48,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +60,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRAFT", meta.Name);
         Assert.NotNull(meta.AdditionalInfo);
@@ -70,7 +70,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        var model = new CRAFT<float>(arch, imageSize: 64);
         var summary = model.GetModelSummary();
         Assert.Contains("CRAFT", summary);
     }
@@ -83,7 +83,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -91,7 +91,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -103,7 +103,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
+        var model = new DBNet<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DBNet", meta.Name);
     }
@@ -116,7 +116,7 @@ public class OCRTextDetectionTests
     public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -124,7 +124,7 @@ public class OCRTextDetectionTests
     public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -136,7 +136,7 @@ public class OCRTextDetectionTests
     public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        var model = new EAST<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("EAST", meta.Name);
     }
@@ -149,7 +149,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -157,7 +157,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -169,7 +169,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
+        var model = new PSENet<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("PSENet", meta.Name);
     }
@@ -182,12 +182,12 @@ public class OCRTextDetectionTests
     public async Task AllTextDetectors_SupportedDocumentTypes_NotNone()
     {
         var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
+        var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new CRAFT<double>(arch, imageSize: 64),
-            new DBNet<double>(arch, imageSize: 64),
-            new EAST<double>(arch, imageSize: 64),
-            new PSENet<double>(arch, imageSize: 64),
+            new CRAFT<float>(arch, imageSize: 64),
+            new DBNet<float>(arch, imageSize: 64),
+            new EAST<float>(arch, imageSize: 64),
+            new PSENet<float>(arch, imageSize: 64),
         };
 
         foreach (var model in models)

@@ -14,9 +14,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class OCRTextRecognitionTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture()
+    private static NeuralNetworkArchitecture<float> CreateArchitecture()
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 32,
@@ -25,22 +25,22 @@ public class OCRTextRecognitionTests
             outputSize: 62);
     }
 
-    private static Tensor<double> CreateSmallImage(int height = 32, int width = 128)
+    private static Tensor<float> CreateSmallImage(int height = 32, int width = 128)
     {
         int totalSize = 1 * 3 * height * width;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, 3, height, width }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, 3, height, width }, data);
     }
 
-    private static TrOCR<double> CreateSmallTrOCR(NeuralNetworkArchitecture<double> architecture)
+    private static TrOCR<float> CreateSmallTrOCR(NeuralNetworkArchitecture<float> architecture)
     {
         // Keep the production constructor's TrOCR-base paper defaults intact. These integration
         // invariants exercise native construction, prediction, metadata, and OCR capabilities, so
         // use the model's public topology controls to avoid allocating the full 50,265 x 768
         // double-precision embedding table repeatedly on a 16 GiB CI runner.
-        return new TrOCR<double>(
+        return new TrOCR<float>(
             architecture,
             imageHeight: 32,
             imageWidth: 128,
@@ -61,7 +61,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<float>(arch, imageWidth: 128);
         Assert.NotNull(model);
     }
 
@@ -69,7 +69,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<float>(arch, imageWidth: 128);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -81,7 +81,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRNN<double>(arch, imageWidth: 128);
+        var model = new CRNN<float>(arch, imageWidth: 128);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRNN", meta.Name);
     }
@@ -128,7 +128,7 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
+        var model = new SVTR<float>(arch);
         Assert.True(model.ParameterCount > 0,
             "SVTR construction must create a trainable architecture.");
     }
@@ -138,7 +138,7 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
+        var model = new SVTR<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -151,7 +151,7 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new SVTR<double>(arch);
+        var model = new SVTR<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("SVTR", meta.Name);
     }
@@ -164,7 +164,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<float>(arch, imageWidth: 128, imageHeight: 32);
         Assert.NotNull(model);
     }
 
@@ -172,7 +172,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<float>(arch, imageWidth: 128, imageHeight: 32);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -184,7 +184,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        var model = new ABINet<float>(arch, imageWidth: 128, imageHeight: 32);
         var meta = model.GetModelMetadata();
         Assert.Equal("ABINet", meta.Name);
     }
@@ -198,12 +198,12 @@ public class OCRTextRecognitionTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
+        var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new CRNN<double>(arch, imageWidth: 128),
+            new CRNN<float>(arch, imageWidth: 128),
             CreateSmallTrOCR(arch),
-            new SVTR<double>(arch),
-            new ABINet<double>(arch, imageWidth: 128, imageHeight: 32),
+            new SVTR<float>(arch),
+            new ABINet<float>(arch, imageWidth: 128, imageHeight: 32),
         };
 
         foreach (var model in models)

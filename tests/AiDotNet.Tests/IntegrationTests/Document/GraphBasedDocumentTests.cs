@@ -14,9 +14,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class GraphBasedDocumentTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture()
+    private static NeuralNetworkArchitecture<float> CreateArchitecture()
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 64,
@@ -25,22 +25,22 @@ public class GraphBasedDocumentTests
             outputSize: 9);
     }
 
-    private static Tensor<double> CreateSmallImage(int size = 64)
+    private static Tensor<float> CreateSmallImage(int size = 64)
     {
         int totalSize = 1 * 3 * size * size;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, 3, size, size }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, 3, size, size }, data);
     }
 
     // A rank-2 [N, F] node-feature matrix (one row per document node/segment).
-    private static Tensor<double> CreateNodeFeatures(int numNodes, int featureDim)
+    private static Tensor<float> CreateNodeFeatures(int numNodes, int featureDim)
     {
-        var data = new Vector<double>(numNodes * featureDim);
+        var data = new Vector<float>(numNodes * featureDim);
         for (int i = 0; i < data.Length; i++)
-            data[i] = 0.01 * ((i % 11) + 1);
-        return new Tensor<double>(new[] { numNodes, featureDim }, data);
+            data[i] = 0.01f * ((i % 11) + 1);
+        return new Tensor<float>(new[] { numNodes, featureDim }, data);
     }
 
     #region DocGCN Tests
@@ -49,7 +49,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
+        var model = new DocGCN<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -57,7 +57,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
+        var model = new DocGCN<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -69,7 +69,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocGCN<double>(arch);
+        var model = new DocGCN<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocGCN", meta.Name);
     }
@@ -78,7 +78,7 @@ public class GraphBasedDocumentTests
     public async Task DocGCN_FusedMultimodal_CombinesHeterogeneousNodes()
     {
         await Task.Yield();
-        var model = new DocGCN<double>(CreateArchitecture());
+        var model = new DocGCN<float>(CreateArchitecture());
         var textNodes = CreateNodeFeatures(6, 128);
         var visualNodes = CreateNodeFeatures(10, 128);
 
@@ -104,7 +104,7 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
+        var model = new PICK<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -113,7 +113,7 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
+        var model = new PICK<float>(arch);
         var input = CreateTokenIds(10);
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -126,24 +126,24 @@ public class GraphBasedDocumentTests
     {
         await Task.Yield();
         var arch = CreateArchitecture();
-        var model = new PICK<double>(arch);
+        var model = new PICK<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("PICK", meta.Name);
     }
 
-    private static Tensor<double> CreateTokenIds(int numTokens)
+    private static Tensor<float> CreateTokenIds(int numTokens)
     {
-        var data = new Vector<double>(numTokens);
+        var data = new Vector<float>(numTokens);
         for (int i = 0; i < numTokens; i++)
             data[i] = (i % 20) + 1;
-        return new Tensor<double>(new[] { numTokens }, data);
+        return new Tensor<float>(new[] { numTokens }, data);
     }
 
     [Fact(Timeout = 120000)]
     public async Task PICK_FusedMultimodal_CombinesTextAndVisualSegments()
     {
         await Task.Yield();
-        var model = new PICK<double>(CreateArchitecture());
+        var model = new PICK<float>(CreateArchitecture());
         var tokens = CreateTokenIds(6);
         var visualNodes = CreateNodeFeatures(10, 256);
 
@@ -167,7 +167,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
+        var model = new TRIE<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -175,7 +175,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
+        var model = new TRIE<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -187,22 +187,22 @@ public class GraphBasedDocumentTests
     public async Task TRIE_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TRIE<double>(arch);
+        var model = new TRIE<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("TRIE", meta.Name);
     }
 
     // ===== Modality-robust fusion (task #48): text-only, image-only, and fused inference. =====
 
-    private static Tensor<double> CreateTextTokens(int numTokens = 8, int featureDim = 128)
+    private static Tensor<float> CreateTextTokens(int numTokens = 8, int featureDim = 128)
     {
-        var data = new Vector<double>(numTokens * featureDim);
+        var data = new Vector<float>(numTokens * featureDim);
         for (int i = 0; i < data.Length; i++)
-            data[i] = 0.01 * ((i % 7) + 1);
-        return new Tensor<double>(new[] { numTokens, featureDim }, data);
+            data[i] = 0.01f * ((i % 7) + 1);
+        return new Tensor<float>(new[] { numTokens, featureDim }, data);
     }
 
-    private static void AssertAllFinite(Tensor<double> t, string ctx)
+    private static void AssertAllFinite(Tensor<float> t, string ctx)
     {
         for (int i = 0; i < t.Length; i++)
         {
@@ -215,7 +215,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_TextOnly_ProducesFiniteOutput()
     {
         await Task.Yield();
-        var model = new TRIE<double>(CreateArchitecture());
+        var model = new TRIE<float>(CreateArchitecture());
         var output = model.Predict(CreateTextTokens());   // rank-2 -> text stream (graceful single-modality)
         Assert.True(output.Length > 0);
         AssertAllFinite(output, "TRIE text-only");
@@ -225,7 +225,7 @@ public class GraphBasedDocumentTests
     public async Task TRIE_FusedMultimodal_CombinesTextAndVisualNodes()
     {
         await Task.Yield();
-        var model = new TRIE<double>(CreateArchitecture());
+        var model = new TRIE<float>(CreateArchitecture());
         var tokens = CreateTextTokens();
         var image = CreateSmallImage();
 
@@ -253,7 +253,7 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
+        var model = new LayoutGraph<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -261,7 +261,7 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
+        var model = new LayoutGraph<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -273,7 +273,7 @@ public class GraphBasedDocumentTests
     public async Task LayoutGraph_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutGraph<double>(arch);
+        var model = new LayoutGraph<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutGraph", meta.Name);
     }
@@ -286,12 +286,12 @@ public class GraphBasedDocumentTests
     public async Task AllGraphBasedModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
+        var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new DocGCN<double>(arch),
-            new PICK<double>(arch),
-            new TRIE<double>(arch),
-            new LayoutGraph<double>(arch),
+            new DocGCN<float>(arch),
+            new PICK<float>(arch),
+            new TRIE<float>(arch),
+            new LayoutGraph<float>(arch),
         };
 
         foreach (var model in models)

@@ -208,7 +208,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRResult_Defaults()
     {
-        var result = new OCRResult<double> { AverageConfidence = default };
+        var result = new OCRResult<float> { AverageConfidence = default };
         Assert.Equal(string.Empty, result.FullText);
         Assert.NotNull(result.Words);
         Assert.Empty(result.Words);
@@ -225,14 +225,14 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRResult_SetProperties()
     {
-        var result = new OCRResult<double>
+        var result = new OCRResult<float>
         {
             FullText = "Hello World",
             DetectedLanguage = "en",
             ProcessingTimeMs = 150.5,
             RequiresDeskewing = true,
             RotationAngle = 2.5,
-            AverageConfidence = 0.92
+            AverageConfidence = 0.92f
         };
 
         Assert.Equal("Hello World", result.FullText);
@@ -240,7 +240,7 @@ public class DocumentDeepMathIntegrationTests
         Assert.Equal(150.5, result.ProcessingTimeMs);
         Assert.True(result.RequiresDeskewing);
         Assert.Equal(2.5, result.RotationAngle);
-        Assert.Equal(0.92, result.AverageConfidence);
+        Assert.Equal(0.92f, result.AverageConfidence);
     }
 
     // ============================
@@ -250,7 +250,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRWord_Defaults()
     {
-        var word = new OCRWord<double> { Confidence = default };
+        var word = new OCRWord<float> { Confidence = default };
         Assert.Equal(string.Empty, word.Text);
         Assert.Equal(0, word.LineIndex);
         Assert.Equal(0, word.BlockIndex);
@@ -259,16 +259,16 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRWord_SetProperties()
     {
-        var word = new OCRWord<double>
+        var word = new OCRWord<float>
         {
             Text = "Hello",
-            Confidence = 0.95,
+            Confidence = 0.95f,
             LineIndex = 2,
             BlockIndex = 1
         };
 
         Assert.Equal("Hello", word.Text);
-        Assert.Equal(0.95, word.Confidence);
+        Assert.Equal(0.95f, word.Confidence);
         Assert.Equal(2, word.LineIndex);
         Assert.Equal(1, word.BlockIndex);
     }
@@ -280,7 +280,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRLine_Defaults()
     {
-        var line = new OCRLine<double> { AverageConfidence = default };
+        var line = new OCRLine<float> { AverageConfidence = default };
         Assert.Equal(string.Empty, line.Text);
         Assert.NotNull(line.Words);
         Assert.Empty(line.Words);
@@ -294,7 +294,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRBlock_Defaults()
     {
-        var block = new OCRBlock<double> { AverageConfidence = default };
+        var block = new OCRBlock<float> { AverageConfidence = default };
         Assert.Equal(string.Empty, block.Text);
         Assert.NotNull(block.Lines);
         Assert.Empty(block.Lines);
@@ -304,7 +304,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OCRBlock_SetBlockType()
     {
-        var block = new OCRBlock<double>
+        var block = new OCRBlock<float>
         {
             AverageConfidence = default,
             BlockType = LayoutElementType.Table,
@@ -322,7 +322,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TextDetectionResult_Defaults()
     {
-        var result = new TextDetectionResult<double>();
+        var result = new TextDetectionResult<float>();
         Assert.NotNull(result.TextRegions);
         Assert.Empty(result.TextRegions);
         Assert.Null(result.ProbabilityMap);
@@ -335,14 +335,14 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TextDetectionResult_RegionCount_MatchesTextRegions()
     {
-        var regions = new List<TextRegion<double>>
+        var regions = new List<TextRegion<float>>
         {
             new() { Confidence = default, ConfidenceValue = 0.95, Index = 0 },
             new() { Confidence = default, ConfidenceValue = 0.87, Index = 1 },
             new() { Confidence = default, ConfidenceValue = 0.72, Index = 2 }
         };
 
-        var result = new TextDetectionResult<double> { TextRegions = regions };
+        var result = new TextDetectionResult<float> { TextRegions = regions };
         Assert.Equal(3, result.RegionCount);
     }
 
@@ -353,7 +353,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TextRegion_Defaults()
     {
-        var region = new TextRegion<double> { Confidence = default };
+        var region = new TextRegion<float> { Confidence = default };
         Assert.Null(region.PolygonPoints);
         Assert.Equal(0.0, region.ConfidenceValue);
         Assert.Null(region.RotationAngle);
@@ -364,7 +364,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TextRegion_SetProperties()
     {
-        var region = new TextRegion<double>
+        var region = new TextRegion<float>
         {
             Confidence = default,
             ConfidenceValue = 0.92,

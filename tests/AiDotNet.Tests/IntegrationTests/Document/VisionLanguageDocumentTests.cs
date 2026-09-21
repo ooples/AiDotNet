@@ -14,9 +14,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class VisionLanguageDocumentTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: imageSize,
@@ -25,13 +25,13 @@ public class VisionLanguageDocumentTests
             outputSize: 16);
     }
 
-    private static Tensor<double> CreateSmallImage(int size = 64)
+    private static Tensor<float> CreateSmallImage(int size = 64)
     {
         int totalSize = 1 * 3 * size * size;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, 3, size, size }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, 3, size, size }, data);
     }
 
     #region DocOwl Tests
@@ -40,7 +40,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
+        var model = new DocOwl<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -48,7 +48,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
+        var model = new DocOwl<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -56,16 +56,16 @@ public class VisionLanguageDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    private static DocOwl<double> CreateSmallDocOwl()
-        => new DocOwl<double>(CreateArchitecture(imageSize: 64), imageSize: 64,
+    private static DocOwl<float> CreateSmallDocOwl()
+        => new DocOwl<float>(CreateArchitecture(imageSize: 64), imageSize: 64,
             maxSequenceLength: 64, visionDim: 32, languageDim: 32,
             visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 64);
 
-    private static Tensor<double> CreateTokenIds(int count, int offset = 0, int vocab = 64)
+    private static Tensor<float> CreateTokenIds(int count, int offset = 0, int vocab = 64)
     {
-        var data = new Vector<double>(count);
+        var data = new Vector<float>(count);
         for (int i = 0; i < count; i++) data[i] = (i + offset) % vocab;
-        return new Tensor<double>(new[] { count }, data);
+        return new Tensor<float>(new[] { count }, data);
     }
 
     /// <summary>
@@ -138,7 +138,7 @@ public class VisionLanguageDocumentTests
         {
             var layerDiagnostics = model.Layers.Select((layer, index) =>
             {
-                var layerGradients = (layer as AiDotNet.NeuralNetworks.Layers.LayerBase<double>)?
+                var layerGradients = (layer as AiDotNet.NeuralNetworks.Layers.LayerBase<float>)?
                     .ScatteredParameterGradients ?? layer.GetParameterGradients();
                 int nonFinite = layerGradients.Count(value => !IsFinite(value));
                 int nonZero = layerGradients.Count(value => IsFinite(value) && value != 0.0);
@@ -197,7 +197,7 @@ public class VisionLanguageDocumentTests
             $"non-finite gradients={nonFiniteGradients}.");
     }
 
-    private static Tensor<double> CreateContrastingClassTarget(Tensor<double> logits)
+    private static Tensor<float> CreateContrastingClassTarget(Tensor<float> logits)
     {
         var shape = logits.Shape.ToArray();
         Assert.True(shape.Length > 0 && shape[^1] > 1,
@@ -205,7 +205,7 @@ public class VisionLanguageDocumentTests
 
         int classCount = shape[^1];
         int positionCount = logits.Length / classCount;
-        var target = new Tensor<double>(shape);
+        var target = new Tensor<float>(shape);
         for (int position = 0; position < positionCount; position++)
         {
             int offset = position * classCount;
@@ -216,7 +216,7 @@ public class VisionLanguageDocumentTests
                     argmax = classIndex;
             }
 
-            target[offset + ((argmax + 1) % classCount)] = 1.0;
+            target[offset + ((argmax + 1) % classCount)] = 1.0f;
         }
 
         return target;
@@ -225,7 +225,7 @@ public class VisionLanguageDocumentTests
     private static bool IsFinite(double value)
         => !double.IsNaN(value) && !double.IsInfinity(value);
 
-    private static bool Differs(Tensor<double> a, Tensor<double> b)
+    private static bool Differs(Tensor<float> a, Tensor<float> b)
     {
         if (a.Length != b.Length) return true;
         for (int i = 0; i < a.Length; i++)
@@ -240,7 +240,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
+        var model = new DocOwl<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocOwl", meta.Name);
     }
@@ -253,7 +253,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
+        var model = new InfographicVQA<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -261,7 +261,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
+        var model = new InfographicVQA<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -273,7 +273,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
+        var model = new InfographicVQA<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("InfographicVQA", meta.Name);
     }
@@ -286,7 +286,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
+        var model = new UDOP<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -294,7 +294,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
+        var model = new UDOP<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -306,7 +306,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
+        var model = new UDOP<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("UDOP", meta.Name);
     }
@@ -319,11 +319,11 @@ public class VisionLanguageDocumentTests
     public async Task AllVisionLanguageModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
+        var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new DocOwl<double>(arch, imageSize: 64),
-            new InfographicVQA<double>(arch, imageSize: 64),
-            new UDOP<double>(arch, imageSize: 64),
+            new DocOwl<float>(arch, imageSize: 64),
+            new InfographicVQA<float>(arch, imageSize: 64),
+            new UDOP<float>(arch, imageSize: 64),
         };
 
         foreach (var model in models)

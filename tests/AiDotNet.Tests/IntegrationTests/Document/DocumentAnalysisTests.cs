@@ -15,9 +15,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class DocumentAnalysisTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputHeight: imageSize,
@@ -26,13 +26,13 @@ public class DocumentAnalysisTests
             outputSize: 13);
     }
 
-    private static Tensor<double> CreateSmallImage(int size = 64)
+    private static Tensor<float> CreateSmallImage(int size = 64)
     {
         int totalSize = 1 * 3 * size * size;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, 3, size, size }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, 3, size, size }, data);
     }
 
     #region DocBank Tests
@@ -41,7 +41,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -49,7 +49,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -61,7 +61,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        var model = new DocBank<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocBank", meta.Name);
     }
@@ -74,7 +74,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -82,7 +82,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -94,7 +94,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        var model = new TableTransformer<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("TableTransformer", meta.Name);
     }
@@ -106,7 +106,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task DocumentLayoutResult_Construction_EmptyRegions()
     {
-        var result = new DocumentLayoutResult<double>();
+        var result = new DocumentLayoutResult<float>();
         Assert.Empty(result.Regions);
         Assert.Equal(0, result.TotalRegions);
     }
@@ -114,7 +114,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task TextDetectionResult_Construction_EmptyRegions()
     {
-        var result = new TextDetectionResult<double>();
+        var result = new TextDetectionResult<float>();
         Assert.Empty(result.TextRegions);
         Assert.Equal(0, result.RegionCount);
     }
@@ -122,7 +122,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task OCRResult_Construction_EmptyText()
     {
-        var result = new OCRResult<double> { AverageConfidence = default };
+        var result = new OCRResult<float> { AverageConfidence = default };
         Assert.Equal(string.Empty, result.FullText);
         Assert.Empty(result.Words);
         Assert.Empty(result.Lines);
@@ -132,7 +132,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task TableStructureResult_Construction_EmptyCells()
     {
-        var result = new TableStructureResult<double> { Confidence = default };
+        var result = new TableStructureResult<float> { Confidence = default };
         Assert.Empty(result.Cells);
         Assert.Equal(0, result.NumRows);
         Assert.Equal(0, result.NumColumns);
@@ -141,7 +141,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task TableStructureResult_ToStringGrid_ReturnsEmptyForNoData()
     {
-        var result = new TableStructureResult<double>
+        var result = new TableStructureResult<float>
         {
             Confidence = default,
             NumRows = 0,
@@ -154,7 +154,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task TextRegion_Construction_HasDefaults()
     {
-        var region = new TextRegion<double> { Confidence = default };
+        var region = new TextRegion<float> { Confidence = default };
         Assert.NotNull(region.BoundingBox);
         Assert.Equal(0, region.Index);
     }
@@ -162,8 +162,8 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task LayoutRegion_ConfidenceLevel_CategorizesCorrectly()
     {
-        var lowConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.2 };
-        var highConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.95 };
+        var lowConfidence = new LayoutRegion<float> { Confidence = default, ConfidenceValue = 0.2 };
+        var highConfidence = new LayoutRegion<float> { Confidence = default, ConfidenceValue = 0.95 };
         Assert.Equal(ConfidenceLevel.VeryLow, lowConfidence.ConfidenceLevel);
         Assert.Equal(ConfidenceLevel.VeryHigh, highConfidence.ConfidenceLevel);
     }
@@ -171,13 +171,13 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task DocumentLayoutResult_GetRegionsByType_FiltersCorrectly()
     {
-        var result = new DocumentLayoutResult<double>
+        var result = new DocumentLayoutResult<float>
         {
             Regions =
             [
-                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.9 },
-                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Table, ConfidenceValue = 0.8 },
-                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.7 },
+                new LayoutRegion<float> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.9 },
+                new LayoutRegion<float> { Confidence = default, ElementType = LayoutElementType.Table, ConfidenceValue = 0.8 },
+                new LayoutRegion<float> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.7 },
             ]
         };
 
@@ -188,13 +188,13 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task DocumentLayoutResult_GetHighConfidenceRegions_FiltersCorrectly()
     {
-        var result = new DocumentLayoutResult<double>
+        var result = new DocumentLayoutResult<float>
         {
             Regions =
             [
-                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.9 },
-                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.5 },
-                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.3 },
+                new LayoutRegion<float> { Confidence = default, ConfidenceValue = 0.9 },
+                new LayoutRegion<float> { Confidence = default, ConfidenceValue = 0.5 },
+                new LayoutRegion<float> { Confidence = default, ConfidenceValue = 0.3 },
             ]
         };
 
@@ -205,7 +205,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task OCRWord_Construction_HasDefaults()
     {
-        var word = new OCRWord<double> { Confidence = default };
+        var word = new OCRWord<float> { Confidence = default };
         Assert.Equal(string.Empty, word.Text);
         Assert.NotNull(word.BoundingBox);
     }
@@ -213,7 +213,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task TableCell_Construction_HasDefaults()
     {
-        var cell = new TableCell<double> { Confidence = default };
+        var cell = new TableCell<float> { Confidence = default };
         Assert.Equal(1, cell.RowSpan);
         Assert.Equal(1, cell.ColSpan);
         Assert.Equal(string.Empty, cell.Text);
@@ -227,7 +227,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task DocumentModelOptions_DefaultValues_AreNull()
     {
-        var options = new DocumentModelOptions<double>();
+        var options = new DocumentModelOptions<float>();
         Assert.Null(options.HiddenDimension);
         Assert.Null(options.NumAttentionHeads);
         Assert.Null(options.NumLayers);
@@ -241,7 +241,7 @@ public class DocumentAnalysisTests
     [Fact(Timeout = 120000)]
     public async Task DocumentModelOptions_CustomValues_SetCorrectly()
     {
-        var options = new DocumentModelOptions<double>
+        var options = new DocumentModelOptions<float>
         {
             HiddenDimension = 512,
             NumAttentionHeads = 8,
