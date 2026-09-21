@@ -18660,23 +18660,46 @@ public static partial class LayerHelper<T>
         int numLayers = 2,
         double dropoutRate = 0.1)
     {
-        int inputSize = architecture.CalculatedInputSize;
         int layers = Math.Max(1, numLayers);
 
-        // Input projection
+        // Input projection, then the sinusoidal positional signal, then the embedding norm.
+        // The order matters twice over. Vaswani et al. 2017 section 3.5 requires position to be
+        // injected for a model with no recurrence or convolution, and BERT applies the embedding
+        // LayerNormalization only after the positional term has been added. Normalizing the bare
+        // projection instead made the whole stack invariant to the scale of its input: He
+        // initialization zeroes the projection bias, so a scaled input produced a scaled
+        // activation that LayerNormalization then divided straight back out. A volatility
+        // forecast that does not move when every return in the window is multiplied by nine is
+        // not a volatility forecast.
         yield return new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new PositionalEncodingLayer<T>(Math.Max(1, sequenceLength), hiddenSize);
         yield return new LayerNormalizationLayer<T>();
 
-        // Transformer encoder for temporal patterns
+        // Transformer encoder for temporal patterns. TransformerEncoderBlock, not a hand-rolled
+        // attention + feed-forward pair, because the hand-rolled one had no residual connections.
+        // Vaswani et al. 2017 section 3.1 wraps each sub-layer as LayerNorm(x + Sublayer(x)), and
+        // the "x +" is what carries per-position information past the attention. Without it the
+        // sequence collapsed: at initialization the attention scores are near-uniform, so softmax
+        // returns roughly the mean of the values and every query position receives the SAME
+        // vector. Measured across the sequence axis, variance fell from 6.048E-001 entering the
+        // first attention to 1.169E-006 leaving it, and the model could only ever emit one
+        // constant repeated for all timesteps -- a 90-step volatility forecast that is a single
+        // number 90 times. It pinned the training loss at exactly the variance of the target
+        // (0.0768 after 200 steps, output variance 1E-014) no matter how long it trained.
         for (int i = 0; i < layers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenSize) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DenseLayer<T>(hiddenSize, (IActivationFunction<T>?)null);
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numHeads, hiddenSize * 4, dropoutRate,
+                new GELUActivation<T>());
         }
+
+        // Final normalization before the head, matching CreateDefaultFinGPTLayers and the "ln_f"
+        // of GPT-2 (Radford et al. 2019 section 2.3, "an additional layer normalization was added
+        // after the final self-attention block"). A Pre-LN stack leaves its residual stream
+        // un-normalized on exit -- see the Forward of TransformerEncoderBlock, which closes on
+        // TensorAdd rather than on a norm -- so the head would otherwise read a stream whose
+        // scale grows with depth.
+        yield return new LayerNormalizationLayer<T>();
 
         // Volatility prediction head
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftPlusActivation<T>());
