@@ -38,7 +38,8 @@ namespace AiDotNet.NeuralNetworks;
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new EagleLanguageModel&lt;float&gt;(
 ///         architecture,
-///         vocabSize: 65536, modelDimension: 2560, numLayers: 32, numHeads: 40))
+///         new AiDotNet.NeuralNetworks.Options.EagleOptions
+///         { VocabSize = 65536, ModelDimension = 2560, NumLayers = 32, NumHeads = 40 }))
 ///     .Build(trainX, trainY);
 ///
 /// var logits = result.Predict(tokens);
