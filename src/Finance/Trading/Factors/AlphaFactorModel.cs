@@ -413,6 +413,68 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
 
     #endregion
 
+    #region Factor Analytics
+
+    /// <summary>Step used to difference the alpha predictor when reporting factor loadings.</summary>
+    private const double LoadingProbeStep = 1e-3;
+
+    /// <summary>Layers consumed by the factor extractor in the default layout.</summary>
+    private int FactorSpanEnd => LayerHelper<T>.AlphaFactorExtractorLayerCount;
+
+    /// <summary>First layer of the alpha predictor in the default layout.</summary>
+    private int AlphaSpanStart => FactorSpanEnd;
+
+    /// <summary>One past the last layer of the alpha predictor in the default layout.</summary>
+    private int AlphaSpanEnd => AlphaSpanStart + LayerHelper<T>.AlphaFactorPredictorLayerCount;
+
+    /// <summary>
+    /// True when <c>Layers</c> matches the default layout the analytics read spans out of. A
+    /// caller-supplied architecture, or ONNX mode, has no such spans to read.
+    /// </summary>
+    private bool HasFactorSpans => _useNativeMode && Layers.Count == AlphaSpanEnd;
+
+    /// <summary>Guards an analytic that reads a layer span against a non-default architecture.</summary>
+    /// <param name="member">Name of the calling member, used in the message.</param>
+    private void RequireFactorSpans(string member)
+    {
+        if (!HasFactorSpans)
+        {
+            string mode = _useNativeMode ? "native" : "ONNX";
+            throw new InvalidOperationException(
+                $"{member} reads the factor extractor and alpha predictor spans directly, which "
+                + $"requires native mode and the default layout of {AlphaSpanEnd} layers; this "
+                + $"model is in {mode} mode with {Layers.Count} layers. Use the default native "
+                + "architecture to enable the factor analytics.");
+        }
+    }
+
+    /// <summary>
+    /// Copies <paramref name="factors"/> and adds <paramref name="delta"/> to one factor across
+    /// every observation.
+    /// </summary>
+    /// <param name="factors">Extracted factors, whose trailing axis holds the factors.</param>
+    /// <param name="factorIndex">Index of the factor to perturb.</param>
+    /// <param name="delta">Amount to add.</param>
+    /// <returns>The perturbed copy.</returns>
+    private Tensor<T> ShiftFactor(Tensor<T> factors, int factorIndex, double delta)
+    {
+        var shifted = new Tensor<T>(factors.Shape.ToArray());
+        for (int i = 0; i < factors.Length; i++)
+        {
+            shifted[i] = factors[i];
+        }
+
+        var step = NumOps.FromDouble(delta);
+        for (int i = factorIndex; i < shifted.Length; i += _numFactors)
+        {
+            shifted[i] = NumOps.Add(shifted[i], step);
+        }
+
+        return shifted;
+    }
+
+    #endregion
+
     #region IFactorModel Implementation
 
     /// <summary>
@@ -425,17 +487,29 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> This runs the input through the early layers to produce
     /// the hidden factor signals that drive returns.
     /// </para>
+    /// <para>
+    /// The span ends after the factor head and its normalization, so the result is numFactors
+    /// wide. Stopping two layers earlier - as this did - returned the hidden block's output
+    /// instead, which is hiddenDimension wide and is not a factor representation at all.
+    /// </para>
     /// </remarks>
     public Tensor<T> ExtractFactors(Tensor<T> returns)
     {
-        var current = returns;
-        int factorLayerIndex = Math.Min(6, Layers.Count - 2);
-        for (int i = 0; i < factorLayerIndex; i++)
+        if (!HasFactorSpans)
         {
-            current = Layers[i].Forward(current);
+            // A caller-supplied architecture has no factor head to stop at, so the layer prefix
+            // this method has always returned stays the best available answer.
+            var current = returns;
+            int factorLayerIndex = Math.Min(FactorSpanEnd, Math.Max(0, Layers.Count - 2));
+            for (int i = 0; i < factorLayerIndex; i++)
+            {
+                current = Layers[i].Forward(current);
+            }
+
+            return current;
         }
 
-        return current;
+        return InInferenceMode(() => RunLayerSpan(returns, 0, FactorSpanEnd));
     }
 
     /// <summary>
@@ -448,10 +522,50 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> Factor loadings describe how strongly each asset depends
     /// on each learned factor.
     /// </para>
+    /// <para>
+    /// A loading is the sensitivity of an asset's alpha to a factor, so it is read here as the
+    /// derivative of the alpha predictor with respect to each factor, averaged over the panel.
+    /// Central differences give that derivative exactly rather than approximately: the alpha
+    /// predictor is a rectified linear map, so it is piecewise linear in the factors and the
+    /// symmetric difference is exact inside a linear piece and the two-sided average at a kink.
+    /// This reduces to the usual regression beta when the predictor happens to be linear, and it
+    /// replaces an all-zero matrix that claimed every asset was immune to every factor.
+    /// </para>
     /// </remarks>
     public Tensor<T> GetFactorLoadings(Tensor<T> returns)
     {
-        return new Tensor<T>(new[] { _numAssets, _numFactors });
+        RequireFactorSpans(nameof(GetFactorLoadings));
+
+        return InInferenceMode(() =>
+        {
+            var factors = RunLayerSpan(returns, 0, FactorSpanEnd);
+            int samples = Math.Max(1, factors.Length / _numFactors);
+            var scale = NumOps.FromDouble(1.0 / (2.0 * LoadingProbeStep * samples));
+            var loadings = new Tensor<T>(new[] { _numAssets, _numFactors });
+
+            for (int k = 0; k < _numFactors; k++)
+            {
+                var up = RunLayerSpan(
+                    ShiftFactor(factors, k, LoadingProbeStep), AlphaSpanStart, AlphaSpanEnd);
+                var down = RunLayerSpan(
+                    ShiftFactor(factors, k, -LoadingProbeStep), AlphaSpanStart, AlphaSpanEnd);
+
+                for (int asset = 0; asset < _numAssets; asset++)
+                {
+                    var total = NumOps.Zero;
+                    for (int i = 0; i < samples; i++)
+                    {
+                        total = NumOps.Add(
+                            total,
+                            NumOps.Subtract(up[(i * _numAssets) + asset], down[(i * _numAssets) + asset]));
+                    }
+
+                    loadings[(asset * _numFactors) + k] = NumOps.Multiply(total, scale);
+                }
+            }
+
+            return loadings;
+        });
     }
 
     /// <summary>
@@ -480,10 +594,73 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> This measures how factors move together,
     /// which is important for risk management.
     /// </para>
+    /// <para>
+    /// The factors are deterministic given the input, so their covariance is the sample covariance
+    /// of the extracted factors across the observations in the panel, with the same N-1 divisor
+    /// numpy and pandas use. A covariance is a statistic over observations, so a single
+    /// observation cannot produce one and the caller is told so rather than handed zeros.
+    /// </para>
     /// </remarks>
     public Tensor<T> GetFactorCovariance(Tensor<T> returns)
     {
-        return new Tensor<T>(new[] { _numFactors, _numFactors });
+        RequireFactorSpans(nameof(GetFactorCovariance));
+
+        return InInferenceMode(() =>
+        {
+            var factors = RunLayerSpan(returns, 0, FactorSpanEnd);
+            int samples = factors.Length / _numFactors;
+            if (samples < 2)
+            {
+                throw new ArgumentException(
+                    "A factor covariance is a statistic over observations and needs at least two; "
+                    + $"the input yielded {samples}. Pass a panel spanning several periods.",
+                    nameof(returns));
+            }
+
+            var factorMean = new T[_numFactors];
+            for (int k = 0; k < _numFactors; k++)
+            {
+                factorMean[k] = NumOps.Zero;
+            }
+
+            for (int i = 0; i < samples; i++)
+            {
+                for (int k = 0; k < _numFactors; k++)
+                {
+                    factorMean[k] = NumOps.Add(factorMean[k], factors[(i * _numFactors) + k]);
+                }
+            }
+
+            var meanScale = NumOps.FromDouble(1.0 / samples);
+            for (int k = 0; k < _numFactors; k++)
+            {
+                factorMean[k] = NumOps.Multiply(factorMean[k], meanScale);
+            }
+
+            var covariance = new Tensor<T>(new[] { _numFactors, _numFactors });
+            for (int i = 0; i < samples; i++)
+            {
+                for (int j = 0; j < _numFactors; j++)
+                {
+                    var centeredJ = NumOps.Subtract(factors[(i * _numFactors) + j], factorMean[j]);
+                    for (int k = 0; k < _numFactors; k++)
+                    {
+                        var centeredK = NumOps.Subtract(factors[(i * _numFactors) + k], factorMean[k]);
+                        int cell = (j * _numFactors) + k;
+                        covariance[cell] = NumOps.Add(
+                            covariance[cell], NumOps.Multiply(centeredJ, centeredK));
+                    }
+                }
+            }
+
+            var covarianceScale = NumOps.FromDouble(1.0 / (samples - 1));
+            for (int cell = 0; cell < covariance.Length; cell++)
+            {
+                covariance[cell] = NumOps.Multiply(covariance[cell], covarianceScale);
+            }
+
+            return covariance;
+        });
     }
 
     /// <summary>
@@ -497,10 +674,25 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <b>For Beginners:</b> Alpha is the portion of returns not explained by factors,
     /// which is the "extra edge" investors seek.
     /// </para>
+    /// <para>
+    /// Alpha here is what the model is trained to produce: the alpha predictor's per-asset excess
+    /// return, read off the extracted factors and averaged over the panel.
+    /// <paramref name="factorReturns"/> is accepted for the <see cref="IFactorModel{T}"/> contract
+    /// but not consumed - residualizing against it would be ill-posed, because this model's input
+    /// is a market-feature panel rather than an asset return panel and the two need not even share
+    /// a width.
+    /// </para>
     /// </remarks>
     public Tensor<T> ComputeAlpha(Tensor<T> returns, Tensor<T> factorReturns)
     {
-        return new Tensor<T>(new[] { _numAssets });
+        RequireFactorSpans(nameof(ComputeAlpha));
+
+        return InInferenceMode(() =>
+        {
+            var factors = RunLayerSpan(returns, 0, FactorSpanEnd);
+            var alpha = RunLayerSpan(factors, AlphaSpanStart, AlphaSpanEnd);
+            return AverageHeadOverSamples(alpha, new[] { _numAssets });
+        });
     }
 
     /// <summary>

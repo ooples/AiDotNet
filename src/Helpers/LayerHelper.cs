@@ -17861,6 +17861,15 @@ public static partial class LayerHelper<T>
     /// <summary>Number of layers in the FactorVAE decoder span.</summary>
     public const int FactorVAEDecoderLayerCount = 4;
 
+    /// <summary>
+    /// Layers in the AlphaFactorModel factor extractor span: the feature encoder, the hidden
+    /// block, and the factor head with its normalization.
+    /// </summary>
+    public const int AlphaFactorExtractorLayerCount = 8;
+
+    /// <summary>Layers in the AlphaFactorModel alpha predictor span.</summary>
+    public const int AlphaFactorPredictorLayerCount = 2;
+
 
     #endregion
 
