@@ -66,12 +66,6 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
     /// <summary>16 noisy latent channels plus 16 channels of the encoded source image.</summary>
     private const int INPUT_CHANNELS = 32;
 
-    /// <summary>Cross-attention width. Emu conditions on CLIP ViT-L, whose text width is 768.</summary>
-    private const int CROSS_ATTENTION_DIM = 768;
-
-    /// <summary>Base channel count of the denoising U-Net.</summary>
-    private const int BASE_CHANNELS = 320;
-
     #endregion
 
     #region Fields
@@ -160,28 +154,28 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
             architecture: Architecture,
             inputChannels: INPUT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: CROSS_ATTENTION_DIM,
+            baseChannels: _editOptions.UNetBaseChannels,
+            channelMultipliers: _editOptions.UNetChannelMultipliers,
+            numResBlocks: _editOptions.UNetNumResBlocks,
+            attentionResolutions: _editOptions.UNetAttentionResolutions,
+            contextDim: _editOptions.CrossAttentionDim,
             seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocksPerLevel: 2,
+            baseChannels: _editOptions.VaeBaseChannels,
+            channelMultipliers: _editOptions.VaeChannelMultipliers,
+            numResBlocksPerLevel: _editOptions.VaeNumResBlocksPerLevel,
             latentScaleFactor: 0.18215,
             seed: seed);
 
         for (int i = 0; i < _editOptions.EditHeadLayers; i++)
         {
             _editHead.Add(new TransformerEncoderBlock<T>(
-                hiddenSize: CROSS_ATTENTION_DIM,
+                hiddenSize: _editOptions.CrossAttentionDim,
                 numHeads: _editOptions.NumHeads,
-                ffnDim: CROSS_ATTENTION_DIM * 4,
+                ffnDim: _editOptions.CrossAttentionDim * 4,
                 dropoutRate: _editOptions.DropoutRate));
         }
     }
