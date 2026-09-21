@@ -58,13 +58,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     /// <example>
     /// <code>
-    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-    ///     inputType: InputType.OneDimensional,
-    ///     taskType: NeuralNetworkTaskType.Regression,
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// var pde = new MultiScaleReactionDiffusion&lt;float&gt;();
-    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
-    /// var msPinn = new MultiScalePINN&lt;float&gt;(architecture, pde, bc);
+    ///
+    /// // The same physics at a coarse and a fine length scale, coupled where they overlap.
+    /// var pde = new MultiScaleReactionDiffusion&lt;double&gt;(
+    ///     coarseDiffusivity: 1.0,
+    ///     fineDiffusivity: 0.01);
+    ///
+    /// // Held at zero on both edges of the domain.
+    /// var boundaryConditions = new IBoundaryCondition&lt;double&gt;[]
+    /// {
+    ///     new DirichletBoundaryCondition&lt;double&gt;(boundaryValue: 0.0, lowerBound: 0.0, upperBound: 1.0)
+    /// };
+    ///
+    /// var msPinn = new MultiScalePINN&lt;double&gt;(architecture, pde, boundaryConditions);
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

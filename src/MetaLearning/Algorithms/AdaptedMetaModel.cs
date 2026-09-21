@@ -26,12 +26,21 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an adapted model after MAML inner-loop adaptation
+/// var baseModel = new NeuralNetwork&lt;float&gt;(
+///     new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4));
+///
+/// // The parameters MAML's inner loop produced for one task.
 /// var adaptedParams = new Vector&lt;float&gt;(baseModel.GetParameters().Length);
-/// // ... inner-loop gradient updates fill adaptedParams ...
-/// var adapted = new AdaptedMetaModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
-///     baseModel, adaptedParams);
-/// Tensor&lt;float&gt; prediction = adapted.Predict(queryInput);
+///
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 4);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AdaptedMetaModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(baseModel, adaptedParams))
+///     .Build(trainX, trainY);
+///
+/// var queryInput = Tensor&lt;float&gt;.CreateRandom(1, 8);
+/// Tensor&lt;float&gt; prediction = result.Predict(queryInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

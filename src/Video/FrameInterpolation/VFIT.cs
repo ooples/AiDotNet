@@ -43,6 +43,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create a VFIT model for multi-frame transformer interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new VFITOptions();
 /// var vfit = new VFIT&lt;double&gt;(architecture, options);

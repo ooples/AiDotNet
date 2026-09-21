@@ -34,18 +34,20 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create Style-Aligned model for consistent style across batches
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new StyleAlignedModel&lt;float&gt;(options);
 ///
 /// // Generate multiple images with consistent artistic style
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 4, 4, 64, 64 });
-/// var styledBatch = model.Predict(noise);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 4, 4, 64, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new StyleAlignedModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var styledBatch = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

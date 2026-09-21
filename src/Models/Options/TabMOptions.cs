@@ -201,7 +201,7 @@ public class TabMOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Creates a copy of the options.
     /// </summary>
-    /// <returns>A new TabMOptions instance with the same values.</returns>
+    /// <returns>A new TabMOptions&lt;double&gt; instance with the same values.</returns>
     public TabMOptions<T> Clone()
     {
         return new TabMOptions<T>

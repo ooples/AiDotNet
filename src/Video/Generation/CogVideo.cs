@@ -37,6 +37,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
 /// var model = new CogVideo&lt;double&gt;(arch);
 /// model.Train(noisyLatent, cleanLatent);
@@ -47,6 +48,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
 /// var model = new CogVideo&lt;double&gt;(arch, "cogvideo.onnx");
 /// var videoFrames = model.Generate(textEmbedding);
@@ -237,6 +239,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
     /// var model = new CogVideo&lt;double&gt;(arch);
     /// </code>
@@ -309,6 +312,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
     /// var model = new CogVideo&lt;double&gt;(arch, "cogvideo.onnx");
     /// var video = model.Generate(textEmbedding);

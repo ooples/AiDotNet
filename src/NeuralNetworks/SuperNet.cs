@@ -35,9 +35,18 @@ namespace AiDotNet.NeuralNetworks
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
-    /// var superNet = new SuperNet&lt;float&gt;(searchSpace, numNodes: 4, inputSize: 784, outputSize: 10);
-    /// superNet.ForwardPass(inputTensor);
-    /// var architecture = superNet.DeriveArchitecture();
+    /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+    /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+    ///
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new SuperNet&lt;float&gt;(searchSpace, numNodes: 4))
+    ///     .Build(trainX, trainY);
+    ///
+    /// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
+    /// result.Predict(inputTensor);
+    ///
+    /// // The winning design, ready to train on its own.
+    /// var architecture = result.DeriveArchitecture();
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.General)]

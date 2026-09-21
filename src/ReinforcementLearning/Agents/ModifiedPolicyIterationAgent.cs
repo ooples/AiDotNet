@@ -44,7 +44,7 @@ public class TransitionData<T>
 /// <example>
 /// <code>
 /// // Create a Modified Policy Iteration agent balancing speed and stability
-/// var options = new ModifiedPolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, EvaluationSweeps = 5 };
+/// var options = new ModifiedPolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, MaxEvaluationSweeps = 5 };
 /// var agent = new ModifiedPolicyIterationAgent&lt;double&gt;(options);
 ///
 /// // Select an action using the partially-evaluated policy

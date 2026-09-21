@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for financial document classification (512 tokens, 5 document types)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 5);
 ///
 /// // Training mode: BERT pre-trained on corporate reports and financial news

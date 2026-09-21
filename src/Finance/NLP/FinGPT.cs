@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for open-source financial language generation (2048 tokens)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 ///
 /// // Training mode: fine-tunable decoder for financial text generation and analysis

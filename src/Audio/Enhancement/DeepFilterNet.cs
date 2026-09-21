@@ -42,8 +42,8 @@ namespace AiDotNet.Audio.Enhancement;
 /// var cleanAudio = model.Enhance(noisyAudio);
 ///
 /// // Native mode for training
-/// var model = new DeepFilterNet&lt;float&gt;(architecture, hiddenDim: 96);
-/// model.Train(noisyAudio, cleanAudio);
+/// var model2 = new DeepFilterNet&lt;float&gt;(architecture, hiddenDim: 96);
+/// model2.Train(noisyAudio, cleanAudio);
 /// </code>
 /// </para>
 /// <para>

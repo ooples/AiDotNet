@@ -33,6 +33,7 @@ namespace AiDotNet.Video.Denoising;
 /// // Create a BSVD model for real-time bidirectional video denoising
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new BSVDOptions();
 /// var bsvd = new BSVD&lt;double&gt;(architecture, options);

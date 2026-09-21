@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// // Create an OLMo-ASR model using the open-source OLMo LLM for speech recognition
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new OLMoASR&lt;double&gt;(architecture);
 ///

@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 /// <example>
 /// <code>
 /// // Create an Implicit Q-Learning agent for offline RL
-/// var options = new IQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ExpectileWeight = 0.7 };
+/// var options = new IQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, Expectile = 0.7 };
 /// var agent = new IQLAgent&lt;double&gt;(options);
 ///
 /// // Select an action using advantage-weighted regression
