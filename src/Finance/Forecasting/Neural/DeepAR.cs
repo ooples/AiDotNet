@@ -843,7 +843,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// </remarks>
     private Tensor<T> GaussianNegativeLogLikelihood(Tensor<T> mu, Tensor<T>? sigma, Tensor<T> target)
     {
-        if (sigma is null || sigma.Length != mu.Length)
+        if (sigma is null || !ShapesMatch(sigma, mu))
         {
             return MeanSquaredDifference(mu, target);
         }
@@ -857,6 +857,25 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
             NumOps.FromDouble(0.5 * System.Math.Log(2.0 * System.Math.PI)));
 
         return MeanOverAllAxes(perElement);
+    }
+
+    /// <summary>Whether two tensors have identical shapes, elementwise ops being undefined otherwise.</summary>
+    private static bool ShapesMatch(Tensor<T> left, Tensor<T> right)
+    {
+        if (left.Shape.Length != right.Shape.Length)
+        {
+            return false;
+        }
+
+        for (int axis = 0; axis < left.Shape.Length; axis++)
+        {
+            if (left.Shape[axis] != right.Shape[axis])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Mean squared difference, as a recorded scalar the tape can follow.</summary>
