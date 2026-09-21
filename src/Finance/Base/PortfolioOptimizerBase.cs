@@ -125,6 +125,19 @@ public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>,
     public abstract Vector<T> OptimizePortfolio(Tensor<T> marketData);
 
     /// <summary>
+    /// Declares the market-data panel geometry a portfolio optimizer accepts.
+    /// </summary>
+    /// <remarks>
+    /// The constructors above pass a sequence length of 1 because the numeric base requires one,
+    /// not because an optimizer reads a sequence split: <see cref="OptimizePortfolio"/> takes a
+    /// [lookback, assets] panel and returns one weight per asset, so there is no batch axis to
+    /// carry either. Publishing the base sequence split handed every generic caller a rank-3
+    /// geometry the allocation surface has no value to supply.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+        => CrossSectionalInputConstraint;
+
+    /// <summary>
     /// Calculates optimal weights given expected returns and covariance (Traditional optimization).
     /// </summary>
     /// <param name="expectedReturns">Tensor of expected returns for each asset.</param>
