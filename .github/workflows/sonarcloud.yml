@@ -1545,6 +1545,22 @@ jobs:
               $runSettings = Join-Path $results 'coverlet.shard.runsettings'
               & ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings -IncludeDirectory (Join-Path (Get-Location).Path $env:SHARD_COVERAGE_INCLUDE) -OutFile $runSettings
               if ($LASTEXITCODE -ne 0) { throw "coverage runsettings for '$shardName' could not be written" }
+              # IncludeDirectory on its own does NOT instrument the worker: coverlet deduplicates
+              # modules by filename, so the worker's own AiDotNet.dll is skipped. That is exactly
+              # what Connect-WorkerCoverage.ps1 exists for, and it was written, self-tested
+              # (Test-WorkerCoverage.ps1, run above) and policy-guarded (CiPolicyImpact.ps1) but
+              # never invoked by a test run. Consequence: every mustCover shard's digest failed to
+              # reach the model code it exists to exercise, so the map kept it always-run for ever -
+              # 46 of the certified map's 51 always-run entries are these shards, and they are why a
+              # one-file change still selects 52 shards instead of the 1 the map actually implicates.
+              # Hard-linking makes the worker's path the same inode as the shard's instrumented copy,
+              # so coverlet's in-place rewrite and its hit counters are shared across the process.
+              $shardProjectDirectory = Split-Path -Parent '${{ matrix.shard.project }}'
+              $parentOutput = Join-Path $shardProjectDirectory 'bin/Release/${{ matrix.shard.framework }}'
+              & ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory $parentOutput -WorkerDirectory $env:SHARD_COVERAGE_INCLUDE
+              # Fail loudly. A silent gap here is the defect being fixed: the map-feeding run would
+              # otherwise complete and publish a map that still cannot select these 46 shards.
+              if ($LASTEXITCODE -ne 0) { throw "worker coverage could not be linked for '$shardName'" }
             }
             $dotnetArgs += @(
               '--collect:XPlat Code Coverage',

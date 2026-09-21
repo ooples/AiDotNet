@@ -779,6 +779,13 @@ Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'
+# IncludeDirectory is only half of it - coverlet deduplicates modules by filename, so the worker's
+# own AiDotNet.dll stays uninstrumented without the hard link. This assertion previously covered
+# only the half above, which is how the repo ran for months with Connect-WorkerCoverage.ps1 written,
+# self-tested and policy-guarded but never called: every mustCover shard's digest missed its subject
+# and stayed always-run, 46 of the certified map's 51 always-run entries.
+Assert-Contract ($shardRun.Contains('& ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory')) `
+    'the shard step writes worker runsettings but never links the instrumented binary into the worker'
 Assert-Contract ($shardRun.Contains("'--blame-hang-timeout', `$hangTimeout,")) `
     'a shard hangTimeout is not passed to the blame-hang collector'
 $shardRetry = Get-StepBlock -JobBlock $testConsumer -Step 'Rerun PR-new failures once'
