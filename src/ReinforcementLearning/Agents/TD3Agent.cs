@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 /// <example>
 /// <code>
 /// // Create a TD3 agent for stable continuous control
-/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2, PolicyDelay = 2 };
+/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2};
 /// var agent = new TD3Agent&lt;double&gt;(options);
 ///
 /// // Select a continuous action with target policy smoothing
@@ -127,6 +127,14 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _critic2Network = CreateCriticNetwork();
         _targetCritic1Network = CreateCriticNetwork();
         _targetCritic2Network = CreateCriticNetwork();
+
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_actorNetwork);
+        Networks.Add(_targetActorNetwork);
+        Networks.Add(_critic1Network);
+        Networks.Add(_critic2Network);
+        Networks.Add(_targetCritic1Network);
+        Networks.Add(_targetCritic2Network);
 
         CopyNetworkWeights(_critic1Network, _targetCritic1Network);
         CopyNetworkWeights(_critic2Network, _targetCritic2Network);

@@ -69,9 +69,9 @@ public partial class COPKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The COP-KMeans options.</param>
     public COPKMeans(COPKMeansOptions<T>? options = null)
-        : base(options ?? new COPKMeansOptions<T>())
+        : base(options ??= new COPKMeansOptions<T>())
     {
-        _options = options ?? new COPKMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>

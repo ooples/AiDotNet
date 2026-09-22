@@ -56,9 +56,9 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     /// </param>
     public NLinearModel(NLinearOptions<T>? options = null,
         IGradientBasedOptimizer<T, Matrix<T>, Vector<T>>? optimizer = null)
-        : base(options ?? new NLinearOptions<T>())
+        : base(options ??= new NLinearOptions<T>())
     {
-        _options = options ?? new NLinearOptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _l = Math.Max(2, _options.LookbackWindow);

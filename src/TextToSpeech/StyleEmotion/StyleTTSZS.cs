@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Year = 2024,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0, Beta2 = 0.99,
+                WeightDecay = 1e-4, ReferenceBatchSize = 32,
+                Source = "Li et al. 2024, Sec. 4: AdamW with beta1 0, beta2 0.99, a weight decay of "
+                        + "1e-4, a learning rate of 1e-4 and a batch size of 32, trained 30 epochs on "
+                        + "LibriTTS and 1 million steps on LibriLight. The beta1 of 0 matches its "
+                        + "predecessor StyleTTS and is the paper value.")]
 public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSZSOptions _options;
@@ -81,7 +89,9 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new StyleTTSZSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

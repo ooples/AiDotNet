@@ -105,14 +105,12 @@ public class TripleTextConditioner<T> : CompositeConditioningBase<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <example>
     /// <code>
-    /// // Create for Stable Diffusion 3
-    /// var conditioner = new TripleTextConditioner&lt;float&gt;();
-    ///
-    /// // Encode a prompt with all three encoders
-    /// var (sequenceEmbeddings, combinedPooled) = conditioner.EncodeTriple("a serene mountain lake");
-    ///
-    /// // sequenceEmbeddings: [1, 256, 4096] - from T5, used for cross-attention
-    /// // combinedPooled: [1, 2048] - from CLIP-L + CLIP-G, used for timestep conditioning
+    /// // SD3 / SDXL: CLIP-L and CLIP-G together with a T5
+    /// var tokenizer = CharacterTokenizer.CreateAscii();
+    /// var conditioner = new TripleTextConditioner&lt;float&gt;(
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
+    ///     new T5TextConditioner&lt;float&gt;(tokenizer, T5Variant.Base));
     /// </code>
     /// </example>
     public TripleTextConditioner(

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -52,6 +53,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2012.02181",
     Year = 2021,
     Authors = "Kelvin C.K. Chan, Xintao Wang, Ke Yu, Chao Dong, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
+                Source = "Chan et al. 2021, Sec. 4: Adam with a cosine annealing schedule over 300K iterations; 2e-4 for all modules other than the feature extractor (1e-4) and the flow estimator (2.5e-5). This model builds one optimizer for the whole network, so the two component rates cannot be applied here and are recorded rather than dropped.")]
 public partial class IconVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -86,7 +90,9 @@ public partial class IconVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new IconVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumFrames;
         InitializeLayers();

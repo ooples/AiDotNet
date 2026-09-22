@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -51,6 +52,9 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2404.06692",
     Year = 2024,
     Authors = "Guangyang Wu, Xin Tao, Changlin Li, Wenyi Wang, Xiaohong Liu, Qingqing Zheng")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4,
+                Source = "Wu et al. 2024, Sec. 4: the ADAM optimizer with the default hyperparameter "
+                        + "settings of Kingma and Ba and an initial learning rate of 5e-4.")]
 public partial class PerVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -84,7 +88,9 @@ public partial class PerVFI<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new PerVFIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

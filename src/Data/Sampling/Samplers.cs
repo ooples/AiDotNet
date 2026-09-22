@@ -19,13 +19,16 @@ namespace AiDotNet.Data.Sampling;
 /// **Common Patterns:**
 /// ```csharp
 /// // Random sampling (default, good for most cases)
-/// var sampler = Samplers.Random(dataSize);
+/// var dataSize = 1000;
+/// var randomSampler = Samplers.Random(dataSize);
 ///
 /// // Balanced sampling for imbalanced classes
-/// var sampler = Samplers.Balanced(labels, numClasses);
+/// var labels = new[] { 0, 1, 0, 2, 1, 0 };
+/// var balancedSampler = Samplers.Balanced(labels, numClasses: 3);
 ///
 /// // Curriculum learning (easy to hard)
-/// var sampler = Samplers.Curriculum(difficulties, totalEpochs);
+/// var difficulties = new[] { 0.1, 0.4, 0.2, 0.9, 0.6, 0.3 };
+/// var curriculumSampler = Samplers.Curriculum(difficulties, totalEpochs: 100);
 /// ```
 /// </para>
 /// </remarks>

@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,10 +45,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FTTransformerOptions { NumFeatures = 20, EmbeddingDim = 192, NumHeads = 8, NumLayers = 3 };
-/// var model = new FTTransformerNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new FTTransformerOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 192, NumHeads = 8, NumLayers = 3 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new FTTransformerNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -61,6 +68,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.11959",
     Year = 2021,
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Gorishniy et al. 2021, Sec. 4: the AdamW optimizer. No rate or batch is "
+                        + "declared: the paper's tables give search spaces rather than values, and the "
+                        + "Adam it names alongside belongs to the TabNet and GrowNet baselines it "
+                        + "reproduces, not to this model.")]
 public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private FTTransformerOptions<T> _options;
@@ -126,12 +138,13 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         // the PreNorm transformer blocks that are already the default and the model's
         // MaxGradientNorm clipping) keeps the loss decreasing monotonically with more
         // training. WeightDecay is threaded from the options so callers can still tune it.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-4,
+                    WeightDecay = _options.WeightDecay,
+                }));
 
         if (_options.NumHeads <= 0)
         {

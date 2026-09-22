@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -38,10 +40,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new WGANGPOptions { LatentSize = 100, GradientPenaltyWeight = 10.0 };
-/// var model = new WGANGP&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
-/// var generated = model.Predict(noise);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new WGANGP&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -56,6 +62,14 @@ namespace AiDotNet.NeuralNetworks;
 [PreprocessesInput("ShapeAsGeneratorInput reshapes latent vectors to the generator architecture before Layers[0] runs.")]
 [StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 64,
+                MinLearningRate = 0, DecayRate = 1.0,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Gulrajani et al. 2017, Sec. 4: Adam with a learning rate of 2e-4 decayed "
+                        + "linearly to 0 over 100K generator iterations, at a batch size of 64. No betas "
+                        + "are declared because the paper gives two different pairs for different "
+                        + "settings -- (0, 0.9) in its algorithm and (0.5, 0.999) elsewhere -- and which "
+                        + "pair accompanies this rate is not stated.")]
 public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
 {
 
@@ -293,10 +307,12 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Algorithm 1 defaults: Adam(alpha=1e-4, beta1=0, beta2=0.9).
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            Generator, CreatePaperAdamOptions());
-        _criticOptimizer = criticOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            Critic, CreatePaperAdamOptions());
+        _generatorOptimizer = generatorOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                Generator, CreatePaperAdamOptions()));
+        _criticOptimizer = criticOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                Critic, CreatePaperAdamOptions()));
 
         InitializeLayers();
     }

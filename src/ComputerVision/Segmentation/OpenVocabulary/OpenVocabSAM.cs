@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +59,10 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 1e-4,
+                Source = "Yuan et al. 2024, Sec. 4: the optimizer is AdamW with a weight decay of "
+                        + "0.0001. The paper states no learning rate in its training description, so "
+                        + "none is declared.")]
 public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly OpenVocabSAMOptions _options;
@@ -282,16 +287,17 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
     /// <summary>
     /// Open-Vocabulary SAM's default optimizer is AdamW configured from the model options.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            }
-        );
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>PaperOptimizerFactory.VerifyHandBuilt(this,
+            
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }
+            ));
 
     private static void ValidateOptions(OpenVocabSAMOptions options)
     {

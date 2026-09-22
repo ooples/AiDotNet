@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -35,7 +37,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// // splitting images into 16x16 patches processed by Transformer layers
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -57,6 +59,9 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2021,
     Authors = "Dosovitskiy et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.1,
+                ReferenceBatchSize = 4096,
+                Source = "Dosovitskiy et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.999, a batch size of 4096 and a high weight decay of 0.1. No learning rate is declared because the paper gives one per model and dataset rather than a single value; the self-supervised run separately uses a base rate of 2e-4 with 10k warmup and cosine decay.")]
 public partial class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly ViTOptions _options;
@@ -101,7 +106,9 @@ public partial class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             _options = new ViTOptions(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

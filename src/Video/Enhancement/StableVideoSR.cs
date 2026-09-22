@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Enums;
@@ -54,6 +55,8 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Zhou et al. 2024, Sec. 4: Adam at a learning rate of 1e-4.")]
 public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -108,7 +111,9 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         _conditioner = conditioner;
         _diffusionCore = diffusionCore;
         _usesInjectedDiffusionCore = diffusionCore is not null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

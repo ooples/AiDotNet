@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -80,6 +81,11 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficiently Modeling Long Sequences with Structured State Spaces", "https://arxiv.org/abs/2111.00396", Year = 2022, Authors = "Albert Gu, Karan Goel, Christopher Re")]
+[PaperOptimizer(OptimizerKind.Lamb, LearningRate = 0.005,
+                Source = "Gu et al. 2022, Sec. 4: the LAMB optimizer with a learning rate of 0.005. The "
+                        + "paper reduces the rate on the HiPPO parameters to a maximum of 0.001 for "
+                        + "stability, which one optimizer over all parameters cannot express, so the "
+                        + "0.005 declared here is the model-wide value.")]
 public partial class S4<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -235,7 +241,9 @@ public partial class S4<T> : ForecastingModelBase<T>
         _options = options ?? new S4Options<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -275,7 +283,9 @@ public partial class S4<T> : ForecastingModelBase<T>
         _options = options ?? new S4Options<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
