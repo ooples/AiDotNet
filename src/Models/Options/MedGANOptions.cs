@@ -28,14 +28,23 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// <example>
 /// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: 8);
+///
 /// var options = new MedGANOptions&lt;double&gt;
 /// {
 ///     EmbeddingDimension = 128,
 ///     DataType = MedGANDataType.Binary,
 /// };
-/// var medgan = new MedGANGenerator&lt;double&gt;(architecture, options);
-/// medgan.Fit(data, columns, epochs: 1000);
-/// var synthetic = medgan.Generate(1000);
+///
+/// var trainX = Tensor&lt;double&gt;.CreateRandom(16, 8);
+/// var trainY = Tensor&lt;double&gt;.CreateRandom(16, 8);
+///
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new MedGANGenerator&lt;double&gt;(architecture, options))
+///     .Build(trainX, trainY);
+///
+/// var synthetic = result.GenerateSamples(1000);
 /// </code>
 /// </example>
 /// </remarks>

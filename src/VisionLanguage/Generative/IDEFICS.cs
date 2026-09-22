@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -36,7 +38,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new IDEFICS&lt;double&gt;(architecture, new IDEFICSOptions());
 /// </code>
@@ -55,6 +57,10 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Laurencon et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Laurencon et al. 2023, Sec. 4: the AdamW optimizer. The paper states no "
+                        + "learning rate, batch size or schedule for this model in its training "
+                        + "description, so none is declared.")]
 public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICSOptions _options;
@@ -102,7 +108,9 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         _options = options ?? new IDEFICSOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

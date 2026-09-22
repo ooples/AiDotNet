@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 /// <example>
 /// <code>
 /// // Create a Soft Actor-Critic agent for continuous control
-/// var options = new SACOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, AutoTuneAlpha = true };
+/// var options = new SACOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, AutoTuneTemperature = true };
 /// var agent = new SACAgent&lt;double&gt;(options);
 ///
 /// // Select a continuous action with entropy-driven exploration
@@ -435,44 +435,47 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
                 var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]);
 
-                // Compute log-probabilities via engine ops
-                // Sample actions from policy for reparameterization
+                // Reparameterized sample: u = mu + sigma * eps, eps ~ N(0, I). The previous noise was
+                // rng.NextDouble() * 2 - 1, which is UNIFORM on [-1, 1) rather than Gaussian, so neither the
+                // sample nor the log-probability below described the distribution this agent samples from.
+                // It also came from an unseeded CreateSecureRandom, making the update irreproducible under a
+                // configured seed; GetNormalRandom is what SampleAction already draws with.
                 var stds = Engine.TensorExp(logStds);
                 var noise = new Tensor<T>([batchCount, actionSize]);
-                var rng = Tensors.Helpers.RandomHelper.CreateSecureRandom();
                 for (int i = 0; i < noise.Length; i++)
-                    noise[i] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
-                var sampledActions = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
+                    noise[i] = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
 
-                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, sampledActions);
+                // SampleAction squashes with tanh, so the replay buffer holds squashed actions and the
+                // critics were trained on them. Handing the RAW Gaussian sample to the critics here queried
+                // Q off the distribution it learned, and scored it with the wrong density: a squashed policy
+                // needs the change-of-variables correction, log pi = log N(u) - sum_i log(1 - tanh^2(u_i))
+                // (Haarnoja et al. 2018, Appendix C). This agent's tanh is unscaled, hence scale 1.
+                var sampledActions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
+                var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
+                    Engine, means, logStds, preSquash, 1.0);
 
-                // Build state-action for Q evaluation
-                var stateActionForQ = new Tensor<T>([batchCount, stateSize + actionSize]);
-                for (int i = 0; i < batchCount; i++)
-                {
-                    for (int j = 0; j < stateSize; j++)
-                        stateActionForQ[i, j] = batchStates[i, j];
-                    for (int j = 0; j < actionSize; j++)
-                        stateActionForQ[i, stateSize + j] = sampledActions[i * actionSize + j];
-                }
+                // Build [state | action] with engine ops. Filling a fresh tensor element by element detaches
+                // it from the tape, so the critics below would have been handed a constant no matter how
+                // they were called.
+                var stateActionForQ = Engine.TensorConcatenate([batchStates, sampledActions], axis: 1);
 
-                // Q values (detached — critics not updated here)
-                var q1 = _q1Network.Predict(stateActionForQ);
-                var q2 = _q2Network.Predict(stateActionForQ);
-                // min(Q1, Q2): use -max(-Q1, -Q2)
-                var negQ1 = Engine.TensorNegate(q1);
-                var negQ2 = Engine.TensorNegate(q2);
-                var minQ = Engine.TensorNegate(Engine.TensorMax(negQ1, negQ2));
+                // Forward the critics ON THE TAPE. Predict runs inside a NoGradScope, so reading Q through it
+                // yields a detached constant and the actor ascends nothing but its own entropy — the Q term
+                // contributes no gradient at all. TrainWithCustomLoss collects only the actor's tensors, so
+                // the critics supply dQ/da here without being updated by this step.
+                var tapedQ1 = (NeuralNetworkBase<T>)_q1Network;
+                var tapedQ2 = (NeuralNetworkBase<T>)_q2Network;
+                var minQ = Engine.TensorMin(
+                    tapedQ1.ForwardForTraining(stateActionForQ),
+                    tapedQ2.ForwardForTraining(stateActionForQ));
 
-                // policy loss = mean(alpha * log_pi - min_Q)
+                // policy loss = mean(alpha * log_pi - min_Q). min_Q stays on the tape rather than being
+                // copied element by element into a new tensor, which severed it a second time.
                 var alphaLogPi = Engine.TensorMultiplyScalar(logProbs, alpha);
-                var flatMinQ = new Tensor<T>([batchCount]);
-                for (int i = 0; i < batchCount; i++)
-                    flatMinQ[i] = minQ[i];
-
+                var flatMinQ = Engine.ReduceSum(minQ, [1], keepDims: false);
                 var loss = Engine.TensorSubtract(alphaLogPi, flatMinQ);
-                var allAxes = Enumerable.Range(0, loss.Shape.Length).ToArray();
-                return Engine.ReduceMean(loss, allAxes, keepDims: false);
+                return Engine.ReduceMean(loss, [0], keepDims: false);
             });
 
             // Update temperature (alpha)

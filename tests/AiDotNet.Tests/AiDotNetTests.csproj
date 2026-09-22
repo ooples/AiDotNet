@@ -55,6 +55,7 @@
     <!-- Keep the generator active as an analyzer and reference its assembly so the analyzer's
          diagnostics can also be exercised directly by the Roslyn contract tests below. -->
     <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" />
+    <EmbeddedResource Include="..\..\src\AiDotNet.Generators\TestScaffoldGenerator.cs" LogicalName="Review.TestScaffoldGenerator.cs" />
   </ItemGroup>
 
   <!-- Shared-compile the generator's Roslyn-free floatify helper so its (#1679) logic can be
@@ -74,6 +75,7 @@
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\FacadeConfigurationValidationGenerator.cs" Link="Generators\FacadeConfigurationValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\PaperOptimizerAnalyzer.cs" Link="Generators\PaperOptimizerAnalyzer.cs" />
     <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
          execute Roslyn directly. The production project reference is analyzer-only and therefore
          intentionally does not expose generator types as a compile reference. -->

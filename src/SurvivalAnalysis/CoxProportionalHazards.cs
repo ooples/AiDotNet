@@ -49,9 +49,21 @@ namespace AiDotNet.SurvivalAnalysis;
 /// </remarks>
 /// <example>
 /// <code>
-/// var cox = new CoxProportionalHazards&lt;double&gt;(learningRate: 0.01, maxIterations: 1000);
-/// cox.Fit(times, events, features);
-/// double hazardRatio = cox.PredictHazardRatio(newPatientFeatures);
+/// // age and treatment arm per patient
+/// var features = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// // months each patient was observed
+/// var times = new Vector&lt;double&gt;(new double[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0 });
+/// // 1 = the event happened; 0 = censored, still fine when the study ended or lost to follow-up
+/// var events = new Vector&lt;int&gt;(new int[] { 1, 0, 1, 0, 1, 1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new CoxProportionalHazards&lt;double&gt;(learningRate: 0.01, maxIterations: 1000))
+///     .Build(features, times, events);
+///
+/// var risk = result.Predict(features);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -132,6 +144,8 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     ///
     /// Usage:
     /// <code>
+    /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// var cox = new CoxProportionalHazards&lt;double&gt;(l2Penalty: 0.1);
     /// cox.FitSurvival(features, times, events);
     /// var hazardRatios = cox.PredictHazardRatio(newPatients);
@@ -406,6 +420,9 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     public override Vector<T> PredictHazardRatio(Matrix<T> x)
     {
         EnsureFitted();
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
 
         var result = new Vector<T>(x.Rows);
 

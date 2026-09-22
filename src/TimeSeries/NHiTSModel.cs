@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -51,18 +52,19 @@ namespace AiDotNet.TimeSeries;
 /// <code>
 /// // Create N-HiTS model with default options for long-horizon forecasting
 /// var options = new NHiTSOptions&lt;double&gt;();
-/// var model = new NHiTSModel&lt;double&gt;(options);
 ///
 /// // Prepare historical time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
 ///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
-/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+/// var trainingMatrix = new Matrix&lt;double&gt;(history.Length - 1, 1);
 ///
 /// // Train the model on historical observations
-/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NHiTSModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, history.SubVector(1, history.Length - 1));
 ///
 /// // Forecast future values using hierarchical interpolation
-/// var forecast = model.Predict(trainingMatrix);
+/// var forecast = result.Predict(trainingMatrix);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -73,6 +75,11 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza, Max Mergenthaler-Canseco, Armin Dubrawski")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 256,
+                Source = "Challu et al. 2023, Sec. 4: trained with the ADAM optimizer and MAE loss at a "
+                        + "batch size of 256 and an initial learning rate of 1e-3, halved three times "
+                        + "across the training procedure. No schedule is declared because the paper "
+                        + "gives neither the interval nor the points at which the halving occurs.")]
 public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
@@ -114,9 +121,9 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     /// </summary>
     /// <param name="options">Configuration options for N-HiTS.</param>
     public NHiTSModel(NHiTSOptions<T>? options = null)
-        : base(options ?? new NHiTSOptions<T>())
+        : base(options ??= new NHiTSOptions<T>())
     {
-        _options = options ?? new NHiTSOptions<T>();
+        _options = options;
         Options = _options;
         _stacks = new List<NHiTSStackTensor<T>>();
         _random = RandomHelper.CreateSeededRandom(42);

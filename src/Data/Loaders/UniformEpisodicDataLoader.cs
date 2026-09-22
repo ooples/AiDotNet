@@ -52,7 +52,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);         // Class labels 0-9
 ///
 /// // Create 5-way 3-shot loader with 10 query examples per class
-/// var loader = new UniformEpisodicDataLoader&lt;double&gt;(
+/// var loader = new UniformEpisodicDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     nWay: 5,        // 5 classes per task
@@ -67,13 +67,12 @@ namespace AiDotNet.Data.Loaders;
 ///     var task = loader.GetNextTask();
 ///
 ///     // Support set: [15, 784] and [15]
-///     Console.WriteLine($"Support: {task.SupportSetX.Shape[0]} examples");
+///     Console.WriteLine($"Support: {task.SupportSetX.Rows} examples");
 ///
 ///     // Query set: [50, 784] and [50]
-///     Console.WriteLine($"Query: {task.QuerySetX.Shape[0]} examples");
+///     Console.WriteLine($"Query: {task.QuerySetX.Rows} examples");
 ///
-///     // Use task with MAML, Reptile, or SEAL
-///     model.MetaTrainStep(task);
+///     // Feed the task to MAML, Reptile or SEAL from here.
 /// }
 /// </code>
 /// </example>

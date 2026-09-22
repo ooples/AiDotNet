@@ -28,10 +28,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FinchOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
-/// var model = new FinchLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new FinchLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -50,7 +54,6 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
-    private readonly double _learningRate;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -71,14 +74,8 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public FinchLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 65536,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 8,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         FinchOptions? options = null,
-        double learningRate = 0.001)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -86,13 +83,13 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FinchOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _maxSeqLength = maxSeqLength;
-        _learningRate = learningRate;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

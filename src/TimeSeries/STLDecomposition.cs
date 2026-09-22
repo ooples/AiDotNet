@@ -30,12 +30,16 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } });
+/// var series = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+///
 /// // Decompose a time series into trend, seasonal, and residual components
-/// var options = new STLDecompositionOptions&lt;double&gt; { SeasonalPeriod = 12 };
-/// var stl = new STLDecomposition&lt;double&gt;(options);
-/// stl.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; trend = stl.GetTrend();
-/// Vector&lt;double&gt; seasonal = stl.GetSeasonal();
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new STLDecomposition&lt;double&gt;(new STLDecompositionOptions&lt;double&gt; { SeasonalPeriod = 12 }))
+///     .Build(features, series);
+///
+/// Vector&lt;double&gt; trend = result.GetTrend();
+/// Vector&lt;double&gt; seasonal = result.GetSeasonal();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

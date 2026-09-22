@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
@@ -53,9 +55,10 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 52);
 /// var gr00t = new GR00TN1&lt;double&gt;(arch, new GR00TN1Options());
 ///
@@ -64,9 +67,12 @@ namespace AiDotNet.VisionLanguage.Robotics;
 ///
 /// // Streaming control at the paper's 50 Hz S1 rate.
 /// var runner = gr00t.CreateDualSystemRunner();
-/// while (running) {
+/// var currentInstruction = "stack the cups";
+/// for (int tick = 0; tick &lt; 200; tick++)
+/// {
+///     var currentImage = image;   // your latest camera frame
 ///     var action = runner.Step(currentImage, currentInstruction);
-///     SendToHumanoid(action);
+///     // send `action` to the robot
 /// }
 /// </code>
 /// </example>
@@ -84,6 +90,14 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2025,
     Authors = "NVIDIA"
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.95, Beta2 = 0.999,
+                Epsilon = 1e-8, WeightDecay = 1e-5, WarmupFraction = 0.05,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Bjorck et al. 2025, hyperparameter table: AdamW with a learning rate of 1e-4, "
+                        + "beta1 0.95, beta2 0.999, epsilon 1e-8, a weight decay of 1e-5, a cosine "
+                        + "scheduler and a warmup ratio of 0.05. No batch size is declared because the "
+                        + "paper's text gives a default global batch of 1024 over 60k steps while its "
+                        + "table gives 16,384 over 200,000, and nothing settles which applies here.")]
 public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
@@ -145,7 +159,9 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
     {
         _options = options ?? new GR00TN1Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

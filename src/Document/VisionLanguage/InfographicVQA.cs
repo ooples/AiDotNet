@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,17 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 4,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Mathew et al. 2022, Sec. 5: continued pre-training on in-domain data uses "
+                        + "four samples in one batch and the Adam optimizer with a learning rate of "
+                        + "2e-5. The batch is declared because the paper gives it as the true global "
+                        + "batch alongside its rate, which is exactly the pairing the linear scaling "
+                        + "rule needs.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-5, ReferenceBatchSize = 8,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Mathew et al. 2022, Sec. 5: fine-tuning uses a batch size of 8 and the Adam "
+                        + "optimizer with a learning rate of 1e-5.")]
 public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly InfographicVQAOptions _options;
@@ -157,7 +169,9 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         _fusionLayers = fusionLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -207,7 +221,9 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         _fusionLayers = fusionLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;

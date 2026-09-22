@@ -114,11 +114,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// </remarks>
 /// <example>
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 512,
-///     outputSize: 9,
-///     hiddenLayers: new[] { 256, 128 },
-///     networkType: NetworkType.Classification);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 512, numClasses: 9);
 /// var biLSTMCRF = new BiLSTMCRF&lt;float&gt;(architecture);
 /// </code>
 /// </example>

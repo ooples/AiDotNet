@@ -52,6 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
           ./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-ShardMapCertificate self-test failed' }
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Selection reduction self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -68,10 +70,8 @@ jobs:
           # Treat workflow_dispatch input as data, never shell source.
           INPUT_RUN_ID: ${{ inputs.run_id }}
         run: |
-          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name]')
-          expected_sorted=$(printf '%s' "$expected" | jq -c 'sort')
-          expected_count=$(printf '%s' "$expected" | jq 'length')
-          if [ "$expected_count" -eq 0 ]; then
+          current_names=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name] | sort')
+          if [ "$(printf '%s' "$current_names" | jq 'length')" -eq 0 ]; then
             echo "::error::.github/test-shards.yml yielded no shards"
             exit 1
           fi
@@ -118,9 +118,30 @@ jobs:
               echo "run $candidate has an invalid coverage-everywhere marker"
               return 1
             fi
+            # The run is judged against the manifest committed at ITS commit, not today's. The map is
+            # the truth at that commit; Select-Shards runs every shard added or redefined since and
+            # drops retired ones, so a manifest edit on master no longer discards a whole night.
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "run $candidate tested $sha, which is not in this checkout"
+              return 1
+            fi
+            if ! git cat-file -e "${sha}:.github/test-shards.yml" 2>/dev/null; then
+              echo "run $candidate has no shard manifest at $sha"
+              return 1
+            fi
+            if ! run_manifest=$(git show "${sha}:.github/test-shards.yml" | yq -o=json -I=0 '.shard') ||
+               ! expected_sorted=$(printf '%s' "$run_manifest" | jq -ce 'if type == "array" then [.[].name] | sort else error("not a list") end'); then
+              echo "run $candidate has an unreadable shard manifest at $sha"
+              return 1
+            fi
+            expected_count=$(printf '%s' "$expected_sorted" | jq 'length')
+            if [ "$expected_count" -eq 0 ]; then
+              echo "run $candidate has an empty shard manifest at $sha"
+              return 1
+            fi
             marker_names=$(jq -c '.shardNames | sort' "$marker")
             if [ "$marker_names" != "$expected_sorted" ]; then
-              echo "run $candidate used a different shard manifest - skipping stale coverage"
+              echo "run $candidate marker does not match the shard manifest at its own commit"
               return 1
             fi
 
@@ -168,7 +189,8 @@ jobs:
             fi
             valid_sha="$sha"
             valid_map_run_id="$map_run_id"
-            echo "run $candidate has the exact $expected_count-shard completed matrix"
+            drift=$(jq -n --argjson run "$expected_sorted" --argjson now "$current_names" '{added: ($now - $run | length), retired: ($run - $now | length)}')
+            echo "run $candidate has the exact $expected_count-shard completed matrix of its commit (manifest drift since: $drift)"
             return 0
           }
 
@@ -280,12 +302,19 @@ jobs:
         if: steps.source.outputs.found == 'true'
         shell: pwsh
         run: |
-          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          # The source commit's manifest: the map's shard universe must equal the audited run's.
+          $all = @(git show '${{ steps.source.outputs.sha }}:.github/test-shards.yml' | yq -o=json -I=0 '.shard' | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $all.Count -eq 0) { throw 'could not read the source commit shard manifest' }
+          # Entries that declare mustCover stay always-run unless their digest reached that code (see the
+          # MODEL-INVENTORY section of test-shards.yml): their subject runs in a child worker process.
+          $requirements = Join-Path $env:RUNNER_TEMP 'shard-coverage-requirements.json'
+          ConvertTo-Json -InputObject @($all) -Depth 6 | Set-Content -LiteralPath $requirements -Encoding utf8
           & ./tools/TestImpact/New-ShardMap.ps1 `
               -DigestDirectory digests `
               -AllShards @($all.name) `
               -Sha '${{ steps.source.outputs.sha }}' `
-              -OutFile shard-map.json
+              -OutFile shard-map.json `
+              -CoverageRequirementsFile $requirements
 
           $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
           $map = Get-Content shard-map.json -Raw | ConvertFrom-Json
@@ -295,6 +324,15 @@ jobs:
           Write-Host "map: $files file(s), $size MB"
           "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # Correctness proofs cannot see a map that skips nothing: the 2026-09-21 map was correct and
+      # still left 51 of 164 shards always-run. This is the only gate on how much the map can
+      # actually save, and it only ever ratchets down.
+      - name: Ratchet on selection reduction
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json
+          if ($LASTEXITCODE -ne 0) { throw 'the candidate map skips less than the recorded baseline' }
 
       - name: Upload candidate map
         if: steps.source.outputs.found == 'true'
@@ -394,9 +432,12 @@ jobs:
             $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
             $extension = Complete-CiMapWorkloads -Map $previousMap -Manifest $auditShards
             $historicalMapFile = 'prevmap/shard-map.json'
-            if ($extension.Added.Count -gt 0) {
+            if ($extension.Added.Count -gt 0 -or $extension.RetiredIndexed.Count -gt 0) {
               # Replay ordinary historical coverage with new auxiliary workloads mandatory.
               # Do not claim that the old source measured these newly introduced workloads.
+              # A retirement must go through here too: the completed map is the only one carrying
+              # retiredShards, and without it certification demands an outcome from a shard that
+              # no longer has a job and can never report one.
               $extension.Map | ConvertTo-Json -Depth 12 -Compress | Set-Content prevmap/selection-map.json
               $historicalMapFile = 'prevmap/selection-map.json'
             }

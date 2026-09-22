@@ -46,8 +46,8 @@ namespace AiDotNet.Audio.Speaker;
 /// var result = diarizer.Diarize(audioTensor);
 ///
 /// // Native training mode
-/// var diarizer = new SpeakerDiarizer&lt;float&gt;(architecture);
-/// diarizer.Train(features, labels);
+/// var diarizer2 = new SpeakerDiarizer&lt;float&gt;(architecture);
+/// diarizer2.Train(features, labels);
 /// </code>
 /// </para>
 /// </remarks>

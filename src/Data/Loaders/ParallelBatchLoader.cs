@@ -296,6 +296,11 @@ public static class ParallelBatchLoaderExtensions
     /// <returns>A parallel batch loader configured with the specified parameters.</returns>
     /// <example>
     /// <code>
+    /// int numFeatures = 8;
+    /// var fullDataset = (X: new Matrix&lt;float&gt;(64, numFeatures), Y: new Vector&lt;float&gt;(64));
+    /// var dataLoader = new InMemoryDataLoader&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
+    ///     fullDataset.X, fullDataset.Y);
+    ///
     /// var parallelLoader = dataLoader.WithParallelLoading(
     ///     batchFactory: indices => {
     ///         var xBatch = new Matrix&lt;float&gt;(indices.Length, numFeatures);

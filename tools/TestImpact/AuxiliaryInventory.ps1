@@ -64,9 +64,11 @@ function Test-AuxiliaryInventoryChange {
     try {
         $sha = $MapSha
         if ($sha -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid map source SHA.' }
-        # Coverage is also tied to the workload definitions and execution configuration.
-        # A window/filter or dependency change must not reuse old indexed membership.
-        & git diff --quiet $sha HEAD -- .github/test-shards.yml .github/workflows/sonarcloud.yml `
+        # Coverage is also tied to the execution configuration: a dependency or runner change must
+        # not reuse old indexed membership. A window's own definition (offset, budget, filter) is
+        # compared per shard by Select-Shards, and another shard's entry cannot move models between
+        # windows, so manifest edits alone do not widen every window.
+        & git diff --quiet $sha HEAD -- .github/workflows/sonarcloud.yml `
             coverlet.runsettings Directory.Packages.props Directory.Build.props Directory.Build.targets global.json `
             tools/TestImpact/Connect-WorkerCoverage.ps1 tools/TestImpact/Write-AuxiliaryEvidence.ps1
         if ($LASTEXITCODE -ne 0) { return $true }

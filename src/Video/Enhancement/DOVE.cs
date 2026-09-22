@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,15 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2505.16239",
     Year = 2025,
     Authors = "Zheng Chen, Zichen Zou, Kewei Zhang, Xiongfei Su, Xin Yuan, Yong Guo, Yulun Zhang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, Beta1 = 0.9, Beta2 = 0.95,
+                Phase = TrainingPhase.PreTraining,
+                Source = "DOVE: the AdamW optimizer with beta1 0.9 and beta2 0.95, at a stage-1 "
+                        + "learning rate of 2e-5. The paper also gives a beta3 of 0.98, which belongs to "
+                        + "a three-moment variant this library's AdamW does not implement, so it is "
+                        + "recorded here rather than declared.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-6,
+                Phase = TrainingPhase.FineTuning,
+                Source = "DOVE: stage-2 uses a learning rate of 5e-6, otherwise as stage-1.")]
 public partial class DOVE<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -91,7 +101,9 @@ public partial class DOVE<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new DOVEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

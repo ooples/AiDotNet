@@ -170,6 +170,14 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         return _innerAgent.Train();
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The inner agent owns both the labelled-transition route and the one-shot supervised
+    /// update flag. Forward the complete operation, rather than creating a target action in
+    /// the wrapper and sending it through the inner agent's public on-policy collection API.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target) => _innerAgent.Train(state, target);
+
     #endregion
 
     #region Base Implementation
@@ -237,7 +245,29 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         return innerMetadata;
     }
 
+    #endregion
 
+    #region Disposal
+
+    /// <summary>
+    /// Disposes the wrapped algorithm agent, which owns every network this wrapper trains.
+    /// </summary>
+    /// <remarks>
+    /// The wrapper builds no networks of its own; it delegates to the DQN/PPO/A2C/SAC agent it
+    /// constructed, so releasing that agent is what releases the networks. Repeated calls are
+    /// harmless because the inner agent's networks are released through a once-only guard.
+    /// </remarks>
+    public override void Dispose()
+    {
+        try
+        {
+            _innerAgent.Dispose();
+        }
+        finally
+        {
+            base.Dispose();
+        }
+    }
 
     #endregion
 }

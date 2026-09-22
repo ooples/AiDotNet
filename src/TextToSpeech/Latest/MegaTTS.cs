@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,14 @@ namespace AiDotNet.TextToSpeech.Latest;
     Year = 2023,
     Authors = "Jiang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Schedule = LearningRateSchedulerType.Noam,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "Jiang et al. 2023, Sec. 4: the Adam optimizer with beta1 0.9, beta2 0.98 and "
+                        + "epsilon 1e-9, following the learning rate schedule of its reference [56], "
+                        + "Vaswani et al. 2017 -- the inverse-square-root schedule with warmup declared "
+                        + "here as Noam. The paper restates neither the peak rate nor the warmup length, "
+                        + "so the provenance records that the schedule comes from the cited work.")]
 public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTSOptions _options;
@@ -86,12 +96,13 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         // its options specify and those two user-facing settings did nothing at all. The resulting
         // overshoot showed up as Training_ShouldReduceLoss drifting upward (0.802 -> 0.837) even
         // though the model's own training loss was decreasing. Same wiring as Piper in this family.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

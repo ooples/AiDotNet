@@ -67,9 +67,9 @@ public partial class KMedoids<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The KMedoids options.</param>
     public KMedoids(KMedoidsOptions<T>? options = null)
-        : base(options ?? new KMedoidsOptions<T>())
+        : base(options ??= new KMedoidsOptions<T>())
     {
-        _options = options ?? new KMedoidsOptions<T>();
+        _options = options;
     }
 
     /// <summary>

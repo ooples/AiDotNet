@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,6 +61,27 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAM 2: Segment Anything in Images and Videos", "https://arxiv.org/abs/2408.00714", Year = 2024, Authors = "Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.1, ReferenceBatchSize = 256, WarmupSteps = 1000,
+                MaxGradientNorm = 0.1, Schedule = LearningRateSchedulerType.Noam,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Ravi et al. 2024, Table 12a: AdamW with momentum 0.9 and 0.999, gradient "
+                        + "clipping at a maximum of 0.1, a weight decay of 0.1, a learning rate of 4e-4 "
+                        + "on a reciprocal square-root schedule with timescale 1000, a linear warmup "
+                        + "over 1k iterations and a batch size of 256. The reciprocal square-root decay "
+                        + "is declared as the Noam schedule. Layer-wise decay is not declared because it "
+                        + "varies with encoder size (0.8 for T and S, 0.9 for B+, 0.925 for L). Routing "
+                        + "is handled by SegmentationModelBase.CreateDefaultOptimizer, which consults "
+                        + "PaperOptimizerFactory itself, so no call is inserted here.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.1,
+                ReferenceBatchSize = 256, WarmupSteps = 7500, MaxGradientNorm = 0.1,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Ravi et al. 2024, Table 12b: full training runs 150k steps under the same "
+                        + "AdamW settings on a cosine schedule with a 7.5k-iteration linear warmup. No "
+                        + "learning rate is declared because the paper splits it by component -- 6e-5 "
+                        + "for the image encoder and 3.0e-4 for everything else -- while this model "
+                        + "builds a single optimizer over all of them.")]
 public partial class SAM21<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SAM21Options _options;
