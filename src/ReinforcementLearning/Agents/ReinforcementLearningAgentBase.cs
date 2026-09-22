@@ -33,7 +33,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IMaskedExperienceAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
@@ -206,7 +206,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     /// <param name="done">Whether the episode terminated.</param>
     public abstract void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
 
-    /// <inheritdoc cref="IMaskedExperienceAgent{T}.StoreExperience"/>
+    /// <summary>Stores a transition with a snapshot of next-state legality, or rejects unsupported nonterminal masks.</summary>
     public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
         bool done, bool[]? nextLegalActions)
     {

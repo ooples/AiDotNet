@@ -622,7 +622,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             actionIndices[i] = ArgMax(_trajectory.Actions[batchIndices[i]]);
         }
 
-        var maskBias = BuildMaskBias(batchIndices);
+        using var maskBias = BuildMaskBias(batchIndices);
 
         var trainableActor = (NeuralNetworkBase<T>)_actor;
         T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
@@ -700,7 +700,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         // default(T) is the additive identity for every numeric T, so the legal entries need no write.
         var data = new T[n * actionSize];
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
         for (int i = 0; i < n; i++)
         {
             var mask = _stepMasks[batchIndices[i]];

@@ -217,6 +217,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         Guard.NotNull(state);
         if (state.Length != TradingOptions.StateSize)
             throw new ArgumentException("State length must match StateSize.", nameof(state));
+        if (legalActions is not null) _ = ActionMasking.NegativeInfinity(NumOps);
         // Move the rollout's state copy to selection so the returned action is tied to the
         // actual input values. Successful storage takes ownership of this snapshot without
         // making a second state copy. Evaluation does not allocate a rollout snapshot.
@@ -496,7 +497,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         if (!batch.Any(step => step.LegalActions is not null)) return null;
         int width = TradingOptions.ActionSize;
         var data = new T[batch.Length * width];
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
         for (int row = 0; row < batch.Length; row++)
         {
             var mask = batch[row].LegalActions;

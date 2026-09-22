@@ -142,13 +142,29 @@ internal static class ActionMasking
             return logits;
         }
 
+        var blocked = NegativeInfinity(ops);
         var masked = new Vector<T>(logits.Length);
         for (int i = 0; i < logits.Length; i++)
         {
-            masked[i] = mask[i] ? logits[i] : ops.FromDouble(double.NegativeInfinity);
+            masked[i] = mask[i] ? logits[i] : blocked;
         }
 
         return masked;
+    }
+
+    /// <summary>Refuses finite-only numeric types before a masked policy can be sampled or trained.</summary>
+    internal static T NegativeInfinity<T>(INumericOperations<T> ops)
+    {
+        try
+        {
+            var value = ops.FromDouble(double.NegativeInfinity);
+            if (double.IsNegativeInfinity(ops.ToDouble(value))) return value;
+        }
+        catch (OverflowException ex)
+        {
+            throw new NotSupportedException($"Masked policy logits require a numeric type supporting infinity; {typeof(T).Name} does not.", ex);
+        }
+        throw new NotSupportedException($"Masked policy logits require a numeric type supporting infinity; {typeof(T).Name} does not.");
     }
 
     /// <summary>

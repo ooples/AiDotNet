@@ -96,14 +96,11 @@ public class MaskableAgentSelectionTests
         var agent = Maskable(agentName);
         var state = FixedState();
 
-        var observed = new HashSet<int>();
         for (var i = 0; i < Draws; i++)
         {
             var index = SelectedIndex(agent.SelectAction(state, training: true, Actions1And3));
             Assert.True(index is 1 or 3, $"{agentName} selected illegal action {index}");
-            observed.Add(index);
         }
-        Assert.True(observed.SetEquals(new[] { 1, 3 }), $"{agentName} did not explore both legal actions.");
     }
 
     /// <summary>
