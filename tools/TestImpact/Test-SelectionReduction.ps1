@@ -60,14 +60,31 @@ $script:AlwaysRunBaseline = 51
     shards. This is the number a one-line docs fix actually waits for, and shard count hides it
     because the always-run shards are wildly uneven in size.
 
-    6109  2026-09-22  first measurement, against the map certified by run 35719826020. 18% of the
-                      suite's 34,421 [Fact]/[Theory] methods, from 51 always-run shards. 46 of
-                      those are the mustCover worker shards whose instrumented binary was never
-                      linked (efdb960edd) and 5 are held by the no-coverage latch (0eb5ef3ed6);
-                      both fixes are expected to cut this hard once a coverage run re-bases the
-                      map, at which point this comes down to what that run proves.
+    6109  2026-09-22  WRONG, superseded same day. Derived from a hand-rolled filter matcher that
+                      required every FullyQualifiedName term to match, which treats the '|' in 83
+                      of the 164 filters as AND, and which ignored each shard's project.
+    5412  2026-09-22  Measured with the repo's own ConvertTo-TestFilter and Test-TestFilter plus a
+                      project match - the same evaluator selection uses - against the map certified
+                      by run 35719826020. 15.7% of the suite's 34,421 [Fact]/[Theory] methods, from
+                      51 always-run shards. 46 of those are the mustCover worker shards whose
+                      instrumented binary was never linked (efdb960edd) and 5 are held by the
+                      no-coverage latch (0eb5ef3ed6); both fixes should cut this once a coverage
+                      run re-bases the map, at which point this comes down to what that run proves.
 #>
-$script:AlwaysRunTestBaseline = 6109
+$script:AlwaysRunTestBaseline = 5412
+
+# Load Select-Shards' declarations - ConvertTo-TestFilter, Test-TestFilter and the $script:Filter*
+# constants - without its parameter block or self-test, so this measures with exactly the parser
+# and evaluator selection uses rather than a second implementation of the same grammar. Dot-sourced
+# at script scope on purpose: doing it inside a function would scope the definitions to that call.
+$script:SelectorLines = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Select-Shards.ps1')
+$script:SelectorFrom = ($script:SelectorLines | Select-String -Pattern '^Set-StrictMode' | Select-Object -First 1).LineNumber
+$script:SelectorTo = ($script:SelectorLines | Select-String -Pattern '^if \(\$SelfTest\)' | Select-Object -First 1).LineNumber
+$script:SelectorFragment = Join-Path ([IO.Path]::GetTempPath()) ("selection-reduction-$([guid]::NewGuid().ToString('N')).ps1")
+Set-Content -LiteralPath $script:SelectorFragment `
+    -Value $script:SelectorLines[($script:SelectorFrom - 1)..($script:SelectorTo - 2)] -Encoding utf8
+. $script:SelectorFragment
+Remove-Item -LiteralPath $script:SelectorFragment -Force -ErrorAction SilentlyContinue
 
 function Measure-AlwaysRunTests {
     <# Tests reachable from the always-run shards, via the FullyQualifiedName terms VSTest uses. #>
@@ -77,21 +94,34 @@ function Measure-AlwaysRunTests {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Units
     )
 
+    # Evaluate each shard's real filter with the parser and evaluator selection itself uses, and
+    # require the test's project to be the one the shard runs. A hand-rolled matcher got this wrong
+    # three times: matching ANY FullyQualifiedName term over-counts; requiring ALL of them treats
+    # the '|' in 83 of the 164 filters as AND and drops 74% of the suite; and skipping the project
+    # check lets AiDotNet.Serving.Tests, whose filter carries no name condition, claim all 34,421.
     $counted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $total = 0
     foreach ($name in $AlwaysRun) {
         $shard = @($Manifest | Where-Object { [string] $_.name -ceq [string] $name })
         if ($shard.Count -eq 0) { continue }
-        $tokens = @([regex]::Matches([string] $shard[0].filter, 'FullyQualifiedName~([A-Za-z0-9_.]+)') |
-            ForEach-Object { $_.Groups[1].Value })
+        $tree = $null
+        try { $tree = ConvertTo-TestFilter -Text ([string] $shard[0].filter) }
+        catch {
+            # An unparseable filter must not silently contribute nothing: count the whole project,
+            # which is the conservative reading and keeps the ratchet from reporting a false gain.
+            $tree = $null
+        }
+        $projectDirectory = ((([string] $shard[0].project).Replace('\', '/')) -split '/')[1]
         foreach ($u in $Units) {
-            foreach ($token in $tokens) {
-                if (([string] $u.Fqn).Contains($token)) {
-                    # A file two shards both claim is paid for once, not twice.
-                    if ($counted.Add([string] $u.Fqn)) { $total += [int] $u.Tests }
-                    break
+            if ([string] $u.Project -cne $projectDirectory) { continue }
+            if ($null -ne $tree) {
+                $candidate = [pscustomobject]@{
+                    Fqn = [string] $u.Fqn; PrefixOnly = $false; AnySuffix = $false; Categories = @()
                 }
+                if ((Test-TestFilter -Node $tree -Candidate $candidate) -eq $script:FilterFalse) { continue }
             }
+            # A file two shards both claim is paid for once, not twice.
+            if ($counted.Add([string] $u.Fqn)) { $total += [int] $u.Tests }
         }
     }
     return $total
@@ -153,12 +183,21 @@ if ($SelfTest) {
 
     # Costing the always-run set in TESTS, which is what a pull request actually waits for.
     $manifest = @(
-        [pscustomobject]@{ name = 'Heavy'; filter = 'FullyQualifiedName~Acme.Heavy' },
-        [pscustomobject]@{ name = 'Light'; filter = 'FullyQualifiedName~Acme.Light' }
+        [pscustomobject]@{ name = 'Heavy'; project = 'tests/Acme.Tests/Acme.Tests.csproj'; filter = 'FullyQualifiedName~Acme.Heavy' },
+        [pscustomobject]@{ name = 'Light'; project = 'tests/Acme.Tests/Acme.Tests.csproj'; filter = 'FullyQualifiedName~Acme.Light' },
+        # An OR filter: the hand-rolled matcher this replaced required every term, so it dropped
+        # everything a '|' filter selects - 83 of the repo's 164 filters contain one.
+        [pscustomobject]@{ name = 'Either'; project = 'tests/Acme.Tests/Acme.Tests.csproj'
+                           filter = 'FullyQualifiedName~Acme.Heavy|FullyQualifiedName~Acme.Light' },
+        # No name condition at all: without the project check this claims every test everywhere.
+        [pscustomobject]@{ name = 'Other'; project = 'tests/Other.Tests/Other.Tests.csproj'; filter = 'Category!=GPU' },
+        # A filter the parser rejects. It must cost the whole project, not nothing - a shard that
+        # silently contributes zero would hand the ratchet a reduction it has not earned.
+        [pscustomobject]@{ name = 'Broken'; project = 'tests/Acme.Tests/Acme.Tests.csproj'; filter = 'Nonsense' }
     )
     $units = @(
-        [pscustomobject]@{ Fqn = 'Acme.Heavy.BigTests'; Tests = 100 },
-        [pscustomobject]@{ Fqn = 'Acme.Light.SmallTests'; Tests = 3 }
+        [pscustomobject]@{ Fqn = 'Acme.Heavy.BigTests'; Tests = 100; Project = 'Acme.Tests' },
+        [pscustomobject]@{ Fqn = 'Acme.Light.SmallTests'; Tests = 3; Project = 'Acme.Tests' }
     )
     Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy') -Manifest $manifest -Units $units) -eq 100) `
         'the always-run test cost did not follow the shard filter'
@@ -167,10 +206,22 @@ if ($SelfTest) {
     # Shard count cannot stand in for this: two always-run shards can differ by 30x.
     Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Light') -Manifest $manifest -Units $units) -eq 3) `
         'a small always-run shard was costed as if it were a large one'
-    # A file two shards both claim is paid for once.
-    $shared = @([pscustomobject]@{ Fqn = 'Acme.Heavy.Light.SharedTests'; Tests = 7 })
-    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy', 'Light') -Manifest $manifest -Units $shared) -eq 7) `
+    # A file two shards both claim is paid for once. 'Either' overlaps 'Heavy' by construction. The
+    # fixture here used to pair 'Heavy' with 'Light' over an FQN only ONE of the two filters
+    # matched - 'Acme.Heavy.Light.SharedTests' contains 'Acme.Heavy' but not 'Acme.Light', since
+    # VSTest '~' is a substring test - so it passed whether or not the dedup existed.
+    $shared = @([pscustomobject]@{ Fqn = 'Acme.Heavy.SharedTests'; Tests = 7; Project = 'Acme.Tests' })
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy', 'Either') -Manifest $manifest -Units $shared) -eq 7) `
         'a test file claimed by two always-run shards was counted twice'
+    # An OR filter must select both sides. Requiring every term instead is what lost 74% of the
+    # suite when this was measured with a hand-rolled matcher.
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Either') -Manifest $manifest -Units $units) -eq 103) `
+        'an OR filter did not select both of its alternatives'
+    # A shard for another project must claim nothing here, however permissive its filter.
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Other') -Manifest $manifest -Units $units) -eq 0) `
+        'a shard running a different project claimed these tests'
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Broken') -Manifest $manifest -Units $units) -eq 103) `
+        'an unparseable filter contributed nothing instead of its whole project'
 
     # The ratchet must actually bite. A map one over the baseline has to be rejected, or this
     # proof is decoration - which is exactly what the existing correctness proofs were for this.
@@ -215,6 +266,7 @@ if ($measured.AlwaysRun -lt $script:AlwaysRunBaseline) {
 # The shard count is a proxy; this is the cost itself.
 if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile) -and (Test-Path -LiteralPath $TestsRoot)) {
     $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+    $testsRootFull = (Resolve-Path -LiteralPath $TestsRoot).Path
     $units = @(foreach ($f in @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter *.cs -File)) {
         $text = [IO.File]::ReadAllText($f.FullName)
         $n = ([regex]::Matches($text, '\[\s*(Fact|Theory)\b')).Count
@@ -222,7 +274,12 @@ if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile) -and (Te
         $ns = ''
         $m = [regex]::Match($text, '(?m)^\s*namespace\s+([A-Za-z0-9_.]+)')
         if ($m.Success) { $ns = $m.Groups[1].Value }
-        [pscustomobject]@{ Fqn = "$ns.$([IO.Path]::GetFileNameWithoutExtension($f.Name))"; Tests = $n }
+        $relative = $f.FullName.Substring($testsRootFull.Length).TrimStart('\', '/').Replace('\', '/')
+        [pscustomobject]@{
+            Fqn = "$ns.$([IO.Path]::GetFileNameWithoutExtension($f.Name))"
+            Tests = $n
+            Project = ($relative -split '/')[0]
+        }
     })
     $always = @(@($map.alwaysRun) | Where-Object { $_ -cnotin $retiredForReport })
     $alwaysTests = Measure-AlwaysRunTests -AlwaysRun $always -Manifest $manifest -Units $units
