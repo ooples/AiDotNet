@@ -619,6 +619,10 @@ jobs:
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
       requires_validation: ${{ steps.select.outputs.requires_validation }}
+      # JSON boolean, and deliberately NOT the same as requires_validation: the build jobs consume
+      # that one, so a build-only change (.editorconfig) has to keep it true while still skipping
+      # every test shard. Absent or malformed leaves the matrix unauthorized, same as above.
+      requires_shards: ${{ steps.select.outputs.requires_shards }}
       # Slugs of the shards deliberately not run, for the regression analyzer. It treats any
       # baseline shard with no current artifact as Incomplete and fails the policy on it - which
       # is right for a host that died and wrong for a shard we chose to skip.
@@ -822,6 +826,9 @@ jobs:
 
           $escalate = $true
           $requiresValidation = $true
+          # Defaults to true so every path that does not explicitly prove a change is build-only
+          # still runs the shard matrix. Only the selector may lower it.
+          $requiresShards = $true
           $selected = @()
 
           # Two independent reasons to refuse to reduce, reported separately so the log says which
@@ -875,6 +882,7 @@ jobs:
             else {
               $escalate = $false
               $requiresValidation = $true
+              $requiresShards = $true
               $selected = @($partialShards)
               Write-Host "post-merge delta: re-running $($partialShards.Count) shard(s) the base branch's later commits reach; importing $($importShards.Count) from the pull request run"
             }
@@ -903,6 +911,7 @@ jobs:
             if (-not $pathRequiresValidation) {
               $escalate = $false
               $requiresValidation = $false
+              $requiresShards = $false
               $selected = @()
             }
             elseif ($mapCertified) {
@@ -932,12 +941,20 @@ jobs:
                 }
                 $escalate = $selectionEscalated
                 $requiresValidation = $true
+                # A build-only change (.editorconfig) must still compile - it can raise an analyzer
+                # to error - but no test shard can be affected by it. The build jobs and the matrix
+                # share requires_validation, so the distinction needs its own flag. Absent property
+                # means an older selector: fail closed by running the shards.
+                $shardsFlag = $result.PSObject.Properties['requiresShards']
+                $requiresShards = if ($null -eq $shardsFlag) { $true }
+                                  else { Read-RequiredJsonBoolean -Object $result -PropertyName 'requiresShards' }
                 $selected = @($shardsProperty.Value)
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
                 $escalate = $true
                 $requiresValidation = $true
+                $requiresShards = $true
                 $selected = @()
               }
             }
@@ -1031,6 +1048,11 @@ jobs:
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "requires_validation=$($requiresValidation.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Separate from requires_validation because the build jobs and the shard matrix share
+          # that flag. A build-only change still compiles - .editorconfig can raise an analyzer to
+          # error - but cannot affect any test.
+          "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
@@ -1187,7 +1209,10 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # requires_shards is the build-only gate: a change that can break the compile but cannot reach
+    # any test (.editorconfig) keeps requires_validation true so the build still runs, and turns
+    # this off. Every other path leaves it true, and an escalation forces it true.
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}

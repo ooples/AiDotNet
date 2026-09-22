@@ -612,6 +612,14 @@ $testRunStep = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) 
 Assert-Contract ([bool] $testRunStep) `
     'the sharded test execution step is absent'
 $testStepLines = [Regex]::Split($testRunStep, '\r?\n')
+# A build-only change must still compile but must reach no test. The build jobs and the shard
+# matrix share requires_validation, so the matrix needs its own gate or the distinction is silently
+# lost - which is how .editorconfig kept escalating PR #2112 to 130 shards.
+Assert-Contract ($validation.Contains('requires_shards: ${{ steps.select.outputs.requires_shards }}')) `
+    'the selection job does not publish requires_shards'
+Assert-Contract ($validation.Contains('fromJSON(needs.select-shards.outputs.requires_shards)')) `
+    'the shard matrix does not consume requires_shards, so a build-only change still runs every test'
+
 $shardScriptPath = '.github/scripts/Invoke-Shard.ps1'
 # A PowerShell single-quoted literal does not expand, so '$($env:SHARD_FRAMEWORK)' reaches the
 # runner verbatim. Extracting this script from the workflow turned five ${{ }} interpolations -

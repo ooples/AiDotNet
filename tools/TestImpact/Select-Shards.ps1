@@ -68,6 +68,7 @@ $ErrorActionPreference = 'Stop'
 
 enum ChangedPathImpact {
     NonRuntime
+    BuildOnly
     MapCandidate
     SelectionControl
     FullValidation
@@ -75,8 +76,16 @@ enum ChangedPathImpact {
 
 $script:SharedInfrastructureFiles = @(
     'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
-    'global.json', 'nuget.config', 'NuGet.config', '.editorconfig'
+    'global.json', 'nuget.config', 'NuGet.config'
 )
+# Compile the change, but do not run the test matrix for it. An .editorconfig edit can raise an
+# analyzer to error and fail the BUILD, which is why it cannot be NonRuntime - the build jobs and
+# the shard matrix share one gate, so calling it non-runtime would skip the compile that catches it.
+# It cannot change runtime behaviour: nothing under src/AiDotNet.Generators reads
+# AnalyzerConfigOptions (verified by grep), so no generated test text depends on it, and the
+# remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
+# to prove an indent rule is the single largest unjustified escalation measured on real PRs.
+$script:BuildOnlyFiles = @('.editorconfig')
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -164,6 +173,12 @@ function Get-ChangedPathImpact {
     }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
+    }
+    # Checked after SelectionControl and SharedInfrastructure so a build-only name can never
+    # downgrade a path those already claimed.
+    $buildOnlyName = [System.IO.Path]::GetFileName($normalized)
+    foreach ($entry in $script:BuildOnlyFiles) {
+        if ($buildOnlyName -ieq $entry) { return [ChangedPathImpact]::BuildOnly }
     }
 
     # Markdown cannot alter a build or runtime. Known independent workflows have their own triggers
@@ -2321,6 +2336,27 @@ file class Private { }
         Assert-True ($null -eq (Get-CSharpTestShape -Text $text).ParseError) `
             "a literal was misparsed and reported unbalanced braces for: $($case.Name)"
     }
+
+    # .editorconfig must compile but must not drag in the shard matrix. It cannot change runtime
+    # behaviour - nothing under src/AiDotNet.Generators reads AnalyzerConfigOptions - but it can
+    # raise an analyzer to error, so it is BuildOnly rather than NonRuntime. Measured on PR #2112,
+    # this was one of the two files escalating it to 130 shards.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        '.editorconfig is not classified BuildOnly'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        'a nested .editorconfig is not classified BuildOnly'
+    # The neighbours it used to sit beside must keep escalating: they really can change compilation
+    # output, not merely diagnostics.
+    foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {
+        Assert-True ((Get-ChangedPathImpact -Path $shared) -eq [ChangedPathImpact]::FullValidation) `
+            "$shared stopped requiring full validation"
+    }
+    # BuildOnly must never be mistaken for NonRuntime: that shares a gate with the build jobs, so
+    # an analyzer promoted to error would ship without ever being compiled.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -ne [ChangedPathImpact]::NonRuntime) `
+        '.editorconfig was downgraded to NonRuntime, which would skip the build that catches it'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/AiDotNet.Generators/TestScaffoldGenerator.cs') -eq [ChangedPathImpact]::FullValidation) `
+        'a generator edit stopped requiring full validation'
     $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
     $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
         'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
@@ -2821,8 +2857,11 @@ function Exit-Escalated {
 
     if ($Message) { Write-Host "::warning::$Message" }
     # Same shape as a successful selection, routes included: consumers read it under StrictMode.
+    # requiresShards is true here on purpose: an escalation is the fail-closed path, so it must
+    # never be the thing that talks the workflow out of running the matrix.
     $result = [pscustomobject]@{
-        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); routes = @(); shards = @()
+        escalate = $true; requiresValidation = $true; requiresShards = $true
+        reason = $Reason; reasons = @(); routes = @(); shards = @()
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -3032,15 +3071,34 @@ try {
         }
     }
 
+    # A build-only change still has to COMPILE - an .editorconfig edit can raise an analyzer to
+    # error - but it cannot alter runtime behaviour, so it must not drag in the shard matrix. The
+    # build jobs and the shard matrix share requiresValidation today, so the distinction needs its
+    # own flag rather than reusing that one.
+    $impacts = @($currentPaths | ForEach-Object { Get-ChangedPathImpact -Path ([string] $_) })
+    $buildOnlyChange = $impacts.Count -gt 0 -and
+        @($impacts | Where-Object { $_ -eq [ChangedPathImpact]::BuildOnly }).Count -gt 0 -and
+        @($impacts | Where-Object {
+            $_ -ne [ChangedPathImpact]::BuildOnly -and $_ -ne [ChangedPathImpact]::NonRuntime
+        }).Count -eq 0
+    if ($buildOnlyChange) {
+        Write-Host 'build-only change: compiling it, but no test shard can be affected by it'
+    }
+    $emittedShards = @(if ($buildOnlyChange) { @() } else { $selection.Shards })
+
     $result = [pscustomobject]@{
         escalate          = $selection.Escalate
         requiresValidation = $selection.RequiresValidation
-        reason            = $(if ($selection.Escalate) { 'impact-unknown' }
+        requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
+        reason            = $(if ($buildOnlyChange) { 'build-only' }
+                              elseif ($selection.Escalate) { 'impact-unknown' }
                               elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
                               else { 'selected' })
         reasons           = $selection.Reasons
+        # @() inside a $( ) subexpression unrolls to nothing, which serialises as null and makes
+        # every consumer that binds this to a [string[]] fail. Build the array first.
+        shards            = $emittedShards
         routes            = @($selection.Routes)
-        shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }
