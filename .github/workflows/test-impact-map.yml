@@ -344,6 +344,11 @@ jobs:
       # still left 51 of 164 shards always-run. This is the only gate on how much the map can
       # actually save, and it only ever ratchets down.
       - name: Ratchet on selection reduction
+        # Same guard as "Build the map" and "Upload candidate map": with no valid coverage source
+        # those steps are skipped and shard-map.json never exists, so an unguarded ratchet fails on
+        # a missing file and reports a reduction regression that did not happen. The ci-proof run
+        # 35731913393 failed exactly this way before this reached master.
+        if: steps.source.outputs.found == 'true'
         shell: pwsh
         run: |
           yq -o=json -I=0 '.shard' .github/test-shards.yml | Set-Content -LiteralPath reduction-manifest.json -Encoding utf8
