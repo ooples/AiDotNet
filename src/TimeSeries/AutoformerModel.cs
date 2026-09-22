@@ -381,22 +381,22 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                     for (int h = 0; h < horizon; h++) targetData[h] = yNorm[idx + h];
                     var targetTensor = new Tensor<T>(new[] { horizon, 1 }, targetData);
 
-                    Dictionary<Tensor<T>, Tensor<T>> sampleGrads;
                     T sampleLoss;
                     using (var tape = new Tensors.Engines.Autodiff.GradientTape<T>())
                     {
-                        var pred = ForwardCore(window);                       // [horizon, 1], normalized
-                        var l = mseLoss.ComputeTapeLoss(pred, targetTensor);  // scalar
-                        sampleGrads = tape.ComputeGradients(l, sources: null);
+                        var pred = ForwardCore(window);
+                        var l = mseLoss.ComputeTapeLoss(pred, targetTensor);
+                        var sampleGrads = tape.ComputeGradients(l, sources: null);
                         sampleLoss = l.Length > 0 ? l[0] : _numOps.Zero;
-                    }
 
-                    foreach (var param in allParams)
-                    {
-                        if (!sampleGrads.TryGetValue(param, out var g)) continue;
-                        accum[param] = accum.TryGetValue(param, out var acc)
-                            ? Engine.TensorAdd(acc, g)
-                            : g.Clone();
+                        // Tape disposal resets the arena. Read gradients before that reset and
+                        // retain owned accumulators, not scratch tensors recycled by the next sample.
+                        foreach (var param in allParams)
+                        {
+                            if (!sampleGrads.TryGetValue(param, out var g)) continue;
+                            accum.TryGetValue(param, out var acc);
+                            accum[param] = AccumulateGradient(acc, g);
+                        }
                     }
                     batchLossSum += Convert.ToDouble(sampleLoss);
                 }
@@ -465,6 +465,13 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         for (int h = 0; h < Math.Min(horizon, outNorm.Length); h++)
             result[h] = _numOps.Add(_numOps.Multiply(outNorm[h], _normStd), _normMean);
         return result;
+    }
+
+    internal Tensor<T> AccumulateGradient(Tensor<T>? accumulated, Tensor<T> gradient)
+    {
+        var sum = accumulated is null ? gradient : Engine.TensorAdd(accumulated, gradient);
+        // ToArray copies logical values; this constructor owns that array and copies the shape.
+        return new Tensor<T>(sum.ToArray(), sum.Shape.ToArray());
     }
 
     // Core Engine forward on an ALREADY z-normalized lookback window, returning the normalized
