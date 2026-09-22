@@ -341,7 +341,9 @@ jobs:
       - name: Ratchet on selection reduction
         shell: pwsh
         run: |
-          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json
+          yq -o=json -I=0 '.shard' .github/test-shards.yml | Set-Content -LiteralPath reduction-manifest.json -Encoding utf8
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json `
+              -ShardManifestFile reduction-manifest.json -TestsRoot tests
           if ($LASTEXITCODE -ne 0) { throw 'the candidate map skips less than the recorded baseline' }
 
       - name: Upload candidate map

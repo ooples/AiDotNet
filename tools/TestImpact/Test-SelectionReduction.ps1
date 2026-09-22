@@ -20,12 +20,22 @@
 .PARAMETER MapFile
     A shard-map.json to measure. Normally the freshly built candidate in the map workflow.
 
+.PARAMETER ShardManifestFile
+    The shard manifest, so the always-run set can be costed in TESTS rather than in shards. Shard
+    count understates the damage: the always-run shards are not evenly sized, and it is the tests
+    inside them that a pull request actually waits for. Omit to check the shard count only.
+
+.PARAMETER TestsRoot
+    Where to count [Fact]/[Theory] methods. Defaults to tests/.
+
 .PARAMETER SelfTest
     Runs the built-in checks and exits.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Measure')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Measure')] [string] $MapFile,
+    [Parameter(ParameterSetName = 'Measure')] [string] $ShardManifestFile,
+    [Parameter(ParameterSetName = 'Measure')] [string] $TestsRoot = 'tests',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -44,6 +54,48 @@ $ErrorActionPreference = 'Stop'
                     down to whatever that run actually proves, not to whatever was hoped for.
 #>
 $script:AlwaysRunBaseline = 51
+
+<#
+    Tests every pull request executes regardless of what it changed - the sum over the always-run
+    shards. This is the number a one-line docs fix actually waits for, and shard count hides it
+    because the always-run shards are wildly uneven in size.
+
+    6109  2026-09-22  first measurement, against the map certified by run 35719826020. 18% of the
+                      suite's 34,421 [Fact]/[Theory] methods, from 51 always-run shards. 46 of
+                      those are the mustCover worker shards whose instrumented binary was never
+                      linked (efdb960edd) and 5 are held by the no-coverage latch (0eb5ef3ed6);
+                      both fixes are expected to cut this hard once a coverage run re-bases the
+                      map, at which point this comes down to what that run proves.
+#>
+$script:AlwaysRunTestBaseline = 6109
+
+function Measure-AlwaysRunTests {
+    <# Tests reachable from the always-run shards, via the FullyQualifiedName terms VSTest uses. #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AlwaysRun,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Manifest,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Units
+    )
+
+    $counted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $total = 0
+    foreach ($name in $AlwaysRun) {
+        $shard = @($Manifest | Where-Object { [string] $_.name -ceq [string] $name })
+        if ($shard.Count -eq 0) { continue }
+        $tokens = @([regex]::Matches([string] $shard[0].filter, 'FullyQualifiedName~([A-Za-z0-9_.]+)') |
+            ForEach-Object { $_.Groups[1].Value })
+        foreach ($u in $Units) {
+            foreach ($token in $tokens) {
+                if (([string] $u.Fqn).Contains($token)) {
+                    # A file two shards both claim is paid for once, not twice.
+                    if ($counted.Add([string] $u.Fqn)) { $total += [int] $u.Tests }
+                    break
+                }
+            }
+        }
+    }
+    return $total
+}
 
 function Measure-MapReduction {
     <# Pure: given a parsed map, report its selectable/always-run split. #>
@@ -99,6 +151,27 @@ if ($SelfTest) {
         knownShards = @('X'); alwaysRun = @(); retiredShards = @('X') }) } `
         'a map whose only shard is retired was measured instead of rejected'
 
+    # Costing the always-run set in TESTS, which is what a pull request actually waits for.
+    $manifest = @(
+        [pscustomobject]@{ name = 'Heavy'; filter = 'FullyQualifiedName~Acme.Heavy' },
+        [pscustomobject]@{ name = 'Light'; filter = 'FullyQualifiedName~Acme.Light' }
+    )
+    $units = @(
+        [pscustomobject]@{ Fqn = 'Acme.Heavy.BigTests'; Tests = 100 },
+        [pscustomobject]@{ Fqn = 'Acme.Light.SmallTests'; Tests = 3 }
+    )
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy') -Manifest $manifest -Units $units) -eq 100) `
+        'the always-run test cost did not follow the shard filter'
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @() -Manifest $manifest -Units $units) -eq 0) `
+        'an empty always-run set must cost nothing'
+    # Shard count cannot stand in for this: two always-run shards can differ by 30x.
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Light') -Manifest $manifest -Units $units) -eq 3) `
+        'a small always-run shard was costed as if it were a large one'
+    # A file two shards both claim is paid for once.
+    $shared = @([pscustomobject]@{ Fqn = 'Acme.Heavy.Light.SharedTests'; Tests = 7 })
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy', 'Light') -Manifest $manifest -Units $shared) -eq 7) `
+        'a test file claimed by two always-run shards was counted twice'
+
     # The ratchet must actually bite. A map one over the baseline has to be rejected, or this
     # proof is decoration - which is exactly what the existing correctness proofs were for this.
     $over = $script:AlwaysRunBaseline + 1
@@ -119,6 +192,7 @@ if ($SelfTest) {
 }
 
 $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+$retiredForReport = @(if ($map.PSObject.Properties['retiredShards']) { @($map.retiredShards) } else { @() })
 $measured = Measure-MapReduction -Map $map
 Write-Host ("selection reduction: {0} mapped, {1} always-run, {2} live shard(s)" -f
     $measured.Mapped, $measured.AlwaysRun, $measured.Total)
@@ -136,5 +210,35 @@ if ($measured.AlwaysRun -lt $script:AlwaysRunBaseline) {
     $message = '::notice::always-run shards fell to {0}, below the baseline of {1} - lower ' +
         'AlwaysRunBaseline in Test-SelectionReduction.ps1 to hold the gain.'
     Write-Host ($message -f $measured.AlwaysRun, $script:AlwaysRunBaseline)
+}
+
+# The shard count is a proxy; this is the cost itself.
+if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile) -and (Test-Path -LiteralPath $TestsRoot)) {
+    $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+    $units = @(foreach ($f in @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter *.cs -File)) {
+        $text = [IO.File]::ReadAllText($f.FullName)
+        $n = ([regex]::Matches($text, '\[\s*(Fact|Theory)\b')).Count
+        if ($n -eq 0) { continue }
+        $ns = ''
+        $m = [regex]::Match($text, '(?m)^\s*namespace\s+([A-Za-z0-9_.]+)')
+        if ($m.Success) { $ns = $m.Groups[1].Value }
+        [pscustomobject]@{ Fqn = "$ns.$([IO.Path]::GetFileNameWithoutExtension($f.Name))"; Tests = $n }
+    })
+    $always = @(@($map.alwaysRun) | Where-Object { $_ -cnotin $retiredForReport })
+    $alwaysTests = Measure-AlwaysRunTests -AlwaysRun $always -Manifest $manifest -Units $units
+    Write-Host ("tests every pull request runs regardless of its change: {0}" -f $alwaysTests)
+
+    if ($alwaysTests -gt $script:AlwaysRunTestBaseline) {
+        $message = '::error::every pull request now runs {0} tests regardless of what it changed, ' +
+            'above the baseline of {1}. Give the always-run shards coverage so they become ' +
+            'selectable; do not raise the baseline.'
+        Write-Host ($message -f $alwaysTests, $script:AlwaysRunTestBaseline)
+        exit 1
+    }
+    if ($alwaysTests -lt $script:AlwaysRunTestBaseline) {
+        $message = '::notice::unconditional tests fell to {0}, below the baseline of {1} - lower ' +
+            'AlwaysRunTestBaseline in Test-SelectionReduction.ps1 to hold the gain.'
+        Write-Host ($message -f $alwaysTests, $script:AlwaysRunTestBaseline)
+    }
 }
 exit 0
