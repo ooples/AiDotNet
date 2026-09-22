@@ -13,6 +13,11 @@ on:
   push:
     branches:
       - master
+      # The same acceptance harness sonarcloud.yml uses. A push trigger cannot be exercised from a
+      # pull request - it only fires on the branch it names - so without this the re-certify-on-
+      # merge behaviour could only be tested by merging it, which is the thing it is meant to make
+      # safe. Pushing this branch to ci-proof/** runs the real post-merge path first.
+      - 'ci-proof/**'
   schedule:
     # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
     # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
