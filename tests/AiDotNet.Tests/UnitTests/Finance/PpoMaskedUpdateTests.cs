@@ -64,7 +64,8 @@ public class PpoMaskedUpdateTests
     [Trait("category", "unit")]
     public void A_rollout_under_one_legal_action_updates_at_a_ratio_of_exactly_one()
     {
-        var loss = RunRollout(Agent(), _ => OneLegal());
+        using var agent = Agent();
+        var loss = RunRollout(agent, _ => OneLegal());
 
         Assert.Equal(0.0, loss, tolerance: 1e-6);
     }
@@ -82,8 +83,9 @@ public class PpoMaskedUpdateTests
     [Trait("category", "unit")]
     public void A_caller_reusing_its_mask_array_cannot_rewrite_a_stored_step()
     {
+        using var agent = Agent();
         var loss = RunRollout(
-            Agent(),
+            agent,
             _ => OneLegal(),
             afterSelect: mask =>
             {
@@ -108,7 +110,7 @@ public class PpoMaskedUpdateTests
     [Trait("category", "unit")]
     public void A_step_whose_mask_cannot_be_recovered_is_refused()
     {
-        var agent = Agent();
+        using var agent = Agent();
         var action = ((IMaskableAgent<double>)agent).SelectAction(State(0), training: true, OneLegal());
 
         var error = Assert.Throws<InvalidOperationException>(
@@ -129,8 +131,10 @@ public class PpoMaskedUpdateTests
     [Trait("category", "unit")]
     public void A_mask_that_forbids_nothing_trains_identically_to_no_mask()
     {
-        var masked = RunRollout(Agent(), _ => NothingForbidden());
-        var unmasked = RunRollout(Agent(), _ => null);
+        using var maskedAgent = Agent();
+        using var unmaskedAgent = Agent();
+        var masked = RunRollout(maskedAgent, _ => NothingForbidden());
+        var unmasked = RunRollout(unmaskedAgent, _ => null);
 
         Assert.Equal(unmasked, masked, tolerance: 1e-9);
     }
@@ -149,7 +153,7 @@ public class PpoMaskedUpdateTests
     [Trait("category", "unit")]
     public void Repeated_training_under_a_partial_mask_stays_finite()
     {
-        var agent = Agent();
+        using var agent = Agent();
 
         for (var round = 0; round < 3; round++)
         {

@@ -57,7 +57,8 @@ public class MaskableAgentSelectionTests
     [MemberData(nameof(MaskableAgents))]
     public void A_training_selection_is_always_legal(string agentName)
     {
-        var agent = Maskable(agentName);
+        using var concreteAgent = Agent(agentName);
+        var agent = (IMaskableAgent<double>)concreteAgent;
         var state = FixedState();
 
         for (var i = 0; i < Draws; i++)
@@ -73,7 +74,8 @@ public class MaskableAgentSelectionTests
     [MemberData(nameof(MaskableAgents))]
     public void A_greedy_selection_is_always_legal(string agentName)
     {
-        var agent = Maskable(agentName);
+        using var concreteAgent = Agent(agentName);
+        var agent = (IMaskableAgent<double>)concreteAgent;
         var state = FixedState();
 
         for (var i = 0; i < 20; i++)
@@ -93,7 +95,8 @@ public class MaskableAgentSelectionTests
     [MemberData(nameof(MaskableAgents))]
     public void Selection_stays_inside_a_two_action_legal_set(string agentName)
     {
-        var agent = Maskable(agentName);
+        using var concreteAgent = Agent(agentName);
+        var agent = (IMaskableAgent<double>)concreteAgent;
         var state = FixedState();
 
         for (var i = 0; i < Draws; i++)
@@ -115,7 +118,7 @@ public class MaskableAgentSelectionTests
         // Bound STATICALLY through the agent base, not via dynamic: a dynamic call would resolve at runtime
         // and keep passing even if the two-argument overload were removed, which is precisely the regression
         // this test exists to catch.
-        var agent = Agent(agentName);
+        using var agent = Agent(agentName);
         var state = FixedState();
 
         var viaMasked = SelectedIndex(((IMaskableAgent<double>)agent).SelectAction(state, training: false, legalActions: null));
@@ -133,7 +136,8 @@ public class MaskableAgentSelectionTests
     [MemberData(nameof(MaskableAgents))]
     public void A_wrong_length_mask_is_refused(string agentName)
     {
-        var agent = Maskable(agentName);
+        using var concreteAgent = Agent(agentName);
+        var agent = (IMaskableAgent<double>)concreteAgent;
 
         Assert.Throws<ArgumentException>(
             () => agent.SelectAction(FixedState(), training: true, [true, true]));
@@ -148,7 +152,8 @@ public class MaskableAgentSelectionTests
     [MemberData(nameof(MaskableAgents))]
     public void An_all_masked_state_is_refused(string agentName)
     {
-        var agent = Maskable(agentName);
+        using var concreteAgent = Agent(agentName);
+        var agent = (IMaskableAgent<double>)concreteAgent;
 
         Assert.Throws<InvalidOperationException>(
             () => agent.SelectAction(FixedState(), training: true, [false, false, false, false]));
@@ -168,7 +173,8 @@ public class MaskableAgentSelectionTests
     [InlineData(FinRLAlgorithm.A2C)]
     public void FinRL_forwards_the_mask_to_a_discrete_inner_agent(FinRLAlgorithm algorithm)
     {
-        var agent = (IMaskableAgent<double>)FinRL(algorithm);
+        using var concreteAgent = FinRL(algorithm);
+        var agent = (IMaskableAgent<double>)concreteAgent;
         var state = FixedState();
 
         for (var i = 0; i < Draws; i++)
@@ -187,7 +193,8 @@ public class MaskableAgentSelectionTests
     [Trait("category", "unit")]
     public void FinRL_refuses_a_mask_its_inner_agent_cannot_honour()
     {
-        var agent = (IMaskableAgent<double>)FinRL(FinRLAlgorithm.SAC);
+        using var concreteAgent = FinRL(FinRLAlgorithm.SAC);
+        var agent = (IMaskableAgent<double>)concreteAgent;
 
         var error = Assert.Throws<InvalidOperationException>(
             () => agent.SelectAction(FixedState(), training: true, OnlyAction2));
@@ -208,7 +215,7 @@ public class MaskableAgentSelectionTests
     [InlineData(FinRLAlgorithm.SAC)]
     public void FinRL_with_a_null_mask_matches_the_unmasked_call(FinRLAlgorithm algorithm)
     {
-        var agent = FinRL(algorithm);
+        using var agent = FinRL(algorithm);
         var state = FixedState();
 
         var viaOriginal = agent.SelectAction(state, training: false);
@@ -259,7 +266,7 @@ public class MaskableAgentSelectionTests
     {
         var options = PpoOptions();
         options.ContinuousActions = true;
-        var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
+        using var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
 
         var error = Assert.Throws<InvalidOperationException>(
             () => ((IMaskableAgent<double>)agent).SelectAction(FixedState(), training: true, OnlyAction2));
@@ -278,14 +285,12 @@ public class MaskableAgentSelectionTests
     {
         var options = PpoOptions();
         options.ContinuousActions = true;
-        var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
+        using var agent = new FinancialPPOAgent<double>(Arch(StateSize, ActionSize), Arch(StateSize, 1), options);
 
         var action = ((IMaskableAgent<double>)agent).SelectAction(FixedState(), training: false, legalActions: null);
 
         Assert.Equal(ActionSize, action.Length);
     }
-
-    private static IMaskableAgent<double> Maskable(string agentName) => (IMaskableAgent<double>)Agent(agentName);
 
     /// <summary>The concrete agent, so the unmasked overload can be bound statically.</summary>
     private static TradingAgentBase<double> Agent(string agentName) => agentName switch
