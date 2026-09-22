@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -56,6 +58,13 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Awadalla et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Awadalla et al. 2023, Sec. 3: AdamW with the learning rate linearly increased "
+                        + "during warmup and then following a cosine schedule. No peak rate is stated in "
+                        + "the training description, so none is declared and the model keeps its own "
+                        + "optimizer, verified against this record -- building from it would apply the "
+                        + "paper's curve to the library default rate.")]
 public partial class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly OpenFlamingoOptions _options;
@@ -103,7 +112,8 @@ public partial class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVi
         _options = options ?? new OpenFlamingoOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

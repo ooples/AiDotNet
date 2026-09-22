@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,15 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [RankRoutedInputDomain(2, 8)]
 [ResearchPaper("DocFormer: End-to-End Transformer for Document Understanding", "https://doi.org/10.48550/arXiv.2106.11539", Year = 2021, Authors = "Srikar Appalaraju, Bhavan Jasani, Bhargava Urala Kota, Yusheng Xie, R. Manmatha")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, WarmupFraction = 0.1,
+                MaxGradientNorm = 1.0, Phase = TrainingPhase.PreTraining,
+                Source = "Appalaraju et al. 2021, training details table: AdamW at a pre-training "
+                        + "learning rate of 5e-05 with warmup over 10 percent of iterations and gradient "
+                        + "clipping at 1.0.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2.5e-5, MaxGradientNorm = 1.0,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Appalaraju et al. 2021, training details table: fine-tuning uses a learning "
+                        + "rate of 2.5e-05 with no warmup and the same gradient clipping of 1.0.")]
 public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DocFormerOptions _options;
@@ -180,15 +190,16 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
         // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
         // optimizer injectable so callers can fully customize the training recipe.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 2.5e-5,
-                WeightDecay = 0.01,
-                UseAMSGrad = false,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 2.5e-5,
+                    WeightDecay = 0.01,
+                    UseAMSGrad = false,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0
+                }));
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;

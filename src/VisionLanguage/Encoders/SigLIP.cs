@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -89,6 +91,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
+[PaperOptimizer(OptimizerKind.Lion, WeightDecay = 1e-7, LearningRate = 1e-4,
+                WarmupSteps = 6500, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhai et al. 2023: the Lion optimizer with decoupled weight decay 1e-7, a linear warm-up over 6.5k steps to a peak of 1e-4, then a cosine decay to 0. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
@@ -161,14 +167,15 @@ public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
         _options = options ?? new SigLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

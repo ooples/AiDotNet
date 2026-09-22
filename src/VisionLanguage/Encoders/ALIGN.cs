@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -70,6 +72,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2021,
     Authors = "Jia et al."
 )]
+[PaperOptimizer(OptimizerKind.Lamb, LearningRate = 1e-3, WeightDecay = 1e-5,
+                WarmupSteps = 10000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Jia et al. 2021, Sec. 4.1: the LAMB optimizer with a weight decay ratio of "
+                        + "1e-5, warming the learning rate up linearly from zero to 1e-3 over 10k steps "
+                        + "and then decaying it linearly to zero over 1.2M steps.")]
 public partial class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     /// <inheritdoc />
@@ -146,7 +155,9 @@ public partial class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
         _options = options ?? new ALIGNOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

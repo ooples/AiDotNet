@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -69,6 +71,11 @@ namespace AiDotNet.Video.Depth;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Yang et al. 2024, Sec. 4: the Adam optimizer. No single learning rate is "
+                        + "declared because the paper sets 5e-6 for the encoder and 5e-5 for the "
+                        + "decoder, and this model builds one optimizer over both, so neither rate would "
+                        + "be correct for all of it.")]
 public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;

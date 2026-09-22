@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -49,6 +50,12 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InvestLM: A Large Language Model for Investment using Financial Domain Instruction Tuning", "https://arxiv.org/abs/2309.13064", Year = 2023, Authors = "Yi Yang, Yixuan Tang, Kar Yan Tam")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 3e-4, ReferenceBatchSize = 16,
+                Source = "Yang et al. 2023, Sec. 3: InvestLM is the LLaMA-65B model, trained for 15 "
+                        + "epochs at a learning rate of 3e-4 and a batch size of 16 examples. The 3e-3 "
+                        + "and batch of 32 in the same passage belong to a LLaMA-7B model tuned for "
+                        + "subsequent analysis, not to InvestLM. The optimizer is left unspecified "
+                        + "because the paper names none.")]
 public partial class InvestLM<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

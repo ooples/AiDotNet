@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -44,6 +45,8 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 2,
+                Source = "Luo and Yu 2023, Sec. 4: Adam with an initial learning rate of 1e-3 over 100 epochs, each epoch 10000 batches with a batch size of 2.")]
 public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
@@ -91,7 +94,9 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
     {
         _options = options ?? new BandSplitRNNEnhancerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FFTSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

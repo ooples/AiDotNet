@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -46,6 +48,10 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Schedule = LearningRateSchedulerType.LinearWarmup,
+                WarmupSteps = 15000, PostWarmupDecay = LinearWarmupScheduler.DecayMode.Cosine,
+                ReferenceBatchSize = 2048,
+                Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. No learning rate is declared here because the paper states peak rates per decoder (0.0025 RNNT, 0.001 CTC) and this model is neither.")]
 public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CanaryFlashOptions _options; public override ModelOptions GetOptions() => _options;
@@ -55,7 +61,9 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     public bool SupportsWordTimestamps => true;
 
     public CanaryFlash(NeuralNetworkArchitecture<T> architecture, string modelPath, CanaryFlashOptions? options = null) : base(architecture) { _options = options ?? new CanaryFlashOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
-    public CanaryFlash(NeuralNetworkArchitecture<T> architecture, CanaryFlashOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new CanaryFlashOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
+    public CanaryFlash(NeuralNetworkArchitecture<T> architecture, CanaryFlashOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new CanaryFlashOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using hybrid CTC/attention encoder-decoder.

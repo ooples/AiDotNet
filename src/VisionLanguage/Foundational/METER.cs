@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
@@ -50,6 +52,13 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2022,
     Authors = "Dou et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, WarmupFraction = 0.1, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Dou et al. 2022, Sec. 4: AdamW over 100k steps, with a warm-up ratio of 10 "
+                        + "percent and the learning rate decayed linearly to 0 afterwards. No single "
+                        + "rate is declared because the paper sets different rates for the transformer "
+                        + "and the vision encoder.")]
 public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly METEROptions _options;
@@ -96,7 +105,9 @@ public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         _options = options ?? new METEROptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

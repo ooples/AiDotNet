@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -65,6 +66,11 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza Ramirez, Max Mergenthaler Canseco, Artur Dubrawski")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 256,
+                Source = "Challu et al. 2023, Sec. 4: trained with the ADAM optimizer and MAE loss at a "
+                        + "batch size of 256 and an initial learning rate of 1e-3, halved three times "
+                        + "across the training procedure. No schedule is declared because the paper "
+                        + "gives neither the interval nor the points at which the halving occurs.")]
 public partial class NHiTSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -290,12 +296,13 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
         NHiTSOptions<T> options)
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = options.LearningRate
+                }));
     }
 
     #region Initialization

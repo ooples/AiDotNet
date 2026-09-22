@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -31,6 +32,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2211.03456",
     Year = 2023,
     Authors = "Xin Jin, Longhai Wu, Jie Chen, Youxin Chen, Jayoon Koo, Cheul-hee Hahm")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, WeightDecay = 1e-4,
+                ReferenceBatchSize = 32, MinLearningRate = 2e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Jin et al. 2023, Sec. 4: the AdamW optimizer with a weight decay of 1e-4 over "
+                        + "0.8M iterations at a batch size of 32, the learning rate reduced from 2e-4 to "
+                        + "2e-5 by cosine annealing.")]
 public partial class UPRNet<T> : FrameInterpolationBase<T>
 {
     private const int CorrelationRadius = 4;
@@ -87,11 +94,12 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         _options = options is null ? new UPRNetOptions() : new UPRNetOptions(options);
         _options.Validate();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -55,8 +56,28 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VMamba: Visual State Space Model", "https://arxiv.org/abs/2401.10166", Year = 2024, Authors = "Liu et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, LearningRate = 1e-3,
+                WeightDecay = 0.05, MinLearningRate = 0, ReferenceBatchSize = 1024,
+                WarmupFraction = 0.0667,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Liu et al. 2024: AdamW with betas (0.9, 0.999), an initial learning rate of 1e-3, weight decay 0.05 and a cosine decay scheduler, trained from scratch for 300 epochs with a 20-epoch warm-up at a batch size of 1024.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 6e-5,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Liu et al. 2024: downstream training sets the learning rate to 6e-5.")]
 public partial class VMamba<T> : Common.SemanticSegmentationBase<T>
 {
+    /// <summary>Keeps this model's own optimizer and has the declaration verify it.</summary>
+    /// <remarks>
+    /// The paper trains for 300 epochs at 1e-3 with a batch of 1024. Neither form of that rate
+    /// suits a short run: applied as stated it diverges, and scaled linearly to a small batch it
+    /// is 3.1e-5, which moves the weights too little to register over ten steps. The record keeps
+    /// both numbers because they are what the paper says; the run keeps a rate that trains, and
+    /// the report states the difference rather than the declaration being trimmed to match.
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(
+            this, CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay));
     private readonly VMambaOptions _options;
     public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -56,6 +58,13 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 96,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Chen et al. 2023, Sec. 4: the AdamW optimizer with a cosine learning rate "
+                        + "schedule; the initial stage trains on 8 A100 GPUs for 400,000 steps with a "
+                        + "global batch size of 96 and a maximum learning rate of 1e-4.")]
 public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPTv2Options _options;
@@ -105,7 +114,9 @@ public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTune
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

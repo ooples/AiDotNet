@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -56,6 +58,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Oquab et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, ReferenceBatchSize = 2048,
+                WarmupSteps = 100000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Oquab et al. 2023, Table 16: AdamW with a learning rate of 1e-3 and a batch "
+                        + "size of 2048 for the S, B and L models, warming up over 100k iterations; the "
+                        + "g model uses 3.5e-4 at a batch of 3072. No weight decay is declared because "
+                        + "the paper schedules it on a cosine of its own rather than holding one value.")]
 public partial class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv2Options _options;
@@ -110,7 +119,9 @@ public partial class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             _options = new DINOv2Options(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

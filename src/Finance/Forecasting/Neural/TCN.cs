@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -75,6 +76,8 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Shaojie Bai, J. Zico Kolter, Vladlen Koltun")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.002,
+                Source = "Bai et al. 2018, Sec. 5 (Experiments): 'the Adam optimizer with learning rate 0.002 for TCN'. Gradient clipping is used but the paper gives a range [0.3, 1] rather than a value, so it is not declared. Verified against the paper.")]
 public partial class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -250,7 +253,9 @@ public partial class TCN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -310,7 +315,9 @@ public partial class TCN<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;

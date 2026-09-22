@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -65,6 +66,11 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OneFormer: One Transformer to Rule Universal Image Segmentation", "https://arxiv.org/abs/2211.06220", Year = 2023, Authors = "Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0001, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Jain et al. 2023, Sec. 4: when training on ADE20K and Cityscapes, AdamW with "
+                        + "a base learning rate of 0.0001, poly learning rate decay and a weight decay "
+                        + "of 0.1. The polynomial power is not stated, so none is declared.")]
 public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OneFormerOptions _options;
@@ -289,15 +295,16 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         if (_options.MaxGradientNorm < 0.0)
             throw new ArgumentOutOfRangeException(nameof(_options.MaxGradientNorm), "Maximum gradient norm cannot be negative.");
 
-        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
-                MaxGradientNorm = _options.MaxGradientNorm
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                    MaxGradientNorm = _options.MaxGradientNorm
+                }));
     }
 
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) ResolveModelConfig(

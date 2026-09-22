@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,6 +90,13 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting", "https://arxiv.org/abs/1709.04875", Year = 2018, Authors = "Bing Yu, Haoteng Yin, Zhanxing Zhu")]
+[PaperOptimizer(OptimizerKind.RmsProp, LearningRate = 1e-3, ReferenceBatchSize = 50,
+                DecayRate = 0.7, StepSize = 5,
+                Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Yu et al. 2018, Sec. 4: models are trained by minimizing the mean square "
+                        + "error using RMSprop for 50 epochs at a batch size of 50, with an initial "
+                        + "learning rate of 1e-3 and a decay rate of 0.7 after every 5 epochs.")]
 public partial class STGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -236,7 +244,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _options = options ?? new STGNNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -280,7 +290,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _options = options ?? new STGNNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +50,21 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Zeng et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                ReferenceBatchSize = 32, Schedule = LearningRateSchedulerType.Noam,
+                Phase = TrainingPhase.PreTraining,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "Zeng et al. 2020, Sec. 4.1: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
+                        + "at a batch size of 16 samples on each of 2 GPUs, for 40K steps in the first "
+                        + "two training stages. The schedule is not restated -- the paper adopts the one "
+                        + "from its reference [18], Vaswani et al. 2017, which is the "
+                        + "inverse-square-root schedule with warmup declared here as Noam; the "
+                        + "provenance records that it comes from the cited work rather than from this "
+                        + "paper.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Zeng et al. 2020, Sec. 4.1: fine-tuning the whole model uses a fixed learning "
+                        + "rate of 1e-4 over 80K steps.")]
 public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AlignTTSOptions _options;
@@ -99,14 +116,15 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         // 1e-3 default with beta2 = 0.999, epsilon = 1e-8 and a decoupled weight decay of
         // 0.01 that no paper here specifies. Ten times the intended rate is enough to blow
         // the first step into a region training cannot recover from.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                Epsilon = 1e-9
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-9
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
