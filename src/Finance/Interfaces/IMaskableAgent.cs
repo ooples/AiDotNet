@@ -44,12 +44,17 @@ public interface IMaskableAgent<T>
     /// One flag per action, <see langword="true"/> where selectable. Length must equal the agent's action
     /// size. <see langword="null"/> means unrestricted and must behave exactly as the unmasked call does.
     /// </param>
-    /// <returns>A one-hot action vector whose set index is always legal.</returns>
+    /// <returns>
+    /// For successful discrete selections, a one-hot action vector whose set index is always legal.
+    /// A null mask preserves the native unmasked result, including continuous output for configurable agents.
+    /// </returns>
     /// <remarks>
     /// <para><b>The contract is that the returned action is legal — at every selection site.</b> An
     /// implementation that masks its greedy branch but leaves its exploration draw unmasked satisfies the
     /// signature and violates the contract: an epsilon-greedy agent explores into illegal actions at rate
     /// epsilon, which early in training is nearly every step.</para>
+    /// <para>Configurable agents may implement this interface in continuous mode, but must reject every
+    /// non-null mask in that mode. Interface detection alone does not establish the active configuration.</para>
     /// </remarks>
     Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions);
 }
