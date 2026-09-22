@@ -35,6 +35,13 @@ public static class AiModelResultTrainingRecipeExtensions
     /// </returns>
     /// <example>
     /// <code>
+    /// var features = new Matrix&lt;double&gt;(new double[,] { { 45 }, { 52 }, { 38 }, { 61 } });
+    /// var labels = new Vector&lt;double&gt;(new double[] { 0, 1, 0, 1 });
+    ///
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .Build(features, labels);
+    ///
     /// var recipe = result.GetTrainingRecipe().FirstOrDefault();
     /// if (recipe?.Fidelity == RecipeFidelity.Deviated)
     /// {
