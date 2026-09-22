@@ -92,6 +92,14 @@ function Complete-CiMapWorkloads {
     $retired = @($existing | Where-Object { -not $current.Contains($_) } | Sort-Object)
     $completed = $Map.PSObject.Copy()
     $completed.alwaysRun = @(@($Map.alwaysRun) | Where-Object { $current.Contains([string] $_) }) + $added.ToArray()
+    # A retired INDEXED shard cannot leave knownShards - the file index addresses shards by
+    # position - but no job will ever report an outcome for it again. Record the retirement so
+    # certification can require outcomes for the live shards only. Without this the first
+    # retirement wedges every later map: certification demands an outcome that cannot exist, and
+    # the previous map only advances when something certifies. (2026-09-17 retirement -> no
+    # certified map from 09-20 on -> every PR and every master push ran the full 164-shard matrix.)
+    $retiredIndexed = @($retired | Where-Object { $_ -cin @($Map.knownShards) })
+    $completed | Add-Member -NotePropertyName retiredShards -NotePropertyValue $retiredIndexed -Force
     # This is a conservative in-memory extension, not newly measured coverage and not
     # a certificate for a larger historical run. The original artifact is untouched.
     if ($added.Count -gt 0) {
@@ -101,6 +109,6 @@ function Complete-CiMapWorkloads {
         Map = $completed
         Added = $added.ToArray()
         Retired = $retired
-        RetiredIndexed = @($retired | Where-Object { $_ -cin @($Map.knownShards) })
+        RetiredIndexed = $retiredIndexed
     }
 }

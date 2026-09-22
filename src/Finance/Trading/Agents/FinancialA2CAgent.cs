@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -128,6 +128,10 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        // Registered for disposal. The replay buffer that used to be built here went with master's
+        // move to a rollout held in _policyRuntime.Pending; the two networks still need owning.
+        Networks.Add(_actor);
+        Networks.Add(_critic);
     }
 
     /// <summary>
@@ -213,6 +217,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         Guard.NotNull(state);
         if (state.Length != TradingOptions.StateSize)
             throw new ArgumentException("State length must match StateSize.", nameof(state));
+        if (legalActions is not null) _ = ActionMasking.NegativeInfinity(NumOps);
         // Move the rollout's state copy to selection so the returned action is tied to the
         // actual input values. Successful storage takes ownership of this snapshot without
         // making a second state copy. Evaluation does not allocate a rollout snapshot.
@@ -492,7 +497,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         if (!batch.Any(step => step.LegalActions is not null)) return null;
         int width = TradingOptions.ActionSize;
         var data = new T[batch.Length * width];
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
         for (int row = 0; row < batch.Length; row++)
         {
             var mask = batch[row].LegalActions;

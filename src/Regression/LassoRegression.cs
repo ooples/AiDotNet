@@ -30,25 +30,30 @@ namespace AiDotNet.Regression;
 ///
 /// Example usage:
 /// ```csharp
-/// var options = new LassoRegressionOptions&lt;double&gt; { Alpha = 1.0 };
-/// var lasso = new LassoRegression&lt;double&gt;(options);
-/// lasso.Train(features, targets);
-/// var predictions = lasso.Predict(newFeatures);
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 11.0, 15.1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LassoRegression&lt;double&gt;(new LassoRegressionOptions&lt;double&gt; { Alpha = 1.0 }))
+///     .Build(features, targets);
+///
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 } });
+/// var predictions = result.Predict(newFeatures);
 ///
 /// // Check which features were selected (non-zero coefficients)
-/// var selectedFeatures = lasso.GetActiveFeatureIndices();
+/// var selectedFeatures = result.GetActiveFeatureIndices();
 /// ```
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// var options = new LassoRegressionOptions&lt;double&gt;();
-/// var model = new LassoRegression&lt;double&gt;(options);
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
-///     1, 2, 0,  3, 4, 0,  5, 6, 0,  7, 8, 0,  9, 10, 0 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2, 0 }, { 3, 4, 0 }, { 5, 6, 0 }, { 7, 8, 0 }, { 9, 10, 0 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
-/// model.Train(features, targets);
-/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 11, 12, 0 }));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LassoRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var prediction = result.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12, 0 } }));
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

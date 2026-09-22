@@ -40,9 +40,11 @@ namespace AiDotNet.Video;
 /// // Create architectures
 /// var generatorArch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 128, inputWidth: 128, inputDepth: 3);
 /// var discriminatorArch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3);
 ///
 /// // Create model with 4x upscaling
@@ -462,6 +464,7 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 128, inputWidth: 128, inputDepth: 3);
     /// var model = new RealESRGAN&lt;float&gt;(arch, "realesrgan_x4.onnx");
     /// var highRes = model.Upscale(lowResImage);

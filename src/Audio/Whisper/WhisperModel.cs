@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.Diagnostics;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -70,7 +71,48 @@ namespace AiDotNet.Audio.Whisper;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2022, Authors = "Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever")]
-public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 1.5e-3, Variant = nameof(WhisperModelSize.Tiny),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: Tiny max learning rate 1.5e-3.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 1e-3, Variant = nameof(WhisperModelSize.Base),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: Base max learning rate 1e-3.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 5e-4, Variant = nameof(WhisperModelSize.Small),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: Small max learning rate 5e-4.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 2.5e-4, Variant = nameof(WhisperModelSize.Medium),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: Medium max learning rate 2.5e-4.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 1.75e-4, Variant = nameof(WhisperModelSize.Large),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: Large max learning rate 1.75e-4.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                LearningRate = 2.0e-4, Variant = nameof(WhisperModelSize.LargeV2),
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. Table 19: LargeV2 max learning rate 2.0e-4.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6, WeightDecay = 0.1,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 2048,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. No learning rate is declared here because Table 19 states one per size and has no row for LargeV3, which post-dates the paper.")]
+public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, IPaperOptimizerVariant
 {
     private readonly WhisperOptions _options;
 
@@ -254,6 +296,14 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// Gets the model size variant.
     /// </summary>
     public WhisperModelSize ModelSize => _modelSize;
+
+    /// <summary>The size this instance was built at, keying the paper recipe for it.</summary>
+    /// <remarks>
+    /// Whisper states one learning rate per size (Radford et al. 2022, Table 19), so a single
+    /// recipe for the class would be wrong for five of the six sizes. Read during construction,
+    /// which is safe here because the size is assigned before the optimizer is built.
+    /// </remarks>
+    public string PaperOptimizerVariant => _modelSize.ToString();
 
     /// <summary>
     /// Gets whether the model is ready for inference.
@@ -504,7 +554,9 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         SupportedLanguages = GetSupportedLanguages();
 
         // Initialize training components
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = LossFunction;
 
         InitializeLayers();

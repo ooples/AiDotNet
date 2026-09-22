@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Prenger et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 24,
+                Source = "Prenger et al. 2019, Sec. 4: WaveGlow was trained on randomly chosen clips of "
+                        + "16,000 samples for 580,000 iterations using weight normalization and the Adam "
+                        + "optimizer, with a batch size of 24 and a step size of 1e-4.")]
 public partial class WaveGlow<T> : VocoderBase<T>
 {
     private readonly WaveGlowOptions _options;
@@ -80,7 +86,9 @@ public partial class WaveGlow<T> : VocoderBase<T>
     {
         _options = options ?? new WaveGlowOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

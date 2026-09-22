@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -34,7 +36,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// // with enhanced native understanding and generation capabilities
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -62,6 +64,13 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Jinheng Xie, Zhenheng Yang, Mike Zheng Shou"
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4,
+                Schedule = LearningRateSchedulerType.Constant,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Xie et al. 2025, Sec. 4: stage 1 trains for 150K iterations using AdamW at a "
+                        + "constant learning rate of 0.0001. The 2e-5 cosine rate at a batch of 512 "
+                        + "elsewhere belongs to pre-distilling the semantic layers from SigLIP, which is "
+                        + "a component rather than this model's own training.")]
 public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ShowO2Options _options;
@@ -105,7 +114,9 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
     {
         _options = options ?? new ShowO2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

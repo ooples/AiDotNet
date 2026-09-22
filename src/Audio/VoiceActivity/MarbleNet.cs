@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -41,6 +42,11 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MarbleNet: Deep 1D Time-Channel Separable Convolutional Neural Network for Voice Activity Detection", "https://arxiv.org/abs/2010.13886", Year = 2021, Authors = "Fei Jia, Somshubra Majumdar, Boris Ginsburg")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, Momentum = 0.9, WeightDecay = 0.001,
+                LearningRate = 0.01, MinLearningRate = 0.001,
+                Schedule = LearningRateSchedulerType.TriStage, WarmupFraction = 0.05,
+                HoldFraction = 0.45, DecayRate = 2.0, ReferenceBatchSize = 64,
+                Source = "Jia et al. 2021, Sec. 3: SGD with momentum 0.9 and weight decay 0.001, the Warmup-Hold-Decay schedule with a 5% warm-up ratio, a 45% hold ratio and a 2nd-order polynomial decay over the remaining 50%, maximum learning rate 0.01 and minimum 0.001, batch size 64.")]
 public partial class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     /// <inheritdoc />
@@ -110,7 +116,9 @@ public partial class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     {
         _options = options ?? new MarbleNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         Threshold = _options.Threshold;
         MinSpeechDurationMs = _options.MinSpeechDurationMs;

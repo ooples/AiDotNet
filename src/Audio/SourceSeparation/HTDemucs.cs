@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -41,6 +42,18 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hybrid Transformers for Music Source Separation", "https://doi.org/10.1109/ICASSP49357.2023.10096956", Year = 2023, Authors = "Simon Rouard, Francisco Massa, Alexandre Défossez")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0, ReferenceBatchSize = 32,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Rouard et al. 2023, Sec. 4: an L1 waveform loss optimized with Adam without "
+                        + "weight decay, a learning rate of 3e-4, beta1 0.9, beta2 0.999 and a batch "
+                        + "size of 32. The absence of weight decay is stated outright, so it is declared "
+                        + "as zero.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Rouard et al. 2023, Sec. 4: one copy of the multi-target model is fine-tuned "
+                        + "on a single target for 50 epochs at a learning rate of 1e-4, without "
+                        + "remixing, repitching or rescaling.")]
 public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     /// <inheritdoc />
@@ -85,7 +98,9 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         : base(architecture)
     {
         _options = options ?? new HTDemucsOptions(); _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

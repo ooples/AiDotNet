@@ -43,8 +43,7 @@ namespace AiDotNet.Classification.Meta;
 /// <example>
 /// <code>
 /// // Create One-vs-One classifier with pairwise binary classifiers
-/// var options = new OneVsOneClassifierOptions&lt;double&gt;();
-/// var classifier = new OneVsOneClassifier&lt;double&gt;(options);
+/// var options = new MetaClassifierOptions&lt;double&gt;();
 ///
 /// // Prepare multi-class training data (3 classes, 9 samples, 2 features)
 /// var features = new Matrix&lt;double&gt;(9, 2);
@@ -60,12 +59,14 @@ namespace AiDotNet.Classification.Meta;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
 ///
 /// // Train K*(K-1)/2 binary classifiers for each class pair
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OneVsOneClassifier&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict using pairwise voting
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 3.1; newSample[0, 1] = 3.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

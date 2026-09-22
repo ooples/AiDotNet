@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -61,6 +62,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
     "https://arxiv.org/abs/1803.11485",
     Year = 2018,
     Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]
+[PaperOptimizer(OptimizerKind.RmsProp, LearningRate = 5e-4,
+                Source = "Rashid et al. 2018, Sec. 5: the learning rate for RMSprop is set to 5e-4.")]
 public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
@@ -113,10 +116,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Epsilon = 1e-8
         });
         _epsilon = options.EpsilonStart;
-        _agentNetworks = new List<INeuralNetwork<T>>();
-        _targetAgentNetworks = new List<INeuralNetwork<T>>();
-        _mixingNetwork = CreateMixingNetwork();
-        _targetMixingNetwork = CreateMixingNetwork();
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _stepCount = 0;
 
@@ -124,6 +123,11 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         InitializeReplayBuffer();
     }
 
+    // The constructor used to build a first pair of mixing networks here and then call this method, which
+    // built a second pair and registered only that one; the first pair was dropped without ever being
+    // disposed. This method is now the only place the networks are created.
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_agentNetworks), nameof(_targetAgentNetworks), nameof(_mixingNetwork), nameof(_targetMixingNetwork))]
     private void InitializeNetworks()
     {
         _agentNetworks = new List<INeuralNetwork<T>>();

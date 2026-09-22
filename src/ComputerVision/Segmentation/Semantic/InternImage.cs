@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,6 +61,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions", "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 0.05,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wang et al. 2023, hyperparameter table: AdamW with a weight decay of 0.05 "
+                        + "under a cosine schedule, shared across every model size. No learning rate or "
+                        + "batch size is declared because both vary by size and pre-training corpus -- "
+                        + "4e-3 at a batch of 4096 for the IN-1K models, 1e-3 for the IN-22K models and "
+                        + "2e-5 at a batch of 512 when fine-tuning -- and the segmentation section "
+                        + "states only a batch size of 16 for 160k iterations without an optimizer of "
+                        + "its own. The 1e-4 rate elsewhere in the paper belongs to the detection "
+                        + "models.")]
 public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly InternImageOptions _options;

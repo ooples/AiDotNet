@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -35,7 +37,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// // with self-training and objectness-calibrated scoring
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -57,6 +59,12 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2023,
     Authors = "Minderer et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-5,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Minderer et al. 2023, Sec. 4: fine-tuning switched to a learning rate of 2e-5 "
+                        + "after 740,000 self-training steps, having overfit at the earlier setting. The "
+                        + "optimizer is left unspecified because the paper names none of its own -- the "
+                        + "Adam in its text is a reference to Kingma and Ba.")]
 public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly OWLv2Options _options;
@@ -100,7 +108,9 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     {
         _options = options ?? new OWLv2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

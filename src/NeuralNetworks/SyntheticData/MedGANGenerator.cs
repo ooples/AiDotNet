@@ -96,9 +96,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 64, outputSize: 64);
-/// var medgan = new MedGANGenerator&lt;double&gt;(architecture);
-/// medgan.Fit(data, columns, epochs: 1000);
-/// var synthetic = medgan.Generate(1000);
+///
+/// var trainX = Tensor&lt;double&gt;.CreateRandom(16, 64);
+/// var trainY = Tensor&lt;double&gt;.CreateRandom(16, 64);
+///
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new MedGANGenerator&lt;double&gt;(architecture))
+///     .Build(trainX, trainY);
+///
+/// var synthetic = result.GenerateSamples(1000);
 /// </code>
 /// </example>
 /// </remarks>

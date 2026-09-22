@@ -42,7 +42,7 @@ public sealed class DqnMaskedTargetTests
     public void Nonterminal_transition_rejects_empty_or_wrong_size_mask()
     {
         using var agent = Create(false);
-        IMaskedExperienceAgent<double> shared = agent;
+        AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<double> shared = agent;
         var state = new Vector<double>(new[] { 0.1, 0.2, -0.3, 0.4 });
         var action = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
         Assert.Throws<InvalidOperationException>(() => shared.StoreExperience(state, action, 0.5, state, false, new bool[3]));
@@ -71,7 +71,7 @@ public sealed class DqnMaskedTargetTests
         }
         else
         {
-            ((IMaskedExperienceAgent<double>)agent).StoreExperience(state, action, 0.5, next, terminal, mask);
+            agent.StoreExperience(state, action, 0.5, next, terminal, mask);
         }
         if (mutateMask && mask is not null)
             for (var i = 0; i < mask.Length; i++) mask[i] = true;

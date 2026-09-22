@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegGPT: Segmenting Everything In Context", "https://arxiv.org/abs/2304.03284", Year = 2023, Authors = "Wang et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 2048, WarmupFraction = 0.2, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wang et al. 2023, Sec. 4: AdamW with a cosine schedule, base learning rate 1e-4, weight decay 0.05, batch size 2048, and a 1.8K warm-up over a 9K iteration run, which is the 20% declared here rather than a step count fixed to that run.")]
 public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SegGPTOptions _options;

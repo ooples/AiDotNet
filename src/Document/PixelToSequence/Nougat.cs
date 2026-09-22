@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,14 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://doi.org/10.48550/arXiv.2308.13418", Year = 2023, Authors = "Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, ReferenceBatchSize = 192,
+                MinLearningRate = 7.5e-6, DecayRate = 0.9996, StepSize = 15,
+                Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Blecher et al. 2023, Sec. 4: an AdamW optimizer trained for 3 epochs at an "
+                        + "effective batch size of 192, with an initial learning rate of 5e-5 reduced by "
+                        + "a factor of 0.9996 every 15 updates until it reaches 7.5e-6. This model "
+                        + "defaults to Adam; the paper's AdamW is the stronger of the two, so the "
+                        + "declaration is applied rather than only verified.")]
 public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly NougatOptions _options;
@@ -150,7 +159,9 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _patchSize = patchSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -212,7 +223,9 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _patchSize = patchSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;

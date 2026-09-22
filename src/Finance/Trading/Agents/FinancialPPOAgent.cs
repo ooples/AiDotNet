@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
@@ -53,6 +54,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, ReferenceBatchSize = 64,
+                Source = "Schulman et al. 2017, Table 3: the Adam stepsize is 3e-4 with a minibatch "
+                        + "size of 64 over 10 epochs at a horizon of 2048, for the MuJoCo "
+                        + "one-million-timestep benchmark. The Roboschool table leaves the stepsize "
+                        + "blank, so only the MuJoCo row is declared.")]
 public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
     IMaskableAgent<T>
 {
@@ -162,6 +168,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = actor;
         _critic = critic;
+        Networks.Add(_actor);
+        Networks.Add(_critic);
         _trajectory = new Trajectory<T>();
         _nextStates = new List<Vector<T>>();
         _stepMasks = new List<bool[]?>();
@@ -614,7 +622,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             actionIndices[i] = ArgMax(_trajectory.Actions[batchIndices[i]]);
         }
 
-        var maskBias = BuildMaskBias(batchIndices);
+        using var maskBias = BuildMaskBias(batchIndices);
 
         var trainableActor = (NeuralNetworkBase<T>)_actor;
         T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
@@ -692,7 +700,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         // default(T) is the additive identity for every numeric T, so the legal entries need no write.
         var data = new T[n * actionSize];
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
         for (int i = 0; i < n; i++)
         {
             var mask = _stepMasks[batchIndices[i]];
