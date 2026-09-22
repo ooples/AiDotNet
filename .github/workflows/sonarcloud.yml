@@ -1124,11 +1124,15 @@ jobs:
                 # octal-escaped non-ASCII path can never equal a map key.
                 $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $prevSha HEAD)
                 if ($LASTEXITCODE -ne 0) { throw "git diff from $prevSha failed" }
+                # The manifest lets a changed test source dirty only the shards that run it. Without
+                # it every tests/ change disabled every carry, so the nightly re-instrumented all
+                # 164 shards, ran 5-22 hours, starved for runners and never re-based the map.
                 ./tools/TestImpact/Select-CoverageShards.ps1 `
                     -PreviousMap map/shard-map.json `
                     -ChangedFiles $changedFiles `
                     -AllShards @($all.name) `
                     -NoCoverageShards $nn `
+                    -ShardManifestFile shard-manifest.json `
                     -CarryForwardDirectory carried-digests `
                     -OutFile covsplit.json
                 if ($LASTEXITCODE -ne 0) { throw "Select-CoverageShards exited $LASTEXITCODE" }
