@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -74,6 +76,13 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/1909.02641",
     Year = 2020,
     Authors = "Jinsoo Choi, In So Kweon")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 16,
+                Source = "Choi and Kweon 2020, Sec. 4: the Adam optimizer with beta1 0.9 and beta2 "
+                        + "0.999, a learning rate of 0.001 and a mini-batch size of 16, trained for 200 "
+                        + "epochs with a linear decay applied from epoch 100. No schedule is declared "
+                        + "because a decay that begins partway through and runs to an unstated endpoint "
+                        + "is a hold-then-decay shape the attribute does not express.")]
 public partial class DIFRINT<T> : VideoStabilizationBase<T>
 {
     private readonly DIFRINTOptions _options;
@@ -139,7 +148,9 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

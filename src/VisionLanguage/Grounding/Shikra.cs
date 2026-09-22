@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,11 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2023,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 64,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Chen et al. 2023, Sec. 4: AdamW under a cosine learning rate scheduler with "
+                        + "an initial learning rate of 2e-5 and a global batch size of 64.")]
 public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly ShikraOptions _options;
@@ -102,7 +109,9 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     {
         _options = options ?? new ShikraOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

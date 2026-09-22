@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,12 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "https://arxiv.org/abs/2412.04533", Year = 2025, Authors = "Yongkang Li, Tianheng Cheng, Wenyu Liu, Xinggang Wang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 8, Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Li et al. 2024, Sec. 4.1: AdamW with an initial learning rate of 1e-4, a "
+                        + "weight decay of 0.05 and a multi-step learning rate decay schedule, training "
+                        + "the first phase on COCO-Panoptic or COCO-Stuff for 20 epochs at a batch size "
+                        + "of 8. The decay milestones are not stated, so none are declared.")]
 public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly MaskAdapterOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,13 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Ye et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4,
+                ReferenceBatchSize = 1024, WarmupSteps = 36, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Ye et al. 2023, Sec. 4.1: a linear warmup of 36 steps to a learning rate of "
+                        + "1e-4, followed by cosine decay to 0, at a batch size of 1024. The optimizer "
+                        + "is left unspecified because the paper never names one -- declaring a kind "
+                        + "here would attribute a choice the authors did not state.")]
 public partial class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly UReaderOptions _options;
@@ -102,7 +111,9 @@ public partial class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
     {
         _options = options ?? new UReaderOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

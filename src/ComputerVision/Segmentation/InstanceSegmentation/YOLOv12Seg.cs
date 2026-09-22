@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
@@ -57,6 +58,10 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv12: Attention-Centric Real-Time Object Detectors", "https://arxiv.org/abs/2502.12524", Year = 2025, Authors = "Yunjie Tian, Qixiang Ye, David Doermann")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, Momentum = 0.937, WeightDecay = 5e-4,
+                LearningRate = 1e-2, MinLearningRate = 1e-4,
+                Schedule = LearningRateSchedulerType.Polynomial, DecayRate = 1.0,
+                Source = "Tian et al. 2025, Fine-tuning Details: SGD for 600 epochs with momentum 0.937 and weight decay 5e-4, the initial learning rate 1e-2 decaying linearly to 1e-4 across training. Linear decay is the polynomial schedule at power 1.")]
 public partial class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv12SegOptions _options;

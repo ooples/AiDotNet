@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +50,10 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Shen et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-6,
+                LearningRate = 0.001, WarmupSteps = 4000,
+                Schedule = LearningRateSchedulerType.Step, StepSize = 50000, DecayRate = 0.5,
+                Source = "Shen et al. 2020, hyperparameter table: Adam(0.9, 0.999, 1e-6) at a learning rate of 0.001, with a linear rampup over 4K steps then halving every 50K steps.")]
 public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ForwardTacotronOptions _options;
@@ -91,7 +97,9 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new ForwardTacotronOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

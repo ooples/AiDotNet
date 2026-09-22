@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -46,6 +48,11 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-6,
+                WeightDecay = 0.1, Schedule = LearningRateSchedulerType.LinearWarmup,
+                WarmupSteps = 2048, PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                MinLearningRate = 0, MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
+                Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. No learning rate is declared because Table 19 states one per model size and this type does not select one.")]
 public partial class WhisperLive<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperLiveOptions _options; public override ModelOptions GetOptions() => _options;
@@ -55,7 +62,9 @@ public partial class WhisperLive<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     public bool SupportsWordTimestamps => false;
 
     public WhisperLive(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperLiveOptions? options = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
-    public WhisperLive(NeuralNetworkArchitecture<T> architecture, WhisperLiveOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
+    public WhisperLive(NeuralNetworkArchitecture<T> architecture, WhisperLiveOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); _useNativeMode = true; _optimizer = optimizer
+     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+     ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using VAD-chunked streaming Whisper.

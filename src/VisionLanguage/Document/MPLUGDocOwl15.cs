@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,14 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Hu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 1024,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Hu et al. 2024, Sec. 4.1: unified structure learning on DocStruct4M runs "
+                        + "12,000 iterations with a learning rate of 1e-4 and a batch size of 1,024.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 256,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Hu et al. 2024, Sec. 4.1: multi-task fine-tuning runs 6,500 iterations with a "
+                        + "batch size of 256 and a learning rate of 2e-5.")]
 public partial class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwl15Options _options;
@@ -102,7 +112,9 @@ public partial class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnd
     {
         _options = options ?? new MPLUGDocOwl15Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

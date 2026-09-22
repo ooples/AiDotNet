@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,6 +90,10 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Connecting the Dots: Multivariate Time Series Forecasting with Graph Neural Networks", "https://arxiv.org/abs/2005.11650", Year = 2020, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xiaojun Chang, Chengqi Zhang")]
+[PaperOptimizer(OptimizerKind.Adam, MaxGradientNorm = 5.0,
+                Source = "Wu et al. 2020, Sec. 4: the model is trained by the Adam optimizer with a "
+                        + "gradient clip of 5. The paper states no learning rate or batch size in its "
+                        + "training description, so neither is declared.")]
 public partial class MTGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -267,7 +272,9 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _options = options ?? new MTGNNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -316,7 +323,9 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _options = options ?? new MTGNNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;

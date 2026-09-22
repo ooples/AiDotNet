@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -59,6 +61,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Meta"
 )]
+[PaperOptimizer(OptimizerKind.Lamb, LearningRate = 2e-3, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Bolya et al. 2025, Sec. 3: LAMB allows stable training at a higher learning "
+                        + "rate of 2e-3, compared with 5e-4 for the original. No reference batch size is "
+                        + "declared: the paper's batch of 32K accompanies an AdamW configuration trained "
+                        + "for 12B samples, and attributing it to the LAMB run would combine two "
+                        + "settings the paper keeps separate.")]
 public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly PerceptionEncoderOptions _options;
@@ -106,7 +115,9 @@ public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualE
             };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

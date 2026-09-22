@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -63,6 +65,19 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Liu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, WeightDecay = 0,
+                ReferenceBatchSize = 256, WarmupFraction = 0.03, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Liu et al. 2024, Table 9: pre-training uses AdamW at a batch size of 256, a "
+                        + "learning rate of 1e-3, cosine decay with a warmup ratio of 0.03, no weight "
+                        + "decay and 1 epoch. The zero weight decay is the table's value.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, WeightDecay = 0,
+                ReferenceBatchSize = 128, WarmupFraction = 0.03, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Liu et al. 2024, Table 9: fine-tuning uses a batch size of 128 and a learning "
+                        + "rate of 2e-5 over 3 epochs, otherwise as pre-training.")]
 public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVA15Options _options;
@@ -107,7 +122,9 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         _options = options ?? new LLaVA15Options();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

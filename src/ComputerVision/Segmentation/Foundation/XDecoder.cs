@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +63,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Zou et al. 2023: AdamW in pretraining with an initial learning rate of 1e-4.")]
 public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly XDecoderOptions _options;

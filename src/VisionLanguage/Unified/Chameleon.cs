@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,14 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Meta"
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, Epsilon = 1e-5,
+                WeightDecay = 0.1, WarmupSteps = 4000, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Chameleon Team 2024, Sec. 2.4: AdamW with beta1 0.9, beta2 0.95 and epsilon "
+                        + "1e-5, a weight decay of 0.1, global gradient clipping at 1.0, and a linear "
+                        + "warm-up of 4000 steps followed by an exponential decay of the learning rate "
+                        + "to 0. No peak rate is declared because it varies with model size -- 3.0e-4 "
+                        + "for Chameleon-7B and 1.5e-4 for Chameleon-34B.")]
 public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ChameleonOptions _options;
@@ -103,7 +113,8 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
     {
         _options = options ?? new ChameleonOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

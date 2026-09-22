@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2022,
     Authors = "Tan et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, LearningRate = 2e-4,
+                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.999875,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Tan et al. 2022, Training Details: AdamW with beta1 0.8, beta2 0.99, initial learning rate 2e-4 and a decay factor of 0.999875 each epoch. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeechOptions _options;
@@ -81,13 +87,14 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new NaturalSpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

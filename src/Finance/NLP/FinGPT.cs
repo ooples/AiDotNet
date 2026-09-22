@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -49,6 +50,10 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinGPT: Open-Source Financial Large Language Models", "https://arxiv.org/abs/2306.06031", Year = 2023, Authors = "Hongyang Yang, Xiao-Yang Liu, Christina Dan Wang")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-4, ReferenceBatchSize = 64,
+                Source = "Yang et al. 2023, Sec. 4: the fine-tuning configuration gives a batch size of "
+                        + "64, a learning rate of 2e-4 and 3 training epochs over a LoRA adapter of rank "
+                        + "8. The optimizer is left unspecified because the paper names none.")]
 public partial class FinGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

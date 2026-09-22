@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -57,6 +59,12 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Zhu et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, ReferenceBatchSize = 256,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Zhu et al. 2023, Sec. 3: MiniGPT-4 is initially trained for 20k steps at a "
+                        + "batch size of 256 on 4 A100 GPUs. The optimizer is left unspecified because "
+                        + "the paper names none -- the Adam in its text is the author Adam Roberts in a "
+                        + "reference -- and no rate is stated.")]
 public partial class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPT4Options _options;
@@ -106,13 +114,14 @@ public partial class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTuned
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
