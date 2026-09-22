@@ -975,6 +975,20 @@ jobs:
             }
           }
 
+          # Sweeps and conformance windows (nightlyOnly in test-shards.yml) exercise every model, so the
+          # map attributes almost any model change to them: 46 of them sat on every pull request and
+          # every post-merge push, a fixed ~2-hour floor whatever the change was. They run nightly
+          # instead, in the coverage-everywhere run on master (workflow_dispatch, untouched here). An
+          # escalated selection still runs the complete matrix, so a change to CI itself is unaffected.
+          if (-not $escalate -and $env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {
+            $deferred = @($matrixShards | Where-Object {
+              $_.PSObject.Properties['nightlyOnly'] -and $_.nightlyOnly -eq $true })
+            if ($deferred.Count -gt 0) {
+              $matrixShards = @($matrixShards | Where-Object {
+                -not ($_.PSObject.Properties['nightlyOnly'] -and $_.nightlyOnly -eq $true) })
+              Write-Host "deferred $($deferred.Count) nightly-only shard(s) to the nightly coverage run; running $($matrixShards.Count)"
+            }
+          }
           # Empty is authorized only by the selector's explicit typed decision. A mapped selection
           # that unexpectedly becomes empty still fails safe to the complete matrix.
           if ($requiresValidation -and $matrixShards.Count -eq 0) {

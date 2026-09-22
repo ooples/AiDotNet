@@ -803,6 +803,15 @@ Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps
     'the shard step does not apply the entry env through the validated helper'
 Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
     'a shard declaring heavy: true does not get the heavy path'
+# The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
+# pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run;
+# losing either half silently restores the ~2-hour floor on every pull request and master push.
+Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and
+    $validation.Contains("`$_.PSObject.Properties['nightlyOnly'] -and `$_.nightlyOnly -eq `$true })")) `
+    'nightly-only sweep shards are no longer deferred out of pull request and push matrices'
+$nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath '.github/test-shards.yml' -Raw), '(?m)^    nightlyOnly: true\r?$').Count
+Assert-Contract ($nightlyOnlyEntries -eq 46) `
+    "expected 46 nightlyOnly sweep/conformance shards in test-shards.yml, found $nightlyOnlyEntries"
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'
