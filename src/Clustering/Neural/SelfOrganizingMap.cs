@@ -78,9 +78,9 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The SOM options.</param>
     public SelfOrganizingMap(SOMOptions<T>? options = null)
-        : base(options ?? new SOMOptions<T>())
+        : base(options ??= new SOMOptions<T>())
     {
-        _options = options ?? new SOMOptions<T>();
+        _options = options;
     }
 
     /// <summary>

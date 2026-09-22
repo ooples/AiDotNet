@@ -68,9 +68,9 @@ public partial class GMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The GMeans options.</param>
     public GMeans(GMeansOptions<T>? options = null)
-        : base(options ?? new GMeansOptions<T>())
+        : base(options ??= new GMeansOptions<T>())
     {
-        _options = options ?? new GMeansOptions<T>();
+        _options = options;
     }
 
     /// <inheritdoc />

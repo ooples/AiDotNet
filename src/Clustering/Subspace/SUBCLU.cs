@@ -75,9 +75,9 @@ public partial class SUBCLU<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The SUBCLU configuration options.</param>
     public SUBCLU(SUBCLUOptions<T>? options = null)
-        : base(options ?? new SUBCLUOptions<T>())
+        : base(options ??= new SUBCLUOptions<T>())
     {
-        _options = options ?? new SUBCLUOptions<T>();
+        _options = options;
     }
 
     /// <summary>
