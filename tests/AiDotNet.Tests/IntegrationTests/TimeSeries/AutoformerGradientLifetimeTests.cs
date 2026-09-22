@@ -38,7 +38,7 @@ public sealed class AutoformerGradientLifetimeTests
             for (var i = 0; i < 16; i++)
                 _ = AiDotNetEngine.Current.TensorMultiplyScalar(other, 3.0);
 
-            Assert.Equal(new[] { 32, 8 }, accumulated.Shape);
+            Assert.Equal(new[] { 32, 8 }, accumulated.Shape.ToArray());
             for (var i = 0; i < accumulated.Length; i++) Assert.Equal(4.0, accumulated[i]);
         }
         finally
