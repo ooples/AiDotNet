@@ -237,7 +237,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
     /// with a reward and done flag.
     /// </para>
     /// </remarks>
-    public (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
+    public virtual (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
     {
         if (action == null)
         {
