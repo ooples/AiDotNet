@@ -247,6 +247,12 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>, IMaskableAgent<T>
     /// <b>For Beginners:</b> In the FinRLAgent model, StoreExperience performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+        => _innerAgent.StoreExperience(state, action, reward, nextState, done, nextLegalActions);
+
+    /// <inheritdoc/>
+
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         _innerAgent.StoreExperience(state, action, reward, nextState, done);

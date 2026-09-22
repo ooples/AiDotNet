@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IMaskedExperienceAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     // --- declared state (ModelStateRegistry) ---
@@ -193,6 +193,16 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     /// <param name="nextState">The state after action.</param>
     /// <param name="done">Whether the episode terminated.</param>
     public abstract void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
+
+    /// <inheritdoc cref="IMaskedExperienceAgent{T}.StoreExperience"/>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+            throw new InvalidOperationException("This agent does not support next-state action masks.");
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
 
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.

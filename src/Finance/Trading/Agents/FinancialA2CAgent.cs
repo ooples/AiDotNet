@@ -249,7 +249,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         if (training)
         {
             _policyRuntime.Selections.Add(
-                action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState));
+                action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState, legalActions));
         }
 
         return action;
@@ -466,11 +466,13 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             actionIndices[i] = ArgMaxIndex(batch[i].Action);
         }
 
+        using var maskBias = BuildMaskBias(batch);
         var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
         var trainableActor = (NeuralNetworkBase<T>)_actor;
-        T policyLoss = trainableActor.TrainWithCustomLoss(states, logits =>
+        T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
         {
             var engine = AiDotNetEngine.Current;
+            var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
             var logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
             var policyObjective = engine.TensorMultiply(logProbs, advantages);
             var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
@@ -484,6 +486,23 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         return loss;
     }
+
+    private Tensor<T>? BuildMaskBias(PolicyExperience[] batch)
+    {
+        if (!batch.Any(step => step.LegalActions is not null)) return null;
+        int width = TradingOptions.ActionSize;
+        var data = new T[batch.Length * width];
+        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        for (int row = 0; row < batch.Length; row++)
+        {
+            var mask = batch[row].LegalActions;
+            if (mask is null) continue;
+            for (int col = 0; col < width; col++)
+                if (!mask[col]) data[row * width + col] = blocked;
+        }
+        return new Tensor<T>(data, [batch.Length, width]);
+    }
+
 
     #endregion
 
@@ -530,6 +549,16 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// the oldest pending transition is dropped. It is not an off-policy replay history.
     /// </para>
     /// </remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done) ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        // A2C bootstraps V(s'), not a maximization over next-state actions.
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
+    /// <inheritdoc/>
+
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int selected = ValidateTransition(state, action, nextState);
@@ -545,7 +574,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         if (!ReferenceEquals(selection.Epoch, _policyRuntime.Epoch))
             throw new InvalidOperationException("The actor policy changed after this action was sampled.");
 
-        EnqueueTransition(new Experience<T>(selectedState, action.Clone(), reward, nextState.Clone(), done));
+        EnqueueTransition(new PolicyExperience(selectedState, action.Clone(), reward, nextState.Clone(), done,
+            selection.LegalActions is null ? null : (bool[])selection.LegalActions.Clone()));
         // Validation/allocation failure leaves the selection available for a corrected attempt.
         _policyRuntime.Selections.Remove(action);
     }
@@ -554,7 +584,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     protected override void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         ValidateTransition(state, action, nextState);
-        var experience = new Experience<T>(state.Clone(), action.Clone(), reward, nextState.Clone(), done);
+        var experience = new PolicyExperience(state.Clone(), action.Clone(), reward, nextState.Clone(), done, null);
         // A target-specified action is labelled supervision, not sampled behavior. Keep its
         // explicit one-shot update separate and invalidate all outstanding behavior tokens.
         InvalidatePolicy();
@@ -582,7 +612,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         return true;
     }
 
-    private void EnqueueTransition(Experience<T> experience)
+    private void EnqueueTransition(PolicyExperience experience)
     {
         _policyRuntime.Pending.Enqueue(experience);
         if (_policyRuntime.Pending.Count > TradingOptions.ReplayBufferSize)
@@ -646,7 +676,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     // Runtime-only ownership state: never serialize an action's provenance or pending rollout.
     private sealed class PolicyRuntimeState
     {
-        public Queue<Experience<T>> Pending { get; } = new();
+        public Queue<PolicyExperience> Pending { get; } = new();
         public ConditionalWeakTable<Vector<T>, SelectionStamp> Selections { get; } = new();
         public Dictionary<object, int> Storage { get; set; } = new(TensorReferenceComparer<object>.Instance);
         public Dictionary<object, int> NextStorage { get; set; } = new(TensorReferenceComparer<object>.Instance);
@@ -654,14 +684,22 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         public bool HasSnapshot { get; set; }
     }
 
+    private sealed record PolicyExperience(Vector<T> State, Vector<T> Action, T Reward,
+        Vector<T> NextState, bool Done, bool[]? LegalActions)
+        : Experience<T>(State, Action, Reward, NextState, Done);
+
     private sealed class SelectionStamp
     {
-        public SelectionStamp(object epoch, bool sampled, int actionIndex, Vector<T>? state)
-        { Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; State = state; }
+        public SelectionStamp(object epoch, bool sampled, int actionIndex, Vector<T>? state, bool[]? legalActions)
+        {
+            Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; State = state;
+            LegalActions = legalActions is null ? null : (bool[])legalActions.Clone();
+        }
         public object Epoch { get; }
         public bool Sampled { get; }
         public int ActionIndex { get; }
         public Vector<T>? State { get; }
+        public bool[]? LegalActions { get; }
     }
 
     #endregion

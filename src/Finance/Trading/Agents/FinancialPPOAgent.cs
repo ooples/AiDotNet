@@ -907,6 +907,21 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <b>For Beginners:</b> In the FinancialPPOAgent model, StoreExperience performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+        {
+            if (_options.ContinuousActions)
+                throw new InvalidOperationException("Continuous PPO does not support next-state action masks.");
+            ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        }
+        // PPO bootstraps V(s'); its action distribution uses the captured current-state mask.
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
+    /// <inheritdoc/>
+
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         MarkHiddenEpisodeBoundaryIfNeeded(state);

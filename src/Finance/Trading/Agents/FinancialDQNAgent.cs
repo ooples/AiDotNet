@@ -379,34 +379,22 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         var expectedData = currentQ.Clone();
         for (int i = 0; i < n; i++)
         {
-            T maxNextQ;
-            if (onlineNextQ is not null)
-            {
-                int bestAction = 0;
-                for (int a = 1; a < actionCount; a++)
-                {
-                    if (NumOps.GreaterThan(onlineNextQ[(i * actionCount) + a], onlineNextQ[(i * actionCount) + bestAction]))
-                    {
-                        bestAction = a;
-                    }
-                }
-
-                maxNextQ = nextQ[(i * actionCount) + bestAction];
-            }
-            else
-            {
-                maxNextQ = nextQ[i * actionCount];
-                for (int a = 1; a < actionCount; a++)
-                {
-                    var q = nextQ[(i * actionCount) + a];
-                    if (NumOps.GreaterThan(q, maxNextQ))
-                    {
-                        maxNextQ = q;
-                    }
-                }
-            }
-
             var exp = batch[i];
+            T maxNextQ = NumOps.Zero;
+            if (!exp.Done)
+            {
+                var selectionQ = onlineNextQ ?? nextQ;
+                var mask = ActionMasking.Validate(exp.NextLegalActions, actionCount);
+                int bestAction = -1;
+                for (int a = 0; a < actionCount; a++)
+                {
+                    if (mask is not null && !mask[a]) continue;
+                    if (bestAction < 0 || NumOps.GreaterThan(selectionQ[i * actionCount + a],
+                            selectionQ[i * actionCount + bestAction])) bestAction = a;
+                }
+                maxNextQ = nextQ[i * actionCount + bestAction];
+            }
+
             T target = exp.Done
                 ? exp.Reward
                 : NumOps.Add(exp.Reward, NumOps.Multiply(gamma, maxNextQ));
@@ -561,9 +549,18 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, done, nextLegalActions: null);
+
+    /// <inheritdoc/>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
     {
         ValidateTransitionShape(state, action, nextState);
-        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
+        var mask = done ? null : ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done)
+        {
+            NextLegalActions = mask,
+        };
         ReplayBuffer.Add(experience);
     }
 

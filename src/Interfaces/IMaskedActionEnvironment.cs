@@ -32,7 +32,7 @@ namespace AiDotNet.Interfaces;
 /// <see cref="AiDotNet.Finance.Interfaces.IMaskableAgent{T}"/>.</para>
 ///
 /// <para><b>Convention for the info dictionary.</b> Implementations SHOULD also publish the same array under
-/// <see cref="AiDotNet.ReinforcementLearning.ActionMasking.ActionMaskKey"/> (spelled <c>action_mask</c>) in the
+/// <c>action_mask</c> in the
 /// dictionary returned by <see cref="IEnvironment{T}.Step"/>, so a consumer
 /// that only has the step result can read it without holding the environment reference. The property is the
 /// authority; the info entry is a mirror. The property also covers the case the info channel cannot:

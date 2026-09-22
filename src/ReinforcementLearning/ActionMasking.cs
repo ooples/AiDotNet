@@ -24,7 +24,7 @@ namespace AiDotNet.ReinforcementLearning;
 /// <c>exp(0) = 1</c> weight through a softmax.</item>
 /// </list>
 /// </remarks>
-public static class ActionMasking
+internal static class ActionMasking
 {
     /// <summary>
     /// The key under which an environment publishes its legal-action mask in the info dictionary returned by
