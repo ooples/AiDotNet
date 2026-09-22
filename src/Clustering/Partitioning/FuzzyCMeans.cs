@@ -72,9 +72,9 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The FCM options.</param>
     public FuzzyCMeans(FuzzyCMeansOptions<T>? options = null)
-        : base(options ?? new FuzzyCMeansOptions<T>())
+        : base(options ??= new FuzzyCMeansOptions<T>())
     {
-        _options = options ?? new FuzzyCMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>

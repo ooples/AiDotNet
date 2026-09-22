@@ -174,10 +174,10 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     public GeneralizedLinearMixedModel(
         GLMMOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new GLMMOptions<T>(), regularization)
+        : base(options ??= new GLMMOptions<T>(), regularization)
     {
         _logLikelihood = NumOps.Zero;
-        _options = options ?? new GLMMOptions<T>();
+        _options = options;
         _randomEffects = [];
         _dispersion = NumOps.One;
     }

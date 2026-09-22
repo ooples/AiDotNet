@@ -172,13 +172,13 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     public LinearMixedModel(
         LinearMixedModelOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new LinearMixedModelOptions<T>(), regularization)
+        : base(options ??= new LinearMixedModelOptions<T>(), regularization)
     {
         ConditionalRSquared = NumOps.Zero;
         MarginalRSquared = NumOps.Zero;
         _logLikelihood = NumOps.Zero;
         _residualVariance = NumOps.Zero;
-        _options = options ?? new LinearMixedModelOptions<T>();
+        _options = options;
         _randomEffects = [];
     }
 

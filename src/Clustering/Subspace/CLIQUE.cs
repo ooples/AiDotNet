@@ -78,9 +78,9 @@ public partial class CLIQUE<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The CLIQUE configuration options.</param>
     public CLIQUE(CLIQUEOptions<T>? options = null)
-        : base(options ?? new CLIQUEOptions<T>())
+        : base(options ??= new CLIQUEOptions<T>())
     {
-        _options = options ?? new CLIQUEOptions<T>();
+        _options = options;
     }
 
     /// <summary>

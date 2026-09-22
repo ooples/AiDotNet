@@ -76,9 +76,9 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     /// Initializes a new instance of the LSTMVAE class.
     /// </summary>
     public LSTMVAE(LSTMVAEOptions<T>? options = null)
-        : base(options ?? new LSTMVAEOptions<T>())
+        : base(options ??= new LSTMVAEOptions<T>())
     {
-        _options = options ?? new LSTMVAEOptions<T>();
+        _options = options;
 
         _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize);
         _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize);

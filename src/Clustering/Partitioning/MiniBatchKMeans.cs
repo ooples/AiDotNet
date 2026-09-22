@@ -76,9 +76,9 @@ public partial class MiniBatchKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The MiniBatchKMeans configuration options.</param>
     public MiniBatchKMeans(MiniBatchKMeansOptions<T>? options = null)
-        : base(options ?? new MiniBatchKMeansOptions<T>())
+        : base(options ??= new MiniBatchKMeansOptions<T>())
     {
-        _options = options ?? new MiniBatchKMeansOptions<T>();
+        _options = options;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
