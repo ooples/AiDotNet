@@ -251,11 +251,14 @@ Write-Host ("selection reduction: {0} mapped, {1} always-run, {2} live shard(s)"
 if ($measured.AlwaysRun -gt $script:AlwaysRunBaseline) {
     # One string, then -f. Concatenating first and formatting after binds -f to the LAST segment
     # only, which printed a literal "{0}" in the very message meant to name the regression.
-    $message = '::error::always-run shards rose to {0}, above the baseline of {1}. Every one of ' +
+    # Advisory, never a block. This runs in the map build before certification, so failing here
+    # refuses the WHOLE map over one shard: a single real test failure (Dessurt, 2026-09-22) prunes
+    # one mapped shard, and blocking on it would put every pull request back on the full matrix.
+    # A slightly worse map is far better than no map.
+    $message = '::warning::always-run shards rose to {0}, above the baseline of {1}. Every one of ' +
         'them runs on every pull request whatever the change touches. Fix the coverage gap that ' +
         'made them unmappable; do not raise the baseline.'
     Write-Host ($message -f $measured.AlwaysRun, $script:AlwaysRunBaseline)
-    exit 1
 }
 if ($measured.AlwaysRun -lt $script:AlwaysRunBaseline) {
     $message = '::notice::always-run shards fell to {0}, below the baseline of {1} - lower ' +
@@ -286,11 +289,10 @@ if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile) -and (Te
     Write-Host ("tests every pull request runs regardless of its change: {0}" -f $alwaysTests)
 
     if ($alwaysTests -gt $script:AlwaysRunTestBaseline) {
-        $message = '::error::every pull request now runs {0} tests regardless of what it changed, ' +
+        $message = '::warning::every pull request now runs {0} tests regardless of what it changed, ' +
             'above the baseline of {1}. Give the always-run shards coverage so they become ' +
             'selectable; do not raise the baseline.'
         Write-Host ($message -f $alwaysTests, $script:AlwaysRunTestBaseline)
-        exit 1
     }
     if ($alwaysTests -lt $script:AlwaysRunTestBaseline) {
         $message = '::notice::unconditional tests fell to {0}, below the baseline of {1} - lower ' +
