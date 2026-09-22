@@ -613,6 +613,21 @@ Assert-Contract ([bool] $testRunStep) `
     'the sharded test execution step is absent'
 $testStepLines = [Regex]::Split($testRunStep, '\r?\n')
 $shardScriptPath = '.github/scripts/Invoke-Shard.ps1'
+# A PowerShell single-quoted literal does not expand, so '$($env:SHARD_FRAMEWORK)' reaches the
+# runner verbatim. Extracting this script from the workflow turned five ${{ }} interpolations -
+# which HAD been inside single quotes - into exactly that, and the ones embedded in a longer path
+# or filter survived the first sweep: the shard died with "runner config not found at
+# tests/AiDotNet.Tests/bin/Release/$($env:SHARD_FRAMEWORK)/xunit.runner.json" and --filter was
+# passed as a literal. Nothing else catches it - the file parses, and the workflow dispatches.
+$shardScriptLines = @(Get-Content -LiteralPath $shardScriptPath)
+$literalEnv = [System.Collections.Generic.List[string]]::new()
+for ($i = 0; $i -lt $shardScriptLines.Count; $i++) {
+    foreach ($m in [regex]::Matches($shardScriptLines[$i], "'[^']*'")) {
+        if ($m.Value -match '\$\(\$env:') { [void] $literalEnv.Add("L$($i + 1): $($m.Value)") }
+    }
+}
+Assert-Contract ($literalEnv.Count -eq 0) `
+    "the shard script has environment expansions inside single quotes, which never expand: $($literalEnv -join '; ')"
 $testRunLine = [Array]::IndexOf($testStepLines, '        run: |')
 Assert-Contract ($testRunLine -ge 0) `
     'the sharded test step has no literal PowerShell run block to validate'

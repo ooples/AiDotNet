@@ -242,7 +242,7 @@ $dotnetArgs = @(
   '--framework', "$($env:SHARD_FRAMEWORK)",
   '--no-build', '--no-restore',
   # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
-  '--filter', '($($env:SHARD_FILTER))&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
+  '--filter', "($($env:SHARD_FILTER))&Category!=HeavyTimeout&Category!=ModelPerformanceCensus"
 )
 if ($collectCoverage) {
   $runSettings = 'coverlet.runsettings'
@@ -310,7 +310,7 @@ $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $diagDir 'gpu-diagnostics.txt'
 # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
 if ($serializeShard) {
   $projDir = Split-Path -Parent "$($env:SHARD_PROJECT)"
-  $runnerJson = Join-Path $projDir 'bin/Release/$($env:SHARD_FRAMEWORK)/xunit.runner.json'
+  $runnerJson = Join-Path $projDir "bin/Release/$($env:SHARD_FRAMEWORK)/xunit.runner.json"
   if (Test-Path $runnerJson) {
     $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
     $cfg.parallelizeTestCollections = $false
