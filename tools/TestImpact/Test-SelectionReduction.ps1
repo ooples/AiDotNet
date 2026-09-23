@@ -120,8 +120,9 @@ function Measure-AlwaysRunTests {
                 }
                 if ((Test-TestFilter -Node $tree -Candidate $candidate) -eq $script:FilterFalse) { continue }
             }
-            # A file two shards both claim is paid for once, not twice.
-            if ($counted.Add([string] $u.Fqn)) { $total += [int] $u.Tests }
+            # A file two shards both claim is paid for once, not twice. Keyed by project AND name:
+            # two test projects can define the same fully qualified name, and those are different tests.
+            if ($counted.Add("$([string] $u.Project)|$([string] $u.Fqn)")) { $total += [int] $u.Tests }
         }
     }
     return $total
@@ -217,6 +218,14 @@ if ($SelfTest) {
     # suite when this was measured with a hand-rolled matcher.
     Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Either') -Manifest $manifest -Units $units) -eq 103) `
         'an OR filter did not select both of its alternatives'
+    # The same fully qualified name in two projects is two sets of tests, not one claimed twice.
+    $twin = @(
+        [pscustomobject]@{ Fqn = 'Acme.Heavy.SameNameTests'; Tests = 5; Project = 'Acme.Tests' },
+        [pscustomobject]@{ Fqn = 'Acme.Heavy.SameNameTests'; Tests = 9; Project = 'Other.Tests' }
+    )
+    $twinManifest = @($manifest) + @([pscustomobject]@{ name = 'OtherHeavy'; project = 'tests/Other.Tests/Other.Tests.csproj'; filter = 'FullyQualifiedName~Acme.Heavy' })
+    Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Heavy', 'OtherHeavy') -Manifest $twinManifest -Units $twin) -eq 14) `
+        'the same fully qualified name in two projects was counted once'
     # A shard for another project must claim nothing here, however permissive its filter.
     Assert-True ((Measure-AlwaysRunTests -AlwaysRun @('Other') -Manifest $manifest -Units $units) -eq 0) `
         'a shard running a different project claimed these tests'
@@ -267,7 +276,21 @@ if ($measured.AlwaysRun -lt $script:AlwaysRunBaseline) {
 }
 
 # The shard count is a proxy; this is the cost itself.
-if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile) -and (Test-Path -LiteralPath $TestsRoot)) {
+# A manifest that was asked for but is missing must not silently skip the measurement: that exits 0
+# and hides a test-cost regression. Omitting -ShardManifestFile still means shard count only.
+$measurementInputsValid = $false
+if ($ShardManifestFile) {
+    if (-not (Test-Path -LiteralPath $ShardManifestFile -PathType Leaf)) {
+        Write-Host "::warning::test-cost measurement skipped; shard manifest was not found: $ShardManifestFile"
+    }
+    elseif (-not (Test-Path -LiteralPath $TestsRoot -PathType Container)) {
+        Write-Host "::warning::test-cost measurement skipped; tests root was not found: $TestsRoot"
+    }
+    else {
+        $measurementInputsValid = $true
+    }
+}
+if ($measurementInputsValid) {
     $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
     $testsRootFull = (Resolve-Path -LiteralPath $TestsRoot).Path
     $units = @(foreach ($f in @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter *.cs -File)) {

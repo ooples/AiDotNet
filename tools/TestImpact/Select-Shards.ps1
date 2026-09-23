@@ -3088,7 +3088,11 @@ try {
 
     $result = [pscustomobject]@{
         escalate          = $selection.Escalate
-        requiresValidation = $selection.RequiresValidation
+        # A build-only change adds no mapped path, so Select-ImpactedShards reports no validation
+        # needed. The workflow requires validation for anything that compiles and treats false as
+        # the selector contradicting it - which sent every .editorconfig change to the full matrix.
+        # It must compile, so validation stays required; only the shard matrix is skipped.
+        requiresValidation = [bool] ($selection.RequiresValidation -or $buildOnlyChange)
         requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
         reason            = $(if ($buildOnlyChange) { 'build-only' }
                               elseif ($selection.Escalate) { 'impact-unknown' }
