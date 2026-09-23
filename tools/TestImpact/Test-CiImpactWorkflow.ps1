@@ -171,7 +171,7 @@ function Test-MapSelectorPullRequestScope {
         $arguments.MapFile -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
         $arguments.MapFile.Value -ceq 'map/shard-map.json' -and
         $arguments.PullRequestHeadSha -is [System.Management.Automation.Language.VariableExpressionAst] -and
-        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'env:PR_HEAD_SHA'
+        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'changeHeadSha'
 }
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
@@ -381,10 +381,17 @@ Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
 Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
 Assert-Contract ($selectStep.Contains('-ClassifyOnly `') -and
-        $selectStep.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) `
+        $selectStep.Contains('-PullRequestHeadSha $changeHeadSha -OutFile path-classification.json')) `
     'non-runtime classification does not use the exact PR base-to-head path set'
 Assert-Contract ($selectStep.Contains('PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}')) `
     'the selector is not given the pull request head it must verify as the merge commit''s second parent'
+# A post-merge push scopes to the merged pull request exactly as its PR run did: the landing's
+# second parent is that pull request's head. Only a two-parent landing qualifies; a squash or
+# rebase landing has no head to scope to and must keep the full matrix.
+Assert-Contract ($selectStep.Contains('$changeHeadSha = [string] $env:PR_HEAD_SHA') -and
+        $selectStep.Contains('if ($LASTEXITCODE -eq 0 -and $landing.Count -eq 3) { $changeHeadSha = $landing[2] }') -and
+        $selectStep.Contains("(`$eventName -eq 'push' -and -not [string]::IsNullOrEmpty(`$changeHeadSha))")) `
+    'a post-merge push no longer scopes selection to the merged pull request, or scopes a one-parent landing'
 # The event base.sha is the base branch as it was when the pull request was opened. For a pull
 # request behind master it made every commit master gained since look like part of the pull
 # request: on #2100 it attributed 16 merged CI-control files to a 4-file change, escalating 116 shards.
