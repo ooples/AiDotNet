@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -59,6 +60,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Token to Seg Them All: Language Instructed Reasoning Segmentation in Videos", "https://arxiv.org/abs/2409.19603", Year = 2024, Authors = "Zechen Bai, Tong He, Haiyang Mei, Pichao Wang, Ziteng Gao, Joya Chen, Lei Liu, Zheng Zhang, Mike Zheng Shou")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0003, WeightDecay = 0,
+                Source = "Bai et al. 2024, Sec. 4: AdamW with the learning rate and weight decay set to "
+                        + "0.0003 and 0 respectively. The zero weight decay is the paper value, not an "
+                        + "omission.")]
 public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
 {
     /// <inheritdoc />
@@ -259,15 +264,16 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// lazily after construction, so <c>_options</c> is already assigned by the time it runs - which is
     /// exactly what a base-constructor argument could never express.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>PaperOptimizerFactory.VerifyHandBuilt(this,
+            
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
 
     private static void ValidateOptions(VideoLISAOptions options)
     {

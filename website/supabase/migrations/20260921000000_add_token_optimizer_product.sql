@@ -1,0 +1,28 @@
+-- Migration: add Token Optimizer as a licensable product
+--
+-- Token Optimizer is shipping a paid tier on these rails rather than its own.
+-- The licence machinery is already multi-product -- issuance, activations and
+-- revocation all key on `license_product` -- so this is a new enum value and
+-- nothing more. No new table, no new function, no change to how a key is
+-- validated.
+--
+-- Keep in sync with the two places that mirror this enum, because nothing in
+-- the database can enforce it:
+--   - website/supabase/functions/_shared/products.ts   (ProductSlug + display names)
+--   - website/src/pages/admin/licenses/index.astro     (PRODUCTS array)
+-- products.ts documents the three-change contract; this file is change one.
+--
+-- WHY `if not exists` RATHER THAN A `do $$ ... exception` BLOCK. The original
+-- product migration wrapped `create type` in an exception handler because
+-- `create type` has no idempotent form. `alter type ... add value` does, and
+-- the native form is preferable: an exception handler swallows every
+-- duplicate_object in its block, including one raised by a statement nobody
+-- intended to be idempotent.
+--
+-- ON TRANSACTIONS. Adding an enum value inside a transaction was rejected
+-- before PostgreSQL 12 and is allowed from 12 onward, provided the new value
+-- is not USED in the same transaction. This migration only declares it -- the
+-- first row carrying it is written by a later issuance -- so it is safe under
+-- a migration runner that wraps each file in a transaction.
+
+alter type public.license_product add value if not exists 'token_optimizer';

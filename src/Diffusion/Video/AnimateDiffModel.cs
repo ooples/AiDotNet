@@ -64,17 +64,16 @@ namespace AiDotNet.Diffusion.Video;
 ///
 /// // Text-to-video generation
 /// var video = animateDiff.GenerateFromText(
-///     prompt: "A beautiful sunset over the ocean, waves gently rolling",
+///     "A beautiful sunset over the ocean, waves gently rolling",
 ///     width: 512,
 ///     height: 512,
 ///     numFrames: 16,
 ///     numInferenceSteps: 25);
 ///
 /// // Image-to-video with text guidance
-/// var inputImage = LoadImage("beach.jpg");
-/// var animatedVideo = animateDiff.AnimateImage(
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("beach.jpg");
+/// var animatedVideo = animateDiff.GenerateFromImage(
 ///     inputImage,
-///     prompt: "gentle waves, moving clouds",
 ///     numFrames: 16);
 /// </code>
 /// </example>

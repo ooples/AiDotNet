@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -79,6 +80,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.02747",
     Year = 2023,
     Authors = "Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, Matt Le")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8,
+                WeightDecay = 0,
+                Source = "Lipman et al. 2023, Sec. 5: all models are trained using the Adam optimizer "
+                        + "with beta1 0.9, beta2 0.999, a weight decay of 0.0 and epsilon 1e-8. The zero "
+                        + "weight decay is the paper value rather than an omission.")]
 public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabFlowOptions<T> _options;
@@ -154,11 +160,12 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         _options = options ?? new TabFlowOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

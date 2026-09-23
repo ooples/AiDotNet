@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -58,6 +60,14 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/1907.01361",
     Year = 2020,
     Authors = "Matias Tassano, Julie Delon, Thomas Veit")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 96,
+                DecayRate = 0.1, Milestones = [50, 60],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Tassano et al. 2020, Sec. 4: the ADAM algorithm with its other "
+                        + "hyper-parameters at their defaults, a mini-batch size of 96 over 80 epochs, "
+                        + "and a learning rate starting at 1e-3 for the first 50 epochs then changing to "
+                        + "1e-4 for the following 10.")]
 public partial class FastDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly FastDVDNetOptions _options;
@@ -121,19 +131,20 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // The official train_fastdvdnet.py uses torch.optim.Adam at 1e-3.
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // The official train_fastdvdnet.py uses torch.optim.Adam at 1e-3.
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false
+                }));
 
         InitializeLayers();
     }

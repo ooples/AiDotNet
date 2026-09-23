@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Kumar et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.5, Beta2 = 0.9, LearningRate = 0.0001,
+                ReferenceBatchSize = 16,
+                Source = "Kumar et al. 2019, Sec. 4: Adam with learning rate 0.0001, beta1 0.5 and beta2 0.9 for both generator and discriminator, batch size 16.")]
 public partial class MelGAN<T> : VocoderBase<T>
 {
     private readonly MelGANOptions _options;
@@ -80,7 +85,9 @@ public partial class MelGAN<T> : VocoderBase<T>
     {
         _options = options ?? new MelGANOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

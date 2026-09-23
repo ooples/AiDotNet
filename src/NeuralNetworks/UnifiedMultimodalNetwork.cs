@@ -31,10 +31,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new UnifiedMultimodalOptions { ImageSize = 224, EmbeddingDim = 768 };
-/// var model = new UnifiedMultimodalNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
-/// var output = model.Predict(image);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new UnifiedMultimodalNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

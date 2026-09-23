@@ -57,8 +57,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// </remarks>
     /// <example>
     /// <code>
+    /// var inputData = new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } };
+    /// var outputData = new double[] { 1.0, 4.0, 9.0, 16.0 };
+    ///
     /// var learner = new SymbolicPhysicsLearner&lt;double&gt;();
-    /// string equation = learner.Discover(inputData, outputData, maxComplexity: 10);
+    /// var equation = learner.DiscoverEquation(inputData, outputData, maxComplexity: 10);
+    /// string latex = learner.ToLatex(equation);
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

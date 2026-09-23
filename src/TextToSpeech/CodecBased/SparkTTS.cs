@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2025,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.9,
+                Source = "Wang et al. 2025, Sec. 4: the AdamW optimizer with moving average "
+                        + "coefficients beta1 0.8 and beta2 0.9, converging within approximately 800k "
+                        + "training steps. No reference batch size is declared because the paper gives "
+                        + "the batch as 614.4 seconds of speech rather than as a count of examples.")]
 public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SparkTTSOptions _options;
@@ -82,7 +89,9 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new SparkTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

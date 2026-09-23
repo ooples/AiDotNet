@@ -35,7 +35,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// <example>
 /// <code>
 /// var predictor = new FluxDoubleStreamPredictor&lt;float&gt;(inputChannels: 16);
-/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 16, 32, 32 });
+/// var noisyLatent = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 32, 32 });
 /// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
 /// </code>
 /// </example>

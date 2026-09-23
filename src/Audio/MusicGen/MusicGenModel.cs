@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -64,6 +65,14 @@ namespace AiDotNet.Audio.MusicGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, WeightDecay = 0.1,
+                ReferenceBatchSize = 192, WarmupSteps = 4000, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Copet et al. 2023, Sec. 4: 1M steps with the AdamW optimizer, a batch size of "
+                        + "192 examples, beta1 0.9, beta2 0.95, a decoupled weight decay of 0.1 and "
+                        + "gradient clipping of 1.0, under a cosine learning rate schedule with a "
+                        + "4000-step warmup. No peak rate is stated, so the recipe is recorded but not "
+                        + "routed.")]
 public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -273,7 +282,8 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         // Use T5-compatible tokenizer as default
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)

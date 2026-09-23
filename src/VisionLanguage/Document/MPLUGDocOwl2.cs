@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -35,7 +37,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// // with high-resolution visual token compression for long documents
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -59,6 +61,10 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Hu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 1024,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Hu et al. 2024, Sec. 4.1: the first stage trains for 12k steps with a batch "
+                        + "size of 1,024 and a learning rate of 1e-4.")]
 public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwl2Options _options;
@@ -102,7 +108,9 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
     {
         _options = options ?? new MPLUGDocOwl2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

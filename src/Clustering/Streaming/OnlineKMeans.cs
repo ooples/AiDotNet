@@ -75,9 +75,9 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The Online K-Means options.</param>
     public OnlineKMeans(OnlineKMeansOptions<T>? options = null)
-        : base(options ?? new OnlineKMeansOptions<T>())
+        : base(options ??= new OnlineKMeansOptions<T>())
     {
-        _options = options ?? new OnlineKMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>

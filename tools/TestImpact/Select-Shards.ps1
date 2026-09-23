@@ -68,6 +68,7 @@ $ErrorActionPreference = 'Stop'
 
 enum ChangedPathImpact {
     NonRuntime
+    BuildOnly
     MapCandidate
     SelectionControl
     FullValidation
@@ -75,8 +76,16 @@ enum ChangedPathImpact {
 
 $script:SharedInfrastructureFiles = @(
     'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
-    'global.json', 'nuget.config', 'NuGet.config', '.editorconfig'
+    'global.json', 'nuget.config', 'NuGet.config'
 )
+# Compile the change, but do not run the test matrix for it. An .editorconfig edit can raise an
+# analyzer to error and fail the BUILD, which is why it cannot be NonRuntime - the build jobs and
+# the shard matrix share one gate, so calling it non-runtime would skip the compile that catches it.
+# It cannot change runtime behaviour: nothing under src/AiDotNet.Generators reads
+# AnalyzerConfigOptions (verified by grep), so no generated test text depends on it, and the
+# remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
+# to prove an indent rule is the single largest unjustified escalation measured on real PRs.
+$script:BuildOnlyFiles = @('.editorconfig')
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -177,6 +186,13 @@ function Get-ChangedPathImpact {
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
     }
+    # Checked after SelectionControl and SharedInfrastructure so a build-only name can never
+    # downgrade a path those already claimed.
+    $buildOnlyName = [System.IO.Path]::GetFileName($normalized)
+    foreach ($entry in $script:BuildOnlyFiles) {
+        if ($buildOnlyName -ieq $entry) { return [ChangedPathImpact]::BuildOnly }
+    }
+
     # AFTER shared infrastructure, so a build file keeps its meaning wherever it sits, and before the
     # markdown and map-candidate rules, so a non-product tree is spared whatever its file extension.
     foreach ($entry in $script:NonRuntimeDirectories) {
@@ -1230,24 +1246,195 @@ function Test-TestFilter {
     }
 }
 
+function Skip-CSharpHoleToken {
+    <#
+        Advances one token inside an interpolation hole, where the text is CODE. Returns the new
+        index and adjusts hole depth through the reference.
+
+        Comments count here: `$"{/* } " */ 0}"` is valid C#, and treating the brace and quote
+        inside that comment as code ends the literal early, which surfaces as 'unbalanced braces'
+        and escalates selection to the full matrix. Nested literals recurse so their own quotes
+        and braces cannot be mistaken for the enclosing literal's.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Text,
+        [Parameter(Mandatory)] [int] $Index,
+        [Parameter(Mandatory)] [ref] $HoleDepth
+    )
+
+    $n = $Text.Length
+    $i = $Index
+    $ch = $Text[$i]
+
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+        $e = $Text.IndexOf("`n", $i)
+        return $(if ($e -lt 0) { $n } else { $e })
+    }
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+        $e = $Text.IndexOf('*/', $i + 2)
+        return $(if ($e -lt 0) { $n } else { $e + 2 })
+    }
+    if ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+        $inner = Get-CSharpLiteralEnd -Text $Text -Start $i
+        if ($inner -gt $i) { return $inner }
+    }
+    if ($ch -eq '{') { $HoleDepth.Value++ }
+    elseif ($ch -eq '}') { $HoleDepth.Value-- }
+    return $i + 1
+}
+
+function Get-CSharpLiteralEnd {
+    <#
+        Returns the index one past the end of the C# string or character literal starting at
+        $Start, or $Start when nothing starts there. Understands raw ("""), verbatim (@"),
+        interpolated ($") and combined forms.
+
+        Interpolation holes are CODE, not text: `$"{string.Join(", ", xs)}"` contains a nested
+        string whose quotes must not end the outer literal. A regex cannot express that, and the
+        one this replaced ended the literal at the first inner quote - which swallowed the hole's
+        opening brace, left its closing brace as code, and made Get-CSharpTestShape report
+        'unbalanced braces' for NeuralNetworkModelTestBase.cs. That is an escalation to the full
+        matrix for every change that reaches it.
+    #>
+    param([Parameter(Mandatory)] [string] $Text, [Parameter(Mandatory)] [int] $Start)
+
+    $n = $Text.Length
+    $i = $Start
+
+    if ($Text[$i] -eq "'") {
+        $i++
+        while ($i -lt $n) {
+            if ($Text[$i] -eq '\') { $i += 2; continue }
+            if ($Text[$i] -eq "'") { return $i + 1 }
+            if ($Text[$i] -eq "`n") { return $i }
+            $i++
+        }
+        return $n
+    }
+
+    $dollars = 0
+    $verbatim = $false
+    while ($i -lt $n -and ($Text[$i] -eq '$' -or $Text[$i] -eq '@')) {
+        if ($Text[$i] -eq '$') { $dollars++ } else { $verbatim = $true }
+        $i++
+    }
+    $interpolated = $dollars -gt 0
+    if ($i -ge $n -or $Text[$i] -ne '"') { return $Start }
+
+    $quotes = 0
+    while ($i + $quotes -lt $n -and $Text[$i + $quotes] -eq '"') { $quotes++ }
+    $holeDepth = 0
+    if ($quotes -ge 3) {
+        # Raw literal. Scanning rather than IndexOf on the fence: in a raw INTERPOLATED literal a
+        # hole is code and may itself contain a fence, so `$"""{ """ }"""` would otherwise end at
+        # the inner one. C# opens a hole with as many braces as there are leading '$'.
+        $i += $quotes
+        while ($i -lt $n) {
+            $ch = $Text[$i]
+            if ($holeDepth -gt 0) {
+                $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
+                continue
+            }
+            if ($interpolated -and $ch -eq '{') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '{') { $run++ }
+                if ($run -ge $dollars) { $holeDepth++; $i += $dollars } else { $i += $run }
+                continue
+            }
+            if ($ch -eq '"') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '"') { $run++ }
+                if ($run -ge $quotes) { return $i + $quotes }
+                $i += $run
+                continue
+            }
+            $i++
+        }
+        return $n
+    }
+
+    $i++
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+
+        if ($holeDepth -gt 0) {
+            $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
+            continue
+        }
+
+        if ($verbatim) {
+            if ($ch -eq '"') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '"') { $i += 2; continue }
+                return $i + 1
+            }
+        }
+        else {
+            if ($ch -eq '\') { $i += 2; continue }
+            if ($ch -eq '"') { return $i + 1 }
+            if ($ch -eq "`n") { return $i }
+        }
+
+        if ($interpolated) {
+            if ($ch -eq '{') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '{') { $i += 2; continue }
+                $holeDepth++; $i++; continue
+            }
+            if ($ch -eq '}' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '}') { $i += 2; continue }
+        }
+
+        $i++
+    }
+    return $n
+}
+
 function ConvertTo-CodeOnlyCSharp {
     <#
         Blanks the CONTENT of comments, strings and character literals (newlines are kept, so
         offsets and line numbers survive), leaving only code. Brace matching and declaration
         matching then cannot be fooled by '{' in a string or 'class X' in a comment.
+
+        Scanned rather than pattern-matched: see Get-CSharpLiteralEnd for why a regex cannot
+        classify an interpolation hole correctly.
     #>
     param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [switch] $PreserveStrings)
 
-    $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
-    # A managed replacement avoids repeatedly logging/Stringifying an ever-growing
-    # StringBuilder under PowerShell member-invocation logging (quadratic on generators).
-    return [regex]::Replace($Text, $pattern, [System.Text.RegularExpressions.MatchEvaluator] {
-        param($match)
-        if ($PreserveStrings -and -not ($match.Value.StartsWith('//') -or $match.Value.StartsWith('/*'))) {
-            return $match.Value
+    $n = $Text.Length
+    if ($n -eq 0) { return $Text }
+    $chars = $Text.ToCharArray()
+    $i = 0
+
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+        $from = $i
+        $to = -1
+        $isComment = $false
+
+        if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+            $isComment = $true
+            $to = $Text.IndexOf("`n", $i)
+            if ($to -lt 0) { $to = $n }
         }
-        return ($match.Value -replace '[^\r\n]', ' ')
-    })
+        elseif ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+            $isComment = $true
+            $to = $Text.IndexOf('*/', $i + 2)
+            $to = if ($to -lt 0) { $n } else { $to + 2 }
+        }
+        elseif ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+            $end = Get-CSharpLiteralEnd -Text $Text -Start $i
+            if ($end -gt $i) { $to = $end }
+        }
+
+        if ($to -lt 0) { $i++; continue }
+        if (-not ($PreserveStrings -and -not $isComment)) {
+            for ($k = $from; $k -lt $to; $k++) {
+                $c = $chars[$k]
+                if ($c -ne "`r" -and $c -ne "`n") { $chars[$k] = ' ' }
+            }
+        }
+        $i = $to
+    }
+
+    return [string]::new($chars)
 }
 
 function Get-CSharpTestShape {
@@ -2212,6 +2399,56 @@ file class Private { }
 '@
     $shape = Get-CSharpTestShape -Text $source
     Assert-True ($null -eq $shape.ParseError) "valid C# was reported unparseable: $($shape.ParseError)"
+
+    # An interpolation hole is CODE, so it may hold a comment or a nested literal whose braces and
+    # quotes are not the enclosing literal's. Getting either wrong reports 'unbalanced braces',
+    # which fails Get-TestFileRoutes closed and escalates to the full 164-shard matrix. Neither
+    # form occurs in the repo today (0 of 11,928 sources), so these guard the scanner, not a
+    # current failure - the nested-quote form did occur, and did exactly that.
+    $q = [string][char]34
+    $holeCases = @(
+        @{ Name = 'nested string in a hole'
+           Body = 'var s = $"a{string.Join(", ", xs)}b";' },
+        @{ Name = 'block comment in a hole'
+           Body = 'var s = $"a{/* } ' + $q + ' */ 0}b";' },
+        @{ Name = 'line comment in a hole'
+           Body = "var s = `$`"a{ 0 // } $q`n }b`";" },
+        @{ Name = 'raw interpolated hole containing a fence'
+           Body = 'var s = $' + ($q * 3) + 'a{ ' + ($q * 3) + 'x' + ($q * 3) + ' }b' + ($q * 3) + ';' },
+        @{ Name = 'doubled braces are literal, not a hole'
+           Body = 'var s = $"{{ not a hole }}";' }
+    )
+    foreach ($case in $holeCases) {
+        $text = "namespace N { public class C { public void M() { $($case.Body) } } }"
+        $masked = ConvertTo-CodeOnlyCSharp -Text $text
+        $open = ([regex]::Matches($masked, '\{')).Count
+        $close = ([regex]::Matches($masked, '\}')).Count
+        Assert-True ($open -eq $close) `
+            "masking left braces unbalanced ($open open, $close close) for: $($case.Name)"
+        Assert-True ($null -eq (Get-CSharpTestShape -Text $text).ParseError) `
+            "a literal was misparsed and reported unbalanced braces for: $($case.Name)"
+    }
+
+    # .editorconfig must compile but must not drag in the shard matrix. It cannot change runtime
+    # behaviour - nothing under src/AiDotNet.Generators reads AnalyzerConfigOptions - but it can
+    # raise an analyzer to error, so it is BuildOnly rather than NonRuntime. Measured on PR #2112,
+    # this was one of the two files escalating it to 130 shards.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        '.editorconfig is not classified BuildOnly'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        'a nested .editorconfig is not classified BuildOnly'
+    # The neighbours it used to sit beside must keep escalating: they really can change compilation
+    # output, not merely diagnostics.
+    foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {
+        Assert-True ((Get-ChangedPathImpact -Path $shared) -eq [ChangedPathImpact]::FullValidation) `
+            "$shared stopped requiring full validation"
+    }
+    # BuildOnly must never be mistaken for NonRuntime: that shares a gate with the build jobs, so
+    # an analyzer promoted to error would ship without ever being compiled.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -ne [ChangedPathImpact]::NonRuntime) `
+        '.editorconfig was downgraded to NonRuntime, which would skip the build that catches it'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/AiDotNet.Generators/TestScaffoldGenerator.cs') -eq [ChangedPathImpact]::FullValidation) `
+        'a generator edit stopped requiring full validation'
     $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
     $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
         'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
@@ -2712,8 +2949,11 @@ function Exit-Escalated {
 
     if ($Message) { Write-Host "::warning::$Message" }
     # Same shape as a successful selection, routes included: consumers read it under StrictMode.
+    # requiresShards is true here on purpose: an escalation is the fail-closed path, so it must
+    # never be the thing that talks the workflow out of running the matrix.
     $result = [pscustomobject]@{
-        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); routes = @(); shards = @()
+        escalate = $true; requiresValidation = $true; requiresShards = $true
+        reason = $Reason; reasons = @(); routes = @(); shards = @()
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -2923,15 +3163,38 @@ try {
         }
     }
 
+    # A build-only change still has to COMPILE - an .editorconfig edit can raise an analyzer to
+    # error - but it cannot alter runtime behaviour, so it must not drag in the shard matrix. The
+    # build jobs and the shard matrix share requiresValidation today, so the distinction needs its
+    # own flag rather than reusing that one.
+    $impacts = @($currentPaths | ForEach-Object { Get-ChangedPathImpact -Path ([string] $_) })
+    $buildOnlyChange = $impacts.Count -gt 0 -and
+        @($impacts | Where-Object { $_ -eq [ChangedPathImpact]::BuildOnly }).Count -gt 0 -and
+        @($impacts | Where-Object {
+            $_ -ne [ChangedPathImpact]::BuildOnly -and $_ -ne [ChangedPathImpact]::NonRuntime
+        }).Count -eq 0
+    if ($buildOnlyChange) {
+        Write-Host 'build-only change: compiling it, but no test shard can be affected by it'
+    }
+    $emittedShards = @(if ($buildOnlyChange) { @() } else { $selection.Shards })
+
     $result = [pscustomobject]@{
         escalate          = $selection.Escalate
-        requiresValidation = $selection.RequiresValidation
-        reason            = $(if ($selection.Escalate) { 'impact-unknown' }
+        # A build-only change adds no mapped path, so Select-ImpactedShards reports no validation
+        # needed. The workflow requires validation for anything that compiles and treats false as
+        # the selector contradicting it - which sent every .editorconfig change to the full matrix.
+        # It must compile, so validation stays required; only the shard matrix is skipped.
+        requiresValidation = [bool] ($selection.RequiresValidation -or $buildOnlyChange)
+        requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
+        reason            = $(if ($buildOnlyChange) { 'build-only' }
+                              elseif ($selection.Escalate) { 'impact-unknown' }
                               elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
                               else { 'selected' })
         reasons           = $selection.Reasons
+        # @() inside a $( ) subexpression unrolls to nothing, which serialises as null and makes
+        # every consumer that binds this to a [string[]] fail. Build the array first.
+        shards            = $emittedShards
         routes            = @($selection.Routes)
-        shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }

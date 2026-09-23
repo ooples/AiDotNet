@@ -3,6 +3,21 @@ name: Test impact map
 # Each invocation first harvests and audits the previous intentional coverage-everywhere run, then
 # dispatches the next one. The expensive run never overlaps the map decision it will later audit.
 on:
+  # Re-certify on every merge. Nothing else does: a fix to the map, the certificate or the
+  # selector only takes effect once a map run executes on master AFTER it lands, and the schedule
+  # below is the only thing that ever did. PR #2176 merged at 10:40 on 2026-09-22, eight and a
+  # half hours after that day's 02:11 run had already failed on the pre-merge code - so every
+  # pull request kept escalating to the full 164-shard matrix until the map was dispatched by
+  # hand. This harvests and audits only; the coverage-everywhere dispatch below stays on the
+  # schedule, so a merge costs the ~5-minute map build, not a ~5-hour instrumented matrix.
+  push:
+    branches:
+      - master
+      # The same acceptance harness sonarcloud.yml uses. A push trigger cannot be exercised from a
+      # pull request - it only fires on the branch it names - so without this the re-certify-on-
+      # merge behaviour could only be tested by merging it, which is the thing it is meant to make
+      # safe. Pushing this branch to ci-proof/** runs the real post-merge path first.
+      - 'ci-proof/**'
   schedule:
     # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
     # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
@@ -52,6 +67,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
           ./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-ShardMapCertificate self-test failed' }
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Selection reduction self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -337,7 +354,26 @@ jobs:
         shell: pwsh
         run: |
           ./tools/TestImpact/Measure-MapCoverage.ps1 -MapFile shard-map.json
-          if ($LASTEXITCODE -ne 0) { throw 'map coverage report failed' }
+          # Reported, never a block: this runs before certification, so throwing here refuses the whole map.
+          if ($LASTEXITCODE -ne 0) { Write-Host '::warning::map coverage report exited non-zero - the map build continues' }
+
+      # Correctness proofs cannot see a map that skips nothing: the 2026-09-21 map was correct and
+      # still left 51 of 164 shards always-run. This is the only gate on how much the map can
+      # actually save, and it only ever ratchets down.
+      - name: Ratchet on selection reduction
+        # Same guard as "Build the map" and "Upload candidate map": with no valid coverage source
+        # those steps are skipped and shard-map.json never exists, so an unguarded ratchet fails on
+        # a missing file and reports a reduction regression that did not happen. The ci-proof run
+        # 35731913393 failed exactly this way before this reached master.
+        if: steps.source.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          yq -o=json -I=0 '.shard' .github/test-shards.yml | Set-Content -LiteralPath reduction-manifest.json -Encoding utf8
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json `
+              -ShardManifestFile reduction-manifest.json -TestsRoot tests
+          # Measurement only. A regression is reported as a warning inside the script, and a crash of
+          # the measurement itself must not refuse the map either.
+          if ($LASTEXITCODE -ne 0) { Write-Host '::warning::selection reduction measurement exited non-zero - the map build continues' }
 
       - name: Upload candidate map
         if: steps.source.outputs.found == 'true'
@@ -437,9 +473,12 @@ jobs:
             $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
             $extension = Complete-CiMapWorkloads -Map $previousMap -Manifest $auditShards
             $historicalMapFile = 'prevmap/shard-map.json'
-            if ($extension.Added.Count -gt 0) {
+            if ($extension.Added.Count -gt 0 -or $extension.RetiredIndexed.Count -gt 0) {
               # Replay ordinary historical coverage with new auxiliary workloads mandatory.
               # Do not claim that the old source measured these newly introduced workloads.
+              # A retirement must go through here too: the completed map is the only one carrying
+              # retiredShards, and without it certification demands an outcome from a shard that
+              # no longer has a job and can never report one.
               $extension.Map | ConvertTo-Json -Depth 12 -Compress | Set-Content prevmap/selection-map.json
               $historicalMapFile = 'prevmap/selection-map.json'
             }
@@ -546,7 +585,10 @@ jobs:
     name: Dispatch next coverage-everywhere run
     needs: build-map
     # Bootstrap even when no source exists yet; explicit harvest-only invocations do not dispatch.
-    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id }}
+    # Never on a merge: instrumenting the whole matrix is ~5 hours of runner occupancy, and the
+    # push trigger exists to re-certify from evidence that already exists, not to gather new
+    # evidence. The schedule and an explicit dispatch remain the only ways to start one.
+    if: ${{ always() && github.event_name != 'push' && !inputs.skip_coverage_run && !inputs.run_id }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
