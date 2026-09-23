@@ -348,7 +348,7 @@ public class ObjectDetectionMetrics<T> where T : struct
                 }
 
                 double iou = box.IoU(candidates[c]);
-                if (iou > bestIoU)
+                if (!double.IsNaN(iou) && (bestCandidate < 0 || iou > bestIoU))
                 {
                     bestIoU = iou;
                     bestCandidate = c;
@@ -460,6 +460,9 @@ public class ObjectDetectionMetrics<T> where T : struct
             for (int threshold = 0; threshold < thresholds.Length; threshold++)
             {
                 var candidateClaimed = claimed[threshold];
+                // The first candidate is always eligible, so an IoU of exactly 0 can still match at the
+                // inclusive threshold 0 ('at or above'). Starting at 0 with a strict '>' made that endpoint
+                // unreachable. NaN (a degenerate box) is never picked, or it would block every later candidate.
                 double bestIoU = 0.0;
                 int bestCandidate = -1;
                 for (int c = 0; c < candidates.Count; c++)
@@ -476,7 +479,7 @@ public class ObjectDetectionMetrics<T> where T : struct
                     }
 
                     double iou = iouRow[c];
-                    if (iou > bestIoU)
+                    if (!double.IsNaN(iou) && (bestCandidate < 0 || iou > bestIoU))
                     {
                         bestIoU = iou;
                         bestCandidate = c;

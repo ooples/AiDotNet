@@ -1,4 +1,5 @@
 using AiDotNet.ComputerVision;
+using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR;
 using AiDotNet.Interfaces;
@@ -27,6 +28,22 @@ public sealed class CvReviewRegressionTests
 
         Assert.Equal(new[] { 0, 3, 2, 2 }, result.Shape.ToArray());
         Assert.Equal(0, result.Length);
+    }
+
+    [Fact]
+    public void RoiAlign_NegativeBatchIndex_ClampsToFirstImage()
+    {
+        // Only the upper bound of a supplied batch index was clamped, so -1 reached the pooling
+        // gather unchanged and read before the first image instead of pooling from it.
+        var features = new Tensor<double>(new[] { 2, 1, 2, 2 },
+            new Vector<double>(new double[] { 1, 1, 1, 1, 5, 5, 5, 5 }));
+        var rois = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 0, 0, 2, 2 }));
+        var align = new RoIAlign<double>(outputSize: 1, samplingRatio: 1);
+
+        var fromFirst = align.Forward(features, rois, spatialScale: 1.0, batchIndices: new[] { 0 });
+        var fromNegative = align.Forward(features, rois, spatialScale: 1.0, batchIndices: new[] { -1 });
+
+        Assert.Equal(fromFirst.ToArray(), fromNegative.ToArray());
     }
 
     [Fact]

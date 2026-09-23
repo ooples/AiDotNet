@@ -535,11 +535,13 @@ internal class RoIAlign<T>
             boxes[i] = _numOps.ToDouble(rois[i]);
         }
 
+        // A supplied batch index is clamped at BOTH ends: an index below zero reached RoIAlign unchanged
+        // and read before the first image, while only the upper bound was ever guarded.
         var indices = new int[numRois];
         for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
         {
             indices[roiIdx] = batchIndices is not null && roiIdx < batchIndices.Length
-                ? Math.Min(batchIndices[roiIdx], batchSize - 1)
+                ? Math.Max(0, Math.Min(batchIndices[roiIdx], batchSize - 1))
                 : 0;
         }
 

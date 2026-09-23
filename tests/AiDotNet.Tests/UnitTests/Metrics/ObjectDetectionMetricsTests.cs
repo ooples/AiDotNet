@@ -52,6 +52,20 @@ namespace AiDotNetTests.UnitTests.Metrics
         }
 
         [Fact(Timeout = 60000)]
+        public async Task AveragePrecision_NoOverlap_MatchesAtInclusiveZeroThreshold()
+        {
+            await Task.Yield();
+
+            // A match is IoU AT OR ABOVE the threshold. At 0 that includes zero overlap, which the
+            // matcher could never select while it only took candidates strictly above 0.
+            var metrics = new ObjectDetectionMetrics<double>();
+            var truth = OneImage(Det(0, 0, 10, 10, 0, 1.0));
+            var predicted = OneImage(Det(100, 100, 110, 110, 0, 0.9));
+
+            Assert.Equal(1.0, metrics.AveragePrecision(predicted, truth, 0, iouThreshold: 0.0), 12);
+        }
+
+        [Fact(Timeout = 60000)]
         public async Task AveragePrecision_NoPredictions_IsZero()
         {
             await Task.Yield();
