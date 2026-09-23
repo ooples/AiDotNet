@@ -42,6 +42,16 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// object - and uses that judgement to steer a diffusion model as it repeatedly removes noise from
 /// the image.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Emu Edit: instruction-based image editing on a latent-diffusion backbone. Every constructor argument has a default,
+/// // so the paper configuration needs none of them.
+/// var model = new EmuEdit&lt;double&gt;();
+///
+/// // Or start from its options and change what you need.
+/// var configured = new EmuEdit&lt;double&gt;(options: new EmuEditOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
