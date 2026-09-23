@@ -87,7 +87,7 @@ public sealed class TwoStageDetectionLossTests
             }
             for (int k = 0; k < 4; k++)
             {
-                double expectedGradient = a == 0 ? 5.0 * Math.Clamp(deltaValues[k], -1, 1) : 0;
+                double expectedGradient = a == 0 ? 5.0 * Math.Max(-1, Math.Min(1, deltaValues[k])) : 0;
                 Near(expectedGradient, deltaGradient[a, k], 1e-10);
             }
         }
