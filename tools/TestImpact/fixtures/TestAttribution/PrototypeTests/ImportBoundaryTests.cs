@@ -56,6 +56,54 @@ public sealed class ImportBoundaryTests
     }
 
     [Fact]
+    public void TrxIsBoundedAndItsFailuresAreTyped()
+    {
+        // An imported TRX was materialised as a DOM with no size bound, and a missing or malformed one
+        // escaped as an untyped I/O or XML exception.
+        string directory = Path.Combine(Path.GetTempPath(), "trx-bound-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string missing = Path.Combine(directory, "missing.trx");
+            string empty = Path.Combine(directory, "empty.trx");
+            string malformed = Path.Combine(directory, "malformed.trx");
+            string oversized = Path.Combine(directory, "oversized.trx");
+            string valid = Path.Combine(directory, "valid.trx");
+            File.WriteAllText(empty, "");
+            File.WriteAllText(malformed, "<TestRun><Results>");
+            using (var stream = new FileStream(oversized, FileMode.CreateNew)) stream.SetLength(AttributionRuntime.PlannedEvidence.MaximumTrxBytes + 1);
+            File.WriteAllText(valid, "<TestRun><ResultSummary outcome=\"Completed\" /></TestRun>");
+            foreach (string path in new[] { missing, empty, malformed, oversized })
+                Assert.Equal(EvidenceFailure.Format, Assert.Throws<EvidenceException>(() => AttributionRuntime.PlannedEvidence.LoadTrx(path)).Reason);
+            Assert.Equal("TestRun", AttributionRuntime.PlannedEvidence.LoadTrx(valid).Root?.Name.LocalName);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ExplicitNullBundleContextAndAssemblyAreTypedFailures()
+    {
+        // ValidateBundle read inventory.Context.SourceTree and every assembly's AssemblyFile before any
+        // null check, so both inputs below threw NullReferenceException instead of typed evidence.
+        var inventory = new DiscoveryManifest(1, "tests", new("tree", "fingerprint", "profile"), []);
+        var snapshot = new SourceSnapshot(1, "tree", "Tests.dll", "a", "b", "c", SourceMapStatus.Verified, []);
+        var source = new SourceBundleSnapshot(1, "tree", "Tests.dll", [snapshot]);
+        Assert.Equal(EvidenceFailure.Context, Assert.Throws<EvidenceException>(() =>
+            LocalEvidenceReader.ValidateBundle(source, WithNull(inventory, "Context"), "bundle")).Reason);
+
+        var options = new JsonSerializerOptions();
+        options.Converters.Add(new JsonStringEnumConverter());
+        JsonNode document = JsonSerializer.SerializeToNode(source, options) ?? throw new InvalidOperationException();
+        (document["Assemblies"] ?? throw new InvalidOperationException()).AsArray()[0] = null;
+        var withNullEntry = ExecutionEvidence.ReadDocument<SourceBundleSnapshot>(document.ToJsonString());
+        Assert.Equal(EvidenceFailure.Context, Assert.Throws<EvidenceException>(() =>
+            LocalEvidenceReader.ValidateBundle(withNullEntry, inventory, "bundle")).Reason);
+    }
+
+    [Fact]
     public async Task DeadlineTerminatesProcessesStalledInOutputOrExit()
     {
         foreach (bool stalledOutput in new[] { true, false })

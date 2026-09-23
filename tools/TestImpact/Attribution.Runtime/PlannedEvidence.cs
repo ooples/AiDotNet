@@ -6,6 +6,35 @@ namespace AttributionRuntime;
 
 public static class PlannedEvidence
 {
+    /// <summary>Largest TRX this reader will materialise: generous for a full shard, far short of harmful.</summary>
+    internal const long MaximumTrxBytes = 64L * 1024 * 1024;
+
+    /// <summary>
+    /// Loads a TRX with a size bound. An imported TRX comes from a pull-request artifact, and the archive
+    /// and extraction limits bound the archive rather than this one file, so without a local bound a large
+    /// TRX is fully materialised as a DOM before any validation runs. Missing, empty, oversized and
+    /// malformed input all fail as typed Format evidence rather than an untyped I/O or XML exception.
+    /// </summary>
+    internal static XDocument LoadTrx(string trxPath)
+    {
+        var file = new FileInfo(trxPath);
+        if (!file.Exists || file.Length <= 0 || file.Length > MaximumTrxBytes)
+            throw new EvidenceException(EvidenceFailure.Format, "Missing, empty or oversized TRX evidence.");
+        try
+        {
+            using var reader = XmlReader.Create(trxPath, new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersInDocument = MaximumTrxBytes
+            });
+            return XDocument.Load(reader);
+        }
+        catch (XmlException exception)
+        {
+            throw new EvidenceException(EvidenceFailure.Format, $"Malformed or oversized TRX evidence: {exception.Message}");
+        }
+    }
     // Consistency validation only. Workflow origin must still be authenticated
     // by the caller. Worker-backed execution needs a multi-bundle binding and
     // is deliberately not reusable through this single-bundle path.
@@ -53,8 +82,7 @@ public static class PlannedEvidence
             results.Add(new(execution.Case.Id, CaseOutcome.Passed));
             if (execution.Case.Kind == DiscoveredCaseKind.Enumerated) standardCases.Add(execution.Case.Id);
         }
-        using var reader = XmlReader.Create(trxPath, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
-        XDocument trx = XDocument.Load(reader);
+        XDocument trx = LoadTrx(trxPath);
         XElement[] actual = trx.Descendants().Where(element => element.Name.LocalName == "UnitTestResult").ToArray();
         XElement[] summaries = trx.Descendants().Where(element => element.Name.LocalName == "ResultSummary").ToArray();
         if (summaries.Length != 1 || (string?)summaries[0].Attribute("outcome") != "Completed" || actual.Length == 0 ||

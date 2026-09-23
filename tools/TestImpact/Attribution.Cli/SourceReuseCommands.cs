@@ -105,6 +105,12 @@ internal static class LocalEvidenceReader
 
     public static void ValidateBundle(SourceBundleSnapshot source, DiscoveryManifest inventory, string bundle)
     {
+        // Every member here arrives from JSON, where a reference-typed field can be an explicit null. A
+        // missing context or a null assembly entry must fail as evidence, not as a NullReferenceException
+        // from the SourceTree read or the Count/Select lambdas below.
+        if (source is null || inventory?.Context is null || source.Assemblies is null ||
+            source.Assemblies.Any(snapshot => snapshot is null))
+            throw new EvidenceException(EvidenceFailure.Context, "Source snapshot differs from the discovered binary bundle.");
         if (source.Schema != 1 || source.SourceTree != inventory.Context.SourceTree || source.Assemblies is null || source.Assemblies.Length == 0 ||
             source.Assemblies.Count(snapshot => snapshot.AssemblyFile == source.TestAssembly) != 1 ||
             source.Assemblies.Select(snapshot => snapshot.AssemblyFile).Distinct(StringComparer.OrdinalIgnoreCase).Count() != source.Assemblies.Length ||

@@ -228,7 +228,8 @@ try {
     Check ($LASTEXITCODE -eq 0) 'Workflow import protocol tests failed.'
     [xml] $workflowTrx = Get-Content -LiteralPath (Join-Path $root 'workflow-protocol/results.trx') -Raw
     $workflowCases = @($workflowTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-    Check ($workflowCases.Count -eq 21 -and @($workflowCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
+    # 23 = 21 plus the two review-driven boundary cases: explicit-null bundle members and the TRX size bound.
+    Check ($workflowCases.Count -eq 23 -and @($workflowCases | Where-Object { $_.outcome -cne 'Passed' }).Count -eq 0) `
         'Workflow import checks did not execute the expected complete set.'
     $sourceAssembly = Join-Path $original 'AttributionSubject.dll'
     $originalHash = (Get-FileHash -LiteralPath $sourceAssembly).Hash
