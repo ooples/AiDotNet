@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 using AiDotNet.VisionLanguage.Encoders;
@@ -10,6 +11,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the Generative model. Default values follow the original paper settings.</para>
 /// </remarks>
+[DimensionDivisibility(nameof(DecoderDim), nameof(NumHeads))]
 public class GenerativeVLMOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>

@@ -374,7 +374,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
                 dot += syntheticFeatures[s][d] * NumOps.ToDouble(prototype[d]);
             agreement += dot;
         }
-        agreement /= syntheticFeatures.Length * _prototypeDim;
+        agreement /= (double)syntheticFeatures.Length * _prototypeDim;
 
         // Scale gradient: higher agreement → more confidence in gradient direction
         double scale = 1.0 + 0.1 * Math.Tanh(agreement);

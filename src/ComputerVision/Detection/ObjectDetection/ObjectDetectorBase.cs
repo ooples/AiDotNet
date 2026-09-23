@@ -45,14 +45,17 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     protected IDetectionBackbone<T>? Backbone { get; set; }
 
     /// <summary>
-    /// The neck module for feature fusion.
+    /// The neck module for feature fusion. Optional: a detector such as DETR feeds the
+    /// backbone straight into its transformer and has no neck at all.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter(Optional = true)]
     protected NeckBase<T>? Neck { get; set; }
 
     /// <summary>
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    [AiDotNet.Attributes.ParameterAlias(nameof(Backbone))]
     protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
@@ -61,6 +64,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Gets the neck module, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when neck has not been initialized.</exception>
+    [AiDotNet.Attributes.ParameterAlias(nameof(Neck))]
     protected NeckBase<T> EnsureNeck =>
         Neck ?? throw new InvalidOperationException(
             $"{GetType().Name}: Neck not initialized. Ensure the model is properly constructed.");

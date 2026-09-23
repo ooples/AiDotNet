@@ -375,10 +375,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     var kind = ComponentKindFor(memberType, elem, isDeclaredSlot: member.IsAbstract);
                     if (kind == "one")
                     {
+                        // [TrainableParameter(Optional = true)] declares that the owner may simply not
+                        // have this component (DETR has no neck). Its null must then be the resolved
+                        // ParameterFree zero that optional: true reports, as for the adapter branch
+                        // below; without it the null read as ShapeDeferred and took the whole model's
+                        // parameter surface offline.
+                        var availability = AvailabilityExpression(member, classification.Kind);
+                        bool declaredOptional = availability.EndsWith(".Conditional", System.StringComparison.Ordinal);
                         components.Add((member.Name,
-                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
+                            declaredOptional
+                                ? $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name}, optional: true)"
+                                : $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
                             RoleExpression(classification.Kind),
-                            AvailabilityExpression(member, classification.Kind)));
+                            availability));
                         continue;
                     }
                     if (kind == "adapt")

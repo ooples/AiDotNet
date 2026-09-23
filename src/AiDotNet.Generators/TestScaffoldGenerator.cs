@@ -5096,18 +5096,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ClipTokenizerFactory.CreateShapeCompatibleForTesting exists precisely for this - a
             // real BPE tokenizer at a bounded vocabulary - so the fixture uses the repository's own
             // intended construction path rather than a stub that would not tokenize.
-            if (model.ExtendsTextConditioningBase)
+            //
+            // The threshold-gated image modules (two classifiers and the watermark detector) report a
+            // finding only when its score clears the threshold, so on random content they correctly
+            // report nothing and the confidence invariants would examine no findings at all. A zero
+            // threshold makes every score report, so those invariants run over the real scores.
+            if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
+            {
+                constructorExpr = $"new {typeName}<double>(threshold: 0.0)";
+            }
+            else if (model.ClassName is "ImageWatermarker")
+            {
+                constructorExpr = $"new {typeName}<double>(detectionThreshold: 0.0)";
+            }
+            else if (model.ExtendsTextConditioningBase)
             {
                 // Bounded size, not the variant: several conditioners have no small variant at all
                 // (ChatGLM3 is 6B only, Gemma's floor is 2B, Qwen2's 1.5B), and at paper scale the
                 // generated suite reached 4 of 8 classes in 18 minutes while one testhost climbed past
-                // 40 GB. The explicit dimension overrides default to each variant's paper values, so
-                // production behaviour is unchanged. numKvHeads exists only on the two GQA models.
+                // 40 GB. TextConditionerOptions leaves each variant's paper values in place when
+                // unset, so production behaviour is unchanged. NumKvHeads is read only by the two
+                // GQA models.
                 bool groupedQuery = model.ClassName is "ChatGLM3TextConditioner" or "Qwen2TextConditioner";
                 constructorExpr = $"new {typeName}<double>("
                     + "AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), "
-                    + "hiddenSize: 16, numLayers: 1, numHeads: 2"
-                    + (groupedQuery ? ", numKvHeads: 2" : string.Empty) + ")";
+                    + "options: new AiDotNet.Diffusion.Conditioning.TextConditionerOptions "
+                    + "{ HiddenSize = 16, NumLayers = 1, NumHeads = 2"
+                    + (groupedQuery ? ", NumKvHeads = 2" : string.Empty) + " })";
             }
             else if (model.ExtendsVisionDetectorBase && model.VisionDetectorOptionsType.Length > 0)
             {
@@ -12892,6 +12907,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (family == TestFamily.TimeSeries && model.ExtendsAnomalyDetectorBase)
         {
             sb.AppendLine("    protected override bool IsForecastingModel => false;");
+        }
+
+        if (family == TestFamily.SafetyModule)
+        {
+            // The image classifiers read a flat vector as a square image and pool 16x16 patches, so
+            // the base's 100-value content is smaller than one patch and yields nothing. 32x32 gives
+            // them four patches to score (their constructor pin sets a zero threshold).
+            if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
+                sb.AppendLine("    protected override int ContentSize => 1024;");
+
+            // A multimodal guardrail judges text/image and text/audio pairs; a bare content vector
+            // has no pair, so by design Evaluate(Vector) reports no findings.
+            if (model.ClassName is "MultimodalGuardrail")
+                sb.AppendLine("    protected override bool ProducesFindings => false;");
         }
 
         // Override InputShape/OutputShape for domain-appropriate test data.
