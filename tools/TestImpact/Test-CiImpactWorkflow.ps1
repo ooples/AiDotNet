@@ -806,9 +806,17 @@ Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (
 # The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
 # pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run;
 # losing either half silently restores the ~2-hour floor on every pull request and master push.
-Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and
-    $validation.Contains("`$_.PSObject.Properties['nightlyOnly'] -and `$_.nightlyOnly -eq `$true })")) `
+Assert-Contract ($validation.Contains("if (-not `$escalate -and `$null -ne `$selectionRoutes -and") -and
+    $validation.Contains("if (`$shard.PSObject.Properties['nightlyOnly'] -and `$shard.nightlyOnly -eq `$true)")) `
     'nightly-only sweep shards are no longer deferred out of pull request and push matrices'
+# The deferral must keep a sweep whose own definition changed, and one that is the only shard still
+# running a changed test file. Measured on #2244 itself: without the first, the change introducing
+# nightlyOnly removed the 46 shards it had to prove and validated on 2.
+Assert-Contract ($validation.Contains("if (`$why -ceq 'its manifest or execution policy changed') { [void] `$keep.Add(`$name) }") -and
+    $validation.Contains("if (`$stillRun -eq 0) { foreach (`$owner in `$owners) { [void] `$keep.Add(`$owner) } }")) `
+    'the nightly-only deferral no longer keeps a sweep that its own change or a changed test file requires'
+Assert-Contract ($validation.Contains("`$selectionRoutes = @(`$routesProperty.Value | ForEach-Object { [string] `$_ })")) `
+    'the nightly-only deferral no longer reads the selector''s per-shard routes'
 $nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath '.github/test-shards.yml' -Raw), '(?m)^    nightlyOnly: true\r?$').Count
 Assert-Contract ($nightlyOnlyEntries -eq 46) `
     "expected 46 nightlyOnly sweep/conformance shards in test-shards.yml, found $nightlyOnlyEntries"
