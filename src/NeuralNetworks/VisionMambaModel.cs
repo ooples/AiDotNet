@@ -51,8 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
 ///         architecture,
-///         imageHeight: 224, imageWidth: 224, patchSize: 16,
-///         modelDimension: 384, numLayers: 24))
+///         new AiDotNet.NeuralNetworks.Options.VisionMambaOptions
+///         {
+///             ImageHeight = 224, ImageWidth = 224, PatchSize = 16,
+///             ModelDimension = 384, NumLayers = 24
+///         }))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(image);
 /// </code>
