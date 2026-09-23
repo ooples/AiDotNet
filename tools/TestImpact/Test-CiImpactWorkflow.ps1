@@ -756,6 +756,16 @@ foreach ($expected in $expectedInventoryShards) {
             "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
         Assert-Contract ($entry.Contains('    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0')) `
             "inventory shard '$($expected.Name)' does not instrument the worker its models run in"
+        # Worker-backed sweeps exercise every model, so they run nightly rather than on every pull
+        # request. Asserted per shard, so the flag cannot drift onto a different shard unnoticed.
+        Assert-Contract ($entry -match '(?m)^    nightlyOnly: true[ \t]*\r?$') `
+            "worker-backed sweep '$($expected.Name)' is not nightlyOnly, so it runs on every pull request"
+    }
+    else {
+        # Inventory shards with no worker (ParameterEnumerationParityTests, the contract surveys) are
+        # cheap and stay on pull requests.
+        Assert-Contract (-not ($entry -match '(?m)^    nightlyOnly:')) `
+            "inventory shard '$($expected.Name)' has no worker yet is nightlyOnly, so pull requests stop running it"
     }
     foreach ($pair in $expected.Env) {
         Assert-Contract ($entry.Contains("      $pair")) "inventory shard '$($expected.Name)' lost its env '$pair'"
@@ -810,6 +820,46 @@ Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps
     'the shard step does not apply the entry env through the validated helper'
 Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
     'a shard declaring heavy: true does not get the heavy path'
+# The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
+# pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run by
+# Get-DeferredNightlyShards, whose keep rules Test-CiWorkloads.ps1 exercises; this guards the wiring.
+Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and
+    $validation.Contains("[string[]] @(Get-DeferredNightlyShards -Shards @(`$matrixShards) -Routes `$selectionRoutes),")) `
+    'nightly-only sweep shards are no longer deferred out of pull request and push matrices'
+Assert-Contract ($validation.Contains("`$selectionRoutes = @(`$routesProperty.Value | ForEach-Object { [string] `$_ })")) `
+    'the nightly-only deferral no longer reads the selector''s per-shard routes'
+# GitHub evaluates a run: block that contains an expression as ONE expression, capped at 21,000
+# characters. Past it the workflow cannot load at all: no pull request run is created, only a 0-job
+# push run "likely failed because of a workflow file issue" - which is how the Select step broke at
+# 22,355. yq, the PowerShell parser and actionlint all accepted that file, so nothing else catches it.
+foreach ($workflowFile in @(Get-ChildItem -LiteralPath (Split-Path -Parent $ValidationWorkflow) -Filter '*.yml')) {
+    $lines = [IO.File]::ReadAllLines($workflowFile.FullName)
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $key = [regex]::Match($lines[$i], '^(?<indent>\s*)(?:- )?run: [|>][-+]?\s*$')
+        if (-not $key.Success) { continue }
+        $keyIndent = $key.Groups['indent'].Value.Length
+        $body = [System.Collections.Generic.List[string]]::new()
+        $bodyIndent = -1
+        for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            $line = $lines[$j]
+            if ($line.Trim().Length -eq 0) { $body.Add(''); continue }
+            $indent = $line.Length - $line.TrimStart().Length
+            if ($indent -le $keyIndent) { break }
+            if ($bodyIndent -lt 0) { $bodyIndent = $indent }
+            $body.Add($line.Substring([Math]::Min($bodyIndent, $indent)))
+        }
+        $text = ($body -join "`n").TrimEnd()
+        if ($text.Contains('${{')) {
+            Assert-Contract ($text.Length -lt 21000) `
+                "$($workflowFile.Name) line $($i + 1): run block is $($text.Length) characters with an expression; GitHub rejects the whole workflow at 21,000 - move logic into a script"
+        }
+    }
+}# Every worker-backed inventory shard is nightlyOnly (asserted per shard above). Matching the total
+# closes the other direction: no shard OUTSIDE that set can carry the flag either.
+$workerBackedCount = @($expectedInventoryShards | Where-Object { $_.ContainsKey('MustCover') }).Count
+$nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath $ShardManifest -Raw), '(?m)^    nightlyOnly: true[ \t]*\r?$').Count
+Assert-Contract ($workerBackedCount -eq 46 -and $nightlyOnlyEntries -eq $workerBackedCount) `
+    "expected nightlyOnly on exactly the 46 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'

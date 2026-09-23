@@ -823,6 +823,9 @@ jobs:
           $escalate = $true
           $requiresValidation = $true
           $selected = @()
+          # Per-shard reasons from the mapped selector ("<shard> <= <why>"). Null on every other
+          # path, which makes the nightly-only deferral below keep everything.
+          $selectionRoutes = $null
 
           # Two independent reasons to refuse to reduce, reported separately so the log says which
           # one applied. Folding them into one flag made a self-test failure on a PR print "not a
@@ -947,6 +950,10 @@ jobs:
                 $escalate = $selectionEscalated
                 $requiresValidation = $true
                 $selected = @($shardsProperty.Value)
+                $routesProperty = $result.PSObject.Properties['routes']
+                if ($null -ne $routesProperty -and $routesProperty.Value -is [System.Array]) {
+                  $selectionRoutes = @($routesProperty.Value | ForEach-Object { [string] $_ })
+                }
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
@@ -986,6 +993,20 @@ jobs:
             else {
               Write-Host "selected $($matrixShards.Count) of $($all.Count) shard(s)"
               foreach ($s in $matrixShards) { Write-Host "  $($s.name)" }
+            }
+          }
+
+          # Sweeps and conformance windows run nightly, not on every pull request and push; which
+          # selected ones may be deferred, and why, is Get-DeferredNightlyShards (CiWorkloadKinds.ps1).
+          # An escalated selection still runs the complete matrix.
+          if (-not $escalate -and $env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {
+            . ./tools/TestImpact/CiWorkloadKinds.ps1
+            $deferredNames = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]] @(Get-DeferredNightlyShards -Shards @($matrixShards) -Routes $selectionRoutes),
+                [System.StringComparer]::Ordinal)
+            if ($deferredNames.Count -gt 0) {
+              $matrixShards = @($matrixShards | Where-Object { -not $deferredNames.Contains([string] $_.name) })
+              Write-Host "deferred $($deferredNames.Count) nightly-only shard(s) to the nightly coverage run; running $($matrixShards.Count)"
             }
           }
 
