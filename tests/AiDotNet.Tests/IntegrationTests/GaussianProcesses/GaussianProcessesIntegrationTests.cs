@@ -247,14 +247,28 @@ public class GaussianProcessesIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MultiOutputGP_Fit_ThrowsInvalidOperation()
+    public async Task MultiOutputGP_Fit_IsTheOneOutputCaseOfFitMultiOutput()
     {
-        var kernel = new GaussianKernel<double>();
-        var gp = new MultiOutputGaussianProcess<double>(kernel);
+        // Fit(Matrix, Vector) is the IFullModel entry point; it fits the target as one output
+        // column, so it must agree with FitMultiOutput on that same column.
         var (X, y) = CreateLinearTrainingData();
+        var viaFit = new MultiOutputGaussianProcess<double>(new GaussianKernel<double>());
+        viaFit.Fit(X, y);
 
-        // MultiOutput GP requires FitMultiOutput, not Fit
-        Assert.Throws<InvalidOperationException>(() => gp.Fit(X, y));
+        var Y = new Matrix<double>(y.Length, 1);
+        for (int i = 0; i < y.Length; i++)
+            Y[i, 0] = y[i];
+        var viaMultiOutput = new MultiOutputGaussianProcess<double>(new GaussianKernel<double>());
+        viaMultiOutput.FitMultiOutput(X, Y);
+
+        for (int i = 0; i < X.Rows; i++)
+        {
+            var (mean, _) = viaFit.Predict(X.GetRow(i));
+            var (means, _) = viaMultiOutput.PredictMultiOutput(X.GetRow(i));
+            Assert.Equal(means[0], mean, 9);
+            Assert.True(Math.Abs(mean - y[i]) < 1.0,
+                $"MultiOutput GP Fit at x={X[i, 0]}: predicted {mean}, expected {y[i]}");
+        }
     }
 
     [Fact(Timeout = 120000)]

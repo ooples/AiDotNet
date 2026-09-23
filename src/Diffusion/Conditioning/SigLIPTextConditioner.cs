@@ -31,6 +31,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 public class SigLIPTextConditioner<T> : TextConditioningBase<T>
 {
     private readonly SigLIPVariant _variant;
+    /// <summary>The caller's dimensions, copied so later edits to their object cannot resize this one.</summary>
+    private readonly TextConditionerOptions _options;
     /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
     private readonly int? _hiddenSizeOverride;
     private readonly int? _numLayersOverride;
@@ -38,35 +40,34 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => true;
 
-    /// <param name="hiddenSize">Transformer width. Defaults to the variant's paper value; the
-    /// conditioner's embedding dimension follows it.</param>
-    /// <param name="numLayers">Transformer depth. Defaults to the variant's paper value.</param>
-    /// <param name="numHeads">Attention heads; must divide <paramref name="hiddenSize"/>.
-    /// Defaults to the variant's paper value.</param>
+    /// <param name="options">Optional transformer dimensions; each unset value keeps the
+    /// variant's paper value, and the embedding dimension follows the hidden size.</param>
     public SigLIPTextConditioner(
         ITokenizer tokenizer,
         SigLIPVariant variant = SigLIPVariant.Base,
         NeuralNetworkArchitecture<T>? architecture = null,
-        int? hiddenSize = null,
-        int? numLayers = null,
-        int? numHeads = null)
+        TextConditionerOptions? options = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
             tokenizer: tokenizer,
             maxSequenceLength: 64,
-            embeddingDimension: hiddenSize ?? GetEmbeddingDim(variant))
+            embeddingDimension: options?.HiddenSize ?? GetEmbeddingDim(variant))
     {
         Guard.NotNull(tokenizer);
         _variant = variant;
-        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
-        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
-        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
+        _options = new TextConditionerOptions(options ?? new TextConditionerOptions());
+        int? hiddenSize = _options.HiddenSize;
+        int? numLayers = _options.NumLayers;
+        int? numHeads = _options.NumHeads;
+        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "HiddenSize must be positive.");
+        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumLayers must be positive.");
+        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumHeads must be positive.");
         int effectiveHidden = hiddenSize ?? GetHiddenSize(variant);
         int effectiveHeads = numHeads ?? GetNumHeads(variant);
         if (effectiveHidden % effectiveHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({effectiveHidden}) must be divisible by numHeads ({effectiveHeads}).",
-                nameof(numHeads));
+                nameof(options));
         _hiddenSizeOverride = hiddenSize;
         _numLayersOverride = numLayers;
         _numHeadsOverride = numHeads;

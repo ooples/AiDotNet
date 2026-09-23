@@ -219,6 +219,7 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    [AiDotNet.Attributes.ParameterAlias(nameof(Backbone))]
     protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");

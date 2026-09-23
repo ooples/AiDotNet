@@ -1210,7 +1210,7 @@ public class NTMMemory<T>
             double normValue = NumOps.ToDouble(rowNorm);
             usage = NumOps.Add(usage, NumOps.FromDouble(Math.Sqrt(Math.Max(0, normValue))));
         }
-        return NumOps.Divide(usage, NumOps.FromDouble(_size * _width));
+        return NumOps.Divide(usage, NumOps.FromDouble((double)_size * _width));
     }
 
     /// <summary>
@@ -1404,7 +1404,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
         // Initialize LSTM weights with Xavier/Glorot initialization
         double inputScale = Math.Sqrt(2.0 / (_inputSize + _hiddenSize));
-        double hiddenScale = Math.Sqrt(2.0 / (_hiddenSize * 2));
+        double hiddenScale = Math.Sqrt(2.0 / (2.0 * _hiddenSize));
 
         // LSTM gates: i, f, c, o (input, forget, cell, output)
         _weightsInput = InitializeTensor(new int[] { 4 * _hiddenSize, _inputSize }, inputScale);

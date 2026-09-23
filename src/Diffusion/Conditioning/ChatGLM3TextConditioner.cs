@@ -31,6 +31,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 {
     private readonly ChatGLM3Variant _variant;
+    /// <summary>The caller's dimensions, copied so later edits to their object cannot resize this one.</summary>
+    private readonly TextConditionerOptions _options;
     /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
     private readonly int? _hiddenSizeOverride;
     private readonly int? _numLayersOverride;
@@ -39,44 +41,41 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    /// <param name="hiddenSize">Transformer width. Defaults to the variant's paper value; the
-    /// conditioner's embedding dimension follows it.</param>
-    /// <param name="numLayers">Transformer depth. Defaults to the variant's paper value.</param>
-    /// <param name="numHeads">Attention heads; must divide <paramref name="hiddenSize"/>.
-    /// Defaults to the variant's paper value.</param>
-    /// <param name="numKvHeads">Key/value heads for grouped-query attention; must divide
-    /// <paramref name="numHeads"/>. Defaults to the variant's paper value.</param>
+    /// <param name="options">Optional transformer dimensions; each unset value keeps the
+    /// variant's paper value, and the embedding dimension follows the hidden size.</param>
     public ChatGLM3TextConditioner(
         ITokenizer tokenizer,
         ChatGLM3Variant variant = ChatGLM3Variant.SixB,
         NeuralNetworkArchitecture<T>? architecture = null,
-        int? hiddenSize = null,
-        int? numLayers = null,
-        int? numHeads = null,
-        int? numKvHeads = null)
+        TextConditionerOptions? options = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: hiddenSize ?? GetEmbeddingDim(variant))
+            embeddingDimension: options?.HiddenSize ?? GetEmbeddingDim(variant))
     {
         Guard.NotNull(tokenizer);
         _variant = variant;
-        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
-        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
-        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
+        _options = new TextConditionerOptions(options ?? new TextConditionerOptions());
+        int? hiddenSize = _options.HiddenSize;
+        int? numLayers = _options.NumLayers;
+        int? numHeads = _options.NumHeads;
+        int? numKvHeads = _options.NumKvHeads;
+        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "HiddenSize must be positive.");
+        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumLayers must be positive.");
+        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumHeads must be positive.");
         int effectiveHidden = hiddenSize ?? GetHiddenSize(variant);
         int effectiveHeads = numHeads ?? GetNumHeads(variant);
         if (effectiveHidden % effectiveHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({effectiveHidden}) must be divisible by numHeads ({effectiveHeads}).",
-                nameof(numHeads));
-        if (numKvHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(numKvHeads));
+                nameof(options));
+        if (numKvHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumKvHeads must be positive.");
         int effectiveKvHeads = numKvHeads ?? GetNumKvHeads(variant);
         if (effectiveHeads % effectiveKvHeads != 0)
             throw new ArgumentException(
                 $"numHeads ({effectiveHeads}) must be divisible by numKvHeads ({effectiveKvHeads}).",
-                nameof(numKvHeads));
+                nameof(options));
         _hiddenSizeOverride = hiddenSize;
         _numLayersOverride = numLayers;
         _numHeadsOverride = numHeads;
