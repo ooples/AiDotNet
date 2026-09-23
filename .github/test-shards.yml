@@ -612,7 +612,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.Sl|
+      (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.Sk|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.Sl|
       FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.So|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.Sp|
       FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sq|FullyQualifiedName~Generated.Sil|
       FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.SIm|
