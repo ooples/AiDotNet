@@ -27,6 +27,8 @@ namespace AiDotNet.Interfaces;
 /// **Example:**
 /// ```csharp
 /// var benchmark = new GSM8KBenchmark&lt;double&gt;();
+/// // your model answers one question at a time
+/// Func&lt;string, Task&lt;string&gt;&gt; reasoner = question =&gt; Task.FromResult("42");
 /// var results = await benchmark.EvaluateAsync(reasoner, sampleSize: 100);
 /// // Result is available in the returned value // "Accuracy: 87.5%"
 /// ```

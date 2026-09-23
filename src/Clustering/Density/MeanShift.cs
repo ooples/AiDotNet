@@ -72,9 +72,9 @@ public partial class MeanShift<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The MeanShift options.</param>
     public MeanShift(MeanShiftOptions<T>? options = null)
-        : base(options ?? new MeanShiftOptions<T>())
+        : base(options ??= new MeanShiftOptions<T>())
     {
-        _options = options ?? new MeanShiftOptions<T>();
+        _options = options;
     }
 
     /// <summary>

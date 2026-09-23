@@ -46,9 +46,9 @@ namespace AiDotNet.Audio.Classification;
 /// var result = beats.Detect(audioTensor);
 ///
 /// // Native training mode
-/// var options = new BEATsOptions { EmbeddingDim = 768, NumEncoderLayers = 12 };
-/// var beats = new BEATs&lt;float&gt;(options);
-/// beats.Train(features, labels);
+/// var options2 = new BEATsOptions { EmbeddingDim = 768, NumEncoderLayers = 12 };
+/// var beats2 = new BEATs&lt;float&gt;(options2);
+/// beats2.Train(features, labels);
 /// </code>
 /// </para>
 /// <para>

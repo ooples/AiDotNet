@@ -39,6 +39,7 @@ namespace AiDotNet.Diffusion.Audio;
 ///     nMels: 128,
 ///     nFft: 2048
 /// );
+/// var audioSignal = Tensor&lt;float&gt;.CreateRandom(44100);   // one second at 44.1 kHz
 /// var mel = melSpec.Forward(audioSignal);
 /// // mel.Shape = [numFrames, nMels]
 /// ```

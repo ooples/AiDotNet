@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -64,6 +65,8 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
+[PaperOptimizer(OptimizerKind.Adam, Provenance = RecipeProvenance.PerDataset,
+                Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. The paper tunes the learning rate manually per dataset, so there is no single value to declare and the provenance says so rather than the omission being silent.")]
 public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Native Mode Fields
@@ -275,7 +278,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         // caller passed nothing. Same wiring Chronos, MOIRAI, SimMTM, TOTEM and TOTO use.
         // DeepAR (Salinas et al. 2020) section 4: Adam at 1e-3, which is DeepAROptions.LearningRate's
         // default - but a caller who changes it must actually get the rate they asked for.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate });
         SetBaseTrainOptimizer(_optimizer);
@@ -340,7 +345,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         // caller passed nothing. Same wiring Chronos, MOIRAI, SimMTM, TOTEM and TOTO use.
         // DeepAR (Salinas et al. 2020) section 4: Adam at 1e-3, which is DeepAROptions.LearningRate's
         // default - but a caller who changes it must actually get the rate they asked for.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate });
         SetBaseTrainOptimizer(_optimizer);

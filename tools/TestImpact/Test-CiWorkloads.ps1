@@ -25,6 +25,33 @@ foreach ($bad in @('', 'Unknown', 'parametersweep', '1', 1, $null)) {
     catch { $rejected = $true }
     Assert-True $rejected 'Malformed workload kind was silently omitted.'
 }
+# Get-DeferredNightlyShards: which selected nightlyOnly shards a pull request or push may leave to the
+# nightly run. Each case is one reason the selector can give, taken from real runs.
+$unit = [pscustomobject]@{ name = 'Unit - Finance' }
+$swA = [pscustomobject]@{ name = 'Sweep - Count 0/8'; nightlyOnly = $true }
+$swB = [pscustomobject]@{ name = 'Sweep - Count 1/8'; nightlyOnly = $true }
+$conf = [pscustomobject]@{ name = 'Conformance - offset 0'; nightlyOnly = $true }
+$picked = @($unit, $swA, $swB, $conf)
+function Get-Deferred([string[]] $Routes) { @(Get-DeferredNightlyShards -Shards $picked -Routes $Routes) | Sort-Object }
+Assert-True (@(Get-DeferredNightlyShards -Shards $picked -Routes $null).Count -eq 0) `
+    'Nightly shards were deferred without selector routes, where no reason for them is known.'
+Assert-True (((Get-Deferred @('Sweep - Count 0/8 <= is always run', 'Sweep - Count 1/8 <= is always run',
+        'Conformance - offset 0 <= is always run', 'Unit - Finance <= is always run')) -join '|') -ceq
+        'Conformance - offset 0|Sweep - Count 0/8|Sweep - Count 1/8') `
+    'Always-run nightly shards were not all deferred, or a non-nightly shard was.'
+Assert-True (-not ((Get-Deferred @('Sweep - Count 0/8 <= its manifest or execution policy changed',
+        'Sweep - Count 1/8 <= is always run')) -contains 'Sweep - Count 0/8')) `
+    'A sweep whose own definition changed was deferred, so the change redefining it would never run it.'
+Assert-True ((Get-Deferred @('Conformance - offset 0 <= runs tests affected by tests/Finance/MaskTests.cs (its filter selects tests in this file)',
+        'Unit - Finance <= runs tests affected by tests/Finance/MaskTests.cs (its filter selects tests in this file)')) -contains 'Conformance - offset 0') `
+    'A broad sweep filter kept a Conformance window although another running shard runs the changed test file.'
+$onlyNightly = Get-Deferred @('Sweep - Count 0/8 <= runs tests affected by tests/Sweeps/CountTests.cs (its filter selects tests in this file)',
+    'Sweep - Count 1/8 <= runs tests affected by tests/Sweeps/CountTests.cs (its filter selects tests in this file)')
+Assert-True (-not ($onlyNightly -contains 'Sweep - Count 0/8') -and -not ($onlyNightly -contains 'Sweep - Count 1/8')) `
+    'A changed test file only sweeps run was deferred, or only one of the shards that split it was kept.'
+Assert-True (@(Get-DeferredNightlyShards -Shards @($unit) -Routes @('Unit - Finance <= is always run')).Count -eq 0) `
+    'A shard that is not nightlyOnly was deferred.'
+
 $workflow = Get-Content (Join-Path $PSScriptRoot '../../.github/workflows/sonarcloud.yml') -Raw
 $emitter = [regex]::Match($workflow,
     '(?ms)^          \. ./tools/TestImpact/CiWorkloadKinds\.ps1\r?\n.*?(?=^          "skipped=)')
@@ -142,5 +169,5 @@ finally {
     $env:GITHUB_OUTPUT = $previousOutput
     if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath }
 }
-Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter and six malformed kinds.'
+Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter, six malformed kinds and six nightly-deferral cases.'
 exit 0

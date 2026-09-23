@@ -76,6 +76,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var degradedPhoto = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var diffbir = new DiffBIRModel&lt;float&gt;();
 ///
@@ -257,7 +258,7 @@ public partial class DiffBIRModel<T> : LatentDiffusionModelBase<T>
     /// var model = new DiffBIRModel&lt;float&gt;();
     ///
     /// // With text conditioning for prompt-guided restoration
-    /// var model = new DiffBIRModel&lt;float&gt;(conditioner: myClipEncoder);
+    /// var model2 = new DiffBIRModel&lt;float&gt;(conditioner: myClipEncoder);
     /// </code>
     /// </para>
     /// </remarks>

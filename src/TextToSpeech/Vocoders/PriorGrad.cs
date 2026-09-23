@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Lee et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Source = "Lee et al. 2022, Sec. 4: following the publicly available implementation, a "
+                        + "2.62M parameter model with an Adam optimizer and a learning rate of 2e-4 over "
+                        + "a total of 1M iterations.")]
 public partial class PriorGrad<T> : VocoderBase<T>
 {
     private readonly PriorGradOptions _options;
@@ -240,21 +246,22 @@ public partial class PriorGrad<T> : VocoderBase<T>
         // user-supplied WeightDecay opts into AdamW while preserving every public setting.
         if (_options.WeightDecay > 0.0)
         {
-            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    BatchSize = _options.OptimizerBatchSize,
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = _options.OptimizerBeta1,
-                    Beta2 = _options.OptimizerBeta2,
-                    Epsilon = _options.OptimizerEpsilon,
-                    WeightDecay = _options.WeightDecay,
-                    UseAdaptiveBetas = false,
-                    UseAMSGrad = false,
-                    EnableGradientClipping = clipGradients,
-                    MaxGradientNorm = _options.MaxGradientNorm,
-                });
+            return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        BatchSize = _options.OptimizerBatchSize,
+                        InitialLearningRate = _options.LearningRate,
+                        Beta1 = _options.OptimizerBeta1,
+                        Beta2 = _options.OptimizerBeta2,
+                        Epsilon = _options.OptimizerEpsilon,
+                        WeightDecay = _options.WeightDecay,
+                        UseAdaptiveBetas = false,
+                        UseAMSGrad = false,
+                        EnableGradientClipping = clipGradients,
+                        MaxGradientNorm = _options.MaxGradientNorm,
+                    }));
         }
 
         return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(

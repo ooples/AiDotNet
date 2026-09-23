@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,8 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Popov et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0001,
+                Source = "Popov et al. 2021, Sec. 4: Adam with the learning rate set to 0.0001.")]
 public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GradTTSOptions _options;
@@ -93,7 +97,9 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new GradTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

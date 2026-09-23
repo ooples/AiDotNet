@@ -84,6 +84,24 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <param name="options">MetaOptNet configuration options containing the model and all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when options is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the configuration is invalid.</exception>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
+    /// // Create MetaOptNet with minimal configuration
+    /// var options = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    ///
+    /// // Create MetaOptNet with SVM solver
+    /// var options2 = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// {
+    ///     SolverType = ConvexSolverType.SVM,
+    ///     RegularizationStrength = 1.0,
+    ///     NumClasses = 5
+    /// };
+    /// var metaOptNet2 = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
+    /// </code>
+    /// </example>
     public MetaOptNetAlgorithm(MetaOptNetOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),

@@ -28,11 +28,15 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a hybrid Neural Network + ARIMA model for complex time series
 /// var options = new NeuralNetworkARIMAOptions&lt;double&gt;();
-/// var nnArima = new NeuralNetworkARIMAModel&lt;double&gt;(options);
-/// nnArima.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = nnArima.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NeuralNetworkARIMAModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

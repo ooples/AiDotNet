@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Interfaces;
@@ -178,6 +178,12 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         _targetCritic = new NeuralNetwork<T>(_criticArchitecture.CloneForModelConstruction(), lossFunction: lossFunction);
         _targetPolicyNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: lossFunction);
 
+        // All four networks are owned here, so all four are registered for disposal. The critic and the two
+        // targets arrived with master after this branch was cut; they need owning just as the policy does.
+        Networks.Add(_policyNetwork);
+        Networks.Add(_critic);
+        Networks.Add(_targetCritic);
+        Networks.Add(_targetPolicyNetwork);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
 
         SoftUpdateTargetNetwork(_critic, _targetCritic, 1.0);

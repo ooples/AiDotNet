@@ -623,8 +623,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
     ///
     /// // Use balanced sampling for class imbalance
-    /// var sampler = Samplers.Balanced(labels, numClasses: 10);
-    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    /// var sampler2 = Samplers.Balanced(labels, numClasses: 10);
+    /// var batcher2 = CreateBatcher(inputData, batchSize: 32, sampler2: sampler2);
     /// </code>
     /// </para>
     /// </remarks>
@@ -895,11 +895,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     /// <example>
     /// <code>
-    /// var optimizer = new AdamOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
-    /// optimizer.EnableMixedPrecision();
+    /// var features = new Matrix&lt;float&gt;(new float[,] { { 1.0f, 2.0f }, { 3.0f, 4.0f } });
+    /// var labels = new Vector&lt;float&gt;(new float[] { 0.0f, 1.0f });
     ///
-    /// // Or with custom configuration
-    /// optimizer.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// // Mixed precision is enabled through the builder, which turns it on for the
+    /// // gradient-based optimizer it configures.
+    /// var result = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new SimpleRegression&lt;float&gt;())
+    ///     .ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative())
+    ///     .Build(features, labels);
     /// </code>
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>

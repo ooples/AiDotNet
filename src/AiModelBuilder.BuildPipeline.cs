@@ -4709,7 +4709,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // is never a ClusteringBase<T> so the check would silently flip to false and route
             // clustering training back through the train/test split — which is exactly the bug
             // this clustering-data path was added to prevent.
-            bool useFullData = _model is Clustering.Base.ClusteringBase<T>;
+            // Survival models built through Build(features, times, events) join clustering on this
+            // path, for the same reason in a different shape: their event indicators are one value per
+            // row, supplied alongside rather than inside X, so the rows Train sees have to be the rows
+            // and the order the caller passed. A shuffled 80% subset would silently pair each subject
+            // with somebody else's censoring.
+            bool useFullData = _model is Clustering.Base.ClusteringBase<T>
+                || (_model is SurvivalAnalysis.SurvivalModelBase<T> survivalTarget
+                    && survivalTarget.HasSuppliedEvents)
+                || (_model is CausalInference.CausalModelBase<T> causalTarget
+                    && causalTarget.HasSuppliedTreatment);
             // Clustering models need ALL data points for correct density estimation.
             // Use preparedX/preparedY (the full dataset before train/test split) when
             // the preprocessing pipeline is not configured. When it IS configured,

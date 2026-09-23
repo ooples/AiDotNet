@@ -58,10 +58,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new InfoGANOptions { LatentSize = 62, NumCategoricalCodes = 10, NumContinuousCodes = 2 };
-/// var model = new InfoGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 74 });
-/// var generated = model.Predict(noise);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 74 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new InfoGAN&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -73,6 +77,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, Component = "generator",
+                Source = "Chen et al. 2016, Appendix C: learning rate is 2e-4 for D and 1e-3 for G. This row is the generator.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Component = "discriminator",
+                Source = "Chen et al. 2016, Appendix C: learning rate is 2e-4 for D and 1e-3 for G. This row is the discriminator.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Component = "qNetwork",
+                Source = "Chen et al. 2016, Appendix C: the recognition network Q shares the discriminator trunk, so it takes the discriminator rate of 2e-4. The paper states no separate rate for Q.")]
 public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
 
@@ -359,12 +369,15 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
         // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
-        // Chen et al. 2016, appendix: learning rate 2e-4 for D and 1e-3 for G. Q is D's head in the
-        // paper, so it trains at D's rate.
         _generatorOptimizer = generatorOptimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, "generator")
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateStandardGanAdamOptions(learningRate: 1e-3));
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreateStandardGanAdamOptions());
-        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork, CreateStandardGanAdamOptions());
+        _discriminatorOptimizer = discriminatorOptimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, "discriminator")
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreateStandardGanAdamOptions());
+        _qNetworkOptimizer = qNetworkOptimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, "qNetwork")
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork, CreateStandardGanAdamOptions());
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 

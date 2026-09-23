@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -39,10 +41,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabDPTOptions { NumFeatures = 20, EmbeddingDim = 128, NumLayers = 12 };
-/// var model = new TabDPTNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabDPTOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 128, NumLayers = 12 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TabDPTNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -59,6 +66,12 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.18164",
     Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
+[PaperOptimizer(OptimizerKind.ScheduleFreeAdamW, LearningRate = 5e-4, WeightDecay = 0.05,
+                Source = "Ma et al. 2024, Sec. 4: the Schedule Free optimizer of Defazio et al. with "
+                        + "AdamW, set by default to a learning rate of 5e-4 and a weight decay of 5e-2. "
+                        + "The paper reports it outperforming a cosine scheduler, so no separate "
+                        + "schedule is declared -- the optimizer subsumes it. The factory call is "
+                        + "already present at the construction site; only the declaration was missing.")]
 public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabDPTOptions<T> _options;
@@ -113,7 +126,9 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
         // model reached its floor the optimizer kept taking full-size steps and oscillated there:
         // 50 iterations landed at 7.43e-05 while 200 landed at 1.83e-04, i.e. more training made it
         // mildly worse rather than settling. A decaying rate lets it settle instead.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 1e-4,

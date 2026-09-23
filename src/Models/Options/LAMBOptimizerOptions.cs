@@ -25,14 +25,16 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 /// <example>
 /// <code>
+/// var batchSize = 32;
 /// var options = new LAMBOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {
-///     LearningRate = 0.00176 * Math.Sqrt(batchSize),  // Square root scaling for LAMB
+///     InitialLearningRate = 0.00176 * Math.Sqrt(batchSize),  // Square root scaling for LAMB
 ///     Beta1 = 0.9,
 ///     Beta2 = 0.999,
 ///     WeightDecay = 0.01,
 ///     BatchSize = 8192
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new LAMBOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>

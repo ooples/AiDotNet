@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Mehta et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 32,
+                Source = "Mehta et al. 2024, Sec. 4: a learning rate of 1e-4 at a batch size of 32. The "
+                        + "optimizer is left unspecified because the paper does not name one in its "
+                        + "training description.")]
 public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MatchaTTSOptions _options;
@@ -81,7 +87,9 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new MatchaTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
