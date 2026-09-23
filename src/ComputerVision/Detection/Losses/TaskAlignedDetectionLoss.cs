@@ -234,8 +234,11 @@ public sealed class TaskAlignedDetectionLoss<T>
             {
                 int anchor = levelStart[level] + cell;
                 anchorLevel[anchor] = level;
-                anchorX[anchor] = (cell % widths[level] + 0.5) * stride;
-                anchorY[anchor] = (cell / widths[level] + 0.5) * stride;
+                // Row-major grid: the integer quotient is the row, the remainder the column.
+                int row = cell / widths[level];
+                int column = cell % widths[level];
+                anchorX[anchor] = (column + 0.5) * stride;
+                anchorY[anchor] = (row + 0.5) * stride;
                 for (int side = 0; side < 4; side++)
                 {
                     double expectation = ExpectedBin(distributionData[level], image, side, cells[level], cell) * stride;

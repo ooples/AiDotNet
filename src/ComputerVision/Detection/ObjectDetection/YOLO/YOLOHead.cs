@@ -154,8 +154,8 @@ internal class YOLOHead<T> : CvParameterModule<T>
             int batch = output.Shape[0];
             int featH = output.Shape[2];
             int featW = output.Shape[3];
-            double scaleX = imageWidth / (double)(featW * stride);
-            double scaleY = imageHeight / (double)(featH * stride);
+            double scaleX = imageWidth / ((double)featW * stride);
+            double scaleY = imageHeight / ((double)featH * stride);
 
             for (int b = 0; b < batch; b++)
             {
@@ -495,8 +495,8 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
             int batch = clsOutput.Shape[0];
             int featH = clsOutput.Shape[2];
             int featW = clsOutput.Shape[3];
-            double scaleX = imageWidth / (double)(featW * stride);
-            double scaleY = imageHeight / (double)(featH * stride);
+            double scaleX = imageWidth / ((double)featW * stride);
+            double scaleY = imageHeight / ((double)featH * stride);
 
             for (int b = 0; b < batch; b++)
             {

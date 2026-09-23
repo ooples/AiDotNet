@@ -637,7 +637,7 @@ public partial class CRNN<T> : OCRBase<T>
         var weights = new Tensor<T>(new[] { labels.Length });
         for (int b = 0; b < labels.Length; b++)
         {
-            weights[b] = NumOps.FromDouble(1.0 / (Math.Max(1, labels[b].Length) * labels.Length));
+            weights[b] = NumOps.FromDouble(1.0 / ((double)Math.Max(1, labels[b].Length) * labels.Length));
         }
 
         return Engine.ReduceSum(Engine.TensorMultiply(perSequence, weights), null);

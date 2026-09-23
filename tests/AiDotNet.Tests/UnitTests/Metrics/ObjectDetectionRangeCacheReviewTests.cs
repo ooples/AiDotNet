@@ -165,10 +165,12 @@ public sealed class ObjectDetectionRangeCacheReviewTests
             OneImage(Det(0, 0, 10, 10, 0, 0.9)), OneImage(Det(0, 0, 10, 10, 0, 1)), 0.5, 0.5, double.Epsilon));
 
     [Fact]
-    public void Range_ZeroOverlapIsNotAMatchEvenAtZeroThreshold()
+    public void Range_ZeroOverlapMatchesOnlyAtTheInclusiveZeroThreshold()
     {
-        Assert.Equal(0.0, new ObjectDetectionMetrics<double>().MeanAveragePrecisionRange(
-            OneImage(Det(100, 100, 110, 110, 0, 0.9)), OneImage(Det(0, 0, 10, 10, 0, 1)), 0, 1, 0.1));
+        // A match is IoU at or above the threshold (as in pycocotools), so zero overlap matches at
+        // exactly 0 and at no positive threshold: AP is 1 at the first of 11 thresholds, 0 elsewhere.
+        Assert.Equal(1.0 / 11.0, new ObjectDetectionMetrics<double>().MeanAveragePrecisionRange(
+            OneImage(Det(100, 100, 110, 110, 0, 0.9)), OneImage(Det(0, 0, 10, 10, 0, 1)), 0, 1, 0.1), 12);
     }
 
     [Fact]
