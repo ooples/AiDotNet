@@ -37,6 +37,15 @@ public class BlipOptions : VisionLanguageModelOptions
         MlpDim = 3072;
     }
 
+    /// <summary>Copies every BLIP setting and its inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public BlipOptions(BlipOptions other) : base(other)
+    {
+        NumDecoderLayers = other.NumDecoderLayers;
+        MlpDim = other.MlpDim;
+    }
+
 
     /// <summary>
     /// Gets or sets the number of native text-decoder transformer blocks.

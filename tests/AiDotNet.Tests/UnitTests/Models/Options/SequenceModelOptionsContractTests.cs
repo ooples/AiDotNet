@@ -122,7 +122,7 @@ public class SequenceModelOptionsContractTests
     [InlineData(typeof(GriffinOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]
     [InlineData(typeof(HawkOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]
     [InlineData(typeof(JambaOptions), 65536, 256, 8, 0, 16, 512, 8, 0, 0.0)]
-    [InlineData(typeof(Mamba2Options), 50277, 256, 4, 8, 64, 512, 0, 0, 0.0)]
+    [InlineData(typeof(Mamba2Options), 50277, 768, 24, 24, 128, 512, 0, 0, 0.0)]
     [InlineData(typeof(MambaOptions), 50277, 256, 4, 0, 16, 512, 0, 2, 0.0)]
     [InlineData(typeof(RecurrentGemmaOptions), 256000, 256, 4, 0, 0, 512, 0, 0, 0.0)]
     [InlineData(typeof(RWKV4Options), 50277, 256, 4, 0, 0, 512, 0, 0, 0.0)]

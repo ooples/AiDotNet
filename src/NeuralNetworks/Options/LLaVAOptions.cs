@@ -38,6 +38,16 @@ public class LLaVAOptions : VisionLanguageModelOptions
         VisionEncoderType = "clip-vit-l";
     }
 
+    /// <summary>Copies every LLaVA setting and its inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public LLaVAOptions(LLaVAOptions other) : base(other)
+    {
+        NumLmLayers = other.NumLmLayers;
+        LanguageModelBackbone = other.LanguageModelBackbone;
+        VisionEncoderType = other.VisionEncoderType;
+    }
+
 
     /// <summary>
     /// Gets or sets the number of native language-model decoder blocks.

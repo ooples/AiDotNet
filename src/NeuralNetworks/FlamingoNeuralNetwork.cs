@@ -219,7 +219,10 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        // ONNX mode initialization
+        // Flamingo has one execution mode. Build the same graph the constructor builds, so a base path
+        // that re-initializes layers ends with a bound model rather than an empty one. Idempotent:
+        // InitializeNativeLayers clears Layers before rebuilding.
+        InitializeNativeLayers(_channels);
     }
 
     private void InitializeNativeLayers(int channels)

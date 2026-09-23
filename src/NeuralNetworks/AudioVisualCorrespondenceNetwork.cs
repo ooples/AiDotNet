@@ -1061,12 +1061,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         return output;
     }
 
-    private T ComputeContrastiveLoss(T similarity, T target)
-    {
-        var diff = NumOps.Subtract(target, similarity);
-        return NumOps.Multiply(diff, diff);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

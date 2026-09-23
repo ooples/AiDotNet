@@ -12,8 +12,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <para>Dao and Gu, <i>Transformers are SSMs: Generalized Models and Efficient Algorithms
 /// Through Structured State Space Duality</i> (2024), introduce the structured state-space
 /// duality formulation used by Mamba-2. Released configurations range from 130 million to
-/// 2.7 billion parameters. The existing 256-wide, four-layer defaults are the library's small
-/// configuration, not the dimensions of those pretrained checkpoints.</para>
+/// 2.7 billion parameters; the defaults are the smallest of them, Mamba-2 130M.</para>
 /// </remarks>
 /// <seealso href="https://arxiv.org/abs/2405.21060">Original Mamba-2 paper.</seealso>
 /// <seealso href="https://github.com/state-spaces/mamba">Authors' implementation and checkpoint roster.</seealso>
@@ -25,23 +24,27 @@ public class Mamba2Options : SequenceModelOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> You do not need to set any of these. They are the values the
-    /// model has always used, moved here from its constructor so they can be seen and
-    /// changed in one place.
+    /// <b>For Beginners:</b> You do not need to set any of these. They reproduce the smallest
+    /// released Mamba-2 model (about 130 million parameters). Lower them for a faster, smaller
+    /// model.
     /// </para>
     /// <para>
-    /// Carried over unchanged. Whether each matches the published paper is verified, and
-    /// corrected where it does not, in a later phase of issue #2090 — kept separate so a
-    /// change in behaviour is never buried in a mechanical move.
+    /// Each value is the Mamba-2 130M checkpoint's. VocabSize, ModelDimension and NumLayers are its
+    /// published config (state-spaces/mamba2-130m: vocab_size 50277, d_model 768, n_layer 24).
+    /// StateDimension and NumHeads are the Mamba2 layer's own defaults in the authors'
+    /// implementation, which that config does not override: d_state 128, and headdim 64 over an
+    /// expand-2 inner width, so 2 x 768 / 64 = 24 heads. MaxSequenceLength is not a paper value -
+    /// a state-space model has no positional limit and the checkpoint declares none - it is the
+    /// library's bound on the sequence it prepares.
     /// </para>
     /// </remarks>
     public Mamba2Options()
     {
         VocabSize = 50277;
-        ModelDimension = 256;
-        NumLayers = 4;
-        StateDimension = 64;
-        NumHeads = 8;
+        ModelDimension = 768;
+        NumLayers = 24;
+        StateDimension = 128;
+        NumHeads = 24;
         MaxSequenceLength = 512;
     }
 
