@@ -54,7 +54,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);
 ///
 /// // Create stratified loader - maintains 50%/30%/20% distribution
-/// var loader = new StratifiedEpisodicDataLoader&lt;double&gt;(
+/// var loader = new StratifiedEpisodicDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     nWay: 2,  // 2-way tasks

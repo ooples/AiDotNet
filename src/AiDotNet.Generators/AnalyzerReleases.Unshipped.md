@@ -87,3 +87,8 @@ AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, O
 AIDN100 | AiDotNet.ParameterAutomation | Error | ParameterUpdateInPlaceAnalyzer, Trainable parameter reassigned to an Engine result in UpdateParameters
 ADNCLONE001 | AiDotNet.ClonePlan | Warning | ClonePlanGenerator, Clone plan records a member name shadowed with an unrelated type
 AIDN101 | AiDotNet.Correctness | Warning | TapeDetachmentAnalyzer, Predict inside a custom-loss lambda detaches the gradient (ratchet closed: removed from WarningsNotAsErrors now that SACAgent, ConditionalGAN and WGAN are fixed, so a regression fails the build)
+AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Every [PaperOptimizer] declaration must cite where the recipe comes from
+AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimizer variants must be unique across optimizer kinds
+AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
+AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
+AIDN106 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)

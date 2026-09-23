@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,7 +44,25 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen, Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu, Michael Zeng, Xiangzhan Yu, Furu Wei")]
-public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                LearningRate = 5e-4, WarmupSteps = 32000,
+                Variant = "base",
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Chen et al. 2022, Table VII (Appendix A) states learning rate and warmup steps per variant and says they are adapted from HuBERT [6]; the optimizer (Adam, beta 0.9/0.98) and the linear ramp then linear decay come from that paper, Hsu et al. 2021 Sec. IV-A, since WavLM states neither itself. Batch size is given in seconds of audio, not samples, so no reference batch is declared. This row is the base column.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                LearningRate = 5e-4, WarmupSteps = 96000,
+                Variant = "base+",
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Chen et al. 2022, Table VII (Appendix A) states learning rate and warmup steps per variant and says they are adapted from HuBERT [6]; the optimizer (Adam, beta 0.9/0.98) and the linear ramp then linear decay come from that paper, Hsu et al. 2021 Sec. IV-A, since WavLM states neither itself. Batch size is given in seconds of audio, not samples, so no reference batch is declared. This row is the base+ column.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                LearningRate = 1.5e-3, WarmupSteps = 32000,
+                Variant = "large",
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Chen et al. 2022, Table VII (Appendix A) states learning rate and warmup steps per variant and says they are adapted from HuBERT [6]; the optimizer (Adam, beta 0.9/0.98) and the linear ramp then linear decay come from that paper, Hsu et al. 2021 Sec. IV-A, since WavLM states neither itself. Batch size is given in seconds of audio, not samples, so no reference batch is declared. This row is the large column.")]
+public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, IPaperOptimizerVariant
 {
     /// <inheritdoc />
     /// <remarks>
@@ -94,10 +113,20 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
     {
         _options = options ?? new WavLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>The variant this instance was built at, keying the paper recipe for it.</summary>
+    /// <remarks>
+    /// The paper states a different peak learning rate per size, so one recipe for the class
+    /// would be wrong for every size but one. Read during construction, which is safe because
+    /// the options are assigned before the optimizer is built.
+    /// </remarks>
+    public string PaperOptimizerVariant => _options.Variant;
 
     internal static async Task<WavLM<T>> CreateAsync(WavLMOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {

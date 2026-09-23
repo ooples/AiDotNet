@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -72,6 +73,10 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 // input widths lazily on the first forward, so any positive sequence and feature count is accepted.
 [ModelInputShapeConstraint(ExactRank = 3)]
 [ResearchPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Chen et al. 2023, Sec. 4: the Adam optimization algorithm minimizing a mean "
+                        + "squared error objective. The paper states no learning rate, batch size or "
+                        + "schedule for this model, so none is declared.")]
 public partial class TSMixer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -311,7 +316,9 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         _useRevIN = opts.UseRevIN;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
@@ -355,7 +362,9 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         _useRevIN = opts.UseRevIN;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();

@@ -7726,7 +7726,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// var network = new MyNetwork(...);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
+/// var network = new NeuralNetwork&lt;float&gt;(architecture);
     /// var warmupInput = new Tensor&lt;float&gt;(new[] { 1, 3, 224, 224 }); // batch=1, RGB 224x224
     /// if (network.CompileForward(warmupInput))
     /// {
@@ -18743,12 +18746,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <remarks>
     /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// Calling it more than once is harmless: only the first call tears anything down. That
+    /// holds for derived classes too, whose <see cref="Dispose(bool)"/> overrides are not
+    /// re-entered by a repeated call, and it holds when two threads dispose the same network at
+    /// once: the run of derived teardown is claimed atomically rather than by reading a field that
+    /// <see cref="Dispose(bool)"/> only sets once the override is already under way.
     /// </remarks>
     public void Dispose()
     {
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Set by the first <see cref="Dispose(bool)"/>. A repeated dispose must be a no-op: the
+    /// teardown invalidates the THREAD-GLOBAL tape-training caches, so re-running it on a long-
+    /// disposed network would evict the cache of whichever live model the thread trained since.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown, zero until a caller wins it. Separate from
+    /// <see cref="_disposed"/>, which <see cref="Dispose(bool)"/> sets after the derived override
+    /// has already run and so cannot gate entry, and which must not be set beforehand or the base
+    /// cleanup below would be skipped.
+    /// </summary>
+    private int _disposeClaimed;
 
     /// <summary>
     /// Protected Dispose pattern implementation.
@@ -18765,6 +18789,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
+        if (_disposed) return;
+        _disposed = true;
+
         if (disposing)
         {
             // Release inference plans plus training plans/caches before layer disposal.

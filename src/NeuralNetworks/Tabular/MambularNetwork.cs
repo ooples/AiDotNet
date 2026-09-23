@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -39,10 +41,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MambularOptions { NumFeatures = 20, ModelDim = 128, NumLayers = 4 };
-/// var model = new MambularNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new MambularOptions&lt;double&gt; { NumFeatures = 20, NumLayers = 4 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MambularNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -56,6 +63,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2408.06291",
     Year = 2024,
     Authors = "Thielmann, A., Kruse, R., Samiee, S., & Kleyko, D.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, WeightDecay = 1e-6,
+                ReferenceBatchSize = 128, DecayRate = 0.1,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Thielmann et al. 2024, Sec. 4: all neural models share a starting learning "
+                        + "rate of 1e-04, a weight decay of 1e-06, learning rate decay with a factor of "
+                        + "0.1 at a patience of 10 epochs against the validation loss, and a universal "
+                        + "batch size of 128. The optimizer is left unspecified because the paper names "
+                        + "none.")]
 public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly MambularOptions<T> _options;

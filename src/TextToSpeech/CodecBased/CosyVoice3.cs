@@ -44,8 +44,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "CosyVoice: Scalable Streaming Speech Synthesis",
-    "https://arxiv.org/abs/2412.10117"
+    "CosyVoice 3: Towards In-the-wild Speech Generation via Scaling-up and Post-training",
+    "https://arxiv.org/abs/2505.17589",
+    Year = 2025,
+    Authors = "Zhihao Du et al."
 )]
 public partial class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
 {

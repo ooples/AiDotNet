@@ -1,5 +1,6 @@
-﻿using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -47,10 +48,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new CycleGANOptions { ImageSize = 256, NumResidualBlocks = 9 };
-/// var model = new CycleGAN&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
-/// var translated = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new CycleGAN&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var translated = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type.</typeparam>
@@ -63,6 +67,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, ReferenceBatchSize = 1,
+                Source = "Zhu et al. 2017, Sec. 4: the Adam solver at a learning rate of 0.0002 with a "
+                        + "batch size of 1. No schedule is declared: the paper holds that rate for the "
+                        + "first 100 epochs and then decays it linearly to zero over the next 100, a "
+                        + "hold-then-decay shape whose two halves are stated as epoch counts rather than "
+                        + "as a schedule this model could follow directly.")]
 public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 {
 
@@ -324,10 +334,14 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         DiscriminatorB = CreateNetworkForInputType(discriminatorB, inputType);
 
         // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
-        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB, CreateStandardGanAdamOptions());
-        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA, CreateStandardGanAdamOptions());
-        _discriminatorAOptimizer = discriminatorAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA, CreateStandardGanAdamOptions());
-        _discriminatorBOptimizer = discriminatorBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB, CreateStandardGanAdamOptions());
+        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB, CreateStandardGanAdamOptions()));
+        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA, CreateStandardGanAdamOptions()));
+        _discriminatorAOptimizer = discriminatorAOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA, CreateStandardGanAdamOptions()));
+        _discriminatorBOptimizer = discriminatorBOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB, CreateStandardGanAdamOptions()));
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 

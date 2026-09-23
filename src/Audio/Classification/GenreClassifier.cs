@@ -40,8 +40,8 @@ namespace AiDotNet.Audio.Classification;
 /// var result = classifier.Classify(audio);
 ///
 /// // Native training mode
-/// var classifier = new GenreClassifier&lt;float&gt;(architecture);
-/// classifier.Train(features, labels);
+/// var classifier2 = new GenreClassifier&lt;float&gt;(architecture);
+/// classifier2.Train(features, labels);
 /// </code>
 /// </para>
 /// </remarks>

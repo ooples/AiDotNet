@@ -16,6 +16,11 @@ interface ProductConfig {
 }
 const PRODUCTS: ProductConfig[] = [
   {
+    // Keep aligned with the ProductSlug union in
+    // supabase/functions/_shared/products.ts and with the
+    // license_product enum migration. Nothing at runtime checks the
+    // three against each other, which is why products.ts spells the
+    // contract out.
     value: 'aidotnet',
     label: 'AiDotNet',
     prefix: 'aidn',
@@ -26,6 +31,12 @@ const PRODUCTS: ProductConfig[] = [
     label: 'Harmonic Engine',
     prefix: 'harm',
     badgeClass: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  },
+  {
+    value: 'token_optimizer',
+    label: 'Token Optimizer',
+    prefix: 'tokn',
+    badgeClass: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
   },
 ];
 // Serialized JSON blob the client <script> picks up — lets the browser

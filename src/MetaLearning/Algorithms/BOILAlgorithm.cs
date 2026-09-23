@@ -94,6 +94,25 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <param name="options">BOIL configuration options containing the model and all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when options is null.</exception>
     /// <exception cref="ArgumentException">Thrown when a size or the adaptation fraction is out of range.</exception>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
+    /// // Create BOIL with minimal configuration
+    /// var options = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var boil = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    ///
+    /// // Create BOIL with custom configuration
+    /// var options2 = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// {
+    ///     AdaptationSteps = 5,
+    ///     InnerLearningRate = 0.01,
+    ///     NumClasses = 5,
+    ///     BodyAdaptationFraction = 0.5
+    /// };
+    /// var boil2 = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
+    /// </code>
+    /// </example>
     public BOILAlgorithm(BOILOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),

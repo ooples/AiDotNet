@@ -109,6 +109,25 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <param name="options">LEO configuration options containing the model and all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when options is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the configuration is invalid.</exception>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
+    /// // Create LEO with minimal configuration
+    /// var options = new LEOOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var leo = new LEOAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    ///
+    /// // Create LEO with custom configuration
+    /// var options2 = new LEOOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// {
+    ///     LatentDimension = 64,
+    ///     HiddenDimension = 256,
+    ///     KLWeight = 0.01,
+    ///     AdaptationSteps = 5
+    /// };
+    /// var leo2 = new LEOAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
+    /// </code>
+    /// </example>
     public LEOAlgorithm(LEOOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),

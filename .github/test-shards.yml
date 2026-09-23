@@ -892,6 +892,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '0'
@@ -902,6 +903,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '1'
@@ -912,6 +914,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '2'
@@ -922,6 +925,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '3'
@@ -932,6 +936,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '4'
@@ -942,6 +947,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '5'
@@ -952,6 +958,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '6'
@@ -962,6 +969,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       AIDOTNET_PARAMETER_COUNT_SHARD: '7'
@@ -972,6 +980,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/Layers/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
   - name: Sweep - ParameterEnumerationParityTests
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
@@ -1005,6 +1014,7 @@ shard:
     heavy: true
     mustCover: ['src/Audio/*', 'src/VisionLanguage/*', 'src/TextToSpeech/*', 'src/NeuralNetworks/DeclaredModelLayoutBases.cs']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       ADNSHAPE_WORKERS: '2'
@@ -1016,6 +1026,7 @@ shard:
     heavy: true
     mustCover: ['src/NeuralNetworks/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 35min
     env:
       ADNSHAPE_WORKERS: '2'
@@ -1032,6 +1043,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1044,6 +1056,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1056,6 +1069,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1068,6 +1082,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1080,6 +1095,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1092,6 +1108,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1104,6 +1121,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1116,6 +1134,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1128,6 +1147,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1140,6 +1160,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1152,6 +1173,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1164,6 +1186,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1176,6 +1199,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1188,6 +1212,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1200,6 +1225,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1212,6 +1238,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1224,6 +1251,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1236,6 +1264,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1248,6 +1277,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1260,6 +1290,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1272,6 +1303,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1284,6 +1316,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1296,6 +1329,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1308,6 +1342,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1320,6 +1355,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1332,6 +1368,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1344,6 +1381,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1356,6 +1394,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1368,6 +1407,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1380,6 +1420,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1392,6 +1433,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1404,6 +1446,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1416,6 +1459,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1428,6 +1472,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
@@ -1440,6 +1485,7 @@ shard:
     heavy: true
     mustCover: ['*/VisionLanguage/*']
     coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
+    nightlyOnly: true
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'

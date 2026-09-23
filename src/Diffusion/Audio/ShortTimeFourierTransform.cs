@@ -31,6 +31,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// Usage:
 /// ```csharp
 /// var stft = new ShortTimeFourierTransform&lt;float&gt;(nFft: 2048, hopLength: 512);
+/// var audioSignal = Tensor&lt;float&gt;.CreateRandom(44100);   // one second at 44.1 kHz
 /// var spectrogram = stft.Forward(audioSignal);
 /// // spectrogram.Shape = [numFrames, nFft/2 + 1] (complex values)
 ///

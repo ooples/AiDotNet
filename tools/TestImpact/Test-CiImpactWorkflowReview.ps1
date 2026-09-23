@@ -15,7 +15,7 @@ $contractPath = Join-Path $PSScriptRoot 'Test-CiImpactWorkflow.ps1'
 $workflow = Get-Content -LiteralPath $workflowPath -Raw
 $manifestPath = Join-Path $repositoryRoot '.github/test-shards.yml'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw
-$mapHeadLine = '(?m)^[ \t]+-PullRequestHeadSha \$env:PR_HEAD_SHA `[ \t]*\r?$'
+$mapHeadLine = '(?m)^[ \t]+-PullRequestHeadSha \$changeHeadSha `[ \t]*\r?$'
 if ([regex]::Matches($workflow, $mapHeadLine).Count -ne 1) {
     throw 'The fixture must identify exactly one map-backed PR-head argument, excluding the classifier.'
 }
@@ -63,7 +63,7 @@ $cases = @(
     [pscustomobject]@{
         Name = 'map-head-only-in-comment'
         Reason = 'map-backed selector.*pull.request'
-        Content = [regex]::Replace($workflow, $mapHeadLine, '                    # -PullRequestHeadSha $env:PR_HEAD_SHA `')
+        Content = [regex]::Replace($workflow, $mapHeadLine, '                    # -PullRequestHeadSha $changeHeadSha `')
     },
     [pscustomobject]@{
         Name = 'delta-map-id-renamed'
@@ -261,7 +261,7 @@ try {
         foreach ($case in $cases) {
             $hasManifestMutation = $null -ne $case.PSObject.Properties['ManifestContent']
             if ($case.Content -ceq $workflow -and -not $hasManifestMutation) { throw "$($case.Name): negative control did not mutate the workflow" }
-            if (-not $case.Content.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) {
+            if (-not $case.Content.Contains('-PullRequestHeadSha $changeHeadSha -OutFile path-classification.json')) {
                 throw 'A map-scoping negative control accidentally changed the classifier.'
             }
             $path = Join-Path $fixture ($case.Name + '.yml')

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,11 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2512.23709",
     Year = 2025,
     Authors = "Hau-Shiang Shiu, Chin-Yang Lin, Zhixiang Wang, Chi-Wei Hsiao, Po-Fan Yu, Yu-Chih Chen, Yu-Lun Liu")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.01, ReferenceBatchSize = 16,
+                Schedule = LearningRateSchedulerType.Constant,
+                Source = "Stream-DiffVSR: AdamW with beta1 0.9, beta2 0.999 and a weight decay of 0.01, "
+                        + "at a batch size of 16 and a constant learning rate of 5e-5.")]
 public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -99,17 +105,18 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         // SetBaseTrainOptimizer call and no GetOrCreateBaseOptimizer override — so training silently
         // used the base class's lazily-created Adam and this field was dead. The measured symptom was
         // the memorization probe rising monotonically (0.256 -> 0.471) instead of descending.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.AdamBeta1,
-                Beta2 = _options.AdamBeta2,
-                WeightDecay = _options.WeightDecay,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = _options.AdamBeta1,
+                    Beta2 = _options.AdamBeta2,
+                    WeightDecay = _options.WeightDecay,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0
+                }));
         SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();

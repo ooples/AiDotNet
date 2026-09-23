@@ -36,11 +36,12 @@ namespace AiDotNet.Optimizers;
 /// <code>
 /// var options = new AdamWOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {
-///     LearningRate = 0.001,
+///     InitialLearningRate = 0.001,
 ///     WeightDecay = 0.01,
 ///     Beta1 = 0.9,
 ///     Beta2 = 0.999
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new AdamWOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>
@@ -121,7 +122,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
-        InitializeAdaptiveParameters();
+        InitializeAdamWScalars();
     }
 
     /// <summary>
@@ -148,6 +149,17 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// Initializes the adaptive parameters used by the AdamW optimizer.
     /// </summary>
     protected override void InitializeAdaptiveParameters()
+        => InitializeAdamWScalars();
+
+    /// <summary>
+    /// Resets AdamW's adaptive scalars without dispatching to an override during construction.
+    /// </summary>
+    /// <remarks>
+    /// The optimizer is intentionally extensible, so <see cref="InitializeAdaptiveParameters"/>
+    /// remains virtual for normal lifecycle resets. Its constructor must not call that virtual
+    /// surface while a derived optimizer is only partially initialized.
+    /// </remarks>
+    private void InitializeAdamWScalars()
     {
         // Learning rate is handled by base class (synced with scheduler)
         _currentBeta1 = NumOps.FromDouble(_options.Beta1);

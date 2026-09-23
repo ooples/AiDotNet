@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,6 +90,8 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Graph WaveNet for Deep Spatial-Temporal Graph Modeling", "https://arxiv.org/abs/1906.00121", Year = 2019, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Chengqi Zhang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Wu et al. 2019, Sec. 4: Adam with an initial learning rate of 0.001.")]
 public partial class GraphWaveNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -261,7 +264,9 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _options = options ?? new GraphWaveNetOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -307,7 +312,9 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _options = options ?? new GraphWaveNetOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;

@@ -166,6 +166,11 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         _critic2 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 1), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetCritic1 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 2), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetCritic2 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 3), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_actor);
+        Networks.Add(_critic1);
+        Networks.Add(_critic2);
+        Networks.Add(_targetCritic1);
+        Networks.Add(_targetCritic2);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
 
         // Policy spread starts at the historical exploration width so behaviour is unchanged on step 0.

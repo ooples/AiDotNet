@@ -192,6 +192,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// or customize individual options for your specific needs.</para>
     /// <example>
     /// <code>
+    /// // The configuration's type arguments must match the builder's, so a classifier over feature
+    /// // vectors uses &lt;double, Vector&lt;double&gt;, int&gt; throughout.
+    /// var builder = new AiModelBuilder&lt;double, Vector&lt;double&gt;, int&gt;();
+    ///
     /// // Use industry-standard defaults
     /// builder.ConfigureAdversarialRobustness();
     ///
@@ -200,9 +204,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///
     /// // Comprehensive robustness with certified guarantees
     /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.Comprehensive());
-    ///
-    /// // LLM safety with content moderation
-    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, string, string&gt;.ForLLM());
     ///
     /// // Custom configuration
     /// builder.ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
@@ -216,6 +217,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     },
     ///     UseCertifiedInference = true
     /// });
+    ///
+    /// // LLM safety with content moderation. Text in, text out, so this needs its own builder —
+    /// // ForLLM() returns a &lt;double, string, string&gt; configuration and will not bind to the one above.
+    /// var textBuilder = new AiModelBuilder&lt;double, string, string&gt;();
+    /// textBuilder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, string, string&gt;.ForLLM());
     /// </code>
     /// </example>
     /// </remarks>
@@ -267,10 +273,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// DPO and SimPO are simpler (no reward model needed), while RLHF and GRPO provide more control.</para>
     /// <example>
     /// <code>
+    /// var builder = new AiModelBuilder&lt;double, string, string&gt;();
+    ///
     /// // Use industry-standard defaults (training data set separately)
     /// builder.ConfigureFineTuning();
     ///
-    /// // DPO fine-tuning with preference pairs
+    /// // DPO fine-tuning with preference pairs: for each prompt, the answer a human preferred
+    /// // and the one they rejected.
+    /// var prompts = new[] { "Explain gradient descent.", "What is overfitting?" };
+    /// var preferredResponses = new[] { "It steps downhill along the gradient.", "Fitting noise, not signal." };
+    /// var rejectedResponses = new[] { "It is an optimizer.", "When a model is bad." };
+    ///
     /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
     /// {
     ///     Inputs = prompts,
@@ -279,7 +292,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// };
     /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForDPO(preferenceData));
     ///
-    /// // GRPO for RL-based alignment
+    /// // GRPO for RL-based alignment: one scalar reward per prompt instead of a preferred/rejected pair.
+    /// var rewardScores = new[] { 0.92, 0.35 };
     /// var rlData = new FineTuningData&lt;double, string, string&gt;
     /// {
     ///     Inputs = prompts,
@@ -287,8 +301,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// };
     /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForGRPO(rlData));
     ///
-    /// // Custom fine-tuning configuration
-    /// builder.ConfigureFineTuning(new FineTuningConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// // Custom fine-tuning configuration. The configuration's type arguments must match the
+    /// // builder's, so this is also &lt;double, string, string&gt;.
+    /// builder.ConfigureFineTuning(new FineTuningConfiguration&lt;double, string, string&gt;
     /// {
     ///     Enabled = true,
     ///     Options = new FineTuningOptions&lt;double&gt;
@@ -298,7 +313,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///         Epochs = 3,
     ///         SimPOGamma = 1.0
     ///     },
-    ///     TrainingData = myPreferenceData
+    ///     TrainingData = preferenceData
     /// });
     /// </code>
     /// </example>
@@ -339,6 +354,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// <example>
     /// <code>
+    /// var builder = new AiModelBuilder&lt;double, string, string&gt;();
+    ///
+    /// // Supervised data is prompt/answer pairs; preference data adds the answer a human rejected.
+    /// var prompts = new[] { "Explain gradient descent.", "What is overfitting?" };
+    /// var sftData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     Outputs = new[] { "It steps downhill along the gradient.", "Fitting noise, not signal." }
+    /// };
+    /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     ChosenOutputs = new[] { "It steps downhill along the gradient.", "Fitting noise, not signal." },
+    ///     RejectedOutputs = new[] { "It is an optimizer.", "When a model is bad." }
+    /// };
+    /// var myData = sftData;
+    ///
     /// // Standard alignment pipeline (SFT → DPO)
     /// builder.ConfigureTrainingPipeline(
     ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.StandardAlignment(sftData, preferenceData));
@@ -1844,6 +1876,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// <example>
     /// <code>
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+    ///
     /// // Using a preset configuration
     /// builder.ConfigureMemoryManagement(TrainingMemoryConfig.MemoryEfficient());
     ///
@@ -1900,6 +1934,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// by returning <c>false</c>:</para>
     /// <example>
     /// <code>
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+    ///
     /// builder.ConfigureTrainingCallback(p =>
     /// {
     ///     Console.WriteLine($"epoch {p.Epoch}: loss={p.Loss}");
@@ -1938,6 +1974,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// which automatically stops a run whose loss blows up:</para>
     /// <example>
     /// <code>
+    /// // The callback's numeric type follows the builder's, so a float builder takes a float callback.
+    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;();
     /// builder.ConfigureTrainingCallback(new HealthMonitorCallback&lt;float&gt;());
     /// </code>
     /// </example>

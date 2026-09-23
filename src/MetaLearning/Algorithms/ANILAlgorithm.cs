@@ -85,13 +85,21 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="ArgumentException">Thrown when the class count or feature width is not positive.</exception>
     /// <example>
     /// <code>
-    /// // A body that embeds each example into 64 values, and a 5-way head over them
-    /// var options = new ANILOptions&lt;double, Matrix&lt;double&gt;, Tensor&lt;double&gt;&gt;(body)
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
+    /// // Create ANIL with minimal configuration
+    /// var options = new ANILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var anil = new ANILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    ///
+    /// // Create ANIL with custom configuration
+    /// var options2 = new ANILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
+    ///     AdaptationSteps = 5,
+    ///     InnerLearningRate = 0.01,
     ///     NumClasses = 5,
-    ///     FeatureDimension = 64
+    ///     FeatureDimension = 512
     /// };
-    /// var anil = new ANILAlgorithm&lt;double, Matrix&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var anil2 = new ANILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public ANILAlgorithm(ANILOptions<T, TInput, TOutput> options)
