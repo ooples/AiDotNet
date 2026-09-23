@@ -44,6 +44,16 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// first works out what you meant and records it as a compact hint; a diffusion model then
 /// repeatedly removes noise from the picture, steered by that hint, until the edit appears.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // MGIE: image editing guided by a multimodal LLM. Every constructor argument has a default,
+/// // so the paper configuration needs none of them.
+/// var model = new MGIE&lt;double&gt;();
+///
+/// // Or start from its options and change what you need.
+/// var configured = new MGIE&lt;double&gt;(options: new MGIEOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]

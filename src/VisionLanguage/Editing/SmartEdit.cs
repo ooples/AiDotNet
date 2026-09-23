@@ -42,6 +42,16 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// what you meant while looking at the picture, then a diffusion model repeatedly removes noise,
 /// steered by that understanding, until the edit appears.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // SmartEdit: complex instruction-based image editing. Every constructor argument has a default,
+/// // so the paper configuration needs none of them.
+/// var model = new SmartEdit&lt;double&gt;();
+///
+/// // Or start from its options and change what you need.
+/// var configured = new SmartEdit&lt;double&gt;(options: new SmartEditOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
