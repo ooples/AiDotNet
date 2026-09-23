@@ -109,15 +109,53 @@ namespace Probe
         Assert.Empty(Assert.IsType<InitializerExpressionSyntax>(names.Initializer).Expressions);
     }
 
+    // SAM and SAM2 are two real models here. A test class for SAM2 must not cover SAM: the match
+    // accepted any non-letter after "SAM", and the '2' in SAM2Tests is one.
+    private const string NumberedVariantSource = @"
+namespace Probe
+{
+    public abstract class Base : AiDotNet.Interfaces.IFullModel<float, float, float> { }
+
+    [AiDotNet.Attributes.ModelDomain(0)]
+    [AiDotNet.Attributes.ModelCategory(0)]
+    public class SAM : Base { }
+
+    [AiDotNet.Attributes.ModelDomain(0)]
+    [AiDotNet.Attributes.ModelCategory(0)]
+    public class SAM2 : Base { }
+
+    public class SAM2Tests { }
+    public class SAM2PaperFidelityTests { }
+}";
+
+    [Fact]
+    public void NumberedVariantTestClass_DoesNotCoverItsShorterSibling()
+    {
+        var report = Run("AiDotNetTests", NumberedVariantSource);
+
+        Assert.Contains("TotalModels = 2;", report);
+        Assert.Contains("TestedCount = 1;", report);
+
+        var testedNames = Assert.Single(
+            CSharpSyntaxTree.ParseText(report).GetRoot().DescendantNodes().OfType<PropertyDeclarationSyntax>(),
+            property => property.Identifier.ValueText == "TestedModelNames");
+        var initializer = Assert.IsType<EqualsValueClauseSyntax>(testedNames.Initializer);
+        var names = Assert.IsType<ArrayCreationExpressionSyntax>(initializer.Value);
+        var tested = Assert.IsType<InitializerExpressionSyntax>(names.Initializer).Expressions
+            .Select(expression => ((LiteralExpressionSyntax)expression).Token.ValueText)
+            .ToArray();
+        Assert.Equal(new[] { "SAM2" }, tested);
+    }
+
     // The assembly names are exact on purpose: RegisterSourceOutput refuses to run this generator
     // for any compilation not named "AiDotNet" or "AiDotNetTests", so that repository-only fixtures
     // never leak into a PackageReference consumer's build. Those are therefore the only two names
     // whose behaviour is worth pinning.
-    private static string Run(string assemblyName)
+    private static string Run(string assemblyName, string modelSource = ModelSource)
     {
         var compilation = CSharpCompilation.Create(
             assemblyName,
-            new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(ModelSource) },
+            new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(modelSource) },
             new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 

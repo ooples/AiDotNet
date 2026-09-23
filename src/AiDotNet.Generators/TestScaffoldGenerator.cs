@@ -17085,8 +17085,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             string remainder = testName.Substring(afterMatch);
             if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
-                remainder.StartsWith("_", System.StringComparison.Ordinal) ||
-                !char.IsLetter(remainder[0])) return true;
+                remainder.StartsWith("_", System.StringComparison.Ordinal)) return true;
+            // No fallback for other characters. An identifier can only continue with a letter, a digit
+            // or '_', and '_' is handled above, so the old "any non-letter" rule admitted exactly one
+            // thing: a DIGIT - which made SAM2Tests count as coverage of the unrelated model SAM.
         }
 
         return false;
