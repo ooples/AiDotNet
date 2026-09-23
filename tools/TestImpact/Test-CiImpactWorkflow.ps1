@@ -171,7 +171,7 @@ function Test-MapSelectorPullRequestScope {
         $arguments.MapFile -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
         $arguments.MapFile.Value -ceq 'map/shard-map.json' -and
         $arguments.PullRequestHeadSha -is [System.Management.Automation.Language.VariableExpressionAst] -and
-        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'env:PR_HEAD_SHA'
+        $arguments.PullRequestHeadSha.VariablePath.UserPath -ceq 'changeHeadSha'
 }
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
@@ -381,10 +381,17 @@ Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
 Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
 Assert-Contract ($selectStep.Contains('-ClassifyOnly `') -and
-        $selectStep.Contains('-PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json')) `
+        $selectStep.Contains('-PullRequestHeadSha $changeHeadSha -OutFile path-classification.json')) `
     'non-runtime classification does not use the exact PR base-to-head path set'
 Assert-Contract ($selectStep.Contains('PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}')) `
     'the selector is not given the pull request head it must verify as the merge commit''s second parent'
+# A post-merge push scopes to the merged pull request exactly as its PR run did: the landing's
+# second parent is that pull request's head. Only a two-parent landing qualifies; a squash or
+# rebase landing has no head to scope to and must keep the full matrix.
+Assert-Contract ($selectStep.Contains('$changeHeadSha = [string] $env:PR_HEAD_SHA') -and
+        $selectStep.Contains('if ($LASTEXITCODE -eq 0 -and $landing.Count -eq 3) { $changeHeadSha = $landing[2] }') -and
+        $selectStep.Contains("(`$eventName -eq 'push' -and -not [string]::IsNullOrEmpty(`$changeHeadSha))")) `
+    'a post-merge push no longer scopes selection to the merged pull request, or scopes a one-parent landing'
 # The event base.sha is the base branch as it was when the pull request was opened. For a pull
 # request behind master it made every commit master gained since look like part of the pull
 # request: on #2100 it attributed 16 merged CI-control files to a 4-file change, escalating 116 shards.
@@ -581,7 +588,12 @@ foreach ($job in $artifactConsumers) {
         "artifact consumer '$job' lacks actions:read for the archive endpoint"
 }
 
-$testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+# The shard step's script lives in .github/scripts/Invoke-Shard.ps1: inline it was 25,578
+# characters against GitHub's 21,000-character expression limit, which made the workflow
+# undispatchable (HTTP 422). Every assertion below is about what the shard job DOES, not about
+# which file the text sits in, so the job block and the script it calls are checked as one.
+$testConsumer = (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') +
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw)
 Assert-Contract ($testConsumer.Contains('enum CoverageDisposition')) `
     'coverage execution state is represented by string comparisons instead of a closed enum'
 Assert-Contract ($testConsumer.Contains(
@@ -607,17 +619,42 @@ $testRunStep = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) 
 Assert-Contract ([bool] $testRunStep) `
     'the sharded test execution step is absent'
 $testStepLines = [Regex]::Split($testRunStep, '\r?\n')
+# A build-only change must still compile but must reach no test. The build jobs and the shard
+# matrix share requires_validation, so the matrix needs its own gate or the distinction is silently
+# lost - which is how .editorconfig kept escalating PR #2112 to 130 shards.
+Assert-Contract ($validation.Contains('requires_shards: ${{ steps.select.outputs.requires_shards }}')) `
+    'the selection job does not publish requires_shards'
+Assert-Contract ($validation.Contains('fromJSON(needs.select-shards.outputs.requires_shards)')) `
+    'the shard matrix does not consume requires_shards, so a build-only change still runs every test'
+
+$shardScriptPath = '.github/scripts/Invoke-Shard.ps1'
+# A PowerShell single-quoted literal does not expand, so '$($env:SHARD_FRAMEWORK)' reaches the
+# runner verbatim. Extracting this script from the workflow turned five ${{ }} interpolations -
+# which HAD been inside single quotes - into exactly that, and the ones embedded in a longer path
+# or filter survived the first sweep: the shard died with "runner config not found at
+# tests/AiDotNet.Tests/bin/Release/$($env:SHARD_FRAMEWORK)/xunit.runner.json" and --filter was
+# passed as a literal. Nothing else catches it - the file parses, and the workflow dispatches.
+$shardScriptLines = @(Get-Content -LiteralPath $shardScriptPath)
+$literalEnv = [System.Collections.Generic.List[string]]::new()
+for ($i = 0; $i -lt $shardScriptLines.Count; $i++) {
+    foreach ($m in [regex]::Matches($shardScriptLines[$i], "'[^']*'")) {
+        if ($m.Value -match '\$\(\$env:') { [void] $literalEnv.Add("L$($i + 1): $($m.Value)") }
+    }
+}
+Assert-Contract ($literalEnv.Count -eq 0) `
+    "the shard script has environment expansions inside single quotes, which never expand: $($literalEnv -join '; ')"
 $testRunLine = [Array]::IndexOf($testStepLines, '        run: |')
 Assert-Contract ($testRunLine -ge 0) `
     'the sharded test step has no literal PowerShell run block to validate'
+Assert-Contract (Test-Path -LiteralPath $shardScriptPath) `
+    'the sharded test step calls no extracted shard script'
 if ($testRunLine -ge 0) {
-    $testRunBody = [System.Collections.Generic.List[string]]::new()
-    for ($i = $testRunLine + 1; $i -lt $testStepLines.Count; $i++) {
-        $line = $testStepLines[$i]
-        if ($line -and -not $line.StartsWith('          ', [StringComparison]::Ordinal)) { break }
-        [void] $testRunBody.Add($(if ($line.Length -ge 10) { $line.Substring(10) } else { '' }))
-    }
-    $testRunScript = $testRunBody -join "`n"
+    # Read the script file rather than slicing it back out of the YAML. Inline, this block was
+    # 25,578 characters against GitHub's 21,000-character expression limit and the workflow could
+    # not be dispatched at all. The file is also the text CI actually runs, and using it drops the
+    # indentation-stripping this extraction relied on - which is precisely what silently corrupted
+    # four comment lines the first time the block was moved out.
+    $testRunScript = Get-Content -LiteralPath $shardScriptPath -Raw
     $testRunScript = [Regex]::Replace($testRunScript, '\$\{\{[^\r\n]*?\}\}', 'placeholder')
     $parseTokens = $null
     $parseErrors = $null
@@ -637,8 +674,11 @@ if ($testRunLine -ge 0) {
         'the executable coverage-decision block could not be isolated from the workflow'
     if ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) {
         $decisionBody = $testRunScript.Substring($decisionStart, $decisionEnd - $decisionStart)
-        $decisionBody = $decisionBody.Replace("'placeholder' -eq 'true'", "'true' -eq 'true'")
+        # The forced-coverage flag used to be a ${{ }} interpolation the parse step rewrote to
+        # 'placeholder', which this then swapped for 'true'. The script reads the real env var now,
+        # so drive that instead - the proof exercises the actual input rather than a rewritten one.
         $decisionProof = @"
+`$env:SHARD_FORCE_COVERAGE = 'true'
 `$shardName = 'Integration D'
 `$env:COVERAGE_CARRIED = '[]'
 `$env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION = '["Integration D"]'
@@ -724,6 +764,16 @@ foreach ($expected in $expectedInventoryShards) {
             "inventory shard '$($expected.Name)' can become selectable without its coverage reaching the model code it tests"
         Assert-Contract ($entry.Contains('    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0')) `
             "inventory shard '$($expected.Name)' does not instrument the worker its models run in"
+        # Worker-backed sweeps exercise every model, so they run nightly rather than on every pull
+        # request. Asserted per shard, so the flag cannot drift onto a different shard unnoticed.
+        Assert-Contract ($entry -match '(?m)^    nightlyOnly: true[ \t]*\r?$') `
+            "worker-backed sweep '$($expected.Name)' is not nightlyOnly, so it runs on every pull request"
+    }
+    else {
+        # Inventory shards with no worker (ParameterEnumerationParityTests, the contract surveys) are
+        # cheap and stay on pull requests.
+        Assert-Contract (-not ($entry -match '(?m)^    nightlyOnly:')) `
+            "inventory shard '$($expected.Name)' has no worker yet is nightlyOnly, so pull requests stop running it"
     }
     foreach ($pair in $expected.Env) {
         Assert-Contract ($entry.Contains("      $pair")) "inventory shard '$($expected.Name)' lost its env '$pair'"
@@ -769,16 +819,65 @@ foreach ($inventoryEntry in $shardEntries) {
          'coverageIncludeDirectory and env stay guarded like every other inventory shard.')
 }
 
-$shardRun = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+# Get-StepBlock cuts at the next step, so the copy appended to $testConsumer is not in this slice.
+$shardRun = (Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage') +
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw)
 Assert-Contract ($shardRun.Contains('SHARD_ENV: ${{ toJSON(matrix.shard.env) }}')) `
     'the shard step does not receive the entry env as data'
 Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
     'the shard step does not apply the entry env through the validated helper'
 Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
     'a shard declaring heavy: true does not get the heavy path'
+# The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
+# pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run by
+# Get-DeferredNightlyShards, whose keep rules Test-CiWorkloads.ps1 exercises; this guards the wiring.
+Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and
+    $validation.Contains("[string[]] @(Get-DeferredNightlyShards -Shards @(`$matrixShards) -Routes `$selectionRoutes),")) `
+    'nightly-only sweep shards are no longer deferred out of pull request and push matrices'
+Assert-Contract ($validation.Contains("`$selectionRoutes = @(`$routesProperty.Value | ForEach-Object { [string] `$_ })")) `
+    'the nightly-only deferral no longer reads the selector''s per-shard routes'
+# GitHub evaluates a run: block that contains an expression as ONE expression, capped at 21,000
+# characters. Past it the workflow cannot load at all: no pull request run is created, only a 0-job
+# push run "likely failed because of a workflow file issue" - which is how the Select step broke at
+# 22,355. yq, the PowerShell parser and actionlint all accepted that file, so nothing else catches it.
+foreach ($workflowFile in @(Get-ChildItem -LiteralPath (Split-Path -Parent $ValidationWorkflow) -Filter '*.yml')) {
+    $lines = [IO.File]::ReadAllLines($workflowFile.FullName)
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $key = [regex]::Match($lines[$i], '^(?<indent>\s*)(?:- )?run: [|>][-+]?\s*$')
+        if (-not $key.Success) { continue }
+        $keyIndent = $key.Groups['indent'].Value.Length
+        $body = [System.Collections.Generic.List[string]]::new()
+        $bodyIndent = -1
+        for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            $line = $lines[$j]
+            if ($line.Trim().Length -eq 0) { $body.Add(''); continue }
+            $indent = $line.Length - $line.TrimStart().Length
+            if ($indent -le $keyIndent) { break }
+            if ($bodyIndent -lt 0) { $bodyIndent = $indent }
+            $body.Add($line.Substring([Math]::Min($bodyIndent, $indent)))
+        }
+        $text = ($body -join "`n").TrimEnd()
+        if ($text.Contains('${{')) {
+            Assert-Contract ($text.Length -lt 21000) `
+                "$($workflowFile.Name) line $($i + 1): run block is $($text.Length) characters with an expression; GitHub rejects the whole workflow at 21,000 - move logic into a script"
+        }
+    }
+}# Every worker-backed inventory shard is nightlyOnly (asserted per shard above). Matching the total
+# closes the other direction: no shard OUTSIDE that set can carry the flag either.
+$workerBackedCount = @($expectedInventoryShards | Where-Object { $_.ContainsKey('MustCover') }).Count
+$nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath $ShardManifest -Raw), '(?m)^    nightlyOnly: true[ \t]*\r?$').Count
+Assert-Contract ($workerBackedCount -eq 46 -and $nightlyOnlyEntries -eq $workerBackedCount) `
+    "expected nightlyOnly on exactly the 46 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'
+# IncludeDirectory is only half of it - coverlet deduplicates modules by filename, so the worker's
+# own AiDotNet.dll stays uninstrumented without the hard link. This assertion previously covered
+# only the half above, which is how the repo ran for months with Connect-WorkerCoverage.ps1 written,
+# self-tested and policy-guarded but never called: every mustCover shard's digest missed its subject
+# and stayed always-run, 46 of the certified map's 51 always-run entries.
+Assert-Contract ($shardRun.Contains('& ./tools/TestImpact/Connect-WorkerCoverage.ps1 -ParentDirectory')) `
+    'the shard step writes worker runsettings but never links the instrumented binary into the worker'
 Assert-Contract ($shardRun.Contains("'--blame-hang-timeout', `$hangTimeout,")) `
     'a shard hangTimeout is not passed to the blame-hang collector'
 $shardRetry = Get-StepBlock -JobBlock $testConsumer -Step 'Rerun PR-new failures once'

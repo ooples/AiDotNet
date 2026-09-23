@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -65,7 +66,7 @@ namespace AiDotNet.Audio.AudioGen;
 /// // Create an AudioGen model for generating audio from text descriptions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 32000);
 ///
@@ -74,7 +75,7 @@ namespace AiDotNet.Audio.AudioGen;
 ///     textEncoderPath: "text_encoder.onnx",
 ///     languageModelPath: "language_model.onnx",
 ///     audioDecoderPath: "audio_decoder.onnx",
-///     tokenizer: myTokenizer);
+///     tokenizer: CharacterTokenizer.CreateAscii());
 ///
 /// // Generate audio from a text prompt
 /// Tensor&lt;float&gt; audio = model.GenerateAudio("a dog barking loudly");
@@ -88,6 +89,11 @@ namespace AiDotNet.Audio.AudioGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("AudioGen: Textually Guided Audio Generation", "https://doi.org/10.48550/arXiv.2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Défossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, ReferenceBatchSize = 256,
+                WarmupSteps = 3000, Schedule = LearningRateSchedulerType.Noam,
+                Source = "Kreuk et al. 2023, Sec. 4: the Adam optimizer with a batch size of 256, a "
+                        + "learning rate of 5e-4 and 3k steps of warm-up followed by inverse-square-root "
+                        + "decay, declared here as Noam.")]
 public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -584,7 +590,9 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         // transformer at LR=5e-5. Framework AdamW default (LR=1e-3) is
         // BERT-pretraining territory and diverges on this VLM-class
         // text-audio aligner during the 30-iter training invariant test.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         // CrossEntropyWithLogitsLoss (not CrossEntropyLoss) — the model's
         // codebook-head emits raw logits, NOT post-softmax probabilities.
         // CrossEntropyLoss expects a softmax-normalized distribution and

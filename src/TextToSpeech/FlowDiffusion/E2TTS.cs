@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,6 +43,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Eskimez et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 7.5e-5, WarmupSteps = 20000,
+                MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Eskimez et al. 2024, Sec. 3: a linear decay learning rate schedule with a "
+                        + "peak learning rate of 7.5e-5 and a warm-up phase over the initial 20,000 "
+                        + "updates. The optimizer is left unspecified because the paper does not name "
+                        + "one.")]
 public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly E2TTSOptions _options;
@@ -242,13 +251,14 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
+        => PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay
+                }));
 
     private static void ValidateOptions(E2TTSOptions opts)
     {

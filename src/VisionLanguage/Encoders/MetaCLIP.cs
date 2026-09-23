@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -37,6 +39,12 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Xu et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-4,
+                ReferenceBatchSize = 32768,
+                Source = "Xu et al. 2023, Sec. 5: a learning rate of 5e-4 at a batch size of 32768. The "
+                        + "paper never names an optimizer in its training description -- it follows the "
+                        + "OpenCLIP setup -- so none is declared rather than attributing a choice it did "
+                        + "not state.")]
 public partial class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly MetaCLIPOptions _options;
@@ -93,7 +101,9 @@ public partial class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
         _options = options ?? new MetaCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

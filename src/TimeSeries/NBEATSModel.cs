@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -49,11 +50,15 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an N-BEATS model with interpretable trend and seasonality stacks
 /// var options = new NBEATSModelOptions&lt;double&gt;();
-/// var nbeats = new NBEATSModel&lt;double&gt;(options);
-/// nbeats.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = nbeats.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NBEATSModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -63,6 +68,9 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Oreshkin et al. 2020, Sec. 5: the Adam optimizer with default settings and an "
+                        + "initial learning rate of 0.001.")]
 public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
@@ -124,9 +132,9 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// If you don't provide options, sensible defaults will be used.
     /// </para>
     /// </remarks>
-    public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ?? new NBEATSModelOptions<T>())
+    public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ??= new NBEATSModelOptions<T>())
     {
-        _options = options ?? new NBEATSModelOptions<T>();
+        _options = options;
         Options = _options;
         _blocks = new List<NBEATSBlock<T>>();
 

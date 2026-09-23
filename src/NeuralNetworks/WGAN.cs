@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -37,10 +39,18 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new WGANOptions { LatentSize = 100, CriticIterations = 5, ClipValue = 0.01 };
-/// var model = new WGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
-/// var generated = model.Predict(noise);
+/// var options = new WGANOptions { };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var generatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+/// var criticArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new WGAN&lt;float&gt;(
+///         generatorArchitecture, criticArchitecture,
+///         inputType: InputType.OneDimensional))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -52,6 +62,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
+[PaperOptimizer(OptimizerKind.RmsProp, LearningRate = 5e-05,
+                Source = "Arjovsky et al. 2017, Algorithm 1: RMSProp with a learning rate of 0.00005. "
+                        + "The clipping the paper specifies is weight clipping to the range [-c, c] "
+                        + "applied after each update, which is a constraint on the critic rather than "
+                        + "gradient-norm clipping, so no gradient clip is declared.")]
 public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
     private readonly WGANOptions _options;
@@ -298,8 +313,10 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         _lossFunction = lossFunction ?? new WassersteinLoss<T>();
 
         // Initialize optimizers (RMSProp with lr=0.00005 is the WGAN paper default).
-        _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateWganRmsPropOptions());
-        _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic, CreateWganRmsPropOptions());
+        _generatorOptimizer = generatorOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateWganRmsPropOptions()));
+        _criticOptimizer = criticOptimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic, CreateWganRmsPropOptions()));
 
         InitializeLayers();
     }

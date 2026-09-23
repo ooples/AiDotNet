@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -50,6 +52,8 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2017,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Wang et al. 2017, Sec. 4: Adam starting from a learning rate of 0.001, reduced to 0.0005, 0.0003 and 0.0001 after 500K, 1M and 2M global steps. No schedule is declared because those steps are not a constant decay factor (0.5, then 0.6, then 0.33), and a multi-step schedule applies one gamma to every milestone. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TacotronOptions _options;
@@ -105,14 +109,15 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new TacotronOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

@@ -96,10 +96,10 @@ public partial class DBSCAN<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The DBSCAN configuration options.</param>
     public DBSCAN(DBSCANOptions<T>? options = null)
-        : base(options ?? new DBSCANOptions<T>())
+        : base(options ??= new DBSCANOptions<T>())
     {
         _fittedEpsilon = NumOps.Zero;
-        _options = options ?? new DBSCANOptions<T>();
+        _options = options;
 
         if (_options.DistanceMetric is null)
         {

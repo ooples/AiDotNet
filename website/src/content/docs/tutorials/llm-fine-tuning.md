@@ -64,7 +64,7 @@ var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
     inputFeatures: 64, numClasses: 8, complexity: NetworkComplexity.Simple));
 
 var loraConfig = new DefaultLoRAConfiguration<double>(rank: 8, alpha: 16, freezeBaseLayer: true);
-var quantConfig = new QuantizationConfig { Mode = QuantizationMode.Int8 };
+var quantConfig = new QuantizationConfig { Mode = AiDotNet.Enums.QuantizationMode.Int8 };
 
 var rng = new Random(7);
 var trainX = new Tensor<double>(new[] { 64, 64 });

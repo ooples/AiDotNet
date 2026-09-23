@@ -40,9 +40,12 @@ namespace AiDotNet.Configuration;
 /// // Option B: Static configuration
 /// AiDotNet.Configuration.GpuDiagnosticsConfig.Level = GpuDiagnosticLevel.Silent;
 ///
+/// Microsoft.Extensions.Logging.ILogger myLogger =
+///     Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+/// 
 /// // Option C: Custom sink (route to any logging framework).
 /// AiDotNet.Configuration.GpuDiagnosticsConfig.Sink =
-///     (level, msg) => myLogger.LogInformation("[gpu:{Level}] {Msg}", level, msg);
+///     (level, msg) => Console.WriteLine($"[gpu:{level}] {msg}");
 ///
 /// // Or via ILogger extension
 /// AiDotNet.Configuration.GpuDiagnosticsConfig.Sink = myLogger.ToSink();

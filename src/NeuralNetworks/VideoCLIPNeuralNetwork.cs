@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -42,10 +44,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VideoCLIPOptions { ImageSize = 224, NumFrames = 8, EmbeddingDim = 512 };
-/// var model = new VideoCLIPNeuralNetwork&lt;float&gt;(options);
-/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 8, 224, 224 });
-/// var embedding = model.Predict(video);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 8, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VideoCLIPNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var embedding = result.Predict(video);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -59,6 +65,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding", "https://arxiv.org/abs/2109.14084", Year = 2021, Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Arber Zela, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, LearningRate = 5e-5,
+                WarmupSteps = 1000, Schedule = LearningRateSchedulerType.Polynomial,
+                MinLearningRate = 0, MaxGradientNorm = 2.0,
+                Source = "Xu et al. 2021, Training Details: Adam with betas (0.9, 0.98), initial learning rate 5e-5, 1000 warm-up steps, a polynomial decay schedule, and gradients clipped at 2.0. The decay power is not stated, so the library default of 1 applies.")]
 public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IVideoCLIPModel<T>
 {
     private readonly VideoCLIPOptions _options;
@@ -231,7 +241,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             string textOutputName = textGraph.RequireEmbeddingOutput(_embeddingDimension, EmbeddingLayouts);
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
             var configuration = new OnnxMultimodalConfiguration(_embeddingDimension, _maxSequenceLength,
                 _imageSize, _tokenizer.VocabularySize, _numFrames, _onnxChannels, videoGraph, textGraph);
@@ -301,7 +313,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _temporalAggregation = _options.TemporalAggregation;
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
         InitializeNativeLayers(_options.Channels);

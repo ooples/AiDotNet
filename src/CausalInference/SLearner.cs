@@ -45,9 +45,19 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
-/// var sLearner = new SLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1);
-/// sLearner.Fit(features, treatment, outcome);
-/// Vector&lt;double&gt; cate = sLearner.EstimateTreatmentEffect(newFeatures);
+/// var covariates = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1, 0, 1 });   // who was treated
+/// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1))
+///     .Build(covariates, treatment, outcome);
+///
+/// // One effect per person, over the covariates alone.
+/// Vector&lt;double&gt; cate = result.EstimateTreatmentEffect(covariates);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

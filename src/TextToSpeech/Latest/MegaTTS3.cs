@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.Latest;
     Year = 2025,
     Authors = "Jiang et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WarmupSteps = 10000,
+                Source = "Jiang et al. 2025, Sec. 4: the Adam optimizer with a learning rate of 1e-4, "
+                        + "beta1 0.9, beta2 0.999 and 10K warmup steps, trained for 1M steps. No "
+                        + "reference batch size is declared because the paper gives the batch as 10K "
+                        + "latent frames per GPU rather than as a count of examples.")]
 public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MegaTTS3Options _options;
@@ -81,7 +89,9 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new MegaTTS3Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

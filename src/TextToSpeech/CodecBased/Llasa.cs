@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2025,
     Authors = "Ye et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5,
+                Source = "Ye et al. 2025, Experimental Details: all TTS models are trained for 3 epochs "
+                        + "with a maximum learning rate of 5e-5. The 1e-4 with a 3000-step warmup "
+                        + "elsewhere in the paper trains the codec on 6-second audio crops, not the TTS "
+                        + "model. No reference batch size is declared because the paper gives the batch "
+                        + "as 2 million tokens rather than as a count of examples, and no optimizer is "
+                        + "declared because the paper does not name one.")]
 public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly LlasaOptions _options;
@@ -81,7 +90,9 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new LlasaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
