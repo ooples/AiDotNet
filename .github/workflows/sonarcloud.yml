@@ -835,7 +835,21 @@ jobs:
           # re-run. This step never selects a master delta itself, so there is one reuse mechanism.
           # Merge groups, schedules and dispatches always run the full matrix.
           $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
-          $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+          # A post-merge push of a GitHub "Merge pull request" commit has exactly the shape the selector
+          # reads from refs/pull/N/merge: two parents, the first the previous tip and the second the
+          # pull request head, so its change is that pull request's change. Without this every merge to
+          # master ran all 164 shards ("event is 'push', not a pull request"), a full ~2-hour run
+          # behind every merged pull request, competing for runners with every open one. A squash or
+          # rebase landing has one parent, no head to scope to, and keeps the full matrix.
+          $eventName = '${{ github.event_name }}'
+          $changeHeadSha = [string] $env:PR_HEAD_SHA
+          if ($eventName -eq 'push') {
+            $changeHeadSha = ''
+            $landing = @(((& git rev-list --parents -n 1 HEAD) -join ' ').Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+            if ($LASTEXITCODE -eq 0 -and $landing.Count -eq 3) { $changeHeadSha = $landing[2] }
+          }
+          $eventCanReduce  = $eventName -eq 'pull_request' -or
+              ($eventName -eq 'push' -and -not [string]::IsNullOrEmpty($changeHeadSha))
           function ConvertFrom-ShardList([string] $Json) {
             if ([string]::IsNullOrWhiteSpace($Json)) { return @() }
             return @($Json | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })
@@ -880,7 +894,7 @@ jobs:
             }
           }
           elseif (-not $eventCanReduce) {
-            Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
+            Write-Host "event is '${{ github.event_name }}' with no pull request head to scope to - running the full matrix"
           }
           else {
             # Non-runtime classification depends only on the PR's exact base-to-head path set, so
@@ -890,7 +904,7 @@ jobs:
             $pathRequiresValidation = $true
             try {
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
-                  -PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json
+                  -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
               $pathRequiresValidation = Read-RequiredJsonBoolean `
@@ -912,7 +926,7 @@ jobs:
               try {
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
-                    -PullRequestHeadSha $env:PR_HEAD_SHA `
+                    -PullRequestHeadSha $changeHeadSha `
                     -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
