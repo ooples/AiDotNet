@@ -221,8 +221,15 @@ public class ModelStateGenerator : IIncrementalGenerator
             // too. Treating every trunk as if it owned a parameter registry dropped the learned
             // coefficients from GAMLSS and ZeroInflatedRegression while their clones appeared to
             // deserialize successfully.
+            //
+            // A neural model's raw fields are carried here, but a trainable COMPONENT is not raw
+            // storage: a registered sub-model (StableVideoSR's diffusion core) is owned by the
+            // parameter registry and restored through it. Declaring it as child state too
+            // restored it twice, and the clone's before-parameters pass failed on its chunk layout.
+            bool ownedByParameterRegistry = persistsParametersSeparately
+                || (onNeuralNetworkTrunk && IsParameterSourceComponent(memberType));
             bool carryTrainableAsState = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
-                && !persistsParametersSeparately;
+                && !ownedByParameterRegistry;
             bool carryNativePrecisionShadow =
                 (classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
                     or ParameterMemberSemanticModel.Kind.Fitted
@@ -231,7 +238,7 @@ public class ModelStateGenerator : IIncrementalGenerator
                 && persistsParametersSeparately
                 && RequiresNativePrecisionShadow(memberType, numeric);
             if ((classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
-                    && persistsParametersSeparately
+                    && ownedByParameterRegistry
                     && !carryNativePrecisionShadow)
                 || classification.Kind is ParameterMemberSemanticModel.Kind.Scratch
                 or ParameterMemberSemanticModel.Kind.Alias
@@ -574,6 +581,16 @@ public class ModelStateGenerator : IIncrementalGenerator
                 ElementType.SpecialType: SpecialType.System_Double
             }
         };
+
+    /// <summary>
+    /// A component the parameter registry accepts: <c>RegisterParameterComponent</c> takes an
+    /// <c>IParameterSource&lt;T&gt;</c>. Raw numeric storage (Tensor, Vector, Matrix) never
+    /// implements it, so this separates registered components from the raw fields.
+    /// </summary>
+    private static bool IsParameterSourceComponent(ITypeSymbol type)
+        => type.AllInterfaces.Any(candidate => candidate.Name == "IParameterSource"
+            && candidate.Arity == 1
+            && candidate.ContainingNamespace.ToDisplayString() == "AiDotNet.Interfaces");
 
     /// <summary>Whether a type is a layer, i.e. derives from LayerBase.</summary>
     /// <remarks>

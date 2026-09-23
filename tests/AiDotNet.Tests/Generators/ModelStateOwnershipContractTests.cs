@@ -131,6 +131,46 @@ public sealed class ModelStateOwnershipContractTests
     }
 
     [Fact]
+    public void NeuralStateGenerationLeavesRegisteredParameterComponentsToTheParameterRegistry()
+    {
+        // StableVideoSR registers its diffusion core as a parameter component. Carrying that
+        // component as declared child state as well restored it twice, and its trained clone
+        // failed on the chunk layout. The raw tensor beside it must still be declared.
+        const string source = """
+            using AiDotNet.Enums;
+            using AiDotNet.Interfaces;
+            using AiDotNet.LossFunctions;
+            using AiDotNet.NeuralNetworks;
+            using AiDotNet.Tensors.LinearAlgebra;
+            namespace AiDotNet.Tests.GeneratedOwnership;
+            public sealed class ProbeComponent : IParameterSource<float>
+            {
+                private Vector<float> _values = new(2);
+                public long ParameterCount => _values.Length;
+                public Vector<float> GetParameters() => _values;
+                public void SetParameters(Vector<float> parameters) => _values = parameters;
+            }
+            public partial class ComponentNetwork : NeuralNetworkBase<float>
+            {
+                [AiDotNet.Attributes.TrainableParameter] private Tensor<float> _tensor = new(new[] { 3 });
+                private ProbeComponent? _core = new();
+                public ComponentNetwork() : base(new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: 4, outputSize: 1), new MeanSquaredErrorLoss<float>()) { }
+                protected override void RegisterComponents()
+                {
+                    if (_core is not null) RegisterParameterComponent("probe/core", _core);
+                }
+                protected override void InitializeLayers() { }
+                public override AiDotNet.Models.ModelMetadata<float> GetModelMetadata() => new() { Name = nameof(ComponentNetwork) };
+            }
+            """;
+        var (_, generated) = CompileSource(source);
+        Assert.Contains("ComponentNetwork._tensor", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("ComponentNetwork._core", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NonNeuralNonpartialReadonlyBuffersRetainTheirExistingPersistenceBoundary()
     {
         const string source = """
