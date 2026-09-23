@@ -35,6 +35,18 @@ namespace AiDotNet.Metrics;
 /// </para>
 /// <example>
 /// <code>
+/// // One image: a ground-truth text region and a predicted region that overlaps it.
+/// var groundTruthRegionsPerImage = new List&lt;IReadOnlyList&lt;AiDotNet.ComputerVision.Detection.TextDetection.TextRegion&lt;double&gt;&gt;&gt;
+/// {
+///     new[] { new AiDotNet.ComputerVision.Detection.TextDetection.TextRegion&lt;double&gt;(
+///         new AiDotNet.Augmentation.Image.BoundingBox&lt;double&gt;(0, 0, 40, 12), 1.0) }
+/// };
+/// var predictedRegionsPerImage = new List&lt;IReadOnlyList&lt;AiDotNet.ComputerVision.Detection.TextDetection.TextRegion&lt;double&gt;&gt;&gt;
+/// {
+///     new[] { new AiDotNet.ComputerVision.Detection.TextDetection.TextRegion&lt;double&gt;(
+///         new AiDotNet.Augmentation.Image.BoundingBox&lt;double&gt;(1, 0, 40, 12), 0.9) }
+/// };
+///
 /// var metrics = new TextDetectionMetrics&lt;double&gt;();
 /// var (precision, recall, hmean) = metrics.Evaluate(predictedRegionsPerImage, groundTruthRegionsPerImage);
 /// </code>

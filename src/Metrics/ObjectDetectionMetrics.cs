@@ -51,8 +51,19 @@ namespace AiDotNet.Metrics;
 /// </para>
 /// <example>
 /// <code>
+/// // One image: a class-0 ground-truth box and a detection that overlaps it.
+/// var groundTruthPerImage = new List&lt;IReadOnlyList&lt;AiDotNet.ComputerVision.Detection.ObjectDetection.Detection&lt;double&gt;&gt;&gt;
+/// {
+///     new[] { new AiDotNet.ComputerVision.Detection.ObjectDetection.Detection&lt;double&gt;(
+///         new AiDotNet.Augmentation.Image.BoundingBox&lt;double&gt;(0, 0, 10, 10), classId: 0, confidence: 1.0) }
+/// };
+/// var predicted = new List&lt;IReadOnlyList&lt;AiDotNet.ComputerVision.Detection.ObjectDetection.Detection&lt;double&gt;&gt;&gt;
+/// {
+///     new[] { new AiDotNet.ComputerVision.Detection.ObjectDetection.Detection&lt;double&gt;(
+///         new AiDotNet.Augmentation.Image.BoundingBox&lt;double&gt;(1, 1, 10, 10), classId: 0, confidence: 0.9) }
+/// };
+///
 /// var metrics = new ObjectDetectionMetrics&lt;double&gt;();
-/// var predicted = images.Select(img =&gt; detector.Detect(img).Detections).ToList();
 /// double cocoMap = metrics.MeanAveragePrecisionRange(predicted, groundTruthPerImage);
 /// double vocMap = metrics.MeanAveragePrecision(predicted, groundTruthPerImage, 0.5);
 /// </code>
