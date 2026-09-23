@@ -31,9 +31,12 @@ namespace AiDotNet.MetaLearning.Models;
 /// </remarks>
 /// <example>
 /// <code>
-/// var model = new LinearEmbeddingModel(inputDim: 3, embeddingDim: 4);
-/// var input = new Matrix&lt;double&gt;(10, 3);          // 10 examples, 3 features
-/// Tensor&lt;double&gt; embeddings = model.Predict(input); // shape [10, 4]
+/// var trainX = new Matrix&lt;double&gt;(10, 3);           // 10 examples, 3 features
+/// var trainY = new Tensor&lt;double&gt;(new[] { 10, 4 }); // their 4-dimensional embeddings
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new LinearEmbeddingModel(inputDim: 3, embeddingDim: 4))
+///     .Build(trainX, trainY);
+/// Tensor&lt;double&gt; embeddings = result.Predict(trainX);  // shape [10, 4]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
