@@ -71,7 +71,11 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ChangedFiles,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $AllShards,
     [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $NoCoverageShards,
+    [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ReattemptShards = @(),
     [Parameter(ParameterSetName = 'Select')] [string[]] $GlobalDirtyPrefixes = @('tests/'),
+    # Shard filters, so a changed test source can dirty the shards that run it instead of
+    # invalidating every carry. Omit to keep the blanket behaviour.
+    [Parameter(ParameterSetName = 'Select')] [string] $ShardManifestFile,
     [Parameter(ParameterSetName = 'Select')] [string] $CarryForwardDirectory,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -96,6 +100,10 @@ function Split-CoverageWork {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $ChangedFiles,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllShards,
         [AllowEmptyCollection()] [string[]] $NoCoverageShards,
+        [AllowEmptyCollection()] [string[]] $ReattemptShards = @(),
+        # Shards a changed test source is attributed to. They must be re-instrumented rather than
+        # carried, because coverlet excludes test assemblies so their new edges are invisible.
+        [AllowEmptyCollection()] [string[]] $TestDirtyShards = @(),
         [switch] $DisableCarry
     )
 
@@ -130,6 +138,13 @@ function Split-CoverageWork {
         foreach ($s in @($Map.alwaysRun)) { if ($s) { [void] $alwaysRun.Add([string] $s) } }
     }
 
+    $reattempt = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($s in $ReattemptShards) {
+        if (-not $s) { continue }
+        if ($s -cnotin $AllShards) { throw "ReattemptShards names unknown shard '$s'" }
+        [void] $reattempt.Add([string] $s)
+    }
+
     $noCoverage = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
         foreach ($s in $NoCoverageShards) { if ($s) { [void] $noCoverage.Add([string] $s) } }
@@ -145,14 +160,22 @@ function Split-CoverageWork {
         $name = [string] $s
         $disposition = [CoverageDisposition]::Instrument
 
-        if ($noCoverage.Contains($name) -and $alwaysRun.Contains($name)) {
+        if ($noCoverage.Contains($name) -and $alwaysRun.Contains($name) -and -not $reattempt.Contains($name)) {
             # The preceding complete map run already proved this no-coverage shard could not
             # produce a digest. Repeating the same memory-hungry instrumentation cannot teach the
             # map anything: execute its complete correctness suite and retain alwaysRun instead.
+            #
+            # That justification only holds where instrumentation was actually ATTEMPTED and
+            # failed. Nothing records the attempt, and a heavy shard is never instrumented on an
+            # ordinary run either, so this latches on the first map and the shard can never earn
+            # the digest that would release it - the same self-perpetuating shape as the
+            # certification deadlock. ReattemptShards is the deliberate escape hatch: name a shard
+            # to instrument it once more and find out, rather than assuming it cannot.
             $disposition = [CoverageDisposition]::RunWithoutCoverage
         }
         elseif ($noCoverage.Contains($name) -and -not $DisableCarry -and
-                $mapped.Contains($name) -and -not $dirty.Contains($name)) {
+                $mapped.Contains($name) -and -not $dirty.Contains($name) -and
+                $name -cnotin $TestDirtyShards) {
             $disposition = [CoverageDisposition]::Carried
         }
 
@@ -295,6 +318,43 @@ if ($SelfTest) {
     Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
         'the typed coverage dispositions must cover every shard exactly once'
 
+    # 8b. ReattemptShards releases the latch for one named shard. Without an escape hatch a
+    #     no-coverage shard that is already always-run can never be instrumented again, so it can
+    #     never earn the digest that would let it leave always-run - it is latched on assumption,
+    #     not on a recorded failed attempt.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy') -ReattemptShards @('Heavy')
+    Assert-True ($r.Instrument -contains 'Heavy') `
+        'a reattempted no-coverage shard must be instrumented instead of latched'
+    Assert-True ($r.RunWithoutCoverage.Count -eq 0) `
+        'reattempting the only latched shard must leave nothing running without coverage'
+    Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
+        'the dispositions must still cover every shard exactly once when one is reattempted'
+    $rejected = $false
+    try {
+        Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+            -NoCoverageShards @('Alpha', 'Heavy') -ReattemptShards @('NoSuchShard') | Out-Null
+    }
+    catch { $rejected = $true }
+    Assert-True $rejected 'ReattemptShards naming a shard outside the catalog must be rejected'
+
+    # 8c. A changed test source must re-instrument the shards that RUN it, and only those. The old
+    #     blanket rule disabled every carry whenever any tests/ path changed, so essentially every
+    #     night re-instrumented all 164 shards - which is why the coverage run never finished and
+    #     the map never re-based.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy') -TestDirtyShards @('Alpha')
+    Assert-True ($r.Instrument -contains 'Alpha') `
+        'a shard owning a changed test source was carried instead of re-instrumented'
+    Assert-True ($r.Carried -notcontains 'Alpha') `
+        'a test-dirty shard must never be carried'
+    Assert-True (($r.Instrument.Count + $r.Carried.Count + $r.RunWithoutCoverage.Count) -eq $all.Count) `
+        'the dispositions must still cover every shard exactly once with a test-dirty shard'
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all `
+        -NoCoverageShards @('Alpha', 'Heavy') -TestDirtyShards @()
+    Assert-True ($r.Carried -contains 'Alpha') `
+        'an unrelated shard stopped carrying when no test source was attributed to it'
+
     # 9. alwaysRun alone is not permission to suppress instrumentation. The shard must also be in
     #    the explicit workflow-derived no-coverage boundary; otherwise it remains Instrument and
     #    gets another opportunity to produce a digest.
@@ -377,24 +437,63 @@ if ($PreviousMap -and (Test-Path -LiteralPath $PreviousMap)) {
     }
 }
 
+# A changed test file can create coverage edges the digests cannot see, because coverlet excludes
+# the test assemblies. That is real, but it only applies to the shards that actually RUN that file.
+# Disabling every carry instead meant essentially every night re-instrumented all 164 shards -
+# virtually every merge touches tests/ - which is why the coverage run takes 5-22 hours, starves for
+# runners (35679242545 sat queued 8.8h), and never re-bases the map. Attribute instead, and fall
+# back to the blanket rule for any test path no shard claims, so the conservative case is preserved.
+$manifestForDirty = $null
+if ($ShardManifestFile -and (Test-Path -LiteralPath $ShardManifestFile)) {
+    $manifestForDirty = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+}
 $disableCarry = $false
+$testDirtyShards = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 foreach ($path in $ChangedFiles) {
     if (-not $path) { continue }
+    $normalized = ([string] $path).Replace('\', '/')
+    $isGlobal = $false
     foreach ($prefix in $GlobalDirtyPrefixes) {
-        if (([string] $path).StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-            Write-Host "change under '$prefix' ($path) - test code is invisible to digests, so nothing is carried tonight"
-            $disableCarry = $true
-            break
+        if ($normalized.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { $isGlobal = $true; break }
+    }
+    if (-not $isGlobal) { continue }
+
+    if ($null -eq $manifestForDirty) {
+        Write-Host "change under a global prefix ($normalized) and no shard manifest - nothing is carried tonight"
+        $disableCarry = $true
+        break
+    }
+
+    # Match the file against each shard's FullyQualifiedName filter terms, the same way VSTest
+    # selects it. A dotted form of the path is what those terms are written against.
+    $dotted = [IO.Path]::ChangeExtension($normalized, $null).TrimEnd('.').Replace('/', '.')
+    $claimed = $false
+    foreach ($shard in $manifestForDirty) {
+        foreach ($m in [regex]::Matches([string] $shard.filter, 'FullyQualifiedName~([A-Za-z0-9_.]+)')) {
+            if ($dotted.Contains($m.Groups[1].Value)) {
+                [void] $testDirtyShards.Add([string] $shard.name)
+                $claimed = $true
+                break
+            }
         }
     }
-    if ($disableCarry) { break }
+    if (-not $claimed) {
+        Write-Host "changed test source '$normalized' matches no shard filter - nothing is carried tonight"
+        $disableCarry = $true
+        break
+    }
+}
+if (-not $disableCarry -and $testDirtyShards.Count -gt 0) {
+    Write-Host "$($testDirtyShards.Count) shard(s) re-instrumented for changed test sources; the rest may still carry"
 }
 
 $splitArgs = @{
-    Map          = $map
-    ChangedFiles = $ChangedFiles
-    AllShards    = $AllShards
-    DisableCarry = $disableCarry
+    Map             = $map
+    ChangedFiles    = $ChangedFiles
+    AllShards       = $AllShards
+    ReattemptShards = $ReattemptShards
+    TestDirtyShards = @($testDirtyShards)
+    DisableCarry    = $disableCarry
 }
 if ($PSBoundParameters.ContainsKey('NoCoverageShards')) {
     $splitArgs.NoCoverageShards = $NoCoverageShards

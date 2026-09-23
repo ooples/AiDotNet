@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,12 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Fu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, ReferenceBatchSize = 128,
+                Source = "Fu et al. 2024, Sec. 4: AdamW at a batch size of 128. No single learning rate "
+                        + "is declared because the paper gives one per component -- 5e-4 for the "
+                        + "multimodal language model and 1e-4 for the editing head -- and this model "
+                        + "builds one optimizer over both, so neither rate would be correct for all of "
+                        + "it.")]
 public partial class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly MGIEOptions _options;
@@ -101,7 +109,9 @@ public partial class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
     {
         _options = options ?? new MGIEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

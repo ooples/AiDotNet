@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -52,10 +54,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new BlipOptions { ImageSize = 384, MaxTextLength = 128 };
-/// var model = new BlipNeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 384, 384 });
-/// var output = model.Predict(image);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 384, 384 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new BlipNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -68,6 +74,8 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation", "https://arxiv.org/abs/2201.12086", Year = 2022, Authors = "Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, WeightDecay = 0.05,
+                Source = "Li et al. 2022, Sec. 4.1: AdamW with weight decay 0.05, the learning rate warmed up to 3e-4 for ViT-B (2e-4 for ViT-L). No schedule is declared because the paper says the rate is decayed linearly with a rate of 0.85, and a linear decay and a 0.85 factor are two different curves; declaring either would be a reading rather than a quotation.")]
 public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipModel<T>
 {
     private readonly BlipOptions _options;
@@ -348,7 +356,9 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
 
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
             InitializeLayers();
@@ -432,7 +442,9 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
         // Create simple tokenizer if not provided
         _tokenizer = tokenizer ?? CreateDefaultTokenizer();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
         InitializeLayers();

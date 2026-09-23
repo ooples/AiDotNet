@@ -43,6 +43,7 @@ namespace AiDotNet.Finance.Portfolio;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <example>
 /// <code>
+/// var returnPanel = Tensor&lt;double&gt;.CreateRandom(2, 4);
 /// var model = new GraphAttentionPortfolio&lt;double&gt;(
 ///     new GraphAttentionPortfolioOptions&lt;double&gt; { NumAssets = 30 });
 /// Vector&lt;double&gt; weights = model.OptimizePortfolio(returnPanel);

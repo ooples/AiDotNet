@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -64,6 +65,8 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
+[PaperOptimizer(OptimizerKind.Adam, Provenance = RecipeProvenance.PerDataset,
+                Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. The paper tunes the learning rate manually per dataset, so there is no single value to declare and the provenance says so rather than the omission being silent.")]
 public partial class DeepAR<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
@@ -255,7 +258,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         Options = _options;
         ValidateOptions(options);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _hiddenSize = options.HiddenSize;
         _numLstmLayers = options.NumLayers;
@@ -303,7 +308,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         Options = _options;
         ValidateOptions(options);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _hiddenSize = options.HiddenSize;
         _numLstmLayers = options.NumLayers;

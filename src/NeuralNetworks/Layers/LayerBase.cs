@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Initialization;
@@ -494,6 +494,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown. Read and set under <c>_bufferRegistrationLock</c>,
+    /// so exactly one caller reaches the virtual <see cref="Dispose(bool)"/> dispatch.
+    /// </summary>
+    private bool _disposeClaimed;
 
     /// <summary>
     /// Collection of tensors that have been registered as persistent with the engine.
@@ -7105,6 +7111,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal int ParameterVectorLength => FillParameters(null, 0);
 
     /// <summary>
+    /// Enumerates live persistent parameter/buffer storage identities and mutation versions without
+    /// producing parameter values, projected sparse payloads, or fp16 conversion snapshots.
+    /// </summary>
+    /// <remarks>
+    /// Policy ownership checks use this declaration walk rather than the checkpoint value stream.
+    /// Registered running statistics are included because they affect inference; scratch state is not
+    /// declared as persistent storage. Opaque non-LayerBase children expose no reliable storage
+    /// identity and retain their explicit owner-update contract. Repeated aliases may be enumerated;
+    /// callers compare by reference identity, not declaration order.
+    /// </remarks>
+    internal IEnumerable<(object Storage, int Version)> GetParameterStorageVersions()
+    {
+        EnsureParametersMaterialized();
+        foreach (var component in GetOrderedParameterComponents())
+        {
+            if (component.Kind is DeclaredParameterComponentKind.Trainable or DeclaredParameterComponentKind.Buffer)
+            {
+                if (component.LowPrecisionTensor is { } half)
+                    yield return (half, half.Version);
+                else if (component.Tensor is { } tensor)
+                    yield return (tensor, tensor.Version);
+            }
+            else if (component.Layer is LayerBase<T> child)
+            {
+                foreach (var storage in child.GetParameterStorageVersions())
+                    yield return storage;
+            }
+        }
+    }
+
+    /// <summary>
     /// Enumerates the exact state walk used by <see cref="GetParameters"/>, preserving trainable
     /// tensors, persistent buffers, sparse payloads, legacy flat storage, and child-layer order.
     /// </summary>
@@ -9357,6 +9394,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public void Dispose()
     {
+        // A repeated call must not re-enter a derived Dispose(bool) override. Overrides run their own
+        // teardown before calling base -- DenseLayer's, for one, re-invalidates the engine's GPU cache
+        // entry for _weights/_biases, tensors whose pooled storage the first call already handed back
+        // and a newer layer may now own. Only this entry point can keep that teardown to one run.
+        //
+        // _disposed cannot be that gate. Dispose(bool) sets it after the derived override has
+        // already run, so two concurrent callers both read false and both enter the override;
+        // setting it here instead would make Dispose(bool) skip the base cleanup altogether. A
+        // separate claim, taken under the same lock, keeps both properties.
+        lock (_bufferRegistrationLock)
+        {
+            if (_disposed || _disposeClaimed) return;
+            _disposeClaimed = true;
+        }
+
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }

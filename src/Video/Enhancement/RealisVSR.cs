@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -51,6 +52,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2507.19138",
     Year = 2025,
     Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 1e-4,
+                Source = "RealisVSR: AdamW as the optimizer, with a weight decay of 1e-4 and a learning "
+                        + "rate of 1e-5.")]
 public partial class RealisVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -86,7 +90,9 @@ public partial class RealisVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new RealisVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

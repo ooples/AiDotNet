@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -23,10 +24,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GatedDeltaNetOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24, NumHeads = 16 };
-/// var model = new GatedDeltaNetLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GatedDeltaNetLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -37,6 +42,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-4, WeightDecay = 0.1,
+                MinLearningRate = 0, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Yang et al. 2024, Sec. 5: AdamW with a peak learning rate of 4e-4, a weight "
+                        + "decay of 0.1 and gradient clipping of 1.0, under a cosine schedule.")]
 public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GatedDeltaNetOptions _options;
@@ -66,33 +76,30 @@ public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBas
 
     public GatedDeltaNetLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 8,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         GatedDeltaNetOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GatedDeltaNetOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _maxSeqLength = _options.MaxSequenceLength;
         // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
         // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
         // something the caller could change short of building the whole optimizer themselves.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         InitializeLayers();
     }
 

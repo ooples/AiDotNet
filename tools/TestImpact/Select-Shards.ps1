@@ -11,7 +11,9 @@
     shard-map.json from New-ShardMap.ps1.
 
 .PARAMETER ExpectedShards
-    The complete current shard manifest. A map for a different shard universe is never trusted.
+    The complete current shard manifest. A map naming a shard the manifest no longer has is never
+    trusted. A manifest shard the map has not seen yet - one added since the map was built - is
+    run on every selection until a map includes it, exactly as if it were an always-run shard.
 
 .PARAMETER AuditUnchangedMap
     Allows the nightly selection-miss audit to evaluate an unchanged map tree by selecting only
@@ -66,6 +68,7 @@ $ErrorActionPreference = 'Stop'
 
 enum ChangedPathImpact {
     NonRuntime
+    BuildOnly
     MapCandidate
     SelectionControl
     FullValidation
@@ -73,8 +76,16 @@ enum ChangedPathImpact {
 
 $script:SharedInfrastructureFiles = @(
     'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
-    'global.json', 'nuget.config', 'NuGet.config', '.editorconfig'
+    'global.json', 'nuget.config', 'NuGet.config'
 )
+# Compile the change, but do not run the test matrix for it. An .editorconfig edit can raise an
+# analyzer to error and fail the BUILD, which is why it cannot be NonRuntime - the build jobs and
+# the shard matrix share one gate, so calling it non-runtime would skip the compile that catches it.
+# It cannot change runtime behaviour: nothing under src/AiDotNet.Generators reads
+# AnalyzerConfigOptions (verified by grep), so no generated test text depends on it, and the
+# remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
+# to prove an indent rule is the single largest unjustified escalation measured on real PRs.
+$script:BuildOnlyFiles = @('.editorconfig')
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -162,6 +173,12 @@ function Get-ChangedPathImpact {
     }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
+    }
+    # Checked after SelectionControl and SharedInfrastructure so a build-only name can never
+    # downgrade a path those already claimed.
+    $buildOnlyName = [System.IO.Path]::GetFileName($normalized)
+    foreach ($entry in $script:BuildOnlyFiles) {
+        if ($buildOnlyName -ieq $entry) { return [ChangedPathImpact]::BuildOnly }
     }
 
     # Markdown cannot alter a build or runtime. Known independent workflows have their own triggers
@@ -253,10 +270,12 @@ function Assert-ShardMap {
         }
     }
 
-    $missing = @($expectedSet | Where-Object { -not $mapSet.Contains($_) } | Sort-Object)
+    # A map shard the manifest no longer has is a removal or a rename: the map's coverage describes
+    # a matrix that no longer exists, and selecting from it could name a job that cannot run.
+    # The opposite direction is not a contradiction, only a gap: see Add-UnmappedShardsAsAlwaysRun.
     $extra = @($mapSet | Where-Object { -not $expectedSet.Contains($_) } | Sort-Object)
-    if ($missing.Count -gt 0 -or $extra.Count -gt 0) {
-        throw "map shard universe differs from the manifest (missing: $($missing -join ', '); extra: $($extra -join ', '))"
+    if ($extra.Count -gt 0) {
+        throw "map names shard(s) the manifest does not have: $($extra -join ', ')"
     }
 
     $fileProperties = @($Map.files.PSObject.Properties)
@@ -586,6 +605,133 @@ function Format-LineRanges {
     return (@($Ranges | ForEach-Object { "$($_[0])-$($_[1])" }) -join ', ')
 }
 
+function Add-UnmappedShardsAsAlwaysRun {
+    <#
+    .SYNOPSIS
+        Runs every manifest shard the map has not seen on every selection, until a map includes it.
+    .DESCRIPTION
+        A shard added to the manifest after the map was built has no coverage in it, so nothing can
+        say which changes reach it. Refusing the whole map for that reason used to send every pull
+        request back to the full matrix from the moment a shard was added until a new map was
+        generated and certified - hours of full runs to learn about one shard. Running just the
+        unmapped shard every time is the honest reading of "no evidence": it costs what that shard
+        cost before it could be selected, and every mapped shard stays selective.
+    .OUTPUTS
+        The unmapped shard names, sorted. The map is updated in place.
+    #>
+    param(
+        [Parameter(Mandatory)] $Map,
+        [Parameter(Mandatory)] [string[]] $Expected
+    )
+
+    $mapSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in @($Map.knownShards) + @($Map.alwaysRun)) { [void] $mapSet.Add([string] $name) }
+    $unmapped = @($Expected | Where-Object { -not $mapSet.Contains([string] $_) } | Sort-Object -Unique)
+    if ($unmapped.Count -gt 0) {
+        $Map.alwaysRun = @(@($Map.alwaysRun) + $unmapped)
+        $Map | Add-Member -NotePropertyName unmappedShards -NotePropertyValue $unmapped -Force
+    }
+    return $unmapped
+}
+
+# Environment variables that slice the reflected model inventory by POSITION: the conformance
+# windows Skip/Take a sorted type list and the parameter-count sweep takes index % 8. Adding one
+# model moves others between such shards without touching their executed lines, so their coverage
+# index is only trusted while the inventory is unchanged (see Test-AuxiliaryInventoryChange).
+$script:InventoryWindowEnvironment = @('ADNSHAPE_CONF_OFFSET', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+
+function Test-InventoryWindow {
+    param([Parameter(Mandatory)] [object] $Shard)
+
+    function Get-Field([object] $Object, [string] $Name) {
+        if ($Object -is [System.Collections.IDictionary]) {
+            if ($Object.Contains($Name)) { return , $Object[$Name] }
+            return $null
+        }
+        $property = $Object.PSObject.Properties[$Name]
+        if ($null -eq $property) { return $null }
+        return , $property.Value
+    }
+    $workload = Get-Field $Shard 'workload'
+    if ($null -ne $workload -and [string] $workload -cne 'Tests') { return $true }
+    $environment = Get-Field $Shard 'env'
+    if ($null -eq $environment) { return $false }
+    $names = if ($environment -is [System.Collections.IDictionary]) { @($environment.Keys) }
+             else { @($environment.PSObject.Properties.Name) }
+    return @($names | Where-Object { [string] $_ -cin $script:InventoryWindowEnvironment }).Count -gt 0
+}
+
+function ConvertTo-CanonicalShardJson {
+    <#
+        One text per shard definition regardless of how it was loaded. yq output, hashtables and
+        ConvertFrom-Json objects disagree on key order and container type, not on content.
+    #>
+    param([AllowNull()] $Value)
+
+    if ($null -eq $Value) { return 'null' }
+    if ($Value -is [string]) { return ConvertTo-Json -InputObject $Value -Compress }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $pairs = foreach ($key in @($Value.Keys | ForEach-Object { [string] $_ } | Sort-Object -CaseSensitive)) {
+            (ConvertTo-Json -InputObject $key -Compress) + ':' + (ConvertTo-CanonicalShardJson $Value[$key])
+        }
+        return '{' + (@($pairs) -join ',') + '}'
+    }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) {
+        $pairs = foreach ($key in @($Value.PSObject.Properties.Name | Sort-Object -CaseSensitive)) {
+            (ConvertTo-Json -InputObject $key -Compress) + ':' +
+                (ConvertTo-CanonicalShardJson $Value.PSObject.Properties[$key].Value)
+        }
+        return '{' + (@($pairs) -join ',') + '}'
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        $items = foreach ($item in $Value) { ConvertTo-CanonicalShardJson $item }
+        return '[' + (@($items) -join ',') + ']'
+    }
+    return ConvertTo-Json -InputObject $Value -Compress
+}
+
+function Read-ShardManifestAtRevision {
+    <#
+        The shard entries committed at a revision, or $null when that revision has no
+        .github/test-shards.yml. A manifest that exists but cannot be parsed throws.
+    #>
+    param([Parameter(Mandatory)] [string] $Revision)
+
+    $source = @(& git show "${Revision}:.github/test-shards.yml" 2>$null)
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $json = ($source -join "`n") | & yq -o=json -I=0 '.shard' '-'
+    if ($LASTEXITCODE -ne 0) { throw "cannot parse .github/test-shards.yml at $Revision" }
+    $entries = @(($json -join "`n") | ConvertFrom-Json)
+    if ($entries.Count -eq 0) { throw ".github/test-shards.yml at $Revision has no shards" }
+    return , $entries
+}
+
+function Get-RedefinedShards {
+    <#
+        Pure. The indexed shards whose current definition differs from the one the map measured.
+        MapManifest is the manifest at the map's commit; an empty one means it could not be
+        established, so every indexed shard counts as redefined.
+
+        Per-shard comparison is sufficient because a filter that moves tests between shards changes
+        the text of both: catch-all shards here list their exclusions explicitly.
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $MapManifest,
+        [Parameter(Mandatory)] [object[]] $Manifest,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $IndexedShards
+    )
+
+    $measured = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in $MapManifest) { $measured[[string] $entry.name] = ConvertTo-CanonicalShardJson $entry }
+    $indexed = [System.Collections.Generic.HashSet[string]]::new([string[]] @($IndexedShards), [StringComparer]::Ordinal)
+    $redefined = foreach ($entry in $Manifest) {
+        $name = [string] $entry.name
+        if (-not $indexed.Contains($name)) { continue }
+        if (-not $measured.ContainsKey($name) -or $measured[$name] -cne (ConvertTo-CanonicalShardJson $entry)) { $name }
+    }
+    return @($redefined | Sort-Object -Unique)
+}
+
 function Select-ImpactedShards {
     <#
         CurrentPaths is the change being validated. With -ScopeToCurrentPaths, only those paths are
@@ -611,6 +757,10 @@ function Select-ImpactedShards {
         [string[]] $RequiredShards = @()
     )
 
+    # Indexed shards whose manifest definition changed since the map was measured: their index
+    # describes a test set they may no longer run, so they are mandatory like always-run shards.
+    $redefined = @(if ($Map.PSObject.Properties['redefinedShards']) { @($Map.redefinedShards) })
+    $mandatory = @(@($Map.alwaysRun) + $redefined)
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
@@ -699,7 +849,7 @@ function Select-ImpactedShards {
     # the candidate map are non-runtime. Ordinary docs-only PRs still select nothing.
     if ($Changed.Count -eq 0 -or ($AuditUnchangedMap -and $mappedPaths.Count -eq 0 -and -not $escalate)) {
         if ($AuditUnchangedMap) {
-            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+            foreach ($shard in $mandatory) { [void] $selected.Add([string] $shard) }
             # Certificate policy requires both a nonempty selected set and a nonempty skipped set.
             # With no always-run shards, an unchanged audit is vacuous and must wait for a real
             # mapped change rather than certifying that selection was exercised when it was not.
@@ -728,7 +878,7 @@ function Select-ImpactedShards {
     # Keep that state typed here and expose only a JSON boolean at the workflow boundary.
     if ($mappedPaths.Count -eq 0) {
         if ($selected.Count -gt 0) {
-            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+            foreach ($shard in $mandatory) { [void] $selected.Add([string] $shard) }
         }
         return [pscustomobject]@{
             Escalate          = $escalate
@@ -739,9 +889,19 @@ function Select-ImpactedShards {
         }
     }
 
+    $unmappedShards = if ($Map.PSObject.Properties['unmappedShards']) { @($Map.unmappedShards) } else { @() }
     foreach ($shard in @($Map.alwaysRun)) {
         [void] $selected.Add([string] $shard)
-        [void] $routes.Add("$shard <= is always run")
+        if ($unmappedShards -contains $shard) {
+            [void] $routes.Add("$shard <= is not in the coverage map yet, so it runs until a map includes it")
+        }
+        else {
+            [void] $routes.Add("$shard <= is always run")
+        }
+    }
+    foreach ($shard in $redefined) {
+        [void] $selected.Add([string] $shard)
+        [void] $routes.Add("$shard <= changed its manifest definition since the map measured it, so it runs until a map measures it again")
     }
 
     foreach ($path in $mappedPaths) {
@@ -1042,24 +1202,195 @@ function Test-TestFilter {
     }
 }
 
+function Skip-CSharpHoleToken {
+    <#
+        Advances one token inside an interpolation hole, where the text is CODE. Returns the new
+        index and adjusts hole depth through the reference.
+
+        Comments count here: `$"{/* } " */ 0}"` is valid C#, and treating the brace and quote
+        inside that comment as code ends the literal early, which surfaces as 'unbalanced braces'
+        and escalates selection to the full matrix. Nested literals recurse so their own quotes
+        and braces cannot be mistaken for the enclosing literal's.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Text,
+        [Parameter(Mandatory)] [int] $Index,
+        [Parameter(Mandatory)] [ref] $HoleDepth
+    )
+
+    $n = $Text.Length
+    $i = $Index
+    $ch = $Text[$i]
+
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+        $e = $Text.IndexOf("`n", $i)
+        return $(if ($e -lt 0) { $n } else { $e })
+    }
+    if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+        $e = $Text.IndexOf('*/', $i + 2)
+        return $(if ($e -lt 0) { $n } else { $e + 2 })
+    }
+    if ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+        $inner = Get-CSharpLiteralEnd -Text $Text -Start $i
+        if ($inner -gt $i) { return $inner }
+    }
+    if ($ch -eq '{') { $HoleDepth.Value++ }
+    elseif ($ch -eq '}') { $HoleDepth.Value-- }
+    return $i + 1
+}
+
+function Get-CSharpLiteralEnd {
+    <#
+        Returns the index one past the end of the C# string or character literal starting at
+        $Start, or $Start when nothing starts there. Understands raw ("""), verbatim (@"),
+        interpolated ($") and combined forms.
+
+        Interpolation holes are CODE, not text: `$"{string.Join(", ", xs)}"` contains a nested
+        string whose quotes must not end the outer literal. A regex cannot express that, and the
+        one this replaced ended the literal at the first inner quote - which swallowed the hole's
+        opening brace, left its closing brace as code, and made Get-CSharpTestShape report
+        'unbalanced braces' for NeuralNetworkModelTestBase.cs. That is an escalation to the full
+        matrix for every change that reaches it.
+    #>
+    param([Parameter(Mandatory)] [string] $Text, [Parameter(Mandatory)] [int] $Start)
+
+    $n = $Text.Length
+    $i = $Start
+
+    if ($Text[$i] -eq "'") {
+        $i++
+        while ($i -lt $n) {
+            if ($Text[$i] -eq '\') { $i += 2; continue }
+            if ($Text[$i] -eq "'") { return $i + 1 }
+            if ($Text[$i] -eq "`n") { return $i }
+            $i++
+        }
+        return $n
+    }
+
+    $dollars = 0
+    $verbatim = $false
+    while ($i -lt $n -and ($Text[$i] -eq '$' -or $Text[$i] -eq '@')) {
+        if ($Text[$i] -eq '$') { $dollars++ } else { $verbatim = $true }
+        $i++
+    }
+    $interpolated = $dollars -gt 0
+    if ($i -ge $n -or $Text[$i] -ne '"') { return $Start }
+
+    $quotes = 0
+    while ($i + $quotes -lt $n -and $Text[$i + $quotes] -eq '"') { $quotes++ }
+    $holeDepth = 0
+    if ($quotes -ge 3) {
+        # Raw literal. Scanning rather than IndexOf on the fence: in a raw INTERPOLATED literal a
+        # hole is code and may itself contain a fence, so `$"""{ """ }"""` would otherwise end at
+        # the inner one. C# opens a hole with as many braces as there are leading '$'.
+        $i += $quotes
+        while ($i -lt $n) {
+            $ch = $Text[$i]
+            if ($holeDepth -gt 0) {
+                $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
+                continue
+            }
+            if ($interpolated -and $ch -eq '{') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '{') { $run++ }
+                if ($run -ge $dollars) { $holeDepth++; $i += $dollars } else { $i += $run }
+                continue
+            }
+            if ($ch -eq '"') {
+                $run = 0
+                while ($i + $run -lt $n -and $Text[$i + $run] -eq '"') { $run++ }
+                if ($run -ge $quotes) { return $i + $quotes }
+                $i += $run
+                continue
+            }
+            $i++
+        }
+        return $n
+    }
+
+    $i++
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+
+        if ($holeDepth -gt 0) {
+            $i = Skip-CSharpHoleToken -Text $Text -Index $i -HoleDepth ([ref] $holeDepth)
+            continue
+        }
+
+        if ($verbatim) {
+            if ($ch -eq '"') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '"') { $i += 2; continue }
+                return $i + 1
+            }
+        }
+        else {
+            if ($ch -eq '\') { $i += 2; continue }
+            if ($ch -eq '"') { return $i + 1 }
+            if ($ch -eq "`n") { return $i }
+        }
+
+        if ($interpolated) {
+            if ($ch -eq '{') {
+                if ($i + 1 -lt $n -and $Text[$i + 1] -eq '{') { $i += 2; continue }
+                $holeDepth++; $i++; continue
+            }
+            if ($ch -eq '}' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '}') { $i += 2; continue }
+        }
+
+        $i++
+    }
+    return $n
+}
+
 function ConvertTo-CodeOnlyCSharp {
     <#
         Blanks the CONTENT of comments, strings and character literals (newlines are kept, so
         offsets and line numbers survive), leaving only code. Brace matching and declaration
         matching then cannot be fooled by '{' in a string or 'class X' in a comment.
+
+        Scanned rather than pattern-matched: see Get-CSharpLiteralEnd for why a regex cannot
+        classify an interpolation hole correctly.
     #>
     param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text, [switch] $PreserveStrings)
 
-    $pattern = '(?s)//[^\n]*|/\*.*?\*/|\$*(?<q>"{3,}).*?\k<q>|(?:\$@|@\$|@)"(?:[^"]|"")*"|\$?"(?:[^"\\\n]|\\.)*"|''(?:[^''\\\n]|\\.){1,10}'''
-    # A managed replacement avoids repeatedly logging/Stringifying an ever-growing
-    # StringBuilder under PowerShell member-invocation logging (quadratic on generators).
-    return [regex]::Replace($Text, $pattern, [System.Text.RegularExpressions.MatchEvaluator] {
-        param($match)
-        if ($PreserveStrings -and -not ($match.Value.StartsWith('//') -or $match.Value.StartsWith('/*'))) {
-            return $match.Value
+    $n = $Text.Length
+    if ($n -eq 0) { return $Text }
+    $chars = $Text.ToCharArray()
+    $i = 0
+
+    while ($i -lt $n) {
+        $ch = $Text[$i]
+        $from = $i
+        $to = -1
+        $isComment = $false
+
+        if ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '/') {
+            $isComment = $true
+            $to = $Text.IndexOf("`n", $i)
+            if ($to -lt 0) { $to = $n }
         }
-        return ($match.Value -replace '[^\r\n]', ' ')
-    })
+        elseif ($ch -eq '/' -and $i + 1 -lt $n -and $Text[$i + 1] -eq '*') {
+            $isComment = $true
+            $to = $Text.IndexOf('*/', $i + 2)
+            $to = if ($to -lt 0) { $n } else { $to + 2 }
+        }
+        elseif ($ch -eq '"' -or $ch -eq "'" -or $ch -eq '$' -or $ch -eq '@') {
+            $end = Get-CSharpLiteralEnd -Text $Text -Start $i
+            if ($end -gt $i) { $to = $end }
+        }
+
+        if ($to -lt 0) { $i++; continue }
+        if (-not ($PreserveStrings -and -not $isComment)) {
+            for ($k = $from; $k -lt $to; $k++) {
+                $c = $chars[$k]
+                if ($c -ne "`r" -and $c -ne "`n") { $chars[$k] = ' ' }
+            }
+        }
+        $i = $to
+    }
+
+    return [string]::new($chars)
 }
 
 function Get-CSharpTestShape {
@@ -1976,6 +2307,56 @@ file class Private { }
 '@
     $shape = Get-CSharpTestShape -Text $source
     Assert-True ($null -eq $shape.ParseError) "valid C# was reported unparseable: $($shape.ParseError)"
+
+    # An interpolation hole is CODE, so it may hold a comment or a nested literal whose braces and
+    # quotes are not the enclosing literal's. Getting either wrong reports 'unbalanced braces',
+    # which fails Get-TestFileRoutes closed and escalates to the full 164-shard matrix. Neither
+    # form occurs in the repo today (0 of 11,928 sources), so these guard the scanner, not a
+    # current failure - the nested-quote form did occur, and did exactly that.
+    $q = [string][char]34
+    $holeCases = @(
+        @{ Name = 'nested string in a hole'
+           Body = 'var s = $"a{string.Join(", ", xs)}b";' },
+        @{ Name = 'block comment in a hole'
+           Body = 'var s = $"a{/* } ' + $q + ' */ 0}b";' },
+        @{ Name = 'line comment in a hole'
+           Body = "var s = `$`"a{ 0 // } $q`n }b`";" },
+        @{ Name = 'raw interpolated hole containing a fence'
+           Body = 'var s = $' + ($q * 3) + 'a{ ' + ($q * 3) + 'x' + ($q * 3) + ' }b' + ($q * 3) + ';' },
+        @{ Name = 'doubled braces are literal, not a hole'
+           Body = 'var s = $"{{ not a hole }}";' }
+    )
+    foreach ($case in $holeCases) {
+        $text = "namespace N { public class C { public void M() { $($case.Body) } } }"
+        $masked = ConvertTo-CodeOnlyCSharp -Text $text
+        $open = ([regex]::Matches($masked, '\{')).Count
+        $close = ([regex]::Matches($masked, '\}')).Count
+        Assert-True ($open -eq $close) `
+            "masking left braces unbalanced ($open open, $close close) for: $($case.Name)"
+        Assert-True ($null -eq (Get-CSharpTestShape -Text $text).ParseError) `
+            "a literal was misparsed and reported unbalanced braces for: $($case.Name)"
+    }
+
+    # .editorconfig must compile but must not drag in the shard matrix. It cannot change runtime
+    # behaviour - nothing under src/AiDotNet.Generators reads AnalyzerConfigOptions - but it can
+    # raise an analyzer to error, so it is BuildOnly rather than NonRuntime. Measured on PR #2112,
+    # this was one of the two files escalating it to 130 shards.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        '.editorconfig is not classified BuildOnly'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        'a nested .editorconfig is not classified BuildOnly'
+    # The neighbours it used to sit beside must keep escalating: they really can change compilation
+    # output, not merely diagnostics.
+    foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {
+        Assert-True ((Get-ChangedPathImpact -Path $shared) -eq [ChangedPathImpact]::FullValidation) `
+            "$shared stopped requiring full validation"
+    }
+    # BuildOnly must never be mistaken for NonRuntime: that shares a gate with the build jobs, so
+    # an analyzer promoted to error would ship without ever being compiled.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -ne [ChangedPathImpact]::NonRuntime) `
+        '.editorconfig was downgraded to NonRuntime, which would skip the build that catches it'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/AiDotNet.Generators/TestScaffoldGenerator.cs') -eq [ChangedPathImpact]::FullValidation) `
+        'a generator edit stopped requiring full validation'
     $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
     $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
         'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
@@ -2271,8 +2652,88 @@ var source = "class Test : RealBase { } // string contents survive"; /* AnotherF
     $badLine.files.'src/Covered.cs'[0].r = @(0, 10)
     Assert-Throws { Assert-ShardMap -Map $badLine -Expected $expected } 'non-positive map lines must be rejected'
 
-    Assert-Throws { Assert-ShardMap -Map $map -Expected @('Alpha', 'Beta', 'HeavyNoCoverage', 'NewShard') } `
-        'a stale shard universe must be rejected'
+    # A map naming a shard the manifest dropped (a removal or rename) is still refused.
+    Assert-Throws { Assert-ShardMap -Map $map -Expected @('Alpha', 'HeavyNoCoverage') } `
+        'a map naming a shard the manifest no longer has must be rejected'
+
+    # A shard added after the map was built is not a reason to distrust the map: it runs on every
+    # selection until a map includes it, and every mapped shard stays selective.
+    $grown = $map | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $grownExpected = @('Alpha', 'Beta', 'HeavyNoCoverage', 'NewShard')
+    try { Assert-ShardMap -Map $grown -Expected $grownExpected } catch { [void] $failures.Add("a map missing only a newly added shard was rejected: $_") }
+    $added = @(Add-UnmappedShardsAsAlwaysRun -Map $grown -Expected $grownExpected)
+    Assert-True (($added -join ',') -ceq 'NewShard') "the unmapped shard was not identified (got '$($added -join ',')')"
+    $r = Select-ImpactedShards -Map $grown -Changed @{ 'src/Covered.cs' = @(12, 14) }
+    Assert-True ($r.Shards -contains 'NewShard') 'an unmapped shard was not run'
+    Assert-True ($r.Shards -contains 'Alpha') 'a mapped shard reached by the change was not selected'
+    Assert-True (-not ($r.Shards -contains 'Beta')) 'an unmapped shard made the mapped selection unselective'
+    Assert-True (@($r.Routes | Where-Object { $_ -like 'NewShard <= is not in the coverage map yet*' }).Count -eq 1) `
+        'the unmapped shard is not reported as unmapped'
+    $r = Select-ImpactedShards -Map $grown -Changed @{ 'docs/readme.md' = @(1, 1) }
+    Assert-True (-not ($r.Shards -contains 'NewShard')) 'an unmapped shard ran for a change that needs no validation'
+    $again = @(Add-UnmappedShardsAsAlwaysRun -Map $grown -Expected $grownExpected)
+    Assert-True ($again.Count -eq 0) 'a second pass re-added an unmapped shard'
+
+    # Position-sliced inventory shards are recognised however the manifest was loaded, and the real
+    # manifest's conformance windows and parameter-count shards are all recognised.
+    Assert-True (Test-InventoryWindow ([pscustomobject]@{ name = 'W'; env = [pscustomobject]@{ ADNSHAPE_CONF_OFFSET = '5' } })) `
+        'a conformance window was not recognised as inventory-sliced'
+    Assert-True (Test-InventoryWindow @{ name = 'P'; env = @{ AIDOTNET_PARAMETER_COUNT_SHARD = '0' } }) `
+        'a parameter-count shard was not recognised as inventory-sliced'
+    Assert-True (Test-InventoryWindow ([pscustomobject]@{ name = 'L'; workload = 'ModelShape' })) `
+        'a legacy auxiliary workload was not recognised as inventory-sliced'
+    Assert-True (-not (Test-InventoryWindow ([pscustomobject]@{ name = 'O'; env = [pscustomobject]@{ ADNSHAPE_WORKERS = '4' } }))) `
+        'an unsliced sweep was treated as inventory-sliced'
+    Assert-True (-not (Test-InventoryWindow ([pscustomobject]@{ name = 'T'; filter = 'x' }))) `
+        'an ordinary shard was treated as inventory-sliced'
+    $realManifest = Join-Path $PSScriptRoot '../../.github/test-shards.yml'
+    if ((Test-Path -LiteralPath $realManifest) -and (Get-Command yq -ErrorAction SilentlyContinue)) {
+        $realShards = @(& yq -o=json -I=0 '.shard' $realManifest | ConvertFrom-Json)
+        $slicedFilters = @($realShards | Where-Object {
+            [string] $_.filter -match 'ModelContractConformanceTests|ParameterCountContractTests' })
+        $unrecognised = @($slicedFilters | Where-Object { -not (Test-InventoryWindow $_) } | ForEach-Object name)
+        Assert-True ($slicedFilters.Count -gt 0 -and $unrecognised.Count -eq 0) `
+            "position-sliced manifest shards are not recognised: $($unrecognised -join ', ')"
+    }
+
+    # Definition drift: the same content loaded two ways is unchanged; any content edit is not.
+    $measuredManifest = @(
+        @{ name = 'Alpha'; filter = 'FullyQualifiedName~A'; env = @{ X = '1'; Y = '2' }; timeout = 30 },
+        @{ name = 'Beta'; filter = 'FullyQualifiedName~B' }
+    )
+    $sameManifest = @($measuredManifest | ConvertTo-Json -Depth 5 | ConvertFrom-Json)
+    [array]::Reverse($sameManifest)
+    Assert-True ((ConvertTo-CanonicalShardJson $measuredManifest[0]) -ceq (ConvertTo-CanonicalShardJson $sameManifest[1])) `
+        'a hashtable and its JSON round trip canonicalised differently'
+    $redefined = @(Get-RedefinedShards -MapManifest $measuredManifest -Manifest $sameManifest -IndexedShards @('Alpha', 'Beta'))
+    Assert-True ($redefined.Count -eq 0) "an unchanged manifest reported redefined shards: $($redefined -join ',')"
+    foreach ($edit in @(
+        @{ What = 'filter'; Entry = @{ name = 'Alpha'; filter = 'FullyQualifiedName~A|FullyQualifiedName~C'; env = @{ X = '1'; Y = '2' }; timeout = 30 } },
+        @{ What = 'nested value'; Entry = @{ name = 'Alpha'; filter = 'FullyQualifiedName~A'; env = @{ X = '1'; Y = '3' }; timeout = 30 } },
+        @{ What = 'number'; Entry = @{ name = 'Alpha'; filter = 'FullyQualifiedName~A'; env = @{ X = '1'; Y = '2' }; timeout = 31 } },
+        @{ What = 'added key'; Entry = @{ name = 'Alpha'; filter = 'FullyQualifiedName~A'; env = @{ X = '1'; Y = '2' }; timeout = 30; heavy = $true } },
+        @{ What = 'case'; Entry = @{ name = 'Alpha'; filter = 'FullyQualifiedName~a'; env = @{ X = '1'; Y = '2' }; timeout = 30 } }
+    )) {
+        $changed = @(Get-RedefinedShards -MapManifest $measuredManifest -Manifest @($edit.Entry, $measuredManifest[1]) -IndexedShards @('Alpha', 'Beta'))
+        Assert-True (($changed -join ',') -ceq 'Alpha') "a $($edit.What) edit was not detected as a redefinition"
+    }
+    $renamedCase = @(Get-RedefinedShards -MapManifest $measuredManifest `
+        -Manifest @(@{ name = 'alpha'; filter = 'FullyQualifiedName~A' }) -IndexedShards @('alpha'))
+    Assert-True (($renamedCase -join ',') -ceq 'alpha') 'shard names were matched case-insensitively'
+    $unindexed = @(Get-RedefinedShards -MapManifest $measuredManifest `
+        -Manifest @(@{ name = 'Beta'; filter = 'changed' }) -IndexedShards @('Alpha'))
+    Assert-True ($unindexed.Count -eq 0) 'a shard with no index was reported as redefined'
+    $unknownHistory = @(Get-RedefinedShards -MapManifest @() -Manifest $sameManifest -IndexedShards @('Alpha', 'Beta'))
+    Assert-True (($unknownHistory -join ',') -ceq 'Alpha,Beta') 'an unknown measured manifest did not redefine every indexed shard'
+
+    $redefinedMap = $map | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $redefinedMap | Add-Member -NotePropertyName redefinedShards -NotePropertyValue @('Beta')
+    $r = Select-ImpactedShards -Map $redefinedMap -Changed @{ 'src/Covered.cs' = @(12, 14) }
+    Assert-True ((@($r.Shards) -join ',') -ceq 'Alpha,Beta,HeavyNoCoverage') 'a redefined shard was not made mandatory'
+    Assert-True (@($r.Routes | Where-Object { $_ -like 'Beta <= changed its manifest definition*' }).Count -eq 1) `
+        'a redefined shard is not reported as redefined'
+    $r = Select-ImpactedShards -Map $redefinedMap -Changed @{ 'docs/readme.md' = @(1, 1) }
+    Assert-True (@($r.Shards).Count -eq 0 -and -not $r.RequiresValidation) 'a redefined shard ran for a change that needs no validation'
 
     $commaMap = @{
         schemaVersion = 1; sha = 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'; knownShards = @('Comma, Shard'); alwaysRun = @()
@@ -2396,8 +2857,11 @@ function Exit-Escalated {
 
     if ($Message) { Write-Host "::warning::$Message" }
     # Same shape as a successful selection, routes included: consumers read it under StrictMode.
+    # requiresShards is true here on purpose: an escalation is the fail-closed path, so it must
+    # never be the thing that talks the workflow out of running the matrix.
     $result = [pscustomobject]@{
-        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); routes = @(); shards = @()
+        escalate = $true; requiresValidation = $true; requiresShards = $true
+        reason = $Reason; reasons = @(); routes = @(); shards = @()
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -2408,23 +2872,38 @@ if (-not (Test-Path -LiteralPath $MapFile)) {
 }
 
 $map = $null
+$retiredIndexed = @()
+$definitionsCompared = $false
 try {
     $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
     if ($ShardManifestFile) {
+        # Shards the manifest no longer has. Dropping an always-run entry loses nothing; an indexed
+        # one keeps its position for the file index, and a change that reaches it escalates below.
+        $expectedNames = [System.Collections.Generic.HashSet[string]]::new([string[]] @($ExpectedShards), [StringComparer]::Ordinal)
+        $retired = @(@($map.knownShards) + @($map.alwaysRun) | Where-Object { -not $expectedNames.Contains([string] $_) } | Sort-Object -Unique)
+        if ($retired.Count -gt 0) {
+            $retiredIndexed = @($retired | Where-Object { $_ -cin @($map.knownShards) })
+            $map.alwaysRun = @(@($map.alwaysRun) | Where-Object { $expectedNames.Contains([string] $_) })
+            Write-Host "$($retired.Count) shard(s) in the map are no longer in the manifest: $($retired -join ', ')"
+        }
         $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
         if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
-            # Keep certified ordinary routing usable during the 116 -> 161 workload rollout.
-            # New auxiliary jobs may only be ADDED as mandatory; no indexed coverage is invented.
+            # Keep certified routing usable while the manifest grows. Workloads the map has not
+            # measured are ADDED as mandatory; no indexed coverage is invented for them.
             Assert-ShardMap -Map $map -Expected @(@($map.knownShards) + @($map.alwaysRun))
             . "$PSScriptRoot/CiWorkloadKinds.ps1"
             $extension = Complete-CiMapWorkloads -Map $map -Manifest $manifest
             $map = $extension.Map
             if ($extension.Added.Count -gt 0) {
-                Write-Host "Retaining $($extension.Added.Count) unmapped auxiliary workloads; ordinary shard routing remains selective."
+                Write-Host "$($extension.Added.Count) workload(s) are not in the coverage map yet and will run until a map includes them: $($extension.Added -join ', ')"
             }
         }
     }
-    Assert-ShardMap -Map $map -Expected $ExpectedShards
+    Assert-ShardMap -Map $map -Expected @(@($ExpectedShards) + $retiredIndexed)
+    $unmapped = @(Add-UnmappedShardsAsAlwaysRun -Map $map -Expected $ExpectedShards)
+    if ($unmapped.Count -gt 0) {
+        Write-Host "$($unmapped.Count) shard(s) are not in the coverage map yet and will run until a map includes them: $($unmapped -join ', ')"
+    }
 }
 catch {
     Exit-Escalated -Reason 'map-unreadable' `
@@ -2485,6 +2964,28 @@ try {
         if (($manifestNames -join "`n") -cne (@($ExpectedShards | Sort-Object) -join "`n")) {
             throw 'the shard manifest does not describe exactly the expected shards'
         }
+
+        # The map was measured with the manifest committed at its own commit. An indexed shard
+        # defined differently now may run other tests than its index records.
+        $manifestAtMap = Read-ShardManifestAtRevision -Revision $mapSha
+        $manifestTracked = $null -ne $manifestAtMap
+        if (-not $manifestTracked) {
+            & git cat-file -e 'HEAD:.github/test-shards.yml' 2>$null
+            $manifestTracked = $LASTEXITCODE -eq 0
+            $manifestAtMap = @()
+        }
+        if ($manifestTracked) {
+            $definitionsCompared = $true
+            $redefinedShards = @(Get-RedefinedShards -MapManifest $manifestAtMap -Manifest $manifest `
+                -IndexedShards @($map.knownShards | Where-Object { $_ -cnotin $retiredIndexed }))
+            if ($redefinedShards.Count -gt 0) {
+                $map | Add-Member -NotePropertyName redefinedShards -NotePropertyValue $redefinedShards -Force
+                Write-Host "$($redefinedShards.Count) mapped shard(s) changed definition since the map and will run until a map measures them: $($redefinedShards -join ', ')"
+            }
+        }
+        else {
+            Write-Host 'no committed shard manifest at the map commit or HEAD; definition drift is not checked'
+        }
         $currentSet = [System.Collections.Generic.HashSet[string]]::new([string[]] $currentPaths, [StringComparer]::OrdinalIgnoreCase)
         $testPaths = @($changed.Keys | Where-Object {
             $candidate = [string] $_
@@ -2519,10 +3020,9 @@ try {
         -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards
 
     if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
-        @($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
-        . "$PSScriptRoot/CiWorkloadKinds.ps1"
+        @($manifest | Where-Object { Test-InventoryWindow $_ }).Count -gt 0) {
         . "$PSScriptRoot/AuxiliaryInventory.ps1"
-        $auxiliary = @($manifest | Where-Object { (Get-CiWorkloadKind $_) -ne [CiWorkloadKind]::Tests })
+        $auxiliary = @($manifest | Where-Object { Test-InventoryWindow $_ })
         $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
         if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
             if ($DeltaFromTree) {
@@ -2540,6 +3040,22 @@ try {
         }
     }
 
+    if ($retiredIndexed.Count -gt 0) {
+        # With definitions compared, a retired shard's tests can only have moved to a shard added
+        # or redefined since the map (both mandatory), been run already by an unchanged overlapping
+        # shard (whose index then records them), or stopped running. Only without that comparison is
+        # there nowhere to account for them.
+        $reachedRetired = @($selection.Shards | Where-Object { $_ -cin $retiredIndexed })
+        if ($reachedRetired.Count -gt 0 -and -not $selection.Escalate -and -not $definitionsCompared) {
+            $selection.Escalate = $true
+            $selection.RequiresValidation = $true
+            $selection.Reasons = @($selection.Reasons) + @($reachedRetired | ForEach-Object {
+                "the change reaches retired shard '$_', and no manifest comparison accounts for its tests"
+            })
+        }
+        $selection.Shards = @($selection.Shards | Where-Object { $_ -cnotin $retiredIndexed })
+    }
+
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'
         foreach ($reason in $selection.Reasons) { Write-Host "  reason: $reason" }
@@ -2555,15 +3071,38 @@ try {
         }
     }
 
+    # A build-only change still has to COMPILE - an .editorconfig edit can raise an analyzer to
+    # error - but it cannot alter runtime behaviour, so it must not drag in the shard matrix. The
+    # build jobs and the shard matrix share requiresValidation today, so the distinction needs its
+    # own flag rather than reusing that one.
+    $impacts = @($currentPaths | ForEach-Object { Get-ChangedPathImpact -Path ([string] $_) })
+    $buildOnlyChange = $impacts.Count -gt 0 -and
+        @($impacts | Where-Object { $_ -eq [ChangedPathImpact]::BuildOnly }).Count -gt 0 -and
+        @($impacts | Where-Object {
+            $_ -ne [ChangedPathImpact]::BuildOnly -and $_ -ne [ChangedPathImpact]::NonRuntime
+        }).Count -eq 0
+    if ($buildOnlyChange) {
+        Write-Host 'build-only change: compiling it, but no test shard can be affected by it'
+    }
+    $emittedShards = @(if ($buildOnlyChange) { @() } else { $selection.Shards })
+
     $result = [pscustomobject]@{
         escalate          = $selection.Escalate
-        requiresValidation = $selection.RequiresValidation
-        reason            = $(if ($selection.Escalate) { 'impact-unknown' }
+        # A build-only change adds no mapped path, so Select-ImpactedShards reports no validation
+        # needed. The workflow requires validation for anything that compiles and treats false as
+        # the selector contradicting it - which sent every .editorconfig change to the full matrix.
+        # It must compile, so validation stays required; only the shard matrix is skipped.
+        requiresValidation = [bool] ($selection.RequiresValidation -or $buildOnlyChange)
+        requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
+        reason            = $(if ($buildOnlyChange) { 'build-only' }
+                              elseif ($selection.Escalate) { 'impact-unknown' }
                               elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
                               else { 'selected' })
         reasons           = $selection.Reasons
+        # @() inside a $( ) subexpression unrolls to nothing, which serialises as null and makes
+        # every consumer that binds this to a [string[]] fail. Build the array first.
+        shards            = $emittedShards
         routes            = @($selection.Routes)
-        shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }
