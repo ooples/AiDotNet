@@ -114,7 +114,6 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new ClipOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
@@ -129,6 +128,10 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
             throw new FileNotFoundException($"Image encoder model file not found: {imageEncoderPath}", imageEncoderPath);
         if (!File.Exists(textEncoderPath))
             throw new FileNotFoundException($"Text encoder model file not found: {textEncoderPath}", textEncoderPath);
+
+        // After the path checks: a missing model file is reported as such even when the options
+        // are also wrong, and the options are still checked before any value is read from them.
+        _options.Validate();
 
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
