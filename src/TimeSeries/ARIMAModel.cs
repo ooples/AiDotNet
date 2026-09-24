@@ -721,7 +721,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
                 // Additional settings from options
                 { "LagOrder", _arimaOptions.LagOrder }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

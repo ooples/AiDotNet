@@ -1191,7 +1191,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
                 { "LastLevel", _level.Length > 0 ? Convert.ToDouble(_level[_level.Length - 1]) : 0 },
                 { "LastTrend", _trend.Length > 0 ? Convert.ToDouble(_trend[_trend.Length - 1]) : 0 }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

@@ -821,7 +821,7 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
             { "BezierSampleWidth", _options.BezierSampleWidth },
             { "NumCharacterClasses", _options.NumCharacterClasses },
         },
-        ModelData = this.Serialize(),
+        ModelDataProvider = () => this.Serialize(),
     };
 
     /// <inheritdoc />

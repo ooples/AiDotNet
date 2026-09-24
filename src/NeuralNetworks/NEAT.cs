@@ -1613,7 +1613,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 { "BestGenomeConnections", bestGenome.Connections.Count },
                 { "BestGenomeEnabledConnections", bestGenome.Connections.Count(c => c.IsEnabled) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

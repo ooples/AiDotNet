@@ -350,7 +350,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
                 { "NumPatches", _numPatches },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

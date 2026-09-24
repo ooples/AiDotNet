@@ -524,7 +524,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
             ["RecurrentSharing"] = "one shared motion estimator and synthesis network across levels",
             ["Warp"] = "normalized forward soft splat"
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     /// <inheritdoc />
