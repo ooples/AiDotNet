@@ -1128,6 +1128,12 @@ public class LayerStateGenerator : IIncrementalGenerator
             var writerParameter = parameter.Copy();
             if (writerParameter.Kind == ValueKind.Int32 && IsPositiveDimensionName(writerParameter.Name))
                 writerParameter.OmitWhenNonPositive = true;
+            // A later constructor's JSON or expression member may be null on a layer built through the
+            // first one. Written anyway, it becomes "null" / "" - values JsonObject<T> and
+            // ExpressionState.Load reject - and the key alone satisfies that factory branch's Has()
+            // test, so a rebuild would enter the branch and throw instead of falling through.
+            if (writerParameter.Kind is ValueKind.JsonObject or ValueKind.Expression)
+                writerParameter.OmitWhenNull = true;
             extra.Add(writerParameter);
         }
 
@@ -1194,7 +1200,8 @@ public class LayerStateGenerator : IIncrementalGenerator
 
             if (p.Kind == ValueKind.JsonObject)
             {
-                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatJson(this.{p.BackingMember});");
+                if (p.OmitWhenNull) sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine($"        {(p.OmitWhenNull ? "    " : "")}__metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatJson(this.{p.BackingMember});");
                 continue;
             }
 
@@ -1208,7 +1215,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
             if (p.Kind == ValueKind.Expression)
             {
-                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
+                if (p.OmitWhenNull) sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine($"        {(p.OmitWhenNull ? "    " : "")}__metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
                 continue;
             }
             if (p.Kind == ValueKind.EnumArray)
@@ -1306,7 +1314,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
             if (p.Kind == ValueKind.Expression)
             {
-                sb.AppendLine($"        __values[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
+                if (p.OmitWhenNull) sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine($"        {(p.OmitWhenNull ? "    " : "")}__values[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
                 continue;
             }
             if (p.Kind == ValueKind.EnumArray)
@@ -1831,6 +1840,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// The author declared that a zero here means "not resolved yet", so the writer guards it.
         /// </summary>
         public bool OmitWhenNonPositive;
+
+        /// <summary>
+        /// Writer-only: skip this JSON or expression value while its backing member is null, so the
+        /// key is never present with a value its reader rejects. Set on later-constructor copies.
+        /// </summary>
+        public bool OmitWhenNull;
     }
 
     /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>
