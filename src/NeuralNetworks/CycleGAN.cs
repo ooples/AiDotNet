@@ -882,7 +882,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
                 { "CycleConsistencyLambda", NumOps.ToDouble(_cycleConsistencyLambda) },
                 { "IdentityLambda", NumOps.ToDouble(_identityLambda) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -748,7 +748,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumClasses", _numClasses }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

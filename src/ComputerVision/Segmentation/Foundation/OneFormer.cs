@@ -480,7 +480,7 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
                 { "ModelSize", _modelSize.ToString() }, { "DecoderDim", _decoderDim },
                 { "DropRate", _dropRate }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

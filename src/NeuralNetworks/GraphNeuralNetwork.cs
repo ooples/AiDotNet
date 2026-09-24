@@ -1096,7 +1096,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
                 { "ParameterCount", GetParameterCount() },
                 { "ActivationTypes", string.Join(", ", GetActivationTypes()) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

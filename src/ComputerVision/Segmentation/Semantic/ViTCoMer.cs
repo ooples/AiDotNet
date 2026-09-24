@@ -375,7 +375,7 @@ public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
                 { "EmbedDim", _embedDim }, { "DecoderDim", _decoderDim }, { "DropRate", _dropRate },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

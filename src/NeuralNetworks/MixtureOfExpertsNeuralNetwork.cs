@@ -443,7 +443,7 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -950,7 +950,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "LatentCodeSize", _latentCodeSize },
                 { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

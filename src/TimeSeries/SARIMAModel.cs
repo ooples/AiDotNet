@@ -997,7 +997,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
                 { "MaxIterations", _sarimaOptions.MaxIterations },
                 { "Tolerance", _sarimaOptions.Tolerance }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;
