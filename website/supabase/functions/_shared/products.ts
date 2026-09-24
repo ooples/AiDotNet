@@ -30,7 +30,7 @@
  * caught at build time instead of at runtime via
  * `resolveProductDisplayName` throwing on the unknown slug.
  */
-export type ProductSlug = "aidotnet" | "harmonic_engine";
+export type ProductSlug = "aidotnet" | "harmonic_engine" | "token_optimizer";
 
 export interface ProductInfo {
   /** The `license_product` enum slug stored in the DB. */
@@ -48,6 +48,7 @@ export interface ProductInfo {
 const PRODUCT_DISPLAY_NAMES: Readonly<Record<ProductSlug, string>> = {
   aidotnet: "AiDotNet",
   harmonic_engine: "Harmonic Engine",
+  token_optimizer: "Token Optimizer",
 };
 
 /**

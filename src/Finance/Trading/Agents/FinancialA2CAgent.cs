@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Validation;
 using AiDotNet.LossFunctions;
@@ -71,7 +72,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Asynchronous Methods for Deep Reinforcement Learning", "https://arxiv.org/abs/1602.01783")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -126,6 +128,10 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        // Registered for disposal. The replay buffer that used to be built here went with master's
+        // move to a rollout held in _policyRuntime.Pending; the two networks still need owning.
+        Networks.Add(_actor);
+        Networks.Add(_critic);
     }
 
     /// <summary>
@@ -188,10 +194,30 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>The mask is applied to the distribution, not to the logits</b> — zeroing the illegal entries
+    /// and RENORMALISING what remains. The actor does emit logits, so <c>ActionMasking.MaskLogits</c>
+    /// would normally be the place for it, but <see cref="SoftmaxProbabilities"/> throws on a non-finite
+    /// logit as its diverged-actor guard and MaskLogits works by writing negative infinity. Nothing is lost:
+    /// renormalising a softmax over the legal set gives the same numbers as a softmax over the legal logits.</para>
+    ///
+    /// <para>The renormalisation is the whole point. <see cref="SampleCategorical"/> walks a cumulative sum
+    /// and returns <c>probabilities.Length - 1</c> if it falls off the end. Zeroing without renormalising
+    /// leaves the entries summing to less than one, so any draw above that reduced total falls through and
+    /// returns the LAST index — whether or not it is legal.</para>
+    ///
+    /// <para>Both branches are masked. Masking only the sampling path would leave greedy evaluation free to
+    /// argmax onto an illegal action, which is the same defect wearing evaluation clothes.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
         Guard.NotNull(state);
         if (state.Length != TradingOptions.StateSize)
             throw new ArgumentException("State length must match StateSize.", nameof(state));
+        if (legalActions is not null) _ = ActionMasking.NegativeInfinity(NumOps);
         // Move the rollout's state copy to selection so the returned action is tied to the
         // actual input values. Successful storage takes ownership of this snapshot without
         // making a second state copy. Evaluation does not allocate a rollout snapshot.
@@ -207,15 +233,28 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             SynchronizePolicyStorage();
         }
 
-        var probabilities = SoftmaxProbabilities(logits);
+        // Masked AFTER the softmax, not before it. MaskLogits would be the cheaper and more usual
+        // choice, but SoftmaxProbabilities throws on a non-finite logit -- deliberately, as the
+        // diverged-actor guard -- and MaskLogits works by writing negative infinity. The two are
+        // equivalent anyway: renormalising a softmax over the legal set gives the same numbers as a
+        // softmax over the legal logits.
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+        var probabilities = ActionMasking.MaskProbabilities(SoftmaxProbabilities(logits), mask);
 
-        int actionIndex = training ? SampleCategorical(probabilities) : ArgMaxIndex(probabilities);
+        // Both branches are masked. SampleCategorical is safe on a masked distribution because
+        // MaskProbabilities renormalises -- without that the entries sum to less than one, and a
+        // draw above the reduced total falls through the cumulative loop and returns the LAST index
+        // whether or not it is legal. ArgMaxLegal rather than ArgMaxIndex on the greedy branch so
+        // the skip is stated rather than inferred from the zeroes.
+        int actionIndex = training
+            ? SampleCategorical(probabilities)
+            : ActionMasking.ArgMaxLegal(probabilities, mask);
         var action = new Vector<T>(TradingOptions.ActionSize);
         action[actionIndex] = NumOps.One;
         if (training)
         {
             _policyRuntime.Selections.Add(
-                action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState));
+                action, new SelectionStamp(_policyRuntime.Epoch, training, actionIndex, selectedState, legalActions));
         }
 
         return action;
@@ -432,11 +471,13 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             actionIndices[i] = ArgMaxIndex(batch[i].Action);
         }
 
+        using var maskBias = BuildMaskBias(batch);
         var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
         var trainableActor = (NeuralNetworkBase<T>)_actor;
-        T policyLoss = trainableActor.TrainWithCustomLoss(states, logits =>
+        T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
         {
             var engine = AiDotNetEngine.Current;
+            var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
             var logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
             var policyObjective = engine.TensorMultiply(logProbs, advantages);
             var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
@@ -450,6 +491,23 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
         return loss;
     }
+
+    private Tensor<T>? BuildMaskBias(PolicyExperience[] batch)
+    {
+        if (!batch.Any(step => step.LegalActions is not null)) return null;
+        int width = TradingOptions.ActionSize;
+        var data = new T[batch.Length * width];
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
+        for (int row = 0; row < batch.Length; row++)
+        {
+            var mask = batch[row].LegalActions;
+            if (mask is null) continue;
+            for (int col = 0; col < width; col++)
+                if (!mask[col]) data[row * width + col] = blocked;
+        }
+        return new Tensor<T>(data, [batch.Length, width]);
+    }
+
 
     #endregion
 
@@ -496,6 +554,16 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// the oldest pending transition is dropped. It is not an off-policy replay history.
     /// </para>
     /// </remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done) ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        // A2C bootstraps V(s'), not a maximization over next-state actions.
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
+    /// <inheritdoc/>
+
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int selected = ValidateTransition(state, action, nextState);
@@ -511,7 +579,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         if (!ReferenceEquals(selection.Epoch, _policyRuntime.Epoch))
             throw new InvalidOperationException("The actor policy changed after this action was sampled.");
 
-        EnqueueTransition(new Experience<T>(selectedState, action.Clone(), reward, nextState.Clone(), done));
+        EnqueueTransition(new PolicyExperience(selectedState, action.Clone(), reward, nextState.Clone(), done,
+            selection.LegalActions is null ? null : (bool[])selection.LegalActions.Clone()));
         // Validation/allocation failure leaves the selection available for a corrected attempt.
         _policyRuntime.Selections.Remove(action);
     }
@@ -520,7 +589,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     protected override void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         ValidateTransition(state, action, nextState);
-        var experience = new Experience<T>(state.Clone(), action.Clone(), reward, nextState.Clone(), done);
+        var experience = new PolicyExperience(state.Clone(), action.Clone(), reward, nextState.Clone(), done, null);
         // A target-specified action is labelled supervision, not sampled behavior. Keep its
         // explicit one-shot update separate and invalidate all outstanding behavior tokens.
         InvalidatePolicy();
@@ -548,7 +617,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         return true;
     }
 
-    private void EnqueueTransition(Experience<T> experience)
+    private void EnqueueTransition(PolicyExperience experience)
     {
         _policyRuntime.Pending.Enqueue(experience);
         if (_policyRuntime.Pending.Count > TradingOptions.ReplayBufferSize)
@@ -612,7 +681,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     // Runtime-only ownership state: never serialize an action's provenance or pending rollout.
     private sealed class PolicyRuntimeState
     {
-        public Queue<Experience<T>> Pending { get; } = new();
+        public Queue<PolicyExperience> Pending { get; } = new();
         public ConditionalWeakTable<Vector<T>, SelectionStamp> Selections { get; } = new();
         public Dictionary<object, int> Storage { get; set; } = new(TensorReferenceComparer<object>.Instance);
         public Dictionary<object, int> NextStorage { get; set; } = new(TensorReferenceComparer<object>.Instance);
@@ -620,14 +689,22 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         public bool HasSnapshot { get; set; }
     }
 
+    private sealed record PolicyExperience(Vector<T> State, Vector<T> Action, T Reward,
+        Vector<T> NextState, bool Done, bool[]? LegalActions)
+        : Experience<T>(State, Action, Reward, NextState, Done);
+
     private sealed class SelectionStamp
     {
-        public SelectionStamp(object epoch, bool sampled, int actionIndex, Vector<T>? state)
-        { Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; State = state; }
+        public SelectionStamp(object epoch, bool sampled, int actionIndex, Vector<T>? state, bool[]? legalActions)
+        {
+            Epoch = epoch; Sampled = sampled; ActionIndex = actionIndex; State = state;
+            LegalActions = legalActions is null ? null : (bool[])legalActions.Clone();
+        }
         public object Epoch { get; }
         public bool Sampled { get; }
         public int ActionIndex { get; }
         public Vector<T>? State { get; }
+        public bool[]? LegalActions { get; }
     }
 
     #endregion

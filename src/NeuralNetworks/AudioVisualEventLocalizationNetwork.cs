@@ -39,17 +39,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an audio-visual event localization network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Detection,
+///     taskType: NeuralNetworkTaskType.ObjectDetection,
 ///     inputSize: 512,
 ///     outputSize: 128);
 ///
-/// var model = new AudioVisualEventLocalizationNetwork&lt;float&gt;(architecture);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 512);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 128);
 ///
-/// // Detect and localize events in audio-visual input
-/// Tensor&lt;float&gt; detections = model.Predict(inputTensor);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AudioVisualEventLocalizationNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+///
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(1, 512);
+/// Tensor&lt;float&gt; detections = result.Predict(inputTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -166,30 +170,26 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     /// </summary>
     public AudioVisualEventLocalizationNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
-        double temporalResolution = DEFAULT_TEMPORAL_RESOLUTION,
-        int numEncoderLayers = 6,
+        AudioVisualEventLocalizationOptions? options = null,
         IEnumerable<string>? eventCategories = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null,
-        AudioVisualEventLocalizationOptions? options = null,
-        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<T>.PaperFullyConnectedWidth,
-        int audioEmbeddingSize = VGGishAudioEmbedding<T>.PaperEmbeddingSize)
+        int? seed = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualEventLocalizationOptions();
+        _options.Validate();
         Options = _options;
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _embeddingDimension = embeddingDimension;
-        _temporalResolution = temporalResolution;
-        _numEncoderLayers = numEncoderLayers;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _temporalResolution = _options.TemporalResolution;
+        _numEncoderLayers = _options.NumEncoderLayers;
         // Published VGGish widths by default. Exposed because the published network is ~67M
         // parameters, which is right for fidelity and wrong for a fixture; a caller can shrink it
         // without a second implementation existing.
-        _audioEmbeddingFullyConnectedWidth = audioEmbeddingFullyConnectedWidth;
-        _audioEmbeddingSize = audioEmbeddingSize;
+        _audioEmbeddingFullyConnectedWidth = _options.AudioEmbeddingFullyConnectedWidth;
+        _audioEmbeddingSize = _options.AudioEmbeddingSize;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -444,7 +444,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         int frames = mel.Shape[mel.Shape.Length - 2];
         int mels = mel.Shape[mel.Shape.Length - 1];
-        int patchFrames = VGGishAudioEmbedding<T>.PaperPatchFrames;
+        int patchFrames = VGGishAudioEmbedding<double>.PaperPatchFrames;
         int segments = Math.Max(1, frames / patchFrames);
 
         var melSpan = mel.Data.Span;

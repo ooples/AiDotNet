@@ -17,7 +17,7 @@ namespace AiDotNet.Tokenization.HuggingFace
     /// var tokenizer = AutoTokenizer.FromPretrained("bert-base-uncased");
     ///
     /// // Load from local directory
-    /// var tokenizer = AutoTokenizer.FromPretrained("./my-model");
+    /// var tokenizer2 = AutoTokenizer.FromPretrained("./my-model");
     /// </code>
     /// </remarks>
     public static class AutoTokenizer

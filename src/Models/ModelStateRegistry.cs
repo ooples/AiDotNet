@@ -258,6 +258,19 @@ public sealed class ModelStateRegistry<T>
             w => WriteVector(w, get()),
             r => set(ReadVector(r)));
 
+    /// <summary>Restores a constructor-owned vector without replacing its reference.</summary>
+    /// <param name="name">The stable state name.</param>
+    /// <param name="get">The destination vector, whose length must match the checkpoint.</param>
+    public void DeclareInPlace(string name, Func<Vector<T>?> get)
+        => Declare(name, get, (Vector<T>? restored) =>
+        {
+            var current = get();
+            if (current is null && restored is null) return;
+            if (current is null || restored is null || current.Length != restored.Length)
+                throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned vector storage.");
+            restored.AsSpan().CopyTo(current.AsWritableSpan());
+        });
+
     /// <summary>Declares a byte vector, such as quantized optimizer moments.</summary>
     public void DeclareByteVector(string name, Func<Vector<byte>?> get, Action<Vector<byte>?> set)
         => Add(name,
@@ -304,6 +317,20 @@ public sealed class ModelStateRegistry<T>
         => Add(name,
             w => WriteMatrix(w, get()),
             r => set(ReadMatrix(r)));
+
+    /// <summary>Restores a constructor-owned matrix without replacing its reference.</summary>
+    /// <param name="name">The stable state name.</param>
+    /// <param name="get">The destination matrix, whose rows and columns must match the checkpoint.</param>
+    public void DeclareInPlace(string name, Func<Matrix<T>?> get)
+        => Declare(name, get, (Matrix<T>? restored) =>
+        {
+            var current = get();
+            if (current is null && restored is null) return;
+            if (current is null || restored is null
+                || current.Rows != restored.Rows || current.Columns != restored.Columns)
+                throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned matrix storage.");
+            restored.AsSpan().CopyTo(current.AsWritableSpan());
+        });
 
     /// <summary>Declares an assignable fitted object, array, list, or dictionary.</summary>
     /// <typeparam name="TState">The compile-time state type.</typeparam>
@@ -1083,6 +1110,27 @@ public sealed class ModelStateRegistry<T>
         => Add(name,
             w => WriteTensor(w, get()),
             r => set(ReadTensor(r)));
+
+    /// <summary>Restores a constructor-owned tensor without replacing its identity or device.</summary>
+    /// <param name="name">The stable state name.</param>
+    /// <param name="get">The destination tensor, whose complete shape must match the checkpoint.</param>
+    /// <remarks>
+    /// Reads and validates the complete stored tensor before changing the destination. The public
+    /// bulk-write boundary honors views and copy-on-write ownership, and advances the mutation
+    /// version so a subsequent GPU operation cannot reuse a stale cached upload.
+    /// </remarks>
+    public void DeclareInPlace(string name, Func<Tensor<T>?> get)
+        => Declare(name, get, (Tensor<T>? restored) =>
+        {
+            using (restored)
+            {
+                var current = get();
+                if (current is null && restored is null) return;
+                if (current is null || restored is null || current.Shape != restored.Shape)
+                    throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned tensor storage.");
+                current.CopyFromArray(restored.ToArray());
+            }
+        });
 
     /// <summary>Declares a list of tensors, such as a temporal memory bank.</summary>
     public void Declare(string name, Func<List<Tensor<T>>?> get, Action<List<Tensor<T>>?> set)
@@ -2636,8 +2684,18 @@ public sealed class ModelStateRegistry<T>
         for (int i = 0; i < rank; i++) shape[i] = r.ReadInt32();
         int length = r.ReadInt32();
         var t = new Tensor<T>(shape);
-        for (int i = 0; i < length && i < t.Length; i++) t[i] = Ops.FromDouble(r.ReadDouble());
-        return t;
+        try
+        {
+            if (length != t.Length)
+                throw new InvalidDataException("Stored tensor length does not match its declared shape.");
+            for (int i = 0; i < length; i++) t[i] = Ops.FromDouble(r.ReadDouble());
+            return t;
+        }
+        catch
+        {
+            t.Dispose();
+            throw;
+        }
     }
 
     private static void WriteInts(BinaryWriter w, int[]? a)

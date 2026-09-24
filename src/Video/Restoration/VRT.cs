@@ -33,6 +33,7 @@ namespace AiDotNet.Video.Restoration;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var model = new VRT&lt;double&gt;(arch, scaleFactor: 4);
 /// model.Train(lowResFrames, highResFrames);
@@ -43,6 +44,7 @@ namespace AiDotNet.Video.Restoration;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var model = new VRT&lt;double&gt;(arch, "vrt.onnx");
 /// var restoredFrame = model.Restore(lowResFrame);
@@ -183,6 +185,7 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
     /// var model = new VRT&lt;double&gt;(arch, scaleFactor: 4);
     /// </code>
@@ -244,6 +247,7 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
     /// var model = new VRT&lt;double&gt;(arch, "vrt_sr_x4.onnx");
     /// var restoredFrame = model.Restore(lowResFrame);

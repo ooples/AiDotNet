@@ -4,6 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
@@ -150,7 +151,18 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         Guard.NotNull(options);
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        // An explicit Seed always wins. Failing that, honour the ambient deterministic-initialisation
+        // scope the surrounding code may have opened: an agent built inside one is expected to be
+        // reproducible, and its exploration draws and replay sampling are as much a part of that as
+        // its layer weights. Reading AmbientFallbackSeed does NOT consume the scope's per-layer seed
+        // stream, so the weights an agent's networks receive are unchanged either way. The property
+        // is null unless a caller sets it, so an agent constructed normally still gets secure entropy.
+        int? ambientSeed = LayerInitializationSeedScope.AmbientFallbackSeed;
+        Random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : ambientSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(ambientSeed.Value)
+                : RandomHelper.CreateSecureRandom();
 
         // Apply sensible defaults for required properties per facade pattern.
         // For unconstrained generic T, `options.LearningRate` is annotated `T?` but
@@ -193,6 +205,16 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     /// <param name="nextState">The state after action.</param>
     /// <param name="done">Whether the episode terminated.</param>
     public abstract void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
+
+    /// <summary>Stores a transition with a snapshot of next-state legality, or rejects unsupported nonterminal masks.</summary>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+            throw new InvalidOperationException("This agent does not support next-state action masks.");
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
 
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.

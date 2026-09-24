@@ -28,10 +28,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FinchOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
-/// var model = new FinchLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new FinchLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -50,6 +54,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -71,7 +76,8 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     public FinchLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         FinchOptions? options = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -86,6 +92,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _numLayers = _options.NumLayers;
         _numHeads = _options.NumHeads;
         _maxSeqLength = _options.MaxSequenceLength;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -109,6 +116,36 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer. Finch's paper trains with AdamW; callers can supply
+    /// any gradient optimizer through the constructor.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    /// <remarks>
+    /// Every value here comes from <see cref="FinchOptions"/> rather than from the optimizer's own
+    /// defaults, which is the point of publishing them: AdamW defaults to 1e-3 / 0.999 / 0.01, none
+    /// of which is the published recipe. Note Beta2 in particular -- arXiv:2404.05892 Appendix H
+    /// uses 0.99, not the 0.999 that AdamWOptimizerOptions would otherwise supply.
+    ///
+    /// MinLearningRate is the floor of the paper's cosine decay. The clipping pair is NOT a paper
+    /// value; see the remark on <see cref="FinchOptions.EnableGradientClipping"/>.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                MinLearningRate = _options.MinLearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

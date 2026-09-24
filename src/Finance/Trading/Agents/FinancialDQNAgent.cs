@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.LossFunctions;
 
@@ -50,7 +51,8 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -126,6 +128,8 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        Networks.Add(_qNetwork);
+        Networks.Add(_targetNetwork);
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
     }
@@ -267,30 +271,40 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>BOTH selection sites are masked, and that is the point.</b> An epsilon-greedy agent has two
+    /// ways to choose an action: the exploration draw and the greedy argmax. Masking only the argmax — the
+    /// commonest way to get this wrong — leaves exploration selecting illegal actions at rate epsilon, which
+    /// early in training is nearly every step, and those are precisely the steps the agent learns most
+    /// from.</para>
+    ///
+    /// <para>The argmax SKIPS illegal indices rather than lowering their Q-value. Lowering invites the
+    /// question "how low is low enough", and the answer depends on the numeric range the network happens to
+    /// produce; skipping does not.</para>
+    /// </remarks>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+
+        // The ANNEALED rate, not the starting one, and the agent's seeded stream rather than a fresh
+        // secure Random per call: CurrentEpsilon and Random both arrived on master while this branch
+        // was open, and they fix the two defects the masking work would otherwise have preserved --
+        // exploration pinned at EpsilonStart, and a non-reproducible draw.
         if (training && Random.NextDouble() < CurrentEpsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
-            int randomAction = Random.Next(TradingOptions.ActionSize);
+            int randomAction = ActionMasking.RandomLegal(Random, mask, TradingOptions.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
         }
 
-        var qValues = _qNetwork.Predict(Tensor<T>.FromVector(state));
-        int bestAction = 0;
-        T maxQ = qValues.Data.Span[0];
-
-        for (int i = 1; i < TradingOptions.ActionSize; i++)
-        {
-            if (NumOps.GreaterThan(qValues.Data.Span[i], maxQ))
-            {
-                maxQ = qValues.Data.Span[i];
-                bestAction = i;
-            }
-        }
+        var qValues = _qNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
 
         var result = new Vector<T>(TradingOptions.ActionSize);
-        result[bestAction] = NumOps.One;
+        result[ActionMasking.ArgMaxLegal(qValues, mask, NumOps)] = NumOps.One;
         return result;
     }
 
@@ -367,34 +381,22 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         var expectedData = currentQ.Clone();
         for (int i = 0; i < n; i++)
         {
-            T maxNextQ;
-            if (onlineNextQ is not null)
-            {
-                int bestAction = 0;
-                for (int a = 1; a < actionCount; a++)
-                {
-                    if (NumOps.GreaterThan(onlineNextQ[(i * actionCount) + a], onlineNextQ[(i * actionCount) + bestAction]))
-                    {
-                        bestAction = a;
-                    }
-                }
-
-                maxNextQ = nextQ[(i * actionCount) + bestAction];
-            }
-            else
-            {
-                maxNextQ = nextQ[i * actionCount];
-                for (int a = 1; a < actionCount; a++)
-                {
-                    var q = nextQ[(i * actionCount) + a];
-                    if (NumOps.GreaterThan(q, maxNextQ))
-                    {
-                        maxNextQ = q;
-                    }
-                }
-            }
-
             var exp = batch[i];
+            T maxNextQ = NumOps.Zero;
+            if (!exp.Done)
+            {
+                var selectionQ = onlineNextQ ?? nextQ;
+                var mask = ActionMasking.Validate(exp.NextLegalActions, actionCount);
+                int bestAction = -1;
+                for (int a = 0; a < actionCount; a++)
+                {
+                    if (mask is not null && !mask[a]) continue;
+                    if (bestAction < 0 || NumOps.GreaterThan(selectionQ[i * actionCount + a],
+                            selectionQ[i * actionCount + bestAction])) bestAction = a;
+                }
+                maxNextQ = nextQ[i * actionCount + bestAction];
+            }
+
             T target = exp.Done
                 ? exp.Reward
                 : NumOps.Add(exp.Reward, NumOps.Multiply(gamma, maxNextQ));
@@ -549,9 +551,18 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, done, nextLegalActions: null);
+
+    /// <inheritdoc/>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
     {
         ValidateTransitionShape(state, action, nextState);
-        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
+        var mask = done ? null : ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done)
+        {
+            NextLegalActions = mask,
+        };
         ReplayBuffer.Add(experience);
     }
 

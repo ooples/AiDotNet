@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -5089,8 +5089,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            foreach (var tensor in layer.GetTrainableParameters())
-                Add(tensor);
+            Training.TapeTrainingStep<T>.CollectLayerParameters(layer, allParameters, seen, materializedOnly: true);
         }
         foreach (var tensor in GetExtraTrainableTensors())
             Add(tensor);
@@ -5106,14 +5105,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            foreach (var parameter in layer.GetTrainableParameters())
-            {
-                if (parameter is null || parameter.Length == 0) continue;
-                seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                if (!seen.Add(parameter)) continue;
-                extraParameters ??= [];
-                extraParameters.Add(parameter);
-            }
+            seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            extraParameters ??= [];
+            Training.TapeTrainingStep<T>.CollectLayerParameters(layer, extraParameters, seen, materializedOnly: true);
         }
 
         foreach (var parameter in GetExtraTrainableTensors())
@@ -5125,7 +5119,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             extraParameters.Add(parameter);
         }
 
-        return extraParameters;
+        return extraParameters is { Count: > 0 } ? extraParameters : null;
     }
 
     /// <summary>
@@ -7280,10 +7274,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (Architecture?.RandomSeed is not int seed) return;
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
         foreach (var layer in Layers)
         {
-            WireLayerRandomSeedRecursive(layer, seedRng);
+            WireLayerRandomSeedRecursive(layer, seedRng, visited);
         }
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited);
     }
 
     /// <summary>
@@ -7300,14 +7297,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         WireLayerRandomSeeds();
     }
 
-    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng)
+    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited)
     {
+        if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
             baseLayer.RandomSeed = seedRng.Next();
             foreach (var sub in baseLayer.GetSubLayers())
             {
-                WireLayerRandomSeedRecursive(sub, seedRng);
+                WireLayerRandomSeedRecursive(sub, seedRng, visited);
             }
         }
     }
@@ -7608,7 +7606,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// var network = new MyNetwork(...);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
+/// var network = new NeuralNetwork&lt;float&gt;(architecture);
     /// var warmupInput = new Tensor&lt;float&gt;(new[] { 1, 3, 224, 224 }); // batch=1, RGB 224x224
     /// if (network.CompileForward(warmupInput))
     /// {
@@ -8450,6 +8451,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int i = 0; i < _layers.Count; i++)
             {
                 _layers[i].SetTrainingMode(isTraining);
+            }
+
+            // Additional registered branches are part of the model's execution mode too.
+            // A composite root propagates to its own registered children through LayerBase.
+            // Allocate no identity set for the ordinary no-extra model path.
+            HashSet<ILayer<T>>? modeRoots = null;
+            foreach (var layer in GetExtraTrainableLayers())
+            {
+                if (layer is null) continue;
+                modeRoots ??= new HashSet<ILayer<T>>(_layers, Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+                if (modeRoots.Add(layer)) layer.SetTrainingMode(isTraining);
             }
         }
 
@@ -13016,6 +13028,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // every training entry point consistent — #1270.zKjB).
             StepSchedulerIfSupported(opt);
 
+            return lossValue;
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Trains an objective with a branched or multi-input forward without changing the public
+    /// prediction contract. The objective must return one tape-connected scalar and recompute
+    /// its entire forward from the supplied input and target on every invocation.
+    /// </summary>
+    /// <remarks>
+    /// Unlike a precomputed loss, this retains real input/target tensors and a recomputation
+    /// callback for line-search optimizers. Parameter discovery follows the forward so newly
+    /// materialized parameters, including generated additional layer groups, participate in
+    /// this first update. The same instance-wide guard covers forward, backward, and update.
+    /// </remarks>
+    protected T TrainWithCustomObjective(
+        Tensor<T> input,
+        Tensor<T> expected,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeObjective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        if (computeObjective is null) throw new ArgumentNullException(nameof(computeObjective));
+
+        using var trainSentinel = AcquireTrainSentinel();
+        SetTrainingMode(true);
+        try
+        {
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            using var tape = new GradientTape<T>();
+            var lossTensor = RecomputeObjective(input, expected);
+            var trainableParams = CollectModelTrainableTensors();
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+            T lossValue = lossTensor[0];
+            LastLoss = lossValue;
+
+            Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
+            {
+                EnsureLayerRandomSeedsWired();
+                var result = computeObjective(currentInput, currentExpected);
+                if (result is null || result.Length != 1)
+                    throw new InvalidOperationException("A custom training objective must return exactly one scalar loss.");
+                double value = NumOps.ToDouble(result[0]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new InvalidOperationException("A custom training objective must return a finite scalar loss.");
+                return result;
+            }
+
+            Tensor<T> ReadObjective(Tensor<T> objective, Tensor<T> _) => objective;
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                trainableParams, grads, lossValue, input, expected, RecomputeObjective, ReadObjective);
+
+            MarkTrainMutationStarted();
+            opt.Step(context);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            StepSchedulerIfSupported(opt);
             return lossValue;
         }
         finally
@@ -18284,12 +18357,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <remarks>
     /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// Calling it more than once is harmless: only the first call tears anything down. That
+    /// holds for derived classes too, whose <see cref="Dispose(bool)"/> overrides are not
+    /// re-entered by a repeated call, and it holds when two threads dispose the same network at
+    /// once: the run of derived teardown is claimed atomically rather than by reading a field that
+    /// <see cref="Dispose(bool)"/> only sets once the override is already under way.
     /// </remarks>
     public void Dispose()
     {
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Set by the first <see cref="Dispose(bool)"/>. A repeated dispose must be a no-op: the
+    /// teardown invalidates the THREAD-GLOBAL tape-training caches, so re-running it on a long-
+    /// disposed network would evict the cache of whichever live model the thread trained since.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown, zero until a caller wins it. Separate from
+    /// <see cref="_disposed"/>, which <see cref="Dispose(bool)"/> sets after the derived override
+    /// has already run and so cannot gate entry, and which must not be set beforehand or the base
+    /// cleanup below would be skipped.
+    /// </summary>
+    private int _disposeClaimed;
 
     /// <summary>
     /// Protected Dispose pattern implementation.
@@ -18306,6 +18400,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
+        if (_disposed) return;
+        _disposed = true;
+
         if (disposing)
         {
             // Release inference plans plus training plans/caches before layer disposal.

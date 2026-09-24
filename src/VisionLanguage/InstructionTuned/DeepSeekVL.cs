@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -39,7 +41,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// // using hybrid SigLIP + SAM-B dual vision encoder
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -63,6 +65,11 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Lu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95,
+                Source = "Lu et al. 2024, hyperparameter table: AdamW with beta1 0.9 and beta2 0.95. "
+                        + "The multi-step and cosine schedulers the paper's text appears to compare are "
+                        + "quoted inside a sample model response describing a figure, not a statement of "
+                        + "its own training, so no schedule is declared.")]
 public partial class DeepSeekVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DeepSeekVLOptions _options;
@@ -107,7 +114,9 @@ public partial class DeepSeekVL<T> : VisionLanguageModelBase<T>, IInstructionTun
         _options = options ?? new DeepSeekVLOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

@@ -72,9 +72,9 @@ public partial class MiniBatchKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The Mini-Batch K-Means options.</param>
     public MiniBatchKMeans(MiniBatchKMeansOptions<T>? options = null)
-        : base(options ?? new MiniBatchKMeansOptions<T>())
+        : base(options ??= new MiniBatchKMeansOptions<T>())
     {
-        _options = options ?? new MiniBatchKMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>

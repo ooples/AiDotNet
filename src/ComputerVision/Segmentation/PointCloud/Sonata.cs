@@ -38,12 +38,19 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Sonata Mamba-based model for efficient 3D point cloud segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
-/// var sonata = new Sonata&lt;float&gt;(architecture,
-///     numClasses: 40, modelSize: SonataModelSize.Base);
-/// Tensor&lt;float&gt; segmentation = sonata.Forward(pointCloudTensor);
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 6, outputSize: 40);
+///
+/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
+/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Sonata&lt;float&gt;(architecture, numClasses: 40, modelSize: SonataModelSize.Base))
+///     .Build(trainPoints, trainLabels);
+///
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
+/// Tensor&lt;float&gt; segmentation = result.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -18,6 +18,17 @@
 	  <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- Explicit CI-only opt-in. Normal tests, compatibility builds, and shipped
+       libraries do not acquire the attribution runtime or change execution. -->
+  <PropertyGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>$(DefineConstants);AIDOTNET_TEST_ATTRIBUTION</DefineConstants>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)attribution-generated/$(Configuration)/$(TargetFramework)</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="../../tools/TestImpact/Attribution.Xunit/Attribution.Xunit.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <DotNetCliToolReference Include="JetBrains.dotCover.CommandLineTools" Version="2023.2.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -75,6 +86,7 @@
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\FacadeConfigurationValidationGenerator.cs" Link="Generators\FacadeConfigurationValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\PaperOptimizerAnalyzer.cs" Link="Generators\PaperOptimizerAnalyzer.cs" />
     <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
          execute Roslyn directly. The production project reference is analyzer-only and therefore
          intentionally does not expose generator types as a compile reference. -->

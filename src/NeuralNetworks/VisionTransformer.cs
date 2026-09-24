@@ -33,10 +33,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VisionTransformerOptions { ImageSize = 224, PatchSize = 16, HiddenSize = 768, NumLayers = 12 };
-/// var model = new VisionTransformer&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
-/// var output = model.Predict(image);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VisionTransformer&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

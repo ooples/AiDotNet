@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -45,8 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// <code>
 /// // Create a multi-agent DDPG system with 3 cooperative agents
 /// var options = new MADDPGOptions&lt;double&gt; { NumAgents = 3, ActorLearningRate = 0.001 };
-/// var arch = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 2);
-/// var agent = new MADDPGAgent&lt;double&gt;(arch, options);
+/// var agent = new MADDPGAgent&lt;double&gt;(options);
 ///
 /// // Each agent selects a continuous action from its observation
 /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2, 0.8, -0.1, 0.4, 0.6 });
@@ -63,6 +63,10 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
     "https://arxiv.org/abs/1706.02275",
     Year = 2017,
     Authors = "Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P., & Mordatch, I.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
+                Source = "Lowe et al. 2017, Experimental Results: the Adam optimizer with a learning "
+                        + "rate of 0.01. The 0.01 tau in the same sentence is the target-network soft "
+                        + "update rate, not an optimizer setting.")]
 public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
@@ -111,13 +115,14 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _options = options;
         _options.Validate();
         // Issue #3 fix: Use configured actor learning rate for default optimizer
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = NumOps.ToDouble(_options.ActorLearningRate),
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+            {
+                InitialLearningRate = NumOps.ToDouble(_options.ActorLearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8
+            }));
         _stepCount = 0;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _perAgentRewards = new Dictionary<int, List<T>>();

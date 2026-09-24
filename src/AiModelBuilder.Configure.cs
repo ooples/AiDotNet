@@ -599,7 +599,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -612,7 +612,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
     /// </code>
