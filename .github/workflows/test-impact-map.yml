@@ -340,6 +340,23 @@ jobs:
           "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      # THE NUMBER NOBODY WAS LOOKING AT. The summary above reports how many shards were mapped, but
+      # not that a whole FAMILY can be missing -- and an unmapped shard is silently added to
+      # alwaysRun, so it runs on every validated pull request forever with no warning and no failed
+      # check. That is how the entire Conformance family (35 shards) came to sit under every run
+      # while the job counts still looked like a selector making choices.
+      #
+      # Reported, not enforced, for now: the floor is real today and failing here would only block
+      # the map that is needed to close it. -FailOnEmptyFamily turns it into a gate once a family is
+      # fixed, which is what stops it regressing.
+      - name: Report what the map can actually select
+        if: steps.source.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Measure-MapCoverage.ps1 -MapFile shard-map.json
+          # Reported, never a block: this runs before certification, so throwing here refuses the whole map.
+          if ($LASTEXITCODE -ne 0) { Write-Host '::warning::map coverage report exited non-zero - the map build continues' }
+
       # Correctness proofs cannot see a map that skips nothing: the 2026-09-21 map was correct and
       # still left 51 of 164 shards always-run. This is the only gate on how much the map can
       # actually save, and it only ever ratchets down.

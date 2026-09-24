@@ -28,13 +28,23 @@ public sealed class AutoformerGradientLifetimeTests
                 new Vector<double>(Enumerable.Repeat(1.0, 256).ToArray()));
             var gradient = AiDotNetEngine.Current.TensorMultiplyScalar(input, 2.0);
             var accumulated = model.AccumulateGradient(null, gradient);
-            accumulated = model.AccumulateGradient(accumulated, gradient);
 
             // The next sample rewinds the arena and rents tensors with the same element
             // count but a different shape, as Autoformer's paired FFN weights do.
             arena.Reset();
             var other = new Tensor<double>(new[] { 8, 32 },
                 new Vector<double>(Enumerable.Repeat(7.0, 256).ToArray()));
+            for (var i = 0; i < 16; i++)
+                _ = AiDotNetEngine.Current.TensorMultiplyScalar(other, 3.0);
+
+            Assert.Equal(new[] { 32, 8 }, accumulated.Shape.ToArray());
+            for (var i = 0; i < accumulated.Length; i++) Assert.Equal(2.0, accumulated[i]);
+
+            var nextInput = new Tensor<double>(new[] { 32, 8 },
+                new Vector<double>(Enumerable.Repeat(1.0, 256).ToArray()));
+            var nextGradient = AiDotNetEngine.Current.TensorMultiplyScalar(nextInput, 2.0);
+            accumulated = model.AccumulateGradient(accumulated, nextGradient);
+            arena.Reset();
             for (var i = 0; i < 16; i++)
                 _ = AiDotNetEngine.Current.TensorMultiplyScalar(other, 3.0);
 

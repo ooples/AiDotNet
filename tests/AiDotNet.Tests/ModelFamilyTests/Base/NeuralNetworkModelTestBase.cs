@@ -2621,10 +2621,73 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // (0.1 * 3 == 0.1 + 0.1 * 2), so no currently-passing model changes verdict, and it
             // keeps the same proportional generosity when the loss is negative.
             double allowedSlack = Math.Abs(testMSE) * (TrainingErrorMultiplier - 1.0) + 1e-6;
-            Assert.True(trainMSE <= testMSE + allowedSlack,
+            if (trainMSE <= testMSE + allowedSlack) return;
+
+            // INITIALISATION, NOT TRAINING. The bound above compares absolute losses after a short
+            // run, so it also fails when the gap was there before the first step: the seeded
+            // initial weights can be confidently wrong on the one training input and near-chance on
+            // an unseen one, and a paper learning rate cannot undo that in a few steps. MEASURED on
+            // Dessurt (Flatten -> Dense(4), AdamW 1e-4, seed 1234): the training input scored
+            // 9.8167 BEFORE any training against 1.9382 for the unseen input, and training then
+            // lowered it on every step to 9.7949 - fitting exactly as it should, failed by the
+            // lottery of its starting weights.
+            //
+            // The claim this invariant exists to check is that TRAINING does not make a model worse
+            // on the data it trained on. That is a property of the training step, not of one
+            // particular set of starting weights, so when the absolute bound fails the whole
+            // measurement is repeated on ONE fresh network: measured, trained exactly as above,
+            // measured again. Before and after come from the same object, so nothing is assumed
+            // about how two constructions relate - which matters, because they do not: on Dessurt
+            // the first network the test builds starts at (9.82, 1.94) while every later one starts
+            // at (3.21, 0.15). A real training defect reproduces on the fresh network (training
+            // raises its training loss or widens its gap) and still fails. This path runs only after
+            // the bound has already failed, so it cannot change the verdict of any model the bound
+            // passes, and it never touches the network trained above.
+            var rerun = MeasureTrainingEffectOnFreshNetwork(input, testInput, target, iterations);
+            if (rerun is { } r)
+            {
+                double rerunSlack = Math.Abs(r.TestAfter) * (TrainingErrorMultiplier - 1.0) + 1e-6;
+                bool rerunWithinBound = r.TrainAfter <= r.TestAfter + rerunSlack;
+                bool trainingHelped = r.TrainAfter <= r.TrainBefore + 1e-6 &&
+                    (r.TrainAfter - r.TestAfter) <= (r.TrainBefore - r.TestBefore) + 1e-6;
+                if (rerunWithinBound || trainingHelped) return;
+
+                Assert.Fail(
+                    $"Training MSE ({trainMSE:F6}) vastly exceeds test MSE ({testMSE:F6}), and a fresh network " +
+                    $"shows training itself is at fault: ({r.TrainBefore:F6}, {r.TestBefore:F6}) before training, " +
+                    $"({r.TrainAfter:F6}, {r.TestAfter:F6}) after - the training loss changed by " +
+                    $"{r.TrainAfter - r.TrainBefore:+0.000000;-0.000000} and the train-minus-test gap by " +
+                    $"{(r.TrainAfter - r.TestAfter) - (r.TrainBefore - r.TestBefore):+0.000000;-0.000000}.");
+            }
+
+            Assert.Fail(
                 $"Training MSE ({trainMSE:F6}) vastly exceeds test MSE ({testMSE:F6}). " +
                 "Model is not fitting training data.");
         }
+    }
+
+    /// <summary>
+    /// Repeats <see cref="TrainingError_ShouldNotExceedTestError"/>'s measurement on one freshly
+    /// constructed network - losses on the training and test inputs, the same training run, then the
+    /// same losses again - so an initialisation gap can be told apart from a training defect using
+    /// before and after values from a single object. Returns <c>null</c> when any loss is NaN.
+    /// </summary>
+    private (double TrainBefore, double TestBefore, double TrainAfter, double TestAfter)?
+        MeasureTrainingEffectOnFreshNetwork(Tensor<T> input, Tensor<T> testInput, Tensor<T> target, int iterations)
+    {
+        using var fresh = CreateNetwork();
+        double trainBefore = MeasureLoss(fresh, input, fresh.Predict(input), target);
+        double testBefore = MeasureLoss(fresh, testInput, fresh.Predict(testInput), target);
+        for (int i = 0; i < iterations; i++)
+            fresh.Train(input, target);
+        double trainAfter = MeasureLoss(fresh, input, fresh.Predict(input), target);
+        double testAfter = MeasureLoss(fresh, testInput, fresh.Predict(testInput), target);
+        if (double.IsNaN(trainBefore) || double.IsNaN(testBefore) ||
+            double.IsNaN(trainAfter) || double.IsNaN(testAfter))
+        {
+            return null;
+        }
+        return (trainBefore, testBefore, trainAfter, testAfter);
     }
 
     // =====================================================

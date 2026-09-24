@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.Tensors;
 using AiDotNet.Validation;
 
@@ -51,7 +52,7 @@ namespace AiDotNet.Finance.Trading.Environments;
     "https://arxiv.org/abs/2511.12120",
     Year = 2020,
     Authors = "Hongyang Yang, Xiao-Yang Liu, Shan Zhong, Anwar Walid")]
-public abstract partial class TradingEnvironment<T> : IEnvironment<T>
+public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedActionEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
     protected IEngine Engine => AiDotNetEngine.Current;
@@ -237,7 +238,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     /// with a reward and done flag.
     /// </para>
     /// </remarks>
-    public (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
+    public virtual (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
     {
         if (action == null)
         {
@@ -268,6 +269,22 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
             ["cash"] = _cash!,
             ["positions"] = _positions
         };
+
+        // Mirror the legal-action mask into the info dictionary under the conventional key, so a consumer
+        // holding only the step result can read it without a reference to the environment. The property
+        // remains the authority; this is the PettingZoo/Shimmy/RLlib convention, and the entry is simply
+        // absent when the environment does not restrict actions.
+        //
+        // CLONED, not aliased. LegalActionMask is an overridable property, and the natural override returns a
+        // reusable bool[] field recomputed in place each step. Storing that reference would leave every info
+        // dictionary ever returned pointing at the SAME array, so a replay buffer or trajectory log would find
+        // every past step wearing the CURRENT step's legality — a corruption that reads as a plausible mask
+        // rather than as an error. An info entry is a snapshot of one step by construction, so it owns a copy.
+        var mask = LegalActionMask;
+        if (mask is not null)
+        {
+            info[ActionMasking.ActionMaskKey] = (bool[])mask.Clone();
+        }
 
         return (nextState, reward, done, info);
     }
@@ -305,6 +322,25 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     /// This method is where "buy/sell/hold" or "target weights" becomes real trades.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Which discrete actions are legal in the current state, or <see langword="null"/> when every action is.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Defaults to no restriction, so no existing environment changes behaviour.</b> A subclass that
+    /// models legality — an options book where the account is cleared only for certain structures, a venue
+    /// that cannot short a given name — overrides this, and the mask reaches the policy through both this
+    /// property and the <c>action_mask</c> entry in <see cref="Step"/>'s info dictionary.</para>
+    ///
+    /// <para>The property exists ALONGSIDE the info entry because <see cref="Reset"/> returns only an
+    /// observation: an agent choosing its first action of an episode has no step result to read, and
+    /// "the mask applies from the second action onward" would be a quietly wrong contract.</para>
+    ///
+    /// <para>Meaningful only for discrete action spaces; see
+    /// <see cref="IMaskedActionEnvironment{T}.LegalActionMask"/> for why a continuous space returns null
+    /// rather than pretending an index set exists.</para>
+    /// </remarks>
+    public virtual bool[]? LegalActionMask => null;
+
     protected abstract void ApplyAction(Vector<T> action, Vector<T> prices);
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -94,12 +95,7 @@ public class ClipNeuralNetworkTests
         // Note: Path validation happens before dimension validation
         // So FileNotFoundException is thrown because the file doesn't exist
         Assert.Throws<FileNotFoundException>(() =>
-            new ClipNeuralNetwork<float>(
-                architecture,
-                "image.onnx",
-                "text.onnx",
-                tokenizer,
-                embeddingDimension: 0));
+            new ClipNeuralNetwork<float>(architecture, "image.onnx", "text.onnx", tokenizer, options: new ClipOptions { EmbeddingDimension = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -111,12 +107,7 @@ public class ClipNeuralNetworkTests
 
         // Note: Path validation happens before this validation
         Assert.Throws<FileNotFoundException>(() =>
-            new ClipNeuralNetwork<float>(
-                architecture,
-                "image.onnx",
-                "text.onnx",
-                tokenizer,
-                maxSequenceLength: -1));
+            new ClipNeuralNetwork<float>(architecture, "image.onnx", "text.onnx", tokenizer, options: new ClipOptions { MaxSequenceLength = -1 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -128,12 +119,7 @@ public class ClipNeuralNetworkTests
 
         // Note: Path validation happens before this validation
         Assert.Throws<FileNotFoundException>(() =>
-            new ClipNeuralNetwork<float>(
-                architecture,
-                "image.onnx",
-                "text.onnx",
-                tokenizer,
-                imageSize: -1));
+            new ClipNeuralNetwork<float>(architecture, "image.onnx", "text.onnx", tokenizer, options: new ClipOptions { ImageSize = -1 }));
     }
 
     /// <summary>

@@ -40,7 +40,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -48,9 +48,9 @@ public class OCRTextDetectionTests
     public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new CRAFT<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -60,7 +60,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRAFT", meta.Name);
         Assert.NotNull(meta.AdditionalInfo);
@@ -70,7 +70,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
-        var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, imageSize: 64);
         var summary = model.GetModelSummary();
         Assert.Contains("CRAFT", summary);
     }
@@ -83,7 +83,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
+        using var model = new DBNet<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -91,9 +91,9 @@ public class OCRTextDetectionTests
     public async Task DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DBNet<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -103,7 +103,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DBNet<double>(arch, imageSize: 64);
+        using var model = new DBNet<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DBNet", meta.Name);
     }
@@ -116,7 +116,7 @@ public class OCRTextDetectionTests
     public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        using var model = new EAST<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -124,9 +124,9 @@ public class OCRTextDetectionTests
     public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new EAST<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -136,7 +136,7 @@ public class OCRTextDetectionTests
     public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new EAST<double>(arch, imageSize: 64);
+        using var model = new EAST<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("EAST", meta.Name);
     }
@@ -149,7 +149,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
+        using var model = new PSENet<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -157,9 +157,9 @@ public class OCRTextDetectionTests
     public async Task PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new PSENet<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -169,7 +169,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new PSENet<double>(arch, imageSize: 64);
+        using var model = new PSENet<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("PSENet", meta.Name);
     }
@@ -181,14 +181,15 @@ public class OCRTextDetectionTests
     [Fact(Timeout = 120000)]
     public async Task AllTextDetectors_SupportedDocumentTypes_NotNone()
     {
-        var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new CRAFT<double>(arch, imageSize: 64),
-            new DBNet<double>(arch, imageSize: 64),
-            new EAST<double>(arch, imageSize: 64),
-            new PSENet<double>(arch, imageSize: 64),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var craft = new CRAFT<double>(CreateArchitecture(), imageSize: 64);
+        using var dbNet = new DBNet<double>(CreateArchitecture(), imageSize: 64);
+        using var east = new EAST<double>(CreateArchitecture(), imageSize: 64);
+        using var pseNet = new PSENet<double>(CreateArchitecture(), imageSize: 64);
+
+        var models = new DocumentNeuralNetworkBase<double>[] { craft, dbNet, east, pseNet };
 
         foreach (var model in models)
         {
