@@ -40,7 +40,13 @@ public sealed class IsolateTrialStateAttribute : BeforeAfterTestAttribute
             Path.GetTempPath(),
             "aidotnet-trial-tests",
             Guid.NewGuid().ToString("N") + ".json");
+#if AIDOTNET_TEST_ATTRIBUTION
+        string? previousPath = ModelPersistenceGuard.CurrentTestTrialFilePath;
+#endif
         _trialPathScope.Value = ModelPersistenceGuard.SetTestTrialFilePathOverride(path);
+#if AIDOTNET_TEST_ATTRIBUTION
+        AttributionRuntime.Tracker.TrialScopeStarted(path, previousPath, ModelPersistenceGuard.CurrentTestTrialFilePath);
+#endif
     }
 
     public override void After(MethodInfo methodUnderTest)
@@ -51,6 +57,9 @@ public sealed class IsolateTrialStateAttribute : BeforeAfterTestAttribute
         // multi-level usages) correctly unwind one level rather than wiping all.
         _trialPathScope.Value?.Dispose();
         _trialPathScope.Value = null;
+#if AIDOTNET_TEST_ATTRIBUTION
+        AttributionRuntime.Tracker.TrialScopeEnded(path, ModelPersistenceGuard.CurrentTestTrialFilePath);
+#endif
         TryDelete(path);
         TryDelete(path is null ? null : path + ".tombstone");
     }

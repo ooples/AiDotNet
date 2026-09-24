@@ -18,6 +18,17 @@
 	  <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- Explicit CI-only opt-in. Normal tests, compatibility builds, and shipped
+       libraries do not acquire the attribution runtime or change execution. -->
+  <PropertyGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <DefineConstants>$(DefineConstants);AIDOTNET_TEST_ATTRIBUTION</DefineConstants>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)attribution-generated/$(Configuration)/$(TargetFramework)</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="../../tools/TestImpact/Attribution.Xunit/Attribution.Xunit.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <DotNetCliToolReference Include="JetBrains.dotCover.CommandLineTools" Version="2023.2.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

@@ -1,0 +1,11 @@
+<Project>
+  <!-- These non-packable tools bind source revisions in execution receipts.
+       Their identical code must produce identical binaries whether built by
+       the fixture harness or through the real project's attribution opt-in. -->
+  <PropertyGroup>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnableSourceLink>false</EnableSourceLink>
+    <SourceLink />
+    <EmbedAllSources>true</EmbedAllSources>
+  </PropertyGroup>
+</Project>
