@@ -285,7 +285,7 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -794,7 +794,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
                 { "MAOrder", _iaOptions.MAOrder },
                 { "InterventionCount", _iaOptions.Interventions.Count },
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

@@ -2126,7 +2126,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
         if (!_useNativeMode)
         {

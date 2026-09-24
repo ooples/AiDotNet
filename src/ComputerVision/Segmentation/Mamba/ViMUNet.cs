@@ -271,7 +271,7 @@ public partial class ViMUNet<T> : Common.SemanticSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ViMUNet" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.

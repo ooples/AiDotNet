@@ -453,7 +453,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
             { "ModelName", "FastDVDNet" }, { "NumFeatures", _numFeatures },
             { "NumInputFrames", _numInputFrames }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

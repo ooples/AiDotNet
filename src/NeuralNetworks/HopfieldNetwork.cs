@@ -563,7 +563,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
                 { "Size", _size },
                 { "WeightMatrixShape", $"{_weights.Shape[0]}x{_weights.Shape[1]}" }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

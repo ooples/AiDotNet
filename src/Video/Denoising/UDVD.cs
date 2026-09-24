@@ -172,7 +172,7 @@ public partial class UDVD<T> : VideoDenoisingBase<T>
                 { "NumResBlocks", _options.NumResBlocks },
                 { "TemporalBufferSize", _options.TemporalBufferSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

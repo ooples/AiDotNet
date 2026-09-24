@@ -1223,7 +1223,9 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         metadata.AdditionalInfo["StateSize"] = GetStateSize();
 
         // Include serialized model data
-        metadata.ModelData = SerializeForMetadata();
+        // Deferred: the metadata object already exists here, so this is the
+        // SetModelDataProvider form of ModelDataProvider = () => ... (#2096).
+        metadata.SetModelDataProvider(() => SerializeForMetadata());
 
         return metadata;
     }

@@ -358,7 +358,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
             { "Variant", _variant.ToString() },
             { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

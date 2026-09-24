@@ -906,7 +906,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
                 { "AR Parameters", _arParameters },
                 { "MA Parameters", _maParameters }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metaData;

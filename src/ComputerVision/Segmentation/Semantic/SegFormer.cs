@@ -584,7 +584,7 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

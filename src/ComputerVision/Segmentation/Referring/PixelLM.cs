@@ -316,7 +316,7 @@ public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "PixelLM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and latches
     // _disposed, and PixelLM owns no other unmanaged resource.

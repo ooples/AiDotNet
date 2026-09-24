@@ -301,7 +301,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
             { "ModelName", "EDVR" }, { "NumFeatures", _numFeatures }, { "NumFrames", _numFrames },
             { "NumBlocks", _numBlocks }, { "ScaleFactor", _scaleFactor }, { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 
