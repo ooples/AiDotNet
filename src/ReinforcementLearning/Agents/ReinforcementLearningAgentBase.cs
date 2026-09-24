@@ -206,6 +206,16 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     /// <param name="done">Whether the episode terminated.</param>
     public abstract void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
 
+    /// <summary>Stores a transition with a snapshot of next-state legality, or rejects unsupported nonterminal masks.</summary>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+            throw new InvalidOperationException("This agent does not support next-state action masks.");
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
+
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.
     /// </summary>

@@ -21,6 +21,9 @@ public class SequenceModelOptionsContractTests
         typeof(SambaOptions), typeof(XLSTMOptions), typeof(Zamba2Options), typeof(ZambaOptions)
     };
 
+    // Sharing state-space settings does not make an image model a tokenizer-backed language model.
+    private static readonly Type[] ImageSequenceTypes = { typeof(VisionMambaOptions) };
+
     public static IEnumerable<object[]> CopyTypes => SequenceTypes
         .Concat(new[] { typeof(NeuralNetworkOptions), typeof(DocumentNeuralNetworkOptions) })
         .Select(type => new object[] { type });
@@ -31,7 +34,24 @@ public class SequenceModelOptionsContractTests
         var actual = typeof(SequenceModelOptions).Assembly.GetTypes()
             .Where(type => !type.IsAbstract && typeof(SequenceModelOptions).IsAssignableFrom(type))
             .OrderBy(type => type.FullName, StringComparer.Ordinal);
-        Assert.Equal(SequenceTypes.OrderBy(type => type.FullName, StringComparer.Ordinal), actual);
+        Assert.Equal(17, SequenceTypes.Length);
+        Assert.Equal(typeof(VisionMambaOptions), Assert.Single(ImageSequenceTypes));
+        Assert.Equal(SequenceTypes.Concat(ImageSequenceTypes)
+            .OrderBy(type => type.FullName, StringComparer.Ordinal), actual);
+    }
+
+    [Fact]
+    public void ImageSequenceRoster_OwnsImageGeometryWithoutLanguageRequirements()
+    {
+        var options = new VisionMambaOptions();
+        Assert.Equal(typeof(VisionMambaOptions), Assert.Single(ImageSequenceTypes));
+        Assert.IsAssignableFrom<SequenceModelOptions>(options);
+        Assert.Equal(new[] { 224, 224, 16, 3, 192, 4, 10, 16 },
+            new[] { options.ImageHeight, options.ImageWidth, options.PatchSize, options.Channels,
+                options.ModelDimension, options.NumLayers, options.NumClasses, options.StateDimension });
+        Assert.Equal(0, options.VocabSize);
+        Assert.Equal(0, options.MaxSequenceLength);
+        options.Validate();
     }
 
     [Theory]
@@ -102,7 +122,7 @@ public class SequenceModelOptionsContractTests
     [InlineData(typeof(GriffinOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]
     [InlineData(typeof(HawkOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]
     [InlineData(typeof(JambaOptions), 65536, 256, 8, 0, 16, 512, 8, 0, 0.0)]
-    [InlineData(typeof(Mamba2Options), 50277, 256, 4, 8, 64, 512, 0, 0, 0.0)]
+    [InlineData(typeof(Mamba2Options), 50277, 768, 24, 24, 128, 512, 0, 0, 0.0)]
     [InlineData(typeof(MambaOptions), 50277, 256, 4, 0, 16, 512, 0, 2, 0.0)]
     [InlineData(typeof(RecurrentGemmaOptions), 256000, 256, 4, 0, 0, 512, 0, 0, 0.0)]
     [InlineData(typeof(RWKV4Options), 50277, 256, 4, 0, 0, 512, 0, 0, 0.0)]
@@ -119,7 +139,6 @@ public class SequenceModelOptionsContractTests
             new[] { options.VocabSize, options.ModelDimension, options.NumLayers, options.NumHeads,
                 options.StateDimension, options.MaxSequenceLength, options.AttentionInterval, options.ExpandFactor });
         Assert.Equal(ffn, options.FfnMultiplier);
-        Assert.Equal(1.0, options.MaxGradNorm);
         Assert.Null(options.Seed);
         Assert.Null(options.EncoderLayerCount);
     }
@@ -277,7 +296,9 @@ public class SequenceModelOptionsContractTests
     private static void AssertInvalid(Type optionsType, PropertyInfo property, object value)
     {
         var options = Create(optionsType);
-        var validate = optionsType.GetMethod(nameof(GLAOptions.Validate), Type.EmptyTypes)
+        var validate = optionsType.GetMethod(nameof(GLAOptions.Validate),
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null, types: Type.EmptyTypes, modifiers: null)
             ?? throw new InvalidOperationException($"{optionsType.Name} has no Validate method.");
         // Prove the fixture starts valid: a different default cannot cause a false pass.
         validate.Invoke(options, Array.Empty<object>());
