@@ -540,7 +540,9 @@ internal static class CvTensorOps<T>
                         {
                             double y = startY + ((iy + 0.5) * binH / samplingRatio);
                             double x = startX + ((ix + 0.5) * binW / samplingRatio);
-                            int point = (((r * side) + (ph * samplingRatio) + iy) * side) + (pw * samplingRatio) + ix;
+                            // Bin-major order: each bin's samplingRatio^2 points are contiguous, so the pooled bin
+                            // is one [1, s*s] x [s*s, C] product below rather than a mask broadcast to every channel.
+                            int point = ((((((r * outputSize) + ph) * outputSize) + pw) * samplingRatio) + iy) * samplingRatio + ix;
                             bool valid = y >= 0 && y < h && x >= 0 && x < w;
                             double sy = valid ? Math.Min(y, h - 1) : 0;
                             double sx = valid ? Math.Min(x, w - 1) : 0;
@@ -557,12 +559,13 @@ internal static class CvTensorOps<T>
 
         var grid = new Tensor<T>(new[] { rois * side, side, 2 }, new Vector<T>(gridValues));
         var sampled = SampleByBatch(features, grid, batchIndices, side);                     // [rois * side, side, C]
-        var mask = Engine.TensorBroadcastTo(
-            new Tensor<T>(new[] { rois * side, side, 1 }, new Vector<T>(maskValues)), new[] { rois * side, side, c });
-        var weighted = Engine.Reshape(
-            Engine.TensorMultiply(sampled, mask), new[] { rois, outputSize, samplingRatio, outputSize, samplingRatio, c });
-        var pooled = Engine.ReduceSum(weighted, new[] { 2, 4 }, false);                   // [rois, out, out, C]
-        return Engine.TensorPermute(pooled, new[] { 0, 3, 1, 2 });
+        // The bin average as a batched product. Broadcasting the weights to every channel and multiplying
+        // materialised two more tensors the size of the samples, and the tape held all three, per stage: about
+        // 400 MB each in double at a thousand proposals, which is what killed CascadeRCNN's CI runner.
+        int bins = rois * outputSize * outputSize, perBin = samplingRatio * samplingRatio;
+        var weights = new Tensor<T>(new[] { bins, 1, perBin }, new Vector<T>(maskValues));
+        var pooled = Engine.BatchMatMul(weights, Engine.Reshape(sampled, new[] { bins, perBin, c }));   // [bins, 1, C]
+        return Engine.TensorPermute(Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
     }
 
     /// <summary>
