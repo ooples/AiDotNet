@@ -300,9 +300,15 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     protected override void RegisterComponents()
     {
         base.RegisterComponents();
-        RegisterParameterComponent(new AiDotNet.Models.Parameters.TensorListParameterSource<T>(
-            () => _stages.SelectMany(stage => stage.ExtraParameterTensors()).ToList()));
+        // A method group, not a lambda over _stages: the registration scan links every member named in
+        // this call to the registered source, and _stages would then be classified as trainable state
+        // the state registry must persist -- which it cannot for List<SwinStage<T>> (ADN0062), and must
+        // not, since this source and the generated layer registration already own every tensor in it.
+        RegisterParameterComponent(new AiDotNet.Models.Parameters.TensorListParameterSource<T>(StageParameterTensors));
     }
+
+    private List<Tensor<T>> StageParameterTensors()
+        => _stages.SelectMany(stage => stage.ExtraParameterTensors()).ToList();
 }
 
 /// <summary>
