@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Attributes;
@@ -194,7 +194,7 @@ public class TrOCR<T> : OCRBase<T>
             var decoderInput = CreateDecoderInput(tokens);
 
             // Apply decoder
-            var decoderOutput = ApplyDecoder(decoderInput, encoderOutput);
+            var decoderOutput = ApplyDecoder(decoderInput, encoderOutput, onlyLastPosition: true);
 
             // Get output for last position
             int lastPos = tokens.Count - 1;
@@ -328,7 +328,11 @@ public class TrOCR<T> : OCRBase<T>
         return _encoderLayers[layerIdx].Forward(x);
     }
 
-    private Tensor<T> ApplyDecoder(Tensor<T> decoderInput, Tensor<T> encoderOutput)
+    /// <param name="onlyLastPosition">
+    /// Greedy decoding reads only the newest position's logits, so projecting every earlier position onto the
+    /// vocabulary at every step repeated work whose result was discarded. Other positions stay zero.
+    /// </param>
+    private Tensor<T> ApplyDecoder(Tensor<T> decoderInput, Tensor<T> encoderOutput, bool onlyLastPosition = false)
     {
         int batch = decoderInput.Shape[0];
         int seqLen = decoderInput.Shape[1];
@@ -346,7 +350,7 @@ public class TrOCR<T> : OCRBase<T>
 
         for (int b = 0; b < batch; b++)
         {
-            for (int t = 0; t < seqLen; t++)
+            for (int t = onlyLastPosition ? seqLen - 1 : 0; t < seqLen; t++)
             {
                 var feat = new Tensor<T>(new[] { 1, _hiddenDim });
                 for (int h = 0; h < _hiddenDim; h++)
