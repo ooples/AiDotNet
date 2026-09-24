@@ -1081,18 +1081,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         => Microsoft.CodeAnalysis.Text.SourceText.From(text, Encoding.UTF8);
 
     /// <summary>
-    /// The writer model for a layer whose generated factory tries each valid constructor in order.
-    /// </summary>
-    /// <remarks>
-    /// The factory has a branch for every constructor, but the writer saved only the first one's state, so a
-    /// layer built through any other overload could never be rebuilt: InputLayer(int[] inputShape) wrote no
-    /// inputShape and failed to clone with "cannot be rebuilt" although its factory branch existed. Later
-    /// constructors now contribute the state keys the first does not already write. This cannot change which
-    /// branch a layer built through the first constructor selects: the factory still tries that branch first,
-    /// against exactly the keys it saw before. A positive dimension the first constructor lacks is omitted when
-    /// unresolved, by the same rule the first constructor's own dimensions follow.
-    /// </remarks>
-    /// <summary>
     /// Whether a nullable reference-type member backs a non-nullable constructor parameter.
     /// </summary>
     /// <remarks>
@@ -1104,6 +1092,18 @@ public class LayerStateGenerator : IIncrementalGenerator
         && p.Kind is ValueKind.String or ValueKind.Int32Array or ValueKind.DoubleArray
             or ValueKind.BooleanArray or ValueKind.StringArray or ValueKind.Int32Jagged;
 
+    /// <summary>
+    /// The writer model for a layer whose generated factory tries each valid constructor in order.
+    /// </summary>
+    /// <remarks>
+    /// The factory has a branch for every constructor, but the writer saved only the first one's state, so a
+    /// layer built through any other overload could never be rebuilt: InputLayer(int[] inputShape) wrote no
+    /// inputShape and failed to clone with "cannot be rebuilt" although its factory branch existed. Later
+    /// constructors now contribute the state keys the first does not already write. This cannot change which
+    /// branch a layer built through the first constructor selects: the factory still tries that branch first,
+    /// against exactly the keys it saw before. A positive dimension the first constructor lacks is omitted when
+    /// unresolved, by the same rule the first constructor's own dimensions follow.
+    /// </remarks>
     private static LayerModel WithEveryConstructorState(List<LayerModel> candidates)
     {
         var writer = candidates[0];
@@ -1123,9 +1123,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         foreach (var parameter in restorable)
         {
             if (!keys.Add(parameter.Key) || !names.Add(parameter.Name)) continue;
-            if (parameter.Kind == ValueKind.Int32 && IsPositiveDimensionName(parameter.Name))
-                parameter.OmitWhenNonPositive = true;
-            extra.Add(parameter);
+            // Copy before setting the writer-only flag: the candidate stays in the incremental model data,
+            // and WithParameters clones only the layer, so mutating it would leak the flag into a later selection.
+            var writerParameter = parameter.Copy();
+            if (writerParameter.Kind == ValueKind.Int32 && IsPositiveDimensionName(writerParameter.Name))
+                writerParameter.OmitWhenNonPositive = true;
+            extra.Add(writerParameter);
         }
 
         return extra.Count == 0 ? writer : writer.WithParameters(writer.Parameters.Concat(extra).ToList());
@@ -1783,6 +1786,8 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     private sealed class ParamModel
     {
+        public ParamModel Copy() => (ParamModel)MemberwiseClone();
+
         public string Name = string.Empty;
         public string TypeFqn = string.Empty;
         public string Key = string.Empty;
