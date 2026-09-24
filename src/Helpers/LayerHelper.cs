@@ -18775,8 +18775,9 @@ public static partial class LayerHelper<T>
             // QKV projection (combined Q, K, V projection)
             yield return new ConvolutionalLayer<T>(hiddenDim * 3, 1, 1, 0);
 
-            // Attention output projection
-            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
+            // Attention output projection. It reads the attention result (hiddenDim wide), not the QKV layer
+            // above it (3 * hiddenDim); sized from the list order it expected 3456 channels and rejected every forward.
+            yield return LayerGraphContract.FromDerivedInput(new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0), "attention");
 
             // FFN with expansion (4x hidden dim as per transformer standard)
             yield return new ConvolutionalLayer<T>(hiddenDim * 4, 1, 1, 0);
