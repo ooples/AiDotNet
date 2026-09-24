@@ -82,6 +82,8 @@ public abstract class GanOptions : ModelHyperparameterOptions
     protected void ValidateCore()
     {
         Require(LatentSize, nameof(LatentSize));
+        Require(GeneratorChannels, nameof(GeneratorChannels));
+        Require(DiscriminatorChannels, nameof(DiscriminatorChannels));
         Require(ImageChannels, nameof(ImageChannels));
         Require(InitialLearningRate, nameof(InitialLearningRate));
     }
