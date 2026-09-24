@@ -8074,9 +8074,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 16), " +
                     "tokenizer: AiDotNet.Tokenization.ClipTokenizerFactory.CreateShapeCompatibleForTesting(), " +
-                    "embeddingDimension: 16, visionEmbeddingDim: 16, maxSequenceLength: 16, " +
-                    "contextWindowSize: 64, imageSize: 16, hiddenDim: 16, numVisionLayers: 1, " +
-                    "numLanguageLayers: 1, numHeads: 2, patchSize: 8, vocabularySize: 49408)";
+                    "options: new AiDotNet.NeuralNetworks.Options.Gpt4VisionOptions { " +
+                    "EmbeddingDimension = 16, VisionDim = 16, MaxSequenceLength = 16, " +
+                    "ContextWindowSize = 64, ImageSize = 16, HiddenDim = 16, VisionLayers = 1, " +
+                    "NumLmLayers = 1, NumHeads = 2, PatchSize = 8, VocabSize = 49408 })";
             }
             else if (model.ClassName == "MultiOutputGaussianProcess" && model.TypeParameterCount == 1)
             {
