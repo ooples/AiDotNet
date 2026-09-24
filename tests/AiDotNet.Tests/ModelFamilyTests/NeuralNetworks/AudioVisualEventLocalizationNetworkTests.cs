@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -19,12 +20,9 @@ public class AudioVisualEventLocalizationNetworkTests : NeuralNetworkModelTestBa
     private const int FixtureEmbeddingSize = 32;
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new AudioVisualEventLocalizationNetwork<float>(
-            new NeuralNetworkArchitecture<float>(
+        => new AudioVisualEventLocalizationNetwork<float>(new NeuralNetworkArchitecture<float>(
                 inputType: AiDotNet.Enums.InputType.OneDimensional,
                 taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification,
                 inputSize: 512,
-                outputSize: 1),
-            audioEmbeddingFullyConnectedWidth: FixtureEmbeddingWidth,
-            audioEmbeddingSize: FixtureEmbeddingSize);
+                outputSize: 1), options: new AudioVisualEventLocalizationOptions { AudioEmbeddingFullyConnectedWidth = FixtureEmbeddingWidth, AudioEmbeddingSize = FixtureEmbeddingSize });
 }

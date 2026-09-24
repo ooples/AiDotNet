@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.IO;
 using AiDotNet.Data.Structures;
 using AiDotNet.Diffusion;
@@ -75,14 +76,7 @@ public class MissingModelsIntegrationTests
                 outputSize: embeddingDim);
 
             // Invalid ONNX models should throw during construction
-            Assert.ThrowsAny<Exception>(() => new ClipNeuralNetwork<float>(
-                architecture,
-                imagePath,
-                textPath,
-                tokenizer,
-                embeddingDimension: embeddingDim,
-                maxSequenceLength: 8,
-                imageSize: imageSize));
+            Assert.ThrowsAny<Exception>(() => new ClipNeuralNetwork<float>(architecture, imagePath, textPath, tokenizer, options: new ClipOptions { EmbeddingDimension = embeddingDim, MaxSequenceLength = 8, ImageSize = imageSize }));
         }
         finally
         {
