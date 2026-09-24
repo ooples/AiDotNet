@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Builds a machine-readable test ledger from TRX files and, when a baseline is
 available, evaluates AiDotNet's regression policy.
@@ -33,6 +33,11 @@ param(
     [string] $BaselineSha,
     [string] $RepositoryPath = '.',
     [string] $ApprovedShardChangesPath,
+    # Shard names the matrix actually dispatched for this run. Without it, inventory mode
+    # (no baseline) has NO expected set, so a shard whose runner died before uploading is
+    # indistinguishable from a shard that never existed -- it is simply absent, the counts
+    # are taken over whatever did arrive, and the run self-reports fully green. #2086.
+    [string[]] $ExpectedShardNames = @(),
     [switch] $FailOnPolicy
 )
 
@@ -461,6 +466,23 @@ function Add-MarkdownList {
     $Lines.Add('')
 }
 
+# Validate the expected inventory before creating any report files. Distinct display names can
+# collapse to the same artifact/ledger key (for example, "Shard A-B" and "Shard A B"). If that
+# ambiguity is accepted, one artifact can satisfy two dispatched rows and conceal a dead shard.
+$expectedShards = New-Object System.Collections.Generic.List[object]
+$expectedShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+foreach ($expectedName in $ExpectedShardNames) {
+    if ([string]::IsNullOrWhiteSpace($expectedName)) { continue }
+    $expectedKey = ConvertTo-ShardKey $expectedName
+    if (-not $expectedShardKeys.Add($expectedKey)) {
+        throw "Expected shard names collide after normalization: '$expectedName' maps to '$expectedKey'."
+    }
+    $expectedShards.Add([PSCustomObject]@{
+        key = $expectedKey
+        name = [string] $expectedName
+    })
+}
+
 New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
 $ledgerPath = Join-Path $OutputDirectory 'ledger.json'
 $comparisonPath = Join-Path $OutputDirectory 'comparison.json'
@@ -469,8 +491,64 @@ $failureCsvPath = Join-Path $OutputDirectory 'failures.csv'
 $shardCsvPath = Join-Path $OutputDirectory 'shards.csv'
 
 $current = Read-TestLedger -Root $CurrentResultsPath -Sha $CurrentSha
+
+# #2086: a shard whose runner dies before uploading its artifact is simply ABSENT. The
+# baseline path already handles that -- it walks the baseline's shards and synthesizes a
+# 'Missing' entry for any that produced nothing. Inventory mode (no baseline) had no
+# expected set at all, so absence was unobservable there: the counts were taken over
+# whatever arrived, every arrived shard passed, and the run reported
+# "115 shards, 115 passed, 0 failed, 0 incomplete" while Integration D had died.
+#
+# The expected set is the matrix the run actually dispatched, passed in by the workflow.
+# Shards that selection deliberately skipped are excluded upstream (they are merged into
+# the approved shard-change manifest), so anything expected-but-absent here died.
+$missingExpectedShards = New-Object System.Collections.Generic.List[object]
+if ($expectedShards.Count -gt 0) {
+    $presentShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+    foreach ($shard in @($current.shards)) { [void] $presentShardKeys.Add([string] $shard.key) }
+
+    foreach ($expectedShard in $expectedShards) {
+        if ($presentShardKeys.Contains($expectedShard.key)) { continue }
+
+        $missingExpectedShards.Add([PSCustomObject]@{
+            key = $expectedShard.key
+            name = $expectedShard.name
+            status = 'Missing'
+            policyStatus = 'Missing'
+            total = 0
+            executed = 0
+            notExecuted = 0
+            aborted = 0
+            failed = 0
+            confirmedFailed = 0
+            rerunPassedFailures = 0
+            missingTrx = $true
+            hostLifecycleFailed = $true
+            parseErrors = @('This shard was dispatched by the matrix but uploaded no artifact; its runner did not complete.')
+            testStepOutcome = 'missing'
+        })
+    }
+
+}
+
+# The ledger object itself is deliberately NOT mutated -- the baseline path keeps its own
+# synthesized 'Missing' shards in a separate list for the same reason, and reassigning the
+# List[object] that Read-TestLedger exposes trips a PSToObjectArrayBinder ArgumentException.
+# The rows are merged only where they are reported.
+$shardRows = New-Object System.Collections.Generic.List[object]
+foreach ($shard in @($current.shards)) { $shardRows.Add($shard) }
+foreach ($shard in $missingExpectedShards) { $shardRows.Add($shard) }
+
+# Stamp the hole onto the ledger itself. find-test-baseline.ps1 deliberately does NOT filter
+# baseline candidates by run conclusion ("master workflows can be cancelled by CodeQL after every
+# test shard has already uploaded a valid TRX"), so failing this run is not enough to stop an
+# incomplete ledger being adopted as a baseline later. Recording the missing shard names in the
+# artifact lets the consumer refuse it on its own evidence. #2086.
+$current | Add-Member -MemberType NoteProperty -Name missingExpectedShards `
+    -Value @($missingExpectedShards | ForEach-Object { [string] $_.name }) -Force
+
 Write-JsonFile $current $ledgerPath
-$current.shards |
+$shardRows |
     Select-Object key, name, status, policyStatus, total, executed, notExecuted, aborted,
         failed, confirmedFailed, rerunPassedFailures, missingTrx, hostLifecycleFailed, testStepOutcome |
     Export-Csv -LiteralPath $shardCsvPath -NoTypeInformation -Encoding utf8
@@ -504,19 +582,51 @@ if (($BaselineLedgerPath -or $BaselineResultsPath) -and
     throw "Resolved baseline '$BaselineSha' contains zero measured test shards; refusing to enforce a false regression comparison."
 }
 
+# A baseline that was itself missing a dispatched shard has a hole in it. Comparing against it
+# would silently inherit that blind spot: the absent shard is in neither side, so its failures
+# can never be classified as new. Refuse it rather than launder the gap forward. #2086.
+if ($baseline -and $baseline.PSObject.Properties['missingExpectedShards']) {
+    $baselineHoles = @($baseline.missingExpectedShards | Where-Object { $_ })
+    if ($baselineHoles.Count -gt 0) {
+        throw ("Resolved baseline '$BaselineSha' is incomplete: $($baselineHoles.Count) dispatched shard(s) " +
+            "uploaded no artifact ($($baselineHoles -join ', ')). Refusing to compare against a baseline with a hole in it.")
+    }
+}
+
 if (-not $baseline) {
+    # A ledger missing a dispatched shard must never be published as a baseline: later pull
+    # requests are diffed against it, so the gap would be normalised and that shard's future
+    # failures would go unnoticed too. #2086.
+    $inventoryComplete = $missingExpectedShards.Count -eq 0
     $summary = [PSCustomObject]@{
         mode = 'inventory'
         currentSha = $CurrentSha
         counts = $currentStats
         failureCategories = $currentCategories
-        policyPassed = $true
+        missingExpectedShards = @($missingExpectedShards | ForEach-Object { $_.name })
+        baselinePublishable = $inventoryComplete
+        policyPassed = $inventoryComplete
     }
-    $lines.Add("Current master ledger: **$($currentStats.shardCount) shards**, **$($currentStats.passedShards) passed**, **$($currentStats.failedShards) failed**, **$($currentStats.incompleteShards) incomplete**.")
+    # The shard count must include shards that uploaded nothing. Reporting only the artifacts
+    # that arrived is what made a run with a dead shard read as "115 shards, 115 passed".
+    $dispatchedShardCount = $currentStats.shardCount + $missingExpectedShards.Count
+    $missingClause = if ($missingExpectedShards.Count -gt 0) { ", **$($missingExpectedShards.Count) missing**" } else { '' }
+    $lines.Add("Current master ledger: **$dispatchedShardCount shards**, **$($currentStats.passedShards) passed**, **$($currentStats.failedShards) failed**, **$($currentStats.incompleteShards) incomplete**$missingClause.")
     $lines.Add('')
     $lines.Add("The TRX files report **$($currentStats.reportedFailureResults) failing results** representing **$($currentStats.distinctFailures) distinct failing tests**.")
     $lines.Add('')
-    $lines.Add('This push establishes the TRX baseline artifact used by later pull requests.')
+    if ($inventoryComplete) {
+        $lines.Add('This push establishes the TRX baseline artifact used by later pull requests.')
+    } else {
+        $lines.Add("> [!CAUTION]")
+        $lines.Add("> **$($missingExpectedShards.Count) dispatched shard(s) uploaded no artifact** and are recorded as ``Missing``:")
+        foreach ($shard in $missingExpectedShards) { $lines.Add("> - ``$($shard.name)``") }
+        $lines.Add('>')
+        $lines.Add('> A shard that dispatched but produced nothing did not pass - its runner did not')
+        $lines.Add('> complete. This ledger is therefore INCOMPLETE and is **not** published as the')
+        $lines.Add('> baseline, because later pull requests are diffed against the baseline and would')
+        $lines.Add('> inherit the blind spot.')
+    }
     $lines.Add('')
     $lines.Add('## Failure categories')
     $lines.Add('')
@@ -659,7 +769,26 @@ if (-not $baseline) {
     $touchedSurfaceClean = $touchedNew.Count -eq 0 -and
         ($touchedSurfaceKnown -or $confirmedNew.Count -eq 0)
     $baselineIncomplete = @($baseline.shards | Where-Object status -eq 'Incomplete')
-    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards.ToArray())
+    # The expected matrix is authoritative for this run. A missing expected shard can be new and
+    # therefore absent from the baseline-key walk above; merge all three sources by shard key so it
+    # is neither dropped nor double-counted when it also existed in the baseline.
+    $effectiveCurrentIncomplete = New-Object System.Collections.Generic.List[object]
+    $effectiveCurrentIncompleteKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+    foreach ($incompleteShard in @($currentIncomplete)) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
+    foreach ($incompleteShard in $missingCurrentShards.ToArray()) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
+    foreach ($incompleteShard in $missingExpectedShards.ToArray()) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
     $baselineStats = Get-LedgerStatistics $baseline
     $baselineCategories = @(Get-FailureCategories $baselineFailures)
     $greenToRedArray = @($greenToRed | ForEach-Object { $_ })
@@ -667,7 +796,9 @@ if (-not $baseline) {
     # when failures change, explicit current passes must at least offset genuinely new failures.
     $netImproved = $fixed.Count -ge $confirmedNew.Count
     $incompleteNotIncreased = $effectiveCurrentIncomplete.Count -le $baselineIncomplete.Count
-    $policyPassed = $netImproved -and $incompleteNotIncreased -and $greenToRed.Count -eq 0 -and $touchedSurfaceClean
+    $allDispatchedShardsReported = $missingExpectedShards.Count -eq 0
+    $policyPassed = $netImproved -and $incompleteNotIncreased -and
+        $greenToRed.Count -eq 0 -and $touchedSurfaceClean -and $allDispatchedShardsReported
 
     $resolvedBaselineSha = [string] $baseline.sha
     if ($BaselineSha) { $resolvedBaselineSha = [string] $BaselineSha }
@@ -681,6 +812,7 @@ if (-not $baseline) {
             incompleteShardsDidNotIncrease = $incompleteNotIncreased
             noPreviouslyGreenShardRegressed = $greenToRed.Count -eq 0
             noTouchedSurfaceRegression = $touchedSurfaceClean
+            allDispatchedShardsReported = $allDispatchedShardsReported
         }
         touchedTokenDiscovery = $touchedTokenResult
         counts = [PSCustomObject]@{
@@ -706,6 +838,7 @@ if (-not $baseline) {
             baselineIncompleteShards = $baselineIncomplete.Count
             currentIncompleteShards = $effectiveCurrentIncomplete.Count
             missingCurrentShardArtifacts = $missingCurrentShards.Count
+            missingExpectedShardArtifacts = $missingExpectedShards.Count
             approvedShardChanges = $approvedMissingShardChanges.Count
             greenToRedShards = $greenToRed.Count
             touchedNewFailures = $touchedNew.Count
@@ -718,7 +851,7 @@ if (-not $baseline) {
         fixedFailures = @($fixed)
         persistentFailures = @($persistent)
         baselineFailuresNotObserved = @($notObserved)
-        currentIncompleteShards = @($effectiveCurrentIncomplete)
+        currentIncompleteShards = $effectiveCurrentIncomplete.ToArray()
         missingCurrentShardArtifacts = $missingCurrentShards.ToArray()
         approvedShardChanges = $approvedMissingShardChanges.ToArray()
         baselineFailureCategories = $baselineCategories
@@ -745,6 +878,7 @@ if (-not $baseline) {
     $lines.Add("| Incomplete shards do not increase | $(if ($incompleteNotIncreased) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| Previously-green shards stay green | $(if ($greenToRed.Count -eq 0) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| No unresolved touched-surface regression risk | $(if ($touchedSurfaceClean) { 'PASS' } else { 'FAIL' }) |")
+    $lines.Add("| Every dispatched shard uploaded an artifact | $(if ($allDispatchedShardsReported) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add('')
     if (-not $touchedSurfaceKnown) {
         $lines.Add("Touched-surface discovery is unavailable: **$(ConvertTo-MarkdownCell ([string] $touchedTokenResult.error))**")
@@ -781,6 +915,18 @@ Get-Content -LiteralPath $summaryPath | Write-Host
 if ($env:GITHUB_STEP_SUMMARY) {
     try { Get-Content -LiteralPath $summaryPath | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
     catch { Write-Warning "Could not write GitHub step summary: $($_.Exception.Message)" }
+}
+
+# A dispatched shard that uploaded nothing is a hole regardless of whether this is inventory or
+# comparison mode. Check it before the general policy verdict so both paths emit the actionable
+# shard names, and never let a baseline comparison hide a newly-added missing shard. #2086.
+if ($missingExpectedShards.Count -gt 0) {
+    $names = ($missingExpectedShards | ForEach-Object { $_.name }) -join ', '
+    # Write-Host + exit rather than Write-Error: $ErrorActionPreference is 'Stop' here, so
+    # Write-Error would throw before `exit 1` ever ran and the caller would see a terminating
+    # error instead of a deterministic exit code.
+    Write-Host "::error::$($missingExpectedShards.Count) dispatched shard(s) uploaded no artifact and are recorded as Missing: $names. Refusing to accept an incomplete test ledger."
+    exit 1
 }
 
 if ($FailOnPolicy -and $baseline) {

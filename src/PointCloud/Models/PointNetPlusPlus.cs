@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -68,7 +68,7 @@ namespace AiDotNet.PointCloud.Models;
 /// <example>
 /// <code>
 /// // Create a PointNet++ model for hierarchical point cloud classification
-/// var options = new PointNetPlusPlusOptions
+/// var options = new AiDotNet.Models.Options.PointNetPlusPlusOptions
 /// {
 ///     NumClasses = 40,
 ///     UseMultiScaleGrouping = true

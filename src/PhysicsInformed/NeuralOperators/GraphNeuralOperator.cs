@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -73,6 +74,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                    Source = "Li et al. 2020, Sec. 5: the Adam optimizer with a learning rate of 1e-4, "
+                            + "trained for 200 epochs against the absolute mean squared error on the "
+                            + "normalized data unless otherwise stated.")]
     public partial class GraphNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly GraphNeuralOperatorOptions _options;
@@ -138,7 +143,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             _normalizeAdjacency = normalizeAdjacency;
             _graphLayers = new List<GraphConvolutionalLayer<T>>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
 
             InitializeLayers();

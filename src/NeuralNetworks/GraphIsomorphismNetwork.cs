@@ -1,3 +1,4 @@
+using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -61,10 +62,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphIsomorphismNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 5 };
-/// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 16 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphIsomorphismNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
@@ -74,6 +79,13 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("How Powerful are Graph Neural Networks?", "https://arxiv.org/abs/1810.00826", Year = 2019, Authors = "Keyulu Xu, Weihua Hu, Jure Leskovec, Stefanie Jegelka")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, DecayRate = 0.5, StepSize = 50,
+                Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Xu et al. 2019, Sec. 6: the Adam optimizer with an initial learning rate of "
+                        + "0.01, decayed by 0.5 every 50 epochs. No reference batch size is declared "
+                        + "because the paper tunes the batch over {32, 128} per dataset rather than "
+                        + "fixing one.")]
 public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphIsomorphismNetworkOptions _options;
@@ -193,7 +205,9 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
                 baseLearningRate: 0.001, gamma: 0.99),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
 
         InitializeLayers();
     }

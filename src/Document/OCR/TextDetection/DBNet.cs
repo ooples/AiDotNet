@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -53,6 +54,13 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real-time Scene Text Detection with Differentiable Binarization", "https://doi.org/10.48550/arXiv.1911.08947", Year = 2020, Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.007, WeightDecay = 0.0001,
+                Momentum = 0.9, ReferenceBatchSize = 16, DecayRate = 0.9,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Liao et al. 2020, Sec. 4: a poly learning rate policy with an initial "
+                        + "learning rate of 0.007 and a power of 0.9, a weight decay of 0.0001, a "
+                        + "momentum of 0.9 and a training batch size of 16. Recorded verify-only because "
+                        + "SGD is a weaker optimizer than this model's Adam default.")]
 public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly DBNetOptions _options;
@@ -155,7 +163,8 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _expandRatio = expandRatio;
         _thresholdK = thresholdK;
         _minTextArea = minTextArea;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         ImageSize = imageSize;
 
@@ -207,7 +216,8 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _expandRatio = expandRatio;
         _thresholdK = thresholdK;
         _minTextArea = minTextArea;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         ImageSize = imageSize;
 

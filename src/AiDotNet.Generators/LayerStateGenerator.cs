@@ -287,11 +287,22 @@ public class LayerStateGenerator : IIncrementalGenerator
         // it however correct its state declarations are. Declined rather than reported: the author
         // of a private helper layer has done nothing wrong, and ADN0055 firing on it is a
         // diagnostic about the table's reach rather than about their code.
-        for (var scope = type; scope is not null; scope = scope.ContainingType)
+        //
+        // A do/while, not `for (var scope = type; scope is not null; ...)`: the for-form tests the
+        // loop variable against null while it still aliases `type` (first iteration), and CodeQL's
+        // nullness analysis (cs/dereferenced-value-is-always-null) does not separate that iteration
+        // from later ones, so it carried the loop-exit fact "scope is null" back onto `type` and
+        // reported the `type.TypeKind` dereference below as always null. `type` is never null here
+        // -- `type.IsAbstract` above already dereferenced it -- so only ContainingType links are
+        // null-tested.
+        INamedTypeSymbol? scope = type;
+        do
         {
             if (scope.DeclaredAccessibility is Accessibility.Private or Accessibility.ProtectedAndInternal)
                 return null;
+            scope = scope.ContainingType;
         }
+        while (scope is not null);
 
         // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
         // constructor whose parameters carried [LayerState] and then emitted

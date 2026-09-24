@@ -1,4 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -37,9 +38,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new GraphNeuralNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 3 };
-/// var model = new GraphNeuralNetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 10, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 16 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphNeuralNetwork&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -51,6 +56,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, EarlyStoppingPatience = 10,
+                Source = "Kipf and Welling 2017, Sec. 5: all models trained for a maximum of 200 epochs "
+                        + "using Adam with a learning rate of 0.01 and early stopping with a window size "
+                        + "of 10.")]
 public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;

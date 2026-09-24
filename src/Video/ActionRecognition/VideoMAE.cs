@@ -47,11 +47,12 @@ namespace AiDotNet.Video.ActionRecognition;
 /// // Create a VideoMAE model for action recognition on Kinetics-400
 /// var videoMAE = new VideoMAE&lt;double&gt;();
 ///
-/// // Or configure with a custom architecture and parameters
+/// // Or configure with a custom architecture and parameters. Declare the input as
+/// // FourDimensional [frames, channels, height, width] so GetInputShape() describes a clip.
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.ThreeDimensional,
+///     inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3,
+///     inputFrames: 16, inputHeight: 224, inputWidth: 224, inputDepth: 3,
 ///     outputSize: 400);
 /// var model = new VideoMAE&lt;double&gt;(architecture, numClasses: 400, numFrames: 16);
 /// </code>
@@ -142,13 +143,27 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of VideoMAE with default architecture (224x224, 400 classes).
+    /// Initializes a new instance of VideoMAE with default architecture (16 frames of 224x224, 400 classes).
     /// </summary>
+    /// <remarks>
+    /// The default architecture is declared <see cref="Enums.InputType.FourDimensional"/>
+    /// ([frames, channels, height, width]) with 16 frames, in lockstep with the
+    /// <c>numFrames = 16</c> default of the native constructor. It used to be declared
+    /// <see cref="Enums.InputType.ThreeDimensional"/>, whose <c>GetInputShape()</c> is
+    /// [channels, height, width] = [3, 224, 224]: a SINGLE frame. VideoMAE reads a rank-4
+    /// input as an unbatched clip [T, C, H, W] (see the TensorLayout attribute), so that
+    /// declared shape was consumed as a 1-frame clip, and <see cref="PatchEmbed"/> folds
+    /// frames in tubelets of 2 — 1 / 2 = 0 tubelets, an empty [0, 6, 224, 224] batch for
+    /// the tubelet convolution. A model's declared input shape must be an input it
+    /// accepts; any caller that builds its probe from the architecture (serving, the
+    /// shape-discovery and traced-chain sweeps, a user following <c>GetInputShape()</c>)
+    /// hit that on the first Predict.
+    /// </remarks>
     public VideoMAE()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
+            inputType: Enums.InputType.FourDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            inputFrames: 16, inputHeight: 224, inputWidth: 224, inputDepth: 3,
             outputSize: 400)) { }
 
     /// <summary>
@@ -544,6 +559,23 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         int channels = video.Shape[2];
         int height = video.Shape[3];
         int width = video.Shape[4];
+
+        // A clip shorter than one tubelet has NO tubelets: numFrames / _tubeletSize is 0, the
+        // tubelet batch below would be [0, channels * _tubeletSize, H, W], and the empty tensor
+        // reached the engine's bias broadcast inside Layers[0] as an opaque
+        // "Inner left-operand block exceeds its span" instead of a statement of what is wrong
+        // with the input. The reference (a Conv3d with temporal kernel = stride = tubelet size)
+        // rejects such a clip too, so reject it here, in terms of the input, before the conv.
+        // Trailing frames beyond a whole tubelet are dropped, exactly as that strided Conv3d
+        // drops them, so only the too-short case is an error.
+        if (numFrames < _tubeletSize)
+        {
+            throw new ArgumentException(
+                $"VideoMAE embeds frames in tubelets of {_tubeletSize}, so a clip needs at least "
+                + $"{_tubeletSize} frames; got {numFrames}. Input layout is [T, C, H, W] or "
+                + $"[B, T, C, H, W] (received shape [{string.Join(", ", video._shape)}]).",
+                nameof(video));
+        }
 
         // Combine frames into tubelet pairs
         int numTubelets = numFrames / _tubeletSize;

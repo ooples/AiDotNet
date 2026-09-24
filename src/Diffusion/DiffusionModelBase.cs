@@ -110,8 +110,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// </para>
     /// <example>
     /// <code>
-    /// public class DDPMModel&lt;T&gt; : DiffusionModelBase&lt;T&gt; {
+    /// public class MyDiffusionModel&lt;T&gt; : DiffusionModelBase&lt;T&gt; {
     ///     private readonly UNetNoisePredictor&lt;T&gt; _unet;
+    ///
+    ///     public override Tensor&lt;T&gt; PredictNoise(Tensor&lt;T&gt; noisySample, int timestep)
+    ///         =&gt; _unet.PredictNoise(noisySample, timestep);
+    ///
     ///     protected override IEnumerable&lt;IDisposable&gt; EnumerateDisposableComponents() {
     ///         yield return _unet;
     ///     }

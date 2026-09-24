@@ -94,6 +94,23 @@ internal static class LayerInitializationSeedScope
     }
 
     /// <summary>
+    /// Captures the current construction scope so a caller that reseeds it for a nested construction can
+    /// put it back afterwards. Pair with <see cref="RestoreScope"/> in a <c>finally</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ResetForModelConstruction"/> is normally called by a model's own constructor, which owns
+    /// the scope for the rest of that construction. A caller that reseeds the scope to build something
+    /// NESTED (cloning an architecture per network, say) leaves the sequence armed with a seed that does not
+    /// belong to whatever is constructed next. That matters because of the lazy arming in
+    /// <see cref="NextSeedOrNull"/>: layers passed as constructor ARGUMENTS are built before the model
+    /// constructor body runs, so they would draw from the stale seed rather than their own.
+    /// </remarks>
+    internal static Random? CaptureScope() => _rng;
+
+    /// <summary>Restores a scope captured by <see cref="CaptureScope"/>.</summary>
+    internal static void RestoreScope(Random? capturedScope) => _rng = capturedScope;
+
+    /// <summary>
     /// Returns the next deterministic per-layer init seed, or <c>null</c> when no
     /// seeded construction scope is active (no architecture seed was set). A
     /// <c>null</c> return tells the layer to keep its existing initialization

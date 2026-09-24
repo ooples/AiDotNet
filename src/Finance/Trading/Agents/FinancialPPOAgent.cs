@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
@@ -52,6 +53,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, ReferenceBatchSize = 64,
+                Source = "Schulman et al. 2017, Table 3: the Adam stepsize is 3e-4 with a minibatch "
+                        + "size of 64 over 10 epochs at a horizon of 2048, for the MuJoCo "
+                        + "one-million-timestep benchmark. The Roboschool table leaves the stepsize "
+                        + "blank, so only the MuJoCo row is declared.")]
 public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
@@ -137,6 +143,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = actor;
         _critic = critic;
+        Networks.Add(_actor);
+        Networks.Add(_critic);
         _trajectory = new Trajectory<T>();
         _nextStates = new List<Vector<T>>();
         _random = options.Seed.HasValue
@@ -146,7 +154,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #endregion
 
-    private static void EnsurePpoDefaultLayers(
+    private void EnsurePpoDefaultLayers(
         NeuralNetworkArchitecture<T> architecture,
         int expectedInputSize,
         int expectedOutputSize)
@@ -160,11 +168,26 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         if (architecture.OutputSize != expectedOutputSize)
             throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
 
+        // Derive a reproducible init seed from options.Seed (when the architecture has none) and build the
+        // default layers under it, so identically seeded PPO agents start from identical weights.
+        ApplyNetworkSeed(architecture);
+
         if (architecture.Layers.Count == 0)
         {
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
-            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
-            architecture.Layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+            // Tanh MLP sized by TradingAgentOptions.HiddenLayers (default [64, 64]) with a linear head:
+            // the actor emits logits / action means and the critic a state value, whatever the task type.
+            var hiddenSizes = GetHiddenLayerSizes();
+            AddSeededDefaultLayers(architecture, () =>
+            {
+                var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+                foreach (int width in hiddenSizes)
+                {
+                    layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>()));
+                }
+
+                layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+                return layers;
+            });
         }
     }
 

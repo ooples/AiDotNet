@@ -816,9 +816,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
             var scaledHiddenGrad = Engine.TensorMultiplyScalar(_hiddenWeightsGradient, learningRate);
             var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
 
-            _inputWeights = Engine.TensorSubtract(_inputWeights, scaledInputGrad);
-            _hiddenWeights = Engine.TensorSubtract(_hiddenWeights, scaledHiddenGrad);
-            _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+            Engine.TensorSubtractInPlace(_inputWeights, scaledInputGrad);
+            Engine.TensorSubtractInPlace(_hiddenWeights, scaledHiddenGrad);
+            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
 
             Engine.InvalidatePersistentTensor(_inputWeights);
             Engine.InvalidatePersistentTensor(_hiddenWeights);

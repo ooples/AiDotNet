@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -36,7 +38,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new Emu3&lt;double&gt;(architecture, new Emu3Options());
 /// </code>
@@ -56,6 +58,11 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2024,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wang et al. 2024, Sec. 3: both training stages use a learning rate of 5e-5 "
+                        + "with cosine annealing of the learning rate to zero. The optimizer is left "
+                        + "unspecified because the paper names none.")]
 public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu3Options _options;
@@ -103,7 +110,9 @@ public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         _options = options ?? new Emu3Options();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

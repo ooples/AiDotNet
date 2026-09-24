@@ -39,17 +39,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an audio-visual event localization network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Detection,
+///     taskType: NeuralNetworkTaskType.ObjectDetection,
 ///     inputSize: 512,
 ///     outputSize: 128);
 ///
-/// var model = new AudioVisualEventLocalizationNetwork&lt;float&gt;(architecture);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 512);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 128);
 ///
-/// // Detect and localize events in audio-visual input
-/// Tensor&lt;float&gt; detections = model.Predict(inputTensor);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AudioVisualEventLocalizationNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+///
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(1, 512);
+/// Tensor&lt;float&gt; detections = result.Predict(inputTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -1319,7 +1323,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             }
         }
 
-        return _numOps.Divide(totalDiff, _numOps.FromDouble(frames.Count * frames[0].ToVector().Length));
+        return _numOps.Divide(totalDiff, _numOps.FromDouble((double)frames.Count * frames[0].ToVector().Length));
     }
 
     private Vector<T> EncodeTextDescription(string description)

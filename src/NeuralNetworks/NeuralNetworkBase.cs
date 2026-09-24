@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -137,6 +137,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private readonly List<ILayer<T>> _layers;
 
+    /// <summary>
+    /// Indicates that this model has crossed the architecture-layer ownership boundary.
+    /// </summary>
+    /// <remarks>
+    /// Keeps the ownership guard off inference and training hot paths after the first layer-collection
+    /// access. A competing first access may repeat the idempotent same-model claim, but neither access can
+    /// return the collection until the architecture's atomic claim has completed.
+    /// </remarks>
+    private int _architectureLayerOwnershipEstablished;
+
+    /// <summary>
+    /// Tracks nested validation entry points so one failed validation chain rolls back its provisional
+    /// architecture claim exactly once at the outer transaction boundary.
+    /// </summary>
+    private int _customLayerValidationDepth;
+
 
     /// <summary>
     /// Gets the collection of layers that make up this neural network (read-only access).
@@ -150,7 +166,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
     /// </para>
     /// </remarks>
-    public List<ILayer<T>> Layers => _layers;
+    public List<ILayer<T>> Layers
+    {
+        get
+        {
+            // Claim only at the first point where this model can take references to the architecture's
+            // mutable layers. Claiming in the base constructor poisoned the architecture when a derived
+            // constructor rejected its configuration before touching Layers; a corrected construction
+            // then looked like an illegal second owner. The getter is evaluated before Add/AddRange can
+            // capture anything, while ClaimForModel's lock still makes competing captures atomic.
+            if (Volatile.Read(ref _architectureLayerOwnershipEstablished) == 0)
+            {
+                Architecture.ClaimForModel(this);
+                Volatile.Write(ref _architectureLayerOwnershipEstablished, 1);
+            }
+
+            return _layers;
+        }
+    }
 
     /// <summary>
     /// Moves the whole model — every layer's parameters and buffers — to the given device, the model-level
@@ -1349,7 +1382,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         foreach (var (source, destination) in pairs)
+        {
             source.AsSpan().CopyTo(destination.AsWritableSpan());
+            // AsWritableSpan deliberately does not publish a mutation. Consumers of live
+            // chunks and resident GPU buffers rely on this version, while CPU packed-weight
+            // caches key the backing array. Invalidate only the tensor/array actually written.
+            destination.IncrementVersion();
+            AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
+            Engine.InvalidatePersistentTensor(destination);
+            GpuEngine?.InvalidateResidentWeightBuffer(destination);
+        }
     }
 
     #region GPU Training Methods
@@ -2800,19 +2842,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // model class's forward BEFORE the input hits Layers[0] — e.g. NeRF's positional
         // encoding turns [N, 3] positions into [N, 60] before Layers[0] sees them, and
         // Layers[0] only resolves its DenseLayer input width on that real forward. Drive
-        // one full forward now (SetTrainingMode(false) so batchnorm/dropout stay inference)
-        // to trigger those inside-forward resolutions. The output is discarded; only the
-        // side-effect of materializing lazy layer shapes matters here.
-        bool previousTrainingMode = IsTrainingMode;
-        try
-        {
-            SetTrainingMode(false);
-            _ = ForwardWithMemory(sampleInput);
-        }
-        finally
-        {
-            SetTrainingMode(previousTrainingMode);
-        }
+        // one full forward now to trigger those inside-forward resolutions. The output is
+        // discarded; only the side-effect of materializing lazy layer shapes matters here.
+        //
+        // The forward has to be the model's own inference entry point, not the bare layer loop.
+        // A model may reshape its input before Layers[0] in PredictCore rather than in
+        // ForwardWithMemory: MusicSourceSeparator turns a [B, samples] waveform into the
+        // [B, 1, samples] its first Conv1D needs there, so feeding the caller's sample straight to
+        // the layers threw "Conv1DLayer requires rank-3 input" - from the very method the
+        // SetParameters error tells a user to call. Predict also owns the eval-mode transition
+        // (and restores the prior mode), so batchnorm/dropout stay in inference here.
+        _ = Predict(sampleInput);
     }
 
     /// <summary>
@@ -2874,6 +2914,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Monotonically increasing version counter, incremented when layers are added/removed.
     /// Used by TapeTrainingStep caching to detect structural changes.
     /// </summary>
+    /// <remarks>
+    /// Scratch, not model state: it is a cache key for THIS instance's layer list, meaningless on any
+    /// other. Persisted by default, it made every copy differ from its original, because restoring a
+    /// model rebuilds its layer list and so advances its own counter - a clone's bytes could never
+    /// match the model it was cloned from.
+    /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _layerStructureVersion;
 
     /// <summary>
@@ -3979,14 +4026,73 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <remarks>
     /// <b>For Beginners:</b> Not all combinations of layers make a valid neural network. This method checks that
     /// the layers can properly connect to each other (like making sure puzzle pieces fit together).
+    /// Derived implementations may add model-specific checks. Their initialization path must enter through
+    /// <see cref="ValidateCustomLayersWithOwnershipRollback"/> so failures after the base checks also release
+    /// the provisional architecture claim.
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
-        ValidateCustomLayersInternal(layers);
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
     }
 
+    /// <summary>
+    /// Runs a model-specific custom-layer validator inside the architecture ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
+    /// <remarks>
+    /// Derived models that override <see cref="ValidateCustomLayers"/> call this non-virtual entry point from
+    /// initialization. It catches failures thrown after the base validator returns while preserving the existing
+    /// protected virtual extension point for downstream models.
+    /// </remarks>
+    protected void ValidateCustomLayersWithOwnershipRollback(List<ILayer<T>> layers)
+    {
+        ValidateWithOwnershipRollback(() => ValidateCustomLayers(layers));
+    }
+
+    /// <summary>
+    /// Validates only the common layer contracts while preserving the ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
     protected void ValidateCustomLayersInternal(List<ILayer<T>> layers)
+    {
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
+    }
+
+    private void ValidateWithOwnershipRollback(Action validate)
+    {
+        bool ownsRollback = _customLayerValidationDepth++ == 0;
+        try
+        {
+            validate();
+        }
+        catch
+        {
+            if (ownsRollback)
+            {
+                RollbackRejectedCustomLayers();
+            }
+
+            throw;
+        }
+        finally
+        {
+            _customLayerValidationDepth--;
+        }
+    }
+
+    private void RollbackRejectedCustomLayers()
+    {
+        // Validation is the commit point for a caller-supplied layer graph. Until it succeeds, the
+        // ownership claim is provisional. Drop this model's references before releasing the claim so
+        // an immediate corrected construction can take the graph without ever overlapping owners.
+        _layers.Clear();
+        InvalidateParameterCountCache();
+        Architecture.ReleaseForModel(this);
+        Volatile.Write(ref _architectureLayerOwnershipEstablished, 0);
+    }
+
+    private void ValidateCustomLayersInternalCore(List<ILayer<T>> layers)
     {
         if (layers == null || layers.Count == 0)
         {
@@ -5053,7 +5159,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (tape is null) throw new ArgumentNullException(nameof(tape));
         if (loss is null) throw new ArgumentNullException(nameof(loss));
 
-        var gradients = tape.ComputeGradients(loss, sources, createGraph);
+        // Reachability probe (tests only; inert unless armed). Every training entry point funnels
+        // through here, so this is the one place that can answer "is tensor X connected to this
+        // loss?" — the question torch.autograd.grad(loss, params) answers by raising when a
+        // parameter is unused. Nothing else can: a caller outside the model never sees this tape,
+        // and the published gradient surface cannot distinguish "no gradient" from a layer accessor
+        // that manufactures zeros.
+        var probe = TapeReachabilityProbe<T>.Current;
+        var effectiveSources = sources;
+        if (probe is not null && probe.Requested.Count > 0)
+        {
+            // A null `sources` means "every trainable tensor this model owns", so the probe cannot
+            // simply substitute its own list: that would NARROW what the step differentiates and
+            // starve the real update, turning an armed probe into a behaviour change. Materialize the
+            // implied set and append to it instead, so arming the probe only ever adds questions.
+            var baseline = sources ?? CollectModelTrainableTensors();
+            var widened = new List<Tensor<T>>(baseline.Count + probe.Requested.Count);
+            widened.AddRange(baseline);
+            widened.AddRange(probe.Requested);
+            effectiveSources = widened;
+        }
+
+        var gradients = tape.ComputeGradients(loss, effectiveSources, createGraph);
+        // Tag the observation with the owning network: one agent step runs several backward passes,
+        // and a tensor reached by its OWN network's update must not be credited to a later, different
+        // update that never reached it.
+        probe?.Record(this, gradients);
         PublishParameterGradients(gradients);
         return gradients;
     }
@@ -5227,11 +5358,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// the very thing in question and assuming it is what went wrong last time. Reporting only; the
     /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
     /// </para>
+    /// <para>
+    /// Scratch, not model state: these are per-instance report counters. Persisted, they made a clone
+    /// serialize differently from its source, because the clone re-walks its shapes and records its
+    /// own tallies.
+    /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedBatched;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowAgreedPerSample;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDeclined;
+    [AiDotNet.Attributes.Scratch]
     private int _propagationShadowDisagreedBoth;
+    [AiDotNet.Attributes.Scratch]
     private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
@@ -7467,7 +7608,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// var network = new MyNetwork(...);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
+/// var network = new NeuralNetwork&lt;float&gt;(architecture);
     /// var warmupInput = new Tensor&lt;float&gt;(new[] { 1, 3, 224, 224 }); // batch=1, RGB 224x224
     /// if (network.CompileForward(warmupInput))
     /// {
@@ -11962,6 +12106,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// follows. Reset at the top of every <see cref="TrainWithTape"/>
     /// call so a prior step's bail-out can't leak into this one.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private string? _pendingFusedMissReason;
 
     /// <summary>
@@ -11980,6 +12125,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// after the first warning. <see cref="Configuration.TrainingDiagnosticsConfig"/>
     /// at PerStep still gives per-step detail for those who want it.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private bool _loggedFusedFallback;
 
     /// <summary>
@@ -15270,6 +15416,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // A copy is state-identical to its source, INCLUDING its training mode. Every path below
+        // restores through the layer deserializer, which deliberately leaves a restored model in
+        // inference mode (right for a model loaded from bytes, wrong for a clone). Before training
+        // mode became serialized state (#1789) that difference was invisible; after it, a training
+        // network's copy serialized to different bytes than its original, and a clone taken mid-
+        // training silently switched dropout and batch statistics off. Deserialize itself is
+        // unchanged: loading a model still starts it in inference mode.
+        var copy = DeepCopyRestoredInInferenceMode();
+        if (copy is NeuralNetworkBase<T> network && network.IsTrainingMode != IsTrainingMode)
+        {
+            network.SetTrainingMode(IsTrainingMode);
+        }
+
+        return copy;
+    }
+
+    private IFullModel<T, Tensor<T>, Tensor<T>> DeepCopyRestoredInInferenceMode()
+    {
 
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
@@ -18123,12 +18287,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <remarks>
     /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// Calling it more than once is harmless: only the first call tears anything down. That
+    /// holds for derived classes too, whose <see cref="Dispose(bool)"/> overrides are not
+    /// re-entered by a repeated call, and it holds when two threads dispose the same network at
+    /// once: the run of derived teardown is claimed atomically rather than by reading a field that
+    /// <see cref="Dispose(bool)"/> only sets once the override is already under way.
     /// </remarks>
     public void Dispose()
     {
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Set by the first <see cref="Dispose(bool)"/>. A repeated dispose must be a no-op: the
+    /// teardown invalidates the THREAD-GLOBAL tape-training caches, so re-running it on a long-
+    /// disposed network would evict the cache of whichever live model the thread trained since.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    /// Claims the one run of derived teardown, zero until a caller wins it. Separate from
+    /// <see cref="_disposed"/>, which <see cref="Dispose(bool)"/> sets after the derived override
+    /// has already run and so cannot gate entry, and which must not be set beforehand or the base
+    /// cleanup below would be skipped.
+    /// </summary>
+    private int _disposeClaimed;
 
     /// <summary>
     /// Protected Dispose pattern implementation.
@@ -18145,6 +18330,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
+        if (_disposed) return;
+        _disposed = true;
+
         if (disposing)
         {
             // Release inference plans plus training plans/caches before layer disposal.

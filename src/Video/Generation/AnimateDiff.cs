@@ -33,6 +33,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 64, inputWidth: 64, inputDepth: 320);
 /// var model = new AnimateDiff&lt;double&gt;(arch);
 /// model.Train(inputFeatures, motionFeatures);
@@ -43,6 +44,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 64, inputWidth: 64, inputDepth: 320);
 /// var model = new AnimateDiff&lt;double&gt;(arch, "animatediff.onnx");
 /// var animatedFeatures = model.AddMotion(staticFeatures);
@@ -177,6 +179,7 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 320);
     /// var model = new AnimateDiff&lt;double&gt;(arch);
     /// </code>
@@ -240,6 +243,7 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 320);
     /// var model = new AnimateDiff&lt;double&gt;(arch, "animatediff.onnx");
     /// var animated = model.AddMotion(features);

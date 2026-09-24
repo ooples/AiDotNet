@@ -25,10 +25,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FalconMambaOptions { VocabSize = 65024, ModelDim = 4096, NumLayers = 64 };
-/// var model = new FalconMambaLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new FalconMambaLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -68,16 +72,10 @@ public partial class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<
 
     public FalconMambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 65024,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int stateDimension = 16,
-        int expandFactor = 2,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        FalconMambaOptions? options = null)
+        FalconMambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
-            // The LM head (DenseLayer(vocabSize, activation: null) in
+            // The LM head (DenseLayer(_options.VocabSize, activation: null) in
             // CreateFalconMambaLayers) emits RAW LOGITS, so the default loss
             // must be the logits-domain cross-entropy (log_softmax + NLL,
             // PyTorch nn.CrossEntropyLoss semantics). The TextGeneration
@@ -88,13 +86,14 @@ public partial class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<
             lossFunction ?? new LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FalconMambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _expandFactor = expandFactor;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _expandFactor = _options.ExpandFactor;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 

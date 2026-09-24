@@ -23,6 +23,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </remarks>
 /// <example>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// // Create a market making environment for bid/ask spread optimization
 /// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 }); // 1000 timesteps, 1 asset
 /// var env = new MarketMakingEnvironment&lt;double&gt;(
@@ -39,10 +40,11 @@ namespace AiDotNet.Finance.Trading.Environments;
 [ResearchPaper("Deep Reinforcement Learning for Market Making", "https://arxiv.org/abs/2004.06985")]
 public sealed class MarketMakingEnvironment<T> : TradingEnvironment<T>
 {
-    private readonly int _maxInventory;
+    // Not readonly: ApplyAgentOverrides REPLACES these with an agent's own values when it supplies them.
+    private int _maxInventory;
     private readonly double _baseSpread;
     private readonly double _orderArrivalRate;
-    private readonly double _inventoryPenalty;
+    private double _inventoryPenalty;
     private readonly T _tradeSize;
 
     /// <inheritdoc/>
@@ -101,6 +103,36 @@ public sealed class MarketMakingEnvironment<T> : TradingEnvironment<T>
         _orderArrivalRate = orderArrivalRate;
         _maxInventory = maxInventory;
         _inventoryPenalty = inventoryPenalty;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Also applies the market-making frictions when the agent supplies them:
+    /// <see cref="AiDotNet.Models.Options.MarketMakingOptions{T}.InventoryPenalty"/> and
+    /// <see cref="AiDotNet.Models.Options.MarketMakingOptions{T}.MaxInventory"/> REPLACE the values this
+    /// environment was constructed with. They are never applied in addition to them, so the inventory
+    /// penalty configured on both an agent and its environment is charged once, not twice.
+    /// </para>
+    /// </remarks>
+    internal override void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
+    {
+        base.ApplyAgentOverrides(options);
+
+        if (options is not AiDotNet.Models.Options.MarketMakingOptions<T> marketMakingOptions)
+        {
+            return;
+        }
+
+        if (marketMakingOptions.InventoryPenalty is double inventoryPenalty)
+        {
+            _inventoryPenalty = inventoryPenalty;
+        }
+
+        if (marketMakingOptions.MaxInventory is int maxInventory)
+        {
+            _maxInventory = maxInventory;
+        }
     }
 
     /// <summary>

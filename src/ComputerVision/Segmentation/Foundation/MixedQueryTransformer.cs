@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +62,15 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
     Year = 2024,
     Authors = "Pei Wang, Zhaowei Cai, Hao Yang, Ashwin Swaminathan, R. Manmatha, Stefano Soatto")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 0.05, WarmupSteps = 10,
+                DecayRate = 0.1, MilestoneFractions = [0.9, 0.95],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Xu et al. 2024, Sec. 4: AdamW with a weight decay of 0.05, 10 warmup "
+                        + "iterations, and the learning rate decayed at 0.9 and 0.95 of training. No "
+                        + "single learning rate is declared because the paper gives a base rate of 2e-4 "
+                        + "for the segmentation encoder and decoder and 2e-5 for the backbone, and this "
+                        + "model builds one optimizer over both. The decay factor is not stated, so the "
+                        + "library default of 0.1 applies and is declared explicitly.")]
 public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly MixedQueryTransformerOptions _options;
@@ -157,12 +167,13 @@ public partial class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<
     /// </para>
     /// </remarks>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        =>PaperOptimizerFactory.VerifyHandBuilt(this,
+             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
 
     /// <summary>
     /// Initializes MixedQueryTransformer in ONNX (inference-only) mode.

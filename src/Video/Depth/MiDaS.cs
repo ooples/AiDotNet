@@ -1,3 +1,5 @@
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -32,6 +34,7 @@ namespace AiDotNet.Video.Depth;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 384, inputWidth: 384, inputDepth: 3);
 /// var model = new MiDaS&lt;double&gt;(arch);
 /// var depthMap = model.EstimateDepth(image);
@@ -64,6 +67,9 @@ namespace AiDotNet.Video.Depth;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Ranftl et al. 2020, Sec. 5: Adam with a learning rate of 1e-4 for randomly "
+                        + "initialized layers.")]
 public partial class MiDaS<T> : NeuralNetworkBase<T>
 {
     private readonly MiDaSOptions _options;
@@ -142,7 +148,9 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         _variant = variant;
 
         _lossFunction = lossFunction ?? new ScaleInvariantDepthLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

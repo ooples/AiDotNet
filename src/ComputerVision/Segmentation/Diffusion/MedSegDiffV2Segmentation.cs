@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -39,6 +39,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingMasks = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
+/// var medicalImage = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
+/// var trainingImages = Tensor&lt;double&gt;.CreateRandom(4, 3, 32, 32);
 /// // Use AiModelBuilder facade for medical image segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,

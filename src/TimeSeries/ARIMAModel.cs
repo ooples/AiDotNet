@@ -37,12 +37,19 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+///
 /// // Create an ARIMA(1,1,1) model for non-stationary time series
-/// var options = new ARIMAOptions&lt;double&gt;();
-/// var arima = new ARIMAModel&lt;double&gt;(options);
-/// arima.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = arima.Predict(inputMatrix);
-/// Vector&lt;double&gt; anomalyScores = arima.ComputeAnomalyScores(timeSeries);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ARIMAModel&lt;double&gt;(new ARIMAOptions&lt;double&gt;()))
+///     .Build(trainingMatrix, trainingLabels);
+///
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 5.0 }, { 6.0 } });
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
+///
+/// var timeSeries = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+/// Vector&lt;double&gt; anomalyScores = result.ComputeAnomalyScores(timeSeries);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

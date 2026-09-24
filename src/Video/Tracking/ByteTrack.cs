@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +63,13 @@ namespace AiDotNet.Video.Tracking;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Length, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.001, WeightDecay = 5e-4,
+                Momentum = 0.9, Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhang et al. 2022, Sec. 4: the optimizer is SGD with a weight decay of 5e-4 "
+                        + "and a momentum of 0.9, at an initial learning rate of 1e-3 with 1 epoch of "
+                        + "warmup and a cosine annealing schedule. The warmup is given in epochs rather "
+                        + "than steps, so it is not declared. Recorded verify-only because SGD is weaker "
+                        + "than this model's Adam default.")]
 public partial class ByteTrack<T> : NeuralNetworkBase<T>
 {
     private readonly ByteTrackOptions _options;
@@ -136,7 +145,8 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 1440;
 
         _lossFunction = lossFunction ?? new FocalLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         InitializeLayers();
     }

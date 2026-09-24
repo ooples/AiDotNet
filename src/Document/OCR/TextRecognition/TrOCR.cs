@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -51,6 +52,11 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5,
+                ReferenceBatchSize = 2048,
+                Source = "Li et al. 2023, Sec. 4: for all the models the batch size is set to 2,048 and "
+                        + "the learning rate is 5e-5. The optimizer is left unspecified because the "
+                        + "paper names none.")]
 public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly TrOCROptions _options;

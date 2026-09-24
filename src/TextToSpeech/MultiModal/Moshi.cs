@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,6 +44,12 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Defossez et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 8e-4, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Defossez et al. 2024, Sec. 4: AdamW at a learning rate of 8e-4 with a warmup "
+                        + "followed by cosine learning rate decay. No weight decay is declared because "
+                        + "the paper applies it only to the Transformer parameters, which one optimizer "
+                        + "over the whole model cannot express.")]
 public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MoshiOptions _options;
@@ -83,7 +91,9 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     {
         _options = options ?? new MoshiOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

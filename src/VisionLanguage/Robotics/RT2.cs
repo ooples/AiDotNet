@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
@@ -50,9 +52,10 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -77,6 +80,12 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2023,
     Authors = "Brohan et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-3,
+                ReferenceBatchSize = 2048,
+                Source = "Brohan et al. 2023, Sec. 4: both RT-2-PaLI-X sizes co-fine-tune at a learning "
+                        + "rate of 1e-3 and a batch size of 2048, differing only in step count, so those "
+                        + "two values are declared while the step count is not. The optimizer is left "
+                        + "unspecified because the paper names none.")]
 public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly RT2Options _options;

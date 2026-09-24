@@ -44,6 +44,9 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use AiModelBuilder facade for mini-batch K-Means clustering
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new MiniBatchKMeans&lt;double&gt;(new MiniBatchKMeansOptions&lt;double&gt;()));
@@ -73,9 +76,9 @@ public partial class MiniBatchKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The MiniBatchKMeans configuration options.</param>
     public MiniBatchKMeans(MiniBatchKMeansOptions<T>? options = null)
-        : base(options ?? new MiniBatchKMeansOptions<T>())
+        : base(options ??= new MiniBatchKMeansOptions<T>())
     {
-        _options = options ?? new MiniBatchKMeansOptions<T>();
+        _options = options;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);

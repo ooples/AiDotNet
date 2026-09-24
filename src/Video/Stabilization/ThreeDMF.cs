@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -32,6 +33,7 @@ namespace AiDotNet.Video.Stabilization;
 /// // Create a 3DMF model for depth-aware 3D video stabilization
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new ThreeDMFOptions();
 /// var threeDMF = new ThreeDMF&lt;double&gt;(architecture, options);
@@ -50,6 +52,11 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2404.12887",
     Year = 2024,
     Authors = "Yuchen Zhang, Xiu Li")]
+[PaperOptimizer(OptimizerKind.Adam, Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Zhang et al. 2024, Sec. 4: the Adam optimizer with base learning rates "
+                        + "decaying exponentially throughout optimization. No rate is declared because "
+                        + "the paper sets 1e-3 for the feature extraction network and 5e-4 for the MLP, "
+                        + "and this model builds one optimizer over both.")]
 public partial class ThreeDMF<T> : VideoStabilizationBase<T>
 {
     private readonly ThreeDMFOptions _options;
@@ -88,11 +95,12 @@ public partial class ThreeDMF<T> : VideoStabilizationBase<T>
     {
         _options = options ?? new ThreeDMFOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         InitializeLayers();
     }
 

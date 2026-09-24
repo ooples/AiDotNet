@@ -48,14 +48,16 @@ public class EagerModelDataAssignmentGuardTests
     /// report success.
     /// </para>
     /// <para>
-    /// <c>SerializedModelData</c> cannot match either branch: the first is anchored at line start,
-    /// and the second requires the dot to sit immediately before <c>ModelData</c>. Comment lines are
-    /// filtered separately so the prose in ModelMetadata.cs that quotes the old pattern is not read
-    /// as code.
+    /// <c>SerializedModelData</c> cannot match any branch: the first is anchored at line start, the
+    /// second requires the dot to sit immediately before <c>ModelData</c>, and the third requires a
+    /// separator. That third branch catches a one-line initializer such as
+    /// <c>=> new() { Name = ..., ModelData = SerializeForMetadata() }</c>, which FasterWhisper used
+    /// and the first two branches missed. Comment lines are filtered separately so the prose in
+    /// ModelMetadata.cs that quotes the old pattern is not read as code.
     /// </para>
     /// </remarks>
     private static readonly Regex EagerAssignment = new(
-        @"(?:^[ \t]*|\.)ModelData[ \t]*=[ \t]*(?<rhs>.+)$",
+        @"(?:^[ \t]*|\.|[,{(][ \t]*)ModelData[ \t]*=(?!=)[ \t]*(?<rhs>.+)$",
         RegexOptions.Compiled);
 
     private static readonly Regex Serializes = new(
