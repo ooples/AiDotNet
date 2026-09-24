@@ -117,6 +117,26 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     }
 
     /// <summary>
+    /// Regresses both heads onto a raw output-shaped target and sums the two losses.
+    /// </summary>
+    /// <remarks>
+    /// The base path fits only Predict's output, which is the one-to-one head, so the one-to-many head's
+    /// registered weights never received a gradient. Both heads emit the same layout, and the paper supervises
+    /// them jointly with summed losses (Wang et al. 2024, Sec. 3.1), as <see cref="TrainDetections"/> does.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
+        TrainWithTargets(input, expectedOutput, ForwardTrainingHeads, (heads, target) =>
+        {
+            int half = heads.Count / 2;
+            return Engine.TensorAdd(
+                TensorModelTrainer<T>.MeanSquaredError(CvTensorOps<T>.ConcatenateOutputs(heads.GetRange(0, half)), target),
+                TensorModelTrainer<T>.MeanSquaredError(CvTensorOps<T>.ConcatenateOutputs(heads.GetRange(half, half)), target));
+        });
+    }
+    /// <summary>
     /// Runs the shared backbone and neck once and returns the one-to-one head's class and distribution levels,
     /// followed by the one-to-many head's.
     /// </summary>

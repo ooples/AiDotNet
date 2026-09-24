@@ -185,7 +185,7 @@ internal static class TensorModelTrainer<T>
     /// <summary>
     /// Mean squared error built from engine operations so the gradient tape can differentiate it.
     /// </summary>
-    private static Tensor<T> MeanSquaredError(Tensor<T> predicted, Tensor<T> target)
+    internal static Tensor<T> MeanSquaredError(Tensor<T> predicted, Tensor<T> target)
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
