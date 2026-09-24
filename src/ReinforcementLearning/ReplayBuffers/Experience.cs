@@ -43,6 +43,15 @@ public record Experience<T, TState, TAction>(
     TState NextState,
     bool Done)
 {
+    private bool[]? _nextLegalActions;
+
+    /// <summary>Snapshot of legal next-state actions; null means unrestricted or terminal.</summary>
+    public bool[]? NextLegalActions
+    {
+        get => _nextLegalActions;
+        init => _nextLegalActions = value is null ? null : (bool[])value.Clone();
+    }
+
     /// <summary>
     /// Gets or sets the priority for prioritized experience replay.
     /// </summary>

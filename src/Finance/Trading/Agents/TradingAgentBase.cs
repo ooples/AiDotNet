@@ -475,9 +475,13 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// </remarks>
     public virtual void StoreTradingExperience(Vector<T> marketState, Vector<T> action, T reward,
         Vector<T> nextMarketState, bool done, T pnl)
+        => StoreTradingExperience(marketState, action, reward, nextMarketState, done, pnl, null);
+
+    /// <summary>Stores a trade with a snapshot of the legal actions at its resulting state.</summary>
+    public virtual void StoreTradingExperience(Vector<T> marketState, Vector<T> action, T reward,
+        Vector<T> nextMarketState, bool done, T pnl, bool[]? nextLegalActions)
     {
-        // Store in base replay buffer
-        StoreExperience(marketState, action, reward, nextMarketState, done);
+        StoreExperience(marketState, action, reward, nextMarketState, done, nextLegalActions);
 
         // Track trade P&L
         if (!NumOps.Equals(pnl, NumOps.Zero))
