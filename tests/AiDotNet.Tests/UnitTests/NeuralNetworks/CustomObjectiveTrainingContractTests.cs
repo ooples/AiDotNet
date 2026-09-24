@@ -23,7 +23,8 @@ public sealed class CustomObjectiveTrainingContractTests
         Assert.False(model.Extra.IsShapeResolved);
         model.Step(Input(), Target(), optimizer);
         Assert.True(model.Extra.IsShapeResolved);
-        Assert.True(optimizer.ParameterElements >= 5);
+        Assert.Equal(5, optimizer.ParameterElements);
+        Assert.Equal(2, optimizer.ParameterTensors);
         Assert.True(optimizer.NonzeroGradients > 0);
         Assert.True(optimizer.ParameterChanged);
         Assert.Equal(1, model.ForwardCalls);
@@ -177,13 +178,13 @@ public sealed class CustomObjectiveTrainingContractTests
 
     private static Tensor<double> Target() => Tensor<double>.CreateDefault(new[] { 2, 1 }, 0.4);
 
-    // [Batch, Features] in and out: one dense 4 -> 1 branch over a single feature axis.
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-    private sealed class ObjectiveNetwork : NeuralNetworkBase<double>
+    // [batch, 4] features in, [batch, 1] out through the single-output Extra branch.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class ObjectiveNetwork : NeuralNetworkBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         public override bool SupportsTraining => true;
         internal FullyConnectedLayer<double> Extra { get; } = new(1, (AiDotNet.Interfaces.IActivationFunction<double>)new IdentityActivation<double>());
         internal DropoutLayer<double> Dropout { get; }
@@ -218,13 +219,13 @@ public sealed class CustomObjectiveTrainingContractTests
             }, optimizer);
     }
 
-    // [Batch, Features] in and out, as above: the shared dense branch is 4 -> 1 over one feature axis.
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-    private sealed class CompositeObjectiveNetwork : NeuralNetworkBase<double>
+    // [batch, 4] features in, [batch, 1] out through CompositeBranch.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    private sealed class CompositeObjectiveNetwork : NeuralNetworkBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         internal CompositeBranch Branch { get; } = new();
         internal bool TrainBiasOnly { get; set; }
         public override bool SupportsTraining => true;
@@ -250,15 +251,25 @@ public sealed class CustomObjectiveTrainingContractTests
                 => new MeanSquaredErrorLoss<double>().ComputeTapeLoss(Branch.Forward(currentInput), currentTarget), optimizer);
     }
 
-    // 4 -> 1 through the dense sub-layer, with dropout preserving whatever it is handed, so the composite
-    // is not shape-preserving: the axis roles are declared here and the width comes from OutputShape, the
-    // way FullyConnectedLayer states the same relation.
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-        BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    /// <summary>Batch passes through and the feature axis becomes one output, for a rank-1 or rank-2 input.</summary>
+    private static IReadOnlyList<OutputAxisContract>? SingleFeatureOutput(int inputRank)
+    {
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(1));
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), features },
+            _ => null,
+        };
+    }
+
+    // A 4 -> 1 feature map, declared like FullyConnectedLayer.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
     private sealed class CompositeBranch : LayerBase<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SingleFeatureOutput(inputRank);
+
         internal FullyConnectedLayer<double> Dense { get; } = new(1,
             (AiDotNet.Interfaces.IActivationFunction<double>)new IdentityActivation<double>());
         internal ObservedDropout Dropout { get; } = new();
@@ -273,21 +284,6 @@ public sealed class CustomObjectiveTrainingContractTests
 
         protected override Tensor<double> ForwardTraced(Tensor<double> input) => Dropout.Forward(Dense.Forward(input));
         public override void ResetState() { Dense.ResetState(); Dropout.ResetState(); }
-
-        /// <inheritdoc />
-        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        {
-            int outputSize = OutputShape.Length > 0 ? OutputShape[0] : -1;
-            if (outputSize <= 0) return null;
-
-            var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
-            return inputRank switch
-            {
-                1 => new[] { features },
-                2 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), features },
-                _ => null,
-            };
-        }
     }
 
     private sealed class ObservedDropout : DropoutLayer<double>
@@ -317,17 +313,22 @@ public sealed class CustomObjectiveTrainingContractTests
             NonzeroGradients = context.Gradients.Values.Sum(gradient => gradient.AsSpan().ToArray().Count(value => value != 0));
             Assert.NotEmpty(context.Parameters);
             var first = context.Parameters[0];
-            var before = first.AsSpan().ToArray();
+            var beforeOptimizerStep = first.AsSpan().ToArray();
             if (Reevaluate)
             {
                 ReevaluationSupported = context.SupportsReevaluation;
                 InitialLoss = context.Loss;
                 first[0] += 0.5;
-                ReevaluateWithGradients(context);
-                ReevaluatedLoss = context.Loss;
+                // The step runs under no-grad; this re-evaluation must record, as a line search would.
+
+                // The perturbation above is this test's, not the optimizer's. Re-snapshot after it so
+                // ParameterChanged reports whether base.Step moved anything; measured against the
+                // pre-perturbation state it would read true even for an optimizer that did nothing.
+                beforeOptimizerStep = first.AsSpan().ToArray();
             }
+
             base.StepCore(context);
-            ParameterChanged = !before.SequenceEqual(first.AsSpan().ToArray());
+            ParameterChanged = !beforeOptimizerStep.SequenceEqual(first.AsSpan().ToArray());
         }
     }
 }
