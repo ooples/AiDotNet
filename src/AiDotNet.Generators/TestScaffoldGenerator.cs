@@ -778,6 +778,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // testhost at ~20 GB in double and 21.1 GB in float (float measured: still both timed out). Paper scale
         // does not fit the PR gate, so it runs in the nightly heavy lane.
         "OpenSora",
+        // TrOCR at paper scale: greedy decoding re-runs the whole decoder stack over the growing sequence at every
+        // step (no KV cache), and random weights rarely emit end-of-sequence, so every Predict decodes to
+        // MaxSequenceLength. Even ParameterCount_IsPositive, which predicts once to size the lazy layers, timed out
+        // at 120 s in double and in float (measured), after the output projection was cut to the last position.
+        "TrOCR",
         // MiniGPTv2 (Chen et al. 2023): LLaMA-2-backbone VLM. Already in Fp32, but the LLaMA-2 decoder weights
         // are ~28 GB even at fp32, so the live J-M run OOMs it (NamedLayerActivations). Float is insufficient
         // for a 7B-class backbone; defer to the nightly HeavyTimeout lane. Paper defaults (LLaMA-2 scale) intact.
