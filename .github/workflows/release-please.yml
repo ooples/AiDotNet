@@ -61,9 +61,30 @@ jobs:
     runs-on: ubuntu-latest
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    timeout-minutes: 25
+    # Sized from measurement, not guessed. The same packed core, built alone for the same frameworks in
+    # "Build (compat frameworks + pack)", took 11-18 min (job 15-21 min) across five master runs on
+    # 2026-09-24; this job also builds and packs seven metapackages and runs the generator consumer check.
+    # 25 min left no margin; 45 is ~2x the worst observed comparable job and still catches a hang.
+    timeout-minutes: 45
     outputs:
       package-artifact-id: ${{ steps.upload-packages.outputs.artifact-id }}
+    env:
+      # The ONE list of what a release ships. Build and pack both read it, so a project can never be
+      # packed without having been built (pack runs --no-build) or built without being shipped.
+      #
+      # v0.232.0 never reached NuGet: "Restore and Build" ran `dotnet build` on the whole solution -
+      # tests, samples and benchmarks included - and was still building when the job hit its 25-minute
+      # limit (13:48:35 -> 14:17:01 UTC, 2026-09-24), so Pack and Publish never ran. Only these
+      # projects and their references are needed to produce the packages.
+      PACKED_PROJECTS: >-
+        src/AiDotNet.csproj
+        src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj
+        src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj
+        src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj
+        src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj
+        src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj
+        src/AiDotNet.Storage.Redis/AiDotNet.Storage.Redis.csproj
+        src/AiDotNet.Dashboard/AiDotNet.Dashboard.csproj
     steps:
       - name: Free up disk space
         run: |
@@ -133,29 +154,27 @@ jobs:
 
       - name: Restore and Build
         run: |
-          dotnet restore
-          dotnet build -c Release --no-restore
+          set -e
+          for proj in $PACKED_PROJECTS; do
+            echo "Building $proj"
+            dotnet restore "$proj"
+            dotnet build "$proj" -c Release --no-restore
+          done
 
       - name: Pack NuGet
         run: |
           set -e
           version=${{ needs.release-please.outputs.version }}
-          dotnet pack src/AiDotNet.csproj -c Release -o out --no-build /p:PackageVersion=$version
-          echo "Package created: AiDotNet.$version.nupkg"
-
-          # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c). They are versioned in
-          # lockstep with the core package, but only AiDotNet was ever packed here, so a consumer
-          # told to add AiDotNet.Storage.Sqlite could not get it from NuGet at all. Packed with the
-          # SAME version so an opt-in backend can never drift from the core it extends.
-          #
-          # Postgres and Redis were not even in AiDotNet.sln until now, so they never compiled in CI
-          # and could not be packed at all. Dashboard declares its own <Version>1.0.0</Version>;
-          # /p:PackageVersion overrides that at pack time, so it publishes on the release version
-          # like everything else here.
-          for proj in src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj                       src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj                       src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj                       src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj                       src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj                       src/AiDotNet.Storage.Redis/AiDotNet.Storage.Redis.csproj                       src/AiDotNet.Dashboard/AiDotNet.Dashboard.csproj; do
+          for proj in $PACKED_PROJECTS; do
             echo "Packing $proj"
             dotnet pack "$proj" -c Release -o out --no-build /p:PackageVersion=$version
           done
+          echo "Package created: AiDotNet.$version.nupkg"
+
+          # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c) are versioned in lockstep
+          # with the core package: packed with the SAME version so an opt-in backend can never drift from
+          # the core it extends. Dashboard declares its own <Version>1.0.0</Version>; /p:PackageVersion
+          # overrides that at pack time, so it publishes on the release version like everything else.
 
       - name: Verify packages
         run: |
