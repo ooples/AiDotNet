@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Mehta et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 32,
+                Source = "Mehta et al. 2024, Sec. 4: a learning rate of 1e-4 at a batch size of 32. The "
+                        + "optimizer is left unspecified because the paper does not name one in its "
+                        + "training description.")]
 public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MatchaTTSOptions _options;
@@ -84,9 +90,11 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

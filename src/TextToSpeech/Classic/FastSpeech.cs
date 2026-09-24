@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,14 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2019,
     Authors = "Ren et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Schedule = LearningRateSchedulerType.Noam,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "Ren et al. 2019, Sec. 4.2: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
+                        + "following the learning rate schedule of its reference [25], Vaswani et al. "
+                        + "2017 -- the inverse-square-root schedule with warmup declared here as Noam. "
+                        + "The paper restates neither the peak rate nor the warmup length, so the "
+                        + "provenance records that the schedule comes from the cited work.")]
 public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeechOptions _options;
@@ -93,7 +103,9 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new FastSpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

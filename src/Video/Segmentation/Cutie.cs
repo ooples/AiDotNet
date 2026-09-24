@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -37,6 +39,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new Cutie&lt;double&gt;(arch);
 /// var masks = model.TrackObject(videoFrames, initialMask);
@@ -46,6 +49,7 @@ namespace AiDotNet.Video.Segmentation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
 /// var model = new Cutie&lt;double&gt;(arch, "cutie.onnx");
 /// var masks = model.TrackObject(videoFrames, initialMask);
@@ -70,6 +74,10 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.001,
+                ReferenceBatchSize = 16,
+                Source = "Cheng et al. 2024, Sec. 4: the AdamW optimizer with a learning rate of 1e-4, "
+                        + "a batch size of 16 and a weight decay of 0.001.")]
 public partial class Cutie<T> : NeuralNetworkBase<T>
 {
     private readonly CutieOptions _options;
@@ -194,6 +202,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
     /// var model = new Cutie&lt;double&gt;(arch);
     /// </code>
@@ -235,7 +244,9 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         _memoryBank = [];
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -253,6 +264,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 480, inputWidth: 854, inputDepth: 3);
     /// var model = new Cutie&lt;double&gt;(arch, "cutie.onnx");
     /// var masks = model.TrackObject(frames, initialMask);

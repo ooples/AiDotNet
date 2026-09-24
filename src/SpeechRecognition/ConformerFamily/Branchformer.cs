@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -31,7 +33,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// // Create a Branchformer model with parallel attention and cgMLP branches
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new Branchformer&lt;double&gt;(architecture);
 ///
@@ -45,6 +47,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Branchformer: Parallel MLP-Attention Architectures to Capture Local and Global Context for Speech Recognition and Understanding", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
+[PaperOptimizer(OptimizerKind.Adam, WeightDecay = 1e-6,
+                Source = "Peng et al. 2022, Sec. 4: the Adam optimizer with weight decay 1e-6. No learning rate is declared because the paper states none, following the ESPnet recipes it cites for training configuration.")]
 public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -90,7 +94,9 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     {
         _options = options ?? new BranchformerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         SupportedLanguages = new[] { _options.Language };

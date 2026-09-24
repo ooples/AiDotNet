@@ -53,13 +53,28 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     /// <example>
     /// <code>
-    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-    ///     inputType: InputType.OneDimensional,
-    ///     taskType: NeuralNetworkTaskType.Regression,
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// var inverseProblem = new HeatConductivityInverseProblem&lt;float&gt;();
-    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
-    /// var pinn = new InverseProblemPINN&lt;float&gt;(architecture, inverseProblem, bc);
+    ///
+    /// // What you measured: a temperature at each (x, t) you probed.
+    /// var observations = new[]
+    /// {
+    ///     (location: new[] { 0.25, 0.1 }, value: new[] { 0.82 }),
+    ///     (location: new[] { 0.50, 0.1 }, value: new[] { 0.95 }),
+    ///     (location: new[] { 0.75, 0.1 }, value: new[] { 0.80 })
+    /// };
+    ///
+    /// // Recover the conductivity that explains them, starting the search at 0.5.
+    /// var problem = new HeatConductivityInverseProblem&lt;double&gt;(observations, initialGuess: 0.5);
+    ///
+    /// // Insulated at both ends: no heat crosses the boundary.
+    /// var boundaryConditions = new IBoundaryCondition&lt;double&gt;[]
+    /// {
+    ///     new NeumannBoundaryCondition&lt;double&gt;(flux: 0.0, lowerBound: 0.0, upperBound: 1.0)
+    /// };
+    ///
+    /// var pinn = new InverseProblemPINN&lt;double&gt;(architecture, problem, boundaryConditions);
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

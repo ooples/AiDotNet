@@ -45,14 +45,18 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var contextWindow = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var options = new DeepAROptions&lt;double&gt;
 /// {
 ///     LookbackWindow = 30, ForecastHorizon = 7,
 ///     HiddenSize = 40, NumLayers = 2
 /// };
-/// var deepar = new DeepARModel&lt;double&gt;(options);
-/// deepar.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = deepar.Predict(contextWindow);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DeepARModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(contextWindow);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -90,9 +94,9 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="options">Configuration options for DeepAR.</param>
     public DeepARModel(DeepAROptions<T>? options = null)
-        : base(options ?? new DeepAROptions<T>())
+        : base(options ??= new DeepAROptions<T>())
     {
-        _options = options ?? new DeepAROptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _lstmLayers = new List<DeepARLstmCellTape<T>>();

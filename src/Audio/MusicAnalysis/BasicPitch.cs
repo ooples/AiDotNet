@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,6 +44,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 16,
+                Source = "Bittner et al. 2022: Adam with a learning rate of 0.001 and a batch size of 16.")]
 public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     /// <inheritdoc />
@@ -100,9 +103,11 @@ public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscribe
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -40,10 +42,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MeshCNNOptions { InputEdgeFeatures = 5, HiddenSize = 64, NumLayers = 4 };
-/// var model = new MeshCNN&lt;float&gt;(options);
-/// var edgeFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 5 });
-/// var output = model.Predict(edgeFeatures);
+/// var options = new MeshCNNOptions { InputFeatures = 5};
+/// var edgeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 500, 5 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MeshCNN&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(edgeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.ThreeD)]
@@ -54,6 +60,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002,
+                Source = "Hanocka et al. 2019, Sec. 5: Adam optimization at a learning rate of 0.0002 "
+                        + "with group normalization.")]
 public partial class MeshCNN<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
@@ -142,9 +151,11 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
 
         InitializeLayers();
     }

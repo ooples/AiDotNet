@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
@@ -58,17 +60,21 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a node classification model for semi-supervised learning on graphs
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification,
 ///     inputSize: 16,   // node feature dimension
-///     outputSize: 7,   // number of node classes
-///     hiddenSizes: new[] { 64 });
-/// var model = new NodeClassificationModel&lt;float&gt;(architecture);
+///     outputSize: 2);  // number of classes (e.g. toxic / non-toxic)
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Classify each node using GCN with neighborhood aggregation
-/// var predictions = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NodeClassificationModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var predictions = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -82,6 +88,8 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, WeightDecay = 5e-4,
+                Source = "Kipf and Welling 2017, Sec. 5.2 (Experimental Set-Up): Adam, lr 0.01, L2 regularization 5e-4 for the citation networks. Verified against the paper.")]
 public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
 {
     private readonly ILossFunction<T> _lossFunction;
@@ -145,7 +153,7 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.MultiClassClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 1433,    // Cora has 1433 word features
+    ///     // Cora has 1433 word features
     ///     outputSize: 7);     // 7 paper categories
     ///
     /// // Create model with default layers
@@ -198,7 +206,9 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         DropoutRate = options.DropoutRate;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

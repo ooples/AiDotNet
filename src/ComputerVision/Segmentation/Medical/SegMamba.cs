@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -56,6 +57,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 1e-2, MinLearningRate = 1e-5,
+                Schedule = LearningRateSchedulerType.Polynomial, DecayRate = 1.0,
+                Source = "Xing et al. 2024: SGD with a polynomial learning rate scheduler, an initial rate of 1e-2 and a decay of 1e-5. The polynomial power is not stated, so the linear power of 1 is used and declared.")]
 public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
 {
     /// <inheritdoc />

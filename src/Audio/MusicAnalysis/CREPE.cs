@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -40,6 +41,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CREPE: A Convolutional Representation for Pitch Estimation", "https://arxiv.org/abs/1802.06182", Year = 2018, Authors = "Jong Wook Kim, Justin Salamon, Peter Li, Juan Pablo Bello")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002,
+                Source = "Kim et al. 2018: Adam with a learning rate of 0.0002.")]
 public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
@@ -101,9 +104,11 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         MinPitch = _options.MinFrequency;
         MaxPitch = _options.MaxFrequency;

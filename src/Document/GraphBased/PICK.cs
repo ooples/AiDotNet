@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,10 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PICK: Processing Key Information Extraction from Documents using Improved Graph Learning-Convolutional Networks", "https://doi.org/10.48550/arXiv.2004.07464", Year = 2020, Authors = "Wenwen Yu, Ning Lu, Xianbiao Qi, Ping Gong, Rong Xiao")]
+[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 16,
+                Source = "Yu et al. 2020, Sec. 4: trained from scratch using Adam to minimize the CRF "
+                        + "and graph learning losses jointly, at a batch size of 16. The paper states no "
+                        + "learning rate in its training description, so none is declared.")]
 public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
 {
     private readonly PICKOptions _options;

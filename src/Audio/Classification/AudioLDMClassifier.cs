@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Classification;
 using AiDotNet.Enums;
@@ -42,6 +43,8 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-5, ReferenceBatchSize = 8,
+                Source = "Liu et al. 2023, Configuration: the latent diffusion model trained with a learning rate of 3e-5, batch size 8 for AudioLDM-L over 0.6M steps. The VAE is trained separately at 4.5e-6 with batch size six, which is a different component and not what this declares.")]
 public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -82,9 +85,11 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         ClassLabels = _options.CustomLabels ?? BEATs<T>.AudioSetLabels;
         InitializeLayers();

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2012.02181",
     Year = 2021,
     Authors = "Kelvin C.K. Chan, Xintao Wang, Ke Yu, Chao Dong, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
+                Source = "Chan et al. 2021, Sec. 4: Adam with a cosine annealing schedule over 300K iterations; 2e-4 for all modules other than the feature extractor (1e-4) and the flow estimator (2.5e-5). This model builds one optimizer for the whole network, so the two component rates cannot be applied here and are recorded rather than dropped.")]
 public partial class BasicVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -93,9 +97,11 @@ public partial class BasicVSR<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumFrames;
         InitializeLayers();

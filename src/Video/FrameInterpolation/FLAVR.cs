@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,15 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2012.08512",
     Year = 2021,
     Authors = "Tarun Kalluri, Deepak Pathak, Manmohan Chandraker, Du Tran")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-4, DecayRate = 0.5,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Kalluri et al. 2023, Sec. 4: an initial learning rate of 2e-4, divided by 2 "
+                        + "whenever training plateaus. The optimizer is left unspecified because the "
+                        + "paper names none for this stage.")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.02, Phase = TrainingPhase.FineTuning,
+                Source = "Kalluri et al. 2023, Sec. 4: the networks are fine-tuned using SGD with batch "
+                        + "norm at a learning rate of 0.02 for 40 epochs.")]
 public partial class FLAVR<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -92,9 +102,11 @@ public partial class FLAVR<T> : FrameInterpolationBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         SupportsArbitraryTimestep = false;
         InitializeLayers();
     }

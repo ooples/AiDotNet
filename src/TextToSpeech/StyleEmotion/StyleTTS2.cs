@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,9 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Year = 2023,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0, Beta2 = 0.99, WeightDecay = 1e-4,
+                LearningRate = 1e-4, ReferenceBatchSize = 16,
+                Source = "Li et al. 2023, Sec. 4: AdamW with beta1 0, beta2 0.99, weight decay 1e-4, learning rate 1e-4 and a batch size of 16. The beta1 of 0 is the paper value, not an omission, and it sits below the adaptive floor of 0.8 that the optimizer would otherwise clamp it to.")]
 public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTS2Options _options;
@@ -84,9 +89,11 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

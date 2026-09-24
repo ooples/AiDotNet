@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,11 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2207.08494",
     Year = 2022,
     Authors = "Shuwei Shi, Jinjin Gu, Liangbin Xie, Xintao Wang, Yujiu Yang, Chao Dong")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 4e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 8,
+                Source = "Shi et al. 2022, Sec. 4.1: Adam with beta1 0.9 and beta2 0.999, a learning "
+                        + "rate of 4e-4 and a mini-batch size of 8. The 64 that appears alongside is the "
+                        + "low-resolution patch size, not a rate.")]
 public partial class PSRT<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -92,9 +98,11 @@ public partial class PSRT<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

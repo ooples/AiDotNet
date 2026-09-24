@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,8 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 48,
+                Source = "Wang et al. 2021, Training details: Adam with a total batch size of 48, training Real-ESRGAN for 400K iterations at a learning rate of 1e-4.")]
 public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -92,9 +95,11 @@ public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -46,6 +47,13 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pengi: An Audio Language Model for Audio Tasks", "https://doi.org/10.48550/arXiv.2305.11834", Year = 2023, Authors = "Soham Deshmukh, Benjamin Elizalde, Rita Singh, Huaming Wang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 384,
+                WarmupSteps = 2000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Deshmukh et al. 2023, Sec. 4: the Adam optimiser for 60 epochs at a batch "
+                        + "size of 384, under a linear schedule with 2000 warmup steps and a base "
+                        + "learning rate of 1e-4.")]
 public partial class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     /// <inheritdoc />
@@ -107,9 +115,11 @@ public partial class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T
         // The paper rate from this model's own options. Built bare, AdamW would use its
         // own 1e-3 default instead and LearningRate would be configuration nobody reads —
         // the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

@@ -1,0 +1,14 @@
+<Project>
+  <!-- Attribution receipts bind the exact commit independently. Avoid changing
+       unchanged test-only dependency binaries solely because the commit changed.
+       Normal builds and release/package builds retain their version/SourceLink
+       provenance; this opt-in is restricted to the supported attribution TFM. -->
+  <PropertyGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnableSourceLink>false</EnableSourceLink>
+    <SourceLink />
+    <!-- Preserve the compiler's exact bytes across checkout EOL conversion.
+         Only checksum-verified embedded source may explain an EOL-only mismatch. -->
+    <EmbedAllSources>true</EmbedAllSources>
+  </PropertyGroup>
+</Project>

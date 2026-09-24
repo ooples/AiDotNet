@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Ju et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.98,
+                WarmupSteps = 5000, Schedule = LearningRateSchedulerType.Noam,
+                Source = "Ju et al. 2024, Sec. 5.1: AdamW with a learning rate of 1e-4, beta1 0.9 and "
+                        + "beta2 0.98, and 5K warmup steps following the inverse square root schedule, "
+                        + "declared here as Noam. No reference batch size is declared because the paper "
+                        + "gives the batch as 10K frames of latent vectors per GPU rather than as a "
+                        + "count of examples.")]
 public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech3Options _options;
@@ -81,7 +90,9 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new NaturalSpeech3Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

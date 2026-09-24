@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -37,17 +38,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an audio-visual correspondence network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Embedding,
 ///     inputSize: 512,
-///     outputSize: 256);
+///     outputSize: 128);
 ///
-/// var model = new AudioVisualCorrespondenceNetwork&lt;float&gt;(architecture);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 512);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 128);
 ///
-/// // Compute correspondence between audio and visual inputs
-/// Tensor&lt;float&gt; embedding = model.Predict(inputTensor);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AudioVisualCorrespondenceNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+///
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(1, 512);
+/// Tensor&lt;float&gt; embedding = result.Predict(inputTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -60,6 +65,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Look, Listen and Learn", "https://arxiv.org/abs/1705.08168")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, WeightDecay = 1e-5,
+                Provenance = RecipeProvenance.Searched,
+                Source = "Arandjelovic and Zisserman 2017, Sec. 3: the Adam optimizer with a weight "
+                        + "decay of 1e-5 and a grid search over the learning rate, of which the paper "
+                        + "says 1e-4 usually works well. The provenance records that the rate came from "
+                        + "a search rather than being stated outright.")]
 public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayoutBase<T>, IAudioVisualCorrespondenceModel<T>
 {
     private readonly AudioVisualCorrespondenceOptions _options;
@@ -212,7 +223,9 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         // horizon (the "loss did not reduce: 0.168 → 0.253" CI failure
         // signal). 1e-4 is mid-range and still overshoots at random
         // init.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 5e-5,

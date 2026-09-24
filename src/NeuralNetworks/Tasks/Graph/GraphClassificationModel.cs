@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
@@ -68,17 +70,21 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a graph classification model for molecular property prediction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification,
 ///     inputSize: 16,   // node feature dimension
-///     outputSize: 2,   // number of classes (e.g., toxic / non-toxic)
-///     hiddenSizes: new[] { 64, 32 });
-/// var model = new GraphClassificationModel&lt;float&gt;(architecture);
+///     outputSize: 2);  // number of classes (e.g. toxic / non-toxic)
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 10, 10 }); // 10-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 10, 16 });
 ///
 /// // Classify the entire graph
-/// var prediction = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphClassificationModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -92,6 +98,8 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, WeightDecay = 5e-4,
+                Source = "Kipf and Welling 2017, Sec. 5.2 (Experimental Set-Up): Adam, lr 0.01, L2 regularization 5e-4 for the citation networks. Verified against the paper.")]
 public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
@@ -172,7 +180,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.MultiClassClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 9,      // Atom features
+    ///     // Atom features
     ///     outputSize: 2);    // Binary classification (toxic/not toxic)
     ///
     /// // Create model with default layers
@@ -235,7 +243,9 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         _poolingType = options.PoolingType;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

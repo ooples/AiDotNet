@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -62,6 +63,13 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Large-Scale Contrastive Language-Audio Pre-Training with Feature Fusion and Keyword-to-Caption Augmentation", "https://doi.org/10.1109/ICASSP49357.2023.10095969", Year = 2023, Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.99, Beta2 = 0.9,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wu et al. 2023, Sec. 4: the Adam optimizer with beta1 0.99 and beta2 0.9, a "
+                        + "warm-up and cosine learning rate decay at a basic learning rate of 1e-4. The "
+                        + "betas are declared in the order the paper gives them, which is the reverse of "
+                        + "the usual 0.9 and 0.99.")]
 public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -136,9 +144,11 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         _textPrompts = _options.TextPrompts ?? Array.Empty<string>();

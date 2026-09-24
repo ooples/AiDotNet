@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
@@ -61,17 +63,21 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a link prediction model for graph edge prediction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification,
 ///     inputSize: 16,   // node feature dimension
-///     outputSize: 1,   // edge score
-///     hiddenSizes: new[] { 64, 32 });
-/// var model = new LinkPredictionModel&lt;float&gt;(architecture);
+///     outputSize: 2);  // number of classes (e.g. toxic / non-toxic)
 ///
 /// // Prepare graph data
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Predict edge likelihood between node pairs
-/// var scores = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LinkPredictionModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var scores = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -89,6 +95,8 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1611.07308",
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
+                Source = "Kipf and Welling 2016 (VGAE), Sec. 2 (Experiments on link prediction): Adam, lr 0.01, 200 iterations. Verified against the paper.")]
 public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly LinkPredictionOptions _options;
@@ -169,7 +177,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.BinaryClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 128,    // User features
+    ///     // User features
     ///     outputSize: 1);    // Edge score
     ///
     /// // Create model with default layers
@@ -222,7 +230,9 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         _decoderType = options.DecoderType;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

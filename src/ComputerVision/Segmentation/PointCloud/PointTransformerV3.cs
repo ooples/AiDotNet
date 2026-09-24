@@ -38,14 +38,21 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create Point Transformer V3 for 3D semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
-/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture);
-/// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new PointTransformerV3&lt;float&gt;(architecture,
-///     options: new PointTransformerV3Options { NumClasses = 40, DropRate = 0.1, ModelSize = PointTransformerV3ModelSize.Base });
-/// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 6, outputSize: 40);
+///
+/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
+/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
+///
+/// // Every tunable is set through the options object; these are the defaults.
+/// var options = new PointTransformerV3Options { NumClasses = 40, DropRate = 0.1, ModelSize = PointTransformerV3ModelSize.Base };
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new PointTransformerV3&lt;float&gt;(architecture, options: options))
+///     .Build(trainPoints, trainLabels);
+///
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
+/// Tensor&lt;float&gt; labels = result.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

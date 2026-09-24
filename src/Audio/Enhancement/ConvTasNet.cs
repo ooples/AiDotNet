@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -62,6 +63,10 @@ namespace AiDotNet.Audio.Enhancement;
 /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new ConvTasNet&lt;float&gt;(architecture, "conv_tasnet.onnx", 8000, 2));
 ///
+/// var trainingData = Tensor&lt;float&gt;.CreateRandom(4, 16000);
+/// var trainingLabels = Tensor&lt;float&gt;.CreateRandom(4, 16000);
+/// var mixedAudioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// 
 /// // Build and use the model through the facade
 /// var result = builder.Build(trainingData, trainingLabels);
 /// var prediction = result.Predict(mixedAudioTensor);
@@ -76,6 +81,11 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, MaxGradientNorm = 5.0,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau, DecayRate = 0.5,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                StepSize = 3,
+                Source = "Luo and Mesgarani 2019, Sec. IV: Adam with an initial learning rate of 1e-3, halved if validation accuracy does not improve for 3 consecutive epochs, and gradient clipping at maximum L2-norm 5, over 100 epochs.")]
 public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly ConvTasNetOptions _options;
@@ -295,7 +305,9 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         _decoderWeight = InitializeWeights(_encoderDim * _kernelSize);
 
         // Initialize optimizer (Adam by default)
-        Optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        Optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

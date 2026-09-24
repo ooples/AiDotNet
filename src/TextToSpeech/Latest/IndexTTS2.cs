@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,9 @@ namespace AiDotNet.TextToSpeech.Latest;
     Year = 2025,
     Authors = "Siyi Zhou, Yiquan Zhou, Yi He, Xun Zhou, Jinchao Wang, Wei Deng, Jingchen Shu"
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4,
+                Source = "Zhou et al. 2025, Training Hyperparameter Details: the AdamW optimizer with "
+                        + "an initial learning rate of 2e-4 on 8 A100 GPUs.")]
 public partial class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly IndexTTS2Options _options;
@@ -229,13 +234,14 @@ public partial class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay
-            });
+        => PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay
+                }));
 
     private void ThrowIfDisposed()
     {

@@ -55,6 +55,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </remarks>
 /// <example>
 /// <code>
+/// var nerFRenderOutput = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create MVDream model
 /// var mvdream = new MVDreamModel&lt;float&gt;();
 ///

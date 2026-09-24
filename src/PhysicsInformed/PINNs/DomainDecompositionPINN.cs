@@ -68,8 +68,14 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 2, outputSize: 1);
 /// var pde = new HeatEquation&lt;float&gt;();
-/// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
-/// var subdomains = new List&lt;SubdomainDefinition&lt;float&gt;&gt; { left, right };
+/// // No IBoundaryCondition implementation ships with the library: write your own with
+/// // IsOnBoundary, ComputeBoundaryResidual and Name, then put instances in this array.
+/// var bc = Array.Empty&lt;IBoundaryCondition&lt;float&gt;&gt;();
+/// var subdomains = new List&lt;SubdomainDefinition&lt;float&gt;&gt;
+/// {
+///     new SubdomainDefinition&lt;float&gt;(new float[] { 0 }, new float[] { 1 }, "left"),
+///     new SubdomainDefinition&lt;float&gt;(new float[] { 1 }, new float[] { 2 }, "right")
+/// };
 /// var ddPinn = new DomainDecompositionPINN&lt;float&gt;(architecture, pde, bc, subdomains);
 /// </code>
 /// </example>

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -36,10 +37,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GRUNeuralNetworkOptions { InputSize = 10, HiddenSize = 128, NumLayers = 2 };
-/// var model = new GRUNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20, 10 });
-/// var output = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20, 10 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GRUNeuralNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -52,6 +56,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", "https://arxiv.org/abs/1406.1078", Year = 2014, Authors = "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adadelta, Epsilon = 1e-6, Rho = 0.95,
+                Source = "Cho et al. 2014, Sec. 4: Adadelta and stochastic gradient descent train the "
+                        + "RNN Encoder-Decoder, with epsilon 1e-6 and rho 0.95 following Zeiler 2012.")]
 public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly GRUOptions _options;
@@ -127,13 +134,14 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // AdamOptimizer was built with a hardcoded LR, so a caller passing
         // options.LearningRate=0.002 silently trained at 1e-3. Callers who supply
         // their own `optimizer` retain full control of LR scheduling.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                UseAMSGrad = true,
-                InitialLearningRate = options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    UseAMSGrad = true,
+                    InitialLearningRate = options.LearningRate
+                }));
         _options = options;
         Options = _options;
         _learningRate = NumOps.FromDouble(options.LearningRate);

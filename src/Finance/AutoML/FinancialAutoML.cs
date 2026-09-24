@@ -25,12 +25,15 @@ namespace AiDotNet.Finance.AutoML;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FinancialAutoMLOptions&lt;float&gt;(architecture);
-/// var automl = new FinancialAutoML&lt;float&gt;(options);
+/// var trainInputs = Tensor&lt;float&gt;.CreateRandom(64, 8);
+/// var trainTargets = Tensor&lt;float&gt;.CreateRandom(64, 1);
+/// var valInputs = Tensor&lt;float&gt;.CreateRandom(16, 8);
+/// var valTargets = Tensor&lt;float&gt;.CreateRandom(16, 1);
+///
+/// var automl = new FinancialAutoML&lt;float&gt;();
 /// var bestModel = await automl.SearchAsync(
 ///     trainInputs, trainTargets,
 ///     valInputs, valTargets,
-///     maxTrials: 20,
 ///     timeLimit: TimeSpan.FromMinutes(30));
 /// </code>
 /// </example>

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Enums;
@@ -54,6 +55,8 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Zhou et al. 2024, Sec. 4: Adam at a learning rate of 1e-4.")]
 public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -111,9 +114,11 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

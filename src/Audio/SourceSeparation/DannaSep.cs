@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -43,6 +44,11 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 100,
+                Source = "Wu et al. 2024, Sec. 4: the Adam optimizer with a learning rate of 1e-4 and a "
+                        + "batch size of 100 for all the cases presented. This model defaults to AdamW; "
+                        + "declaring the paper's Adam is not a downgrade here, because with no weight "
+                        + "decay stated the two are numerically identical.")]
 public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     /// <inheritdoc />
@@ -95,9 +101,11 @@ public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

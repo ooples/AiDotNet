@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2204.03513",
     Year = 2022,
     Authors = "Ping Hu, Simon Niklaus, Stan Sclaroff, Kate Saenko")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, WeightDecay = 1e-4,
+                ReferenceBatchSize = 8, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Hu et al. 2022, Sec. 4: Adam with a weight decay of 1e-4, trained for 400k "
+                        + "iterations at a batch size of 8, the learning rate decayed from 1e-4 to 0 by "
+                        + "cosine annealing.")]
 public partial class M2M<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -95,9 +102,11 @@ public partial class M2M<T> : FrameInterpolationBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

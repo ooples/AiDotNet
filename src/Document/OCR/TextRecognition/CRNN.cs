@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -55,6 +56,11 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition and Its Application to Scene Text Recognition", "https://doi.org/10.48550/arXiv.1507.05717", Year = 2017, Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
+[PaperOptimizer(OptimizerKind.Adadelta,
+                Source = "Shi et al. 2017, Sec. 3: ADADELTA is used to automatically calculate "
+                        + "per-dimension learning rates, and the paper notes it requires no manual "
+                        + "setting of a learning rate, so none is declared. Recorded verify-only because "
+                        + "Adadelta is a weaker optimizer than this model's Adam default.")]
 public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly CRNNOptions _options;
@@ -145,12 +151,13 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _charset = _options.Charset ?? GetDefaultCharset();
         // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
         // and no configured rate can reach the model.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate
-            });
+            }));
         _onnxModelPath = onnxModelPath;
 
         ImageSize = _options.ImageWidth;
@@ -188,12 +195,13 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _rnnHiddenSize = _options.RnnHiddenSize;
         _rnnLayers = _options.RnnLayers;
         _charset = _options.Charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate
-            });
+            }));
         _onnxModelPath = null;
 
         ImageSize = _options.ImageWidth;

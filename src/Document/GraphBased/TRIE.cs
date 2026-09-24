@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -56,6 +57,12 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TRIE: End-to-End Text Reading and Information Extraction for Document Understanding", "https://doi.org/10.48550/arXiv.2005.13118", Year = 2020, Authors = "Peng Zhang, Yunlu Xu, Zhanzhan Cheng, Shiliang Pu, Jing Lu, Liang Qiao, Yi Niu, Fei Wu")]
+[PaperOptimizer(OptimizerKind.Adadelta, LearningRate = 1.0, DecayRate = 0.1,
+                StepSize = 40, Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Zhang et al. 2020, Sec. 4.1: the ADADELTA optimization method with the "
+                        + "learning rate set to 1.0 at the beginning and decreased to a tenth every 40 "
+                        + "epochs.")]
 public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITextDetector<T>
 {
     private readonly TRIEOptions _options;
@@ -152,7 +159,9 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         _graphDim = _options.GraphDim;
         _numEntityTypes = _options.NumEntityTypes;
         _maxEntities = _options.MaxEntities;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.ImageSize;
 
@@ -190,7 +199,9 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         _graphDim = _options.GraphDim;
         _numEntityTypes = _options.NumEntityTypes;
         _maxEntities = _options.MaxEntities;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.ImageSize;
 

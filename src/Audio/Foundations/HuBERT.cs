@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -42,7 +43,17 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
-public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                LearningRate = 5e-4, Variant = "base",
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Hsu et al. 2021, Sec. IV-A: Adam with beta = (0.9, 0.98); the rate ramps up linearly over the first 8% of training steps then decays linearly back to zero. Peak learning rates 5e-4/1.5e-3/3e-3 for BASE/LARGE/X-LARGE. This row is the BASE peak rate.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
+                LearningRate = 1.5e-3, Variant = "large",
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Hsu et al. 2021, Sec. IV-A: Adam with beta = (0.9, 0.98); the rate ramps up linearly over the first 8% of training steps then decays linearly back to zero. Peak learning rates 5e-4/1.5e-3/3e-3 for BASE/LARGE/X-LARGE. This row is the LARGE peak rate.")]
+public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, IPaperOptimizerVariant
 {
     /// <inheritdoc />
     /// <remarks>
@@ -103,12 +114,22 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>The variant this instance was built at, keying the paper recipe for it.</summary>
+    /// <remarks>
+    /// The paper states a different peak learning rate per size, so one recipe for the class
+    /// would be wrong for every size but one. Read during construction, which is safe because
+    /// the options are assigned before the optimizer is built.
+    /// </remarks>
+    public string PaperOptimizerVariant => _options.Variant;
 
     internal static async Task<HuBERT<T>> CreateAsync(HuBERTOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {

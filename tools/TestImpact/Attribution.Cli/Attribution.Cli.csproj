@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../AttributionBuild.props" />
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PrototypeTests" />
+    <ProjectReference Include="../Attribution.Runtime/AttributionRuntime.csproj" />
+    <ProjectReference Include="../fixtures/TestAttribution/Instrumenter/AttributionInstrumenter.csproj" />
+  </ItemGroup>
+</Project>

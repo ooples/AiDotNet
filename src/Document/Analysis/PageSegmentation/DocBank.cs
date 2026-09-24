@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -58,6 +59,9 @@ namespace AiDotNet.Document.Analysis.PageSegmentation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocBank: A Benchmark for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2006.01038", Year = 2020, Authors = "Minghao Li, Yiheng Xu, Lei Cui, Shaohan Huang, Furu Wei, Zhoujun Li, Ming Zhou")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5,
+                Source = "Li et al. 2020, Sec. 4: the model is optimized with AdamW at an initial "
+                        + "learning rate of 5e-5.")]
 public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 {
     private readonly DocBankOptions _options;
@@ -193,7 +197,9 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         _hiddenDim = _options.HiddenDim;
         _useTextFeatures = _options.UseTextFeatures;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
 
@@ -238,7 +244,9 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         _hiddenDim = _options.HiddenDim;
         _useTextFeatures = _options.UseTextFeatures;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
 

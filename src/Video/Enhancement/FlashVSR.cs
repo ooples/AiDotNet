@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2510.12747",
     Year = 2025,
     Authors = "Junhao Zhuang, Shi Guo, Xin Cai, Xiaohui Li, Yihao Liu, Chun Yuan, Tianfan Xue")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 0.01,
+                Source = "FlashVSR: the AdamW optimizer with a learning rate of 1e-5 and a weight decay "
+                        + "of 0.01.")]
 public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -113,9 +117,11 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumInputFrames;
         InitializeLayers();

@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -42,10 +44,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AutoIntOptions { NumFeatures = 20, EmbeddingDim = 16, NumHeads = 2, NumLayers = 3 };
-/// var model = new AutoIntNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new AutoIntOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 16, NumHeads = 2, NumLayers = 3 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AutoIntNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -60,6 +67,10 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1810.11921",
     Year = 2019,
     Authors = "Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Song et al. 2019, Sec. 4: Adam is used to optimize all deep neural "
+                        + "network-based models, AutoInt among them. No rate, batch or schedule is "
+                        + "stated.")]
 public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private AutoIntOptions<T> _options;
@@ -114,7 +125,9 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
         _options = options;
         // Reuse the same resolved instance that was passed to base(...)
         _lossFunction = LossFunction;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

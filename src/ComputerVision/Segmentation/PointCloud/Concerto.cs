@@ -70,14 +70,21 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Concerto hybrid Mamba-Transformer model for 3D point cloud segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
-/// var concerto = new Concerto&lt;float&gt;(architecture);
-/// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new Concerto&lt;float&gt;(architecture,
-///     options: new ConcertoOptions { NumClasses = 40, DropRate = 0.1, ModelSize = ConcertoModelSize.Base });
-/// Tensor&lt;float&gt; segmentationMap = concerto.Forward(pointCloudTensor);
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 6, outputSize: 40);
+///
+/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
+/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
+///
+/// // Every tunable is set through the options object; these are the defaults.
+/// var options = new ConcertoOptions { NumClasses = 40, DropRate = 0.1, ModelSize = ConcertoModelSize.Base };
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Concerto&lt;float&gt;(architecture, options: options))
+///     .Build(trainPoints, trainLabels);
+///
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
+/// Tensor&lt;float&gt; segmentationMap = result.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

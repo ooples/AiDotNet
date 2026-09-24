@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,15 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2401.06312",
     Year = 2024,
     Authors = "Xingyu Zhou, Leheng Zhang, Xiaorui Zhao, Keze Wang, Leida Li, Shuhang Gu")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 24,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Zhou et al. 2024, Sec. 4.1: Adam at a batch size of 24, following the "
+                        + "settings of BasicVSR++ for 600K iterations with an initial learning rate of "
+                        + "2e-4.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Zhou et al. 2024, Sec. 4.1: a further 300K iterations on REDS from the "
+                        + "well-trained model, at an initial learning rate of 1e-4.")]
 public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -95,9 +105,11 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
