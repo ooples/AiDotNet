@@ -204,11 +204,20 @@ public partial class MGIE<T>
         // Checkpoint users inject a native encoder configured with their matching tokenizer.
         var tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA,
             vocabSize: _editOptions.VocabSize);
-        return new LLaVANeuralNetwork<T>(architecture, imageSize: _editOptions.ImageSize, channels: 3,
-            patchSize: _editOptions.VisionPatchSize, vocabularySize: _editOptions.VocabSize,
-            maxSequenceLength: _editOptions.MaxSequenceLength, embeddingDimension: _editOptions.DecoderDim,
-            visionHiddenDim: _editOptions.VisionDim, numVisionLayers: _editOptions.NumVisionLayers,
-            numLmLayers: _editOptions.NumDecoderLayers, numHeads: _editOptions.NumHeads, tokenizer: tokenizer);
+        var llavaOptions = new AiDotNet.NeuralNetworks.Options.LLaVAOptions
+        {
+            ImageSize = _editOptions.ImageSize,
+            Channels = 3,
+            PatchSize = _editOptions.VisionPatchSize,
+            VocabSize = _editOptions.VocabSize,
+            MaxSequenceLength = _editOptions.MaxSequenceLength,
+            EmbeddingDimension = _editOptions.DecoderDim,
+            VisionDim = _editOptions.VisionDim,
+            VisionLayers = _editOptions.NumVisionLayers,
+            NumLmLayers = _editOptions.NumDecoderLayers,
+            NumHeads = _editOptions.NumHeads
+        };
+        return new LLaVANeuralNetwork<T>(architecture, llavaOptions, tokenizer);
     }
 
     private static void ValidateEditingOptions(MGIEOptions options)

@@ -103,9 +103,12 @@ public sealed class JointVisionLanguageStateTests
         internal SmallLlava() : base(new NeuralNetworkArchitecture<float>(
                 inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
                 inputDepth: 3, inputHeight: 4, inputWidth: 4, outputSize: 8),
-            imageSize: 4, patchSize: 2, vocabularySize: 64, maxSequenceLength: 64,
-            embeddingDimension: 8, visionHiddenDim: 8, numVisionLayers: 1, numLmLayers: 1,
-            numHeads: 2, tokenizer: LanguageModelTokenizerFactory.CreateForBackbone(
+            new AiDotNet.NeuralNetworks.Options.LLaVAOptions
+            {
+                ImageSize = 4, PatchSize = 2, VocabSize = 64, MaxSequenceLength = 64,
+                EmbeddingDimension = 8, VisionDim = 8, VisionLayers = 1, NumLmLayers = 1, NumHeads = 2
+            },
+            tokenizer: LanguageModelTokenizerFactory.CreateForBackbone(
                 LanguageModelBackbone.LLaMA, new[] { "red blue bright dark image" }, 64)) { }
 
         internal Tensor<float> SquaredSum(Tensor<float> input)
