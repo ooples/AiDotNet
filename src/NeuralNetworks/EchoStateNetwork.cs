@@ -1652,7 +1652,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
                 { "Regularization", Convert.ToDouble(_regularization) },
                 { "WarmupPeriod", _warmupPeriod }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

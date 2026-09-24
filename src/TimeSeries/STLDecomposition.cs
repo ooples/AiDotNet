@@ -1025,7 +1025,7 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
                 { "SeasonalStrength", Convert.ToDouble(CalculateSeasonalStrength()) },
                 { "TrendStrength", Convert.ToDouble(CalculateTrendStrength()) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

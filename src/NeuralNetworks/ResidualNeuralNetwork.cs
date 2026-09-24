@@ -736,7 +736,7 @@ finally
                 { "InputSize", Architecture.CalculatedInputSize },
                 { "OutputSize", Architecture.CalculateOutputSize() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

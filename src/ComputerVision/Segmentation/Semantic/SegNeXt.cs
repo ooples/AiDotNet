@@ -502,7 +502,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 
