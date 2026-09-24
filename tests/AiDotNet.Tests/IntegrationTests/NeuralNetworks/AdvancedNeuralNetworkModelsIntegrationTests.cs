@@ -4696,11 +4696,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     public async Task Gpt4VisionNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
         // Arrange - using native mode constructor with mock tokenizer
+        // The architecture declares the image the test feeds, [3, 56, 56]. It used to declare a 256-wide
+        // TwoDimensional input, so Predict coerced the image to that shape and the vision tower saw a single
+        // patch; the old encoder silently embedded it against a 17-row positional table.
         var architecture = new NeuralNetworkArchitecture<float>(
-            InputType.TwoDimensional,
-            NeuralNetworkTaskType.MultiClassClassification,
-            NetworkComplexity.Simple,
-            inputSize: 256,
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputDepth: 3, inputHeight: 56, inputWidth: 56,
             outputSize: 10);
 
         // Create a simple tokenizer for testing
