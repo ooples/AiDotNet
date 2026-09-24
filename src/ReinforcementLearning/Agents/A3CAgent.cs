@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
@@ -61,6 +62,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
     "https://arxiv.org/abs/1602.01783",
     Year = 2016,
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
+[PaperOptimizer(OptimizerKind.RmsProp, Rho = 0.99,
+                Source = "Mnih et al. 2016, Sec. 4: of the three optimizers investigated, the "
+                        + "shared-statistics variant of non-centered RMSProp proved considerably more "
+                        + "robust and is the one used, with an RMSProp decay factor of 0.99. No learning "
+                        + "rate is declared because the paper samples it from LogUniform rather than "
+                        + "fixing it. Recorded verify-only because RMSProp is weaker than this agent's "
+                        + "Adam default.")]
 public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
@@ -779,7 +787,18 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return GetParameters();
+        // Returned GetParameters() -- the WEIGHTS -- where this interface promises "gradients
+        // with respect to all model parameters". The length matches, so nothing downstream could
+        // detect the substitution: ApplyGradients subtracts it element-wise, and Elastic Weight
+        // Consolidation / Gradient Episodic Memory / Memory Aware Synapses build Fisher-information
+        // estimates from it. A distributed trainer averaging these across workers was averaging
+        // parameters and calling the result a gradient.
+        //
+        // This agent trains through its own loss inside Train(), with its networks driven by
+        // separate optimizers, so there is no single parameter-gradient vector here.
+        throw new NotSupportedException(
+            "A3CAgent trains via its own loss inside the Train() method, so there is no single "
+            + "parameter-gradient vector for this interface to return. Call Train() instead.");
     }
 
     /// <inheritdoc/>

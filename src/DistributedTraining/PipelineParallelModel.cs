@@ -57,8 +57,15 @@ namespace AiDotNet.DistributedTraining;
 /// <example>
 /// <code>
 /// // Wrap an existing model for pipeline-parallel training across multiple ranks
-/// var config = new ShardingConfiguration&lt;float&gt;(worldSize: 4, rank: 0);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+///     inputSize: 8, outputSize: 1);
+/// var wrappedModel = new NeuralNetwork&lt;float&gt;(architecture);
+///
+/// var backend = new InMemoryCommunicationBackend&lt;float&gt;(rank: 0, worldSize: 2);
+/// var config = new ShardingConfiguration&lt;float&gt;(backend);
 /// var schedule = new GPipeSchedule&lt;float&gt;();
+///
 /// var pipelineModel = new PipelineParallelModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
 ///     wrappedModel, config, microBatchCount: 4, schedule: schedule);
 /// </code>
@@ -216,6 +223,19 @@ public partial class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBas
         _virtualStagesPerRank = _schedule.VirtualStagesPerRank;
         _totalVirtualStages = checked(_numStages * _virtualStagesPerRank);
         _supportsDecomposedBackward = WrappedModel is IPipelineDecomposableModel<T, TInput, TOutput>;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Checkpointed activations, deferred backward state and emulated weight gradients are all keyed by virtual
+    /// stage and sized by that stage's parameter range, so none survives a repartition.
+    /// </remarks>
+    protected override void InvalidateLayoutState()
+    {
+        base.InvalidateLayoutState();
+        _checkpointedActivations.Clear();
+        _cachedBackwardState.Clear();
+        _cachedWeightGradients.Clear();
     }
 
     /// <summary>

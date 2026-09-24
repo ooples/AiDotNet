@@ -30,6 +30,7 @@ namespace AiDotNet.Solvers.Assignment;
 /// </para>
 /// <example>
 /// <code>
+/// var costMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var solver = new LinearAssignmentSolver&lt;double&gt;();
 /// var assignment = solver.Solve(costMatrix);
 /// // assignment[i] is the column matched to row i, or -1 when the row is unmatched

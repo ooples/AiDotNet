@@ -45,7 +45,6 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <code>
 /// // Create MiniRocket classifier with deterministic kernels for fast time series classification
 /// var options = new MiniRocketOptions&lt;double&gt;();
-/// var classifier = new MiniRocketClassifier&lt;double&gt;(options);
 ///
 /// // Prepare time series data: rows are samples, columns are time steps
 /// var features = new Matrix&lt;double&gt;(4, 5);
@@ -56,12 +55,14 @@ namespace AiDotNet.Classification.TimeSeries;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train: extract PPV features using fixed {-1, 2} kernels and fit classifier
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new MiniRocketClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict class for new time series
 /// var newSample = new Matrix&lt;double&gt;(1, 5);
 /// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
-/// var predictions = classifier.Predict(newSample);
+/// var predictions = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

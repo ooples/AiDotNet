@@ -33,10 +33,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
-/// var model = new InstantStyleModel&lt;float&gt;(options);
-/// var styleRef = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
-/// var stylized = model.Predict(styleRef);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
+/// var styleRef = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new InstantStyleModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var stylized = result.Predict(styleRef);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

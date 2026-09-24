@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -35,7 +37,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// // with gated cross-attention and perceiver resampler from OpenFlamingo
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -60,6 +62,11 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2023,
     Authors = "Moor et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam8Bit, GradientAccumulationSteps = 50,
+                Source = "Moor et al. 2023, Sec. 3: the 8-bit AdamW optimizer with 50 gradient "
+                        + "accumulation steps, pre-training for 2700 steps from the OpenFlamingo "
+                        + "checkpoint. The paper states no learning rate, and its batch figures are "
+                        + "per-device, so neither is declared.")]
 public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly MedFlamingoOptions _options;
@@ -103,7 +110,16 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     {
         _options = options ?? new MedFlamingoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Declared, not routed. The paper's "8-bit AdamW" is a memory-reduction form of AdamW --
+        // the same algorithm with quantized moment state -- adopted to fit the model on the
+        // authors' hardware, and it states no learning rate at all. Building it here would swap
+        // this model's AdamW for block-quantized Adam8Bit at the library's default rate, which is
+        // a numerical change with nothing in the paper behind it: it drove the memorization probe
+        // to NaN by step 100 and made every training step 2.5x slower. Verifying instead keeps the
+        // citation as an assertion over the optimizer this model actually builds, which is what
+        // DeepSeek-VL2 and MiniGPT-4 in this same family already do.
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

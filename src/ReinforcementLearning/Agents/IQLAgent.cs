@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 /// <example>
 /// <code>
 /// // Create an Implicit Q-Learning agent for offline RL
-/// var options = new IQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ExpectileWeight = 0.7 };
+/// var options = new IQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, Expectile = 0.7 };
 /// var agent = new IQLAgent&lt;double&gt;(options);
 ///
 /// // Select an action using advantage-weighted regression
@@ -121,6 +121,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _q1Network = CreateQNetwork();
         _q2Network = CreateQNetwork();
         _targetValueNetwork = CreateValueNetwork();
+
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_policyNetwork);
+        Networks.Add(_valueNetwork);
+        Networks.Add(_q1Network);
+        Networks.Add(_q2Network);
+        Networks.Add(_targetValueNetwork);
 
         CopyNetworkWeights(_valueNetwork, _targetValueNetwork);
 
@@ -455,7 +462,18 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        return GetParameters();
+        // Returned GetParameters() -- the WEIGHTS -- where this interface promises "gradients
+        // with respect to all model parameters". The length matches, so nothing downstream could
+        // detect the substitution: ApplyGradients subtracts it element-wise, and Elastic Weight
+        // Consolidation / Gradient Episodic Memory / Memory Aware Synapses build Fisher-information
+        // estimates from it. A distributed trainer averaging these across workers was averaging
+        // parameters and calling the result a gradient.
+        //
+        // This agent trains through its own loss inside Train(), with its networks driven by
+        // separate optimizers, so there is no single parameter-gradient vector here.
+        throw new NotSupportedException(
+            "IQLAgent trains via its own loss inside the Train() method, so there is no single "
+            + "parameter-gradient vector for this interface to return. Call Train() instead.");
     }
 
     /// <inheritdoc/>

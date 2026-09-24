@@ -30,13 +30,13 @@ namespace AiDotNet.Interpretability.Helpers;
 /// <code>
 /// var gpuHelper = new GPUExplainerHelper&lt;double&gt;(gpuRuntime);
 /// // Or auto-detect GPU
-/// var gpuHelper = GPUExplainerHelper&lt;double&gt;.CreateWithAutoDetect();
+/// var gpuHelper2 = GPUExplainerHelper&lt;double&gt;.CreateWithAutoDetect();
 ///
 /// // Batch process predictions
-/// var predictions = gpuHelper.BatchPredict(model, inputs);
+/// var predictions = gpuHelper2.BatchPredict(model, inputs);
 ///
 /// // Parallel coalition processing for SHAP
-/// var values = gpuHelper.ComputeCoalitionPredictions(model, instance, coalitions, background);
+/// var values = gpuHelper2.ComputeCoalitionPredictions(model, instance, coalitions, background);
 /// </code>
 /// </para>
 /// </remarks>

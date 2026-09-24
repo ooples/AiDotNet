@@ -1,3 +1,4 @@
+using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.ContinuousBatching;
 using AiDotNet.Serving.Models;
@@ -283,7 +284,7 @@ public sealed class TextGenerationService : ITextGenerationService
                 {
                     _logger.LogWarning(ex,
                         "Batched incremental generation failed for model '{ModelName}' with an active structured-output constraint; failing rather than retrying with the advanced constraint.",
-                        modelName);
+                        LogSanitizer.Sanitize(modelName));
                     return new SpeculativeDecodingResponse
                     {
                         Error = "Structured-output generation failed and cannot be safely retried.",
@@ -292,7 +293,7 @@ public sealed class TextGenerationService : ITextGenerationService
                 }
                 _logger.LogWarning(ex,
                     "Batched incremental generation failed for model '{ModelName}'; falling back to full-context decode.",
-                    modelName);
+                    LogSanitizer.Sanitize(modelName));
             }
         }
 
@@ -344,7 +345,7 @@ public sealed class TextGenerationService : ITextGenerationService
         {
             _logger.LogWarning(
                 "Text generation for model '{ModelName}' did not complete within the iteration budget.",
-                modelName);
+                LogSanitizer.Sanitize(modelName));
             return new SpeculativeDecodingResponse
             {
                 Error = "Text generation did not complete within the allotted budget.",

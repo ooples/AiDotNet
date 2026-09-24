@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -33,7 +35,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// // with advanced multimodal foundation model capabilities
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -58,6 +60,13 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
     Year = 2025,
     Authors = "Zhang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, WarmupFraction = 0.03,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhang et al. 2025, Sec. 4: a cosine learning rate scheduler with a warmup "
+                        + "ratio of 0.03. No learning rate is declared because the paper sets separate "
+                        + "rates for the LLM, the projector and the vision encoder, while this model "
+                        + "builds a single optimizer over all of them. Recorded but not routed, since a "
+                        + "schedule without a peak rate cannot be applied.")]
 public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA3Options _options;
@@ -105,7 +114,8 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
             _options = new VideoLLaMA3Options(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

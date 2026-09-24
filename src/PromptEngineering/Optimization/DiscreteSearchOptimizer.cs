@@ -18,13 +18,21 @@ namespace AiDotNet.PromptEngineering.Optimization;
 /// ```csharp
 /// var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
 ///
+/// // your labelled examples, and whatever answers a prompt
+/// var testCases = new List&lt;(string Input, string Expected)&gt;
+/// {
+///     ("I loved it", "positive"),
+///     ("Total waste of time", "negative")
+/// };
+/// Func&lt;string, string&gt; model = prompt =&gt; "positive";
+///
 /// // Evaluation function that returns accuracy
 /// double Evaluate(string prompt)
 /// {
 ///     var correct = 0;
 ///     foreach (var test in testCases)
 ///     {
-///         var result = model.Generate(prompt + test.Input);
+///         var result = model(prompt + test.Input);
 ///         if (result == test.Expected) correct++;
 ///     }
 ///     return correct / (double)testCases.Count;

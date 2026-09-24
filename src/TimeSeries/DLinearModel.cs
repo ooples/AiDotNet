@@ -39,9 +39,9 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
     private double _bTrend;
 
     public DLinearModel(DLinearOptions<T>? options = null)
-        : base(options ?? new DLinearOptions<T>())
+        : base(options ??= new DLinearOptions<T>())
     {
-        _options = options ?? new DLinearOptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
 

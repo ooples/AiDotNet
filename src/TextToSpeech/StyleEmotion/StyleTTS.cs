@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Year = 2022,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0, Beta2 = 0.99,
+                WeightDecay = 1e-4, ReferenceBatchSize = 64,
+                Source = "Li et al. 2022, Training: both stages train for 200 epochs with AdamW at "
+                        + "beta1 0, beta2 0.99, a weight decay of 1e-4, a learning rate of 1e-4 and a "
+                        + "batch size of 64. The beta1 of exactly 0 is the paper value, not an omission "
+                        + "-- it disables the first moment entirely.")]
 public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSOptions _options;
@@ -81,7 +89,9 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new StyleTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

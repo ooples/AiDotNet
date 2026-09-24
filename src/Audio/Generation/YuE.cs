@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,6 +44,9 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YuE: Open Music Foundation Models for Full-Song Generation", "https://arxiv.org/abs/2503.08638", Year = 2025, Authors = "Ruibin Yuan, Hanfeng Lin, Ge Zhang, Jiahao Pan, Jiatong Shi, Tian Yuan, Yinghao Ma, Xingjian Du, Haohe Liu, Yiming Liang, Ziyang Ma, Siqi Zheng, Zuoxian Liang, Ziyu Wang, Chenghua Lin, Tianyu Zheng, Yizhi Li, Yifei Yuan, Shangda Wu, Yifu Sun, Peng Li, Wenye Ma, Jie Fu, Roger Dannenberg, Xie Chen, Emmanouil Benetos, Wenwu Wang, Wei Xue, Yike Guo")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Yuan et al. 2025: a linear warm-up and cosine annealing schedule with a maximum learning rate of 3e-4. The warm-up length is given in tokens (280B) rather than steps, so none is declared. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
@@ -112,14 +116,15 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         _options = options ?? new YuEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0
+                }));
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

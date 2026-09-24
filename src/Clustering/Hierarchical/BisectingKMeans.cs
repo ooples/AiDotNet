@@ -69,9 +69,9 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The Bisecting K-Means configuration options.</param>
     public BisectingKMeans(BisectingKMeansOptions<T>? options = null)
-        : base(options ?? new BisectingKMeansOptions<T>())
+        : base(options ??= new BisectingKMeansOptions<T>())
     {
-        _options = options ?? new BisectingKMeansOptions<T>();
+        _options = options;
         _distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)

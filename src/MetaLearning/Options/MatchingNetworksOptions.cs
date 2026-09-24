@@ -266,12 +266,13 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var myEncoder = new NeuralNetwork&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
     /// // Create Matching Networks with minimal configuration
     /// var options = new MatchingNetworksOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder);
     /// var matchingNets = new MatchingNetworksAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create with custom attention function
-    /// var options = new MatchingNetworksOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
+    /// var options2 = new MatchingNetworksOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
     /// {
     ///     AttentionFunction = MatchingNetworksAttentionFunction.DotProduct,
     ///     UseBidirectionalEncoding = true

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -55,6 +56,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2507.01012",
     Year = 2025,
     Authors = "Kaichen Chi, Xin Li, Zhi-Song Liu, Wan-Chi Siu")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 8e-5,
+                Schedule = LearningRateSchedulerType.Constant,
+                Source = "DAM-VSR: a constant learning rate of 8e-5 with the AdamW optimizer.")]
 public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -89,7 +93,9 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new DAMVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumFrames;
         InitializeLayers();

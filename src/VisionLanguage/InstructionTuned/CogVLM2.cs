@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -39,7 +41,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// // using visual expert modules with GLM-4 backbone
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -63,6 +65,11 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Hong et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-5,
+                ReferenceBatchSize = 2340, Phase = TrainingPhase.PreTraining,
+                Source = "Hong et al. 2024, Sec. 3: the first stage runs 3000 iterations at a learning "
+                        + "rate of 1e-5 and a global batch size of 2340. The optimizer is left "
+                        + "unspecified because the paper names none.")]
 public partial class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLM2Options _options;
@@ -107,7 +114,8 @@ public partial class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         _options = options ?? new CogVLM2Options();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

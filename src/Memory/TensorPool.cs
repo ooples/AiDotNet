@@ -36,6 +36,7 @@ namespace AiDotNet.Memory;
 /// For automatic lifetime management, use <see cref="RentPooled"/> which returns
 /// a <see cref="PooledTensor{T}"/> that automatically returns itself when disposed:
 /// <code>
+/// var pool = new TensorPool&lt;double&gt;();
 /// using var pooled = pool.RentPooled(new[] { 32, 784 });
 /// // Use pooled.Tensor for computations...
 /// // Tensor is automatically returned when 'using' block exits
@@ -194,6 +195,7 @@ public class TensorPool<T> : IDisposable
     /// <exception cref="ObjectDisposedException">Thrown if the pool has been disposed.</exception>
     /// <example>
     /// <code>
+    /// var pool = new TensorPool&lt;double&gt;();
     /// using var pooled = pool.RentPooled(new[] { 32, 32 });
     /// var tensor = pooled.Tensor;
     /// // Use tensor... it's automatically returned when block exits
@@ -216,6 +218,7 @@ public class TensorPool<T> : IDisposable
     /// <exception cref="ObjectDisposedException">Thrown if the pool has been disposed.</exception>
     /// <example>
     /// <code>
+    /// var pool = new TensorPool&lt;double&gt;();
     /// using var memory = pool.RentMemory(1024);
     /// var span = memory.Memory.Span;
     /// // Use span... memory is automatically returned when block exits
@@ -307,6 +310,7 @@ public class TensorPool<T> : IDisposable
     /// <returns>A <see cref="PoolStatistics"/> object containing pool metrics.</returns>
     /// <example>
     /// <code>
+    /// var pool = new TensorPool&lt;double&gt;();
     /// var stats = pool.GetStatistics();
     /// // Result is available in the returned value
     /// // Result is available in the returned value

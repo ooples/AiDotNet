@@ -592,7 +592,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         var scaledGrad = Engine.TensorMultiplyScalar(_importanceWeightsGradient, learningRate);
-        _importanceWeights = Engine.TensorSubtract(_importanceWeights, scaledGrad);
+        Engine.TensorSubtractInPlace(_importanceWeights, scaledGrad);
     }
 
     /// <summary>

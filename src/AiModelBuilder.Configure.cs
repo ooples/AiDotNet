@@ -599,7 +599,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -612,7 +612,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
     /// </code>
@@ -2588,7 +2588,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Track training metrics
         var episodeRewards = new List<T>();
-        var episodeLengths = new List<int>();
         var losses = new List<T>();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         int totalStepsAcrossEpisodes = 0;
@@ -2710,7 +2709,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             episodeRewards.Add(episodeReward);
-            episodeLengths.Add(steps);
 
             // Calculate metrics for this episode
             var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();

@@ -254,7 +254,19 @@ public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradien
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        return GetParameters();
+        // Returned GetParameters() -- the WEIGHTS -- where this interface promises "gradients
+        // with respect to all model parameters". The length matches, so nothing downstream could
+        // detect the substitution: ApplyGradients subtracts it element-wise, and Elastic Weight
+        // Consolidation / Gradient Episodic Memory / Memory Aware Synapses build Fisher-information
+        // estimates from it. A distributed trainer averaging these across workers was averaging
+        // parameters and calling the result a gradient.
+        //
+        // This agent is tabular: it owns no network and its update is a value backup rather
+        // than a differentiable loss, so no parameter gradient exists here to return.
+        throw new NotSupportedException(
+            "SARSAAgent is a tabular agent whose update is a value backup rather than a "
+            + "differentiable loss, so it has no parameter gradients for this interface "
+            + "to return. Call Train() instead.");
     }
 
     public void ApplyGradients(Vector<T> gradients, T learningRate)

@@ -50,7 +50,9 @@ namespace AiDotNet.Attributes;
 /// // Chronos.PredictCore calls Forward(Tokenize(input)): the embedding layer receives token indices,
 /// // never the raw series, so the model's rank-3 input and the layer's rank-1/2 input are both correct.
 /// [PreprocessesInput("Tokenize converts the real-valued series to token IDs before the stack runs.")]
-/// public class Chronos&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+/// public partial class Chronos&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+/// {
+/// }
 /// </code>
 /// </example>
 /// </remarks>
