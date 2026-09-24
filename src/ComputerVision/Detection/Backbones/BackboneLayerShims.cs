@@ -18,6 +18,18 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 internal class Conv2D<T>
 {
     private readonly ConvolutionalLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _kernelSize;
@@ -39,6 +51,10 @@ internal class Conv2D<T>
         _padding = padding;
         _layer = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, padding,
             (Interfaces.IActivationFunction<T>?)null);
+        // The kernel is [out, in, k, k] whatever the spatial size, and in is known here. Resolving the shape
+        // (without allocating or drawing weights) gives a copy a known slot before its parameters are
+        // restored; left lazy, a clone's convolutions were ShapeDeferred and the restore refused them.
+        _layer.ResolveShapesOnly(new[] { inChannels, Math.Max(kernelSize, 1) + (2 * padding) + stride, Math.Max(kernelSize, 1) + (2 * padding) + stride });
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -121,6 +137,18 @@ internal class Conv2D<T>
 internal class Dense<T>
 {
     private readonly DenseLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _inDim;
     private readonly int _outDim;
 
@@ -135,6 +163,8 @@ internal class Dense<T>
         _inDim = inDim;
         _outDim = outDim;
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);
+        // [in, out] is known here; resolving it lets a copy restore this slot before its first forward.
+        _layer.ResolveShapesOnly(new[] { 1, inDim });
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -209,6 +239,18 @@ internal class Dense<T>
 internal class MultiHeadSelfAttention<T>
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _dim;
     private readonly int _numHeads;
 

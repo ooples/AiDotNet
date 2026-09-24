@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -355,6 +355,26 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 }
 
                 var memberType = MemberType(member);
+                // A helper that owns real layers without being a parameter source itself -- the detection
+                // and OCR shims around ConvolutionalLayer/DenseLayer, or a backbone stage -- declares that
+                // ownership with a zero-argument EnumerateLayers(). The network trunk above already walks
+                // it; this ModelBase path did not, so CRNN registered its LSTMs and silently left its seven
+                // convolutions and output layer out of GetParameters, SetParameters and every clone.
+                if (member is IFieldSymbol or IPropertySymbol
+                    && !member.IsStatic && !member.IsImplicitlyDeclared
+                    && memberType is not null
+                    && classification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
+                        or ParameterMemberSemanticModel.Kind.Trainable
+                    && !memberType.AllInterfaces.Any(i => i.Name == "IParameterSource")
+                    && HasConventionalLayerEnumerator(
+                        memberType.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+                {
+                    components.Add((member.Name,
+                        $"new ComponentCollectionParameterSource<{elem}>(() => {member.Name}?.EnumerateLayers())",
+                        RoleExpression(classification.Kind),
+                        AvailabilityExpression(member, classification.Kind)));
+                    continue;
+                }
                 if (member is IFieldSymbol or IPropertySymbol
                     && !member.IsStatic && !member.IsImplicitlyDeclared
                     && memberType is not null
