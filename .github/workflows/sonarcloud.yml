@@ -619,6 +619,10 @@ jobs:
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
       requires_validation: ${{ steps.select.outputs.requires_validation }}
+      # JSON boolean, and deliberately NOT the same as requires_validation: the build jobs consume
+      # that one, so a build-only change (.editorconfig) has to keep it true while still skipping
+      # every test shard. Absent or malformed leaves the matrix unauthorized, same as above.
+      requires_shards: ${{ steps.select.outputs.requires_shards }}
       # Slugs of the shards deliberately not run, for the regression analyzer. It treats any
       # baseline shard with no current artifact as Incomplete and fails the policy on it - which
       # is right for a host that died and wrong for a shard we chose to skip.
@@ -776,6 +780,10 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}
           IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
+          # The script body carries no GitHub expressions, so the 21,000-character expression cap
+          # does not apply to it. Everything it needs from the context comes in through env.
+          SELFTEST_OUTCOME: ${{ steps.selftest.outcome }}
+          COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
@@ -822,7 +830,13 @@ jobs:
 
           $escalate = $true
           $requiresValidation = $true
+          # Defaults to true so every path that does not explicitly prove a change is build-only
+          # still runs the shard matrix. Only the selector may lower it.
+          $requiresShards = $true
           $selected = @()
+          # Per-shard reasons from the mapped selector ("<shard> <= <why>"). Null on every other
+          # path, which makes the nightly-only deferral below keep everything.
+          $selectionRoutes = $null
 
           # Two independent reasons to refuse to reduce, reported separately so the log says which
           # one applied. Folding them into one flag made a self-test failure on a PR print "not a
@@ -834,15 +848,29 @@ jobs:
           # validated, selected over what the base branch added since, and named the overlap to
           # re-run. This step never selects a master delta itself, so there is one reuse mechanism.
           # Merge groups, schedules and dispatches always run the full matrix.
-          $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
-          $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+          $selectorTrusted = $env:SELFTEST_OUTCOME -eq 'success'
+          # A post-merge push of a GitHub "Merge pull request" commit has exactly the shape the selector
+          # reads from refs/pull/N/merge: two parents, the first the previous tip and the second the
+          # pull request head, so its change is that pull request's change. Without this every merge to
+          # master ran all 164 shards ("event is 'push', not a pull request"), a full ~2-hour run
+          # behind every merged pull request, competing for runners with every open one. A squash or
+          # rebase landing has one parent, no head to scope to, and keeps the full matrix.
+          $eventName = $env:GITHUB_EVENT_NAME
+          $changeHeadSha = [string] $env:PR_HEAD_SHA
+          if ($eventName -eq 'push') {
+            $changeHeadSha = ''
+            $landing = @(((& git rev-list --parents -n 1 HEAD) -join ' ').Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+            if ($LASTEXITCODE -eq 0 -and $landing.Count -eq 3) { $changeHeadSha = $landing[2] }
+          }
+          $eventCanReduce  = $eventName -eq 'pull_request' -or
+              ($eventName -eq 'push' -and -not [string]::IsNullOrEmpty($changeHeadSha))
           function ConvertFrom-ShardList([string] $Json) {
             if ([string]::IsNullOrWhiteSpace($Json)) { return @() }
             return @($Json | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })
           }
           $partialShards = @(ConvertFrom-ShardList $env:PARTIAL_SHARDS)
           $importShards = @(ConvertFrom-ShardList $env:IMPORT_SHARDS)
-          $deltaPartial = '${{ github.event_name }}' -eq 'push' -and $env:DELTA_MODE -ceq 'Partial' -and
+          $deltaPartial = $env:GITHUB_EVENT_NAME -eq 'push' -and $env:DELTA_MODE -ceq 'Partial' -and
             $partialShards.Count -gt 0
           $mapCertified = $false
 
@@ -875,12 +903,13 @@ jobs:
             else {
               $escalate = $false
               $requiresValidation = $true
+              $requiresShards = $true
               $selected = @($partialShards)
               Write-Host "post-merge delta: re-running $($partialShards.Count) shard(s) the base branch's later commits reach; importing $($importShards.Count) from the pull request run"
             }
           }
           elseif (-not $eventCanReduce) {
-            Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
+            Write-Host "event is '$($env:GITHUB_EVENT_NAME)' with no pull request head to scope to - running the full matrix"
           }
           else {
             # Non-runtime classification depends only on the PR's exact base-to-head path set, so
@@ -890,7 +919,7 @@ jobs:
             $pathRequiresValidation = $true
             try {
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
-                  -PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json
+                  -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
               $pathRequiresValidation = Read-RequiredJsonBoolean `
@@ -903,6 +932,7 @@ jobs:
             if (-not $pathRequiresValidation) {
               $escalate = $false
               $requiresValidation = $false
+              $requiresShards = $false
               $selected = @()
             }
             elseif ($mapCertified) {
@@ -912,7 +942,7 @@ jobs:
               try {
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
-                    -PullRequestHeadSha $env:PR_HEAD_SHA `
+                    -PullRequestHeadSha $changeHeadSha `
                     -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
@@ -932,12 +962,24 @@ jobs:
                 }
                 $escalate = $selectionEscalated
                 $requiresValidation = $true
+                # A build-only change (.editorconfig) must still compile - it can raise an analyzer
+                # to error - but no test shard can be affected by it. The build jobs and the matrix
+                # share requires_validation, so the distinction needs its own flag. Absent property
+                # means an older selector: fail closed by running the shards.
+                $shardsFlag = $result.PSObject.Properties['requiresShards']
+                $requiresShards = if ($null -eq $shardsFlag) { $true }
+                                  else { Read-RequiredJsonBoolean -Object $result -PropertyName 'requiresShards' }
                 $selected = @($shardsProperty.Value)
+                $routesProperty = $result.PSObject.Properties['routes']
+                if ($null -ne $routesProperty -and $routesProperty.Value -is [System.Array]) {
+                  $selectionRoutes = @($routesProperty.Value | ForEach-Object { [string] $_ })
+                }
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
                 $escalate = $true
                 $requiresValidation = $true
+                $requiresShards = $true
                 $selected = @()
               }
             }
@@ -972,6 +1014,20 @@ jobs:
             else {
               Write-Host "selected $($matrixShards.Count) of $($all.Count) shard(s)"
               foreach ($s in $matrixShards) { Write-Host "  $($s.name)" }
+            }
+          }
+
+          # Sweeps and conformance windows run nightly, not on every pull request and push; which
+          # selected ones may be deferred, and why, is Get-DeferredNightlyShards (CiWorkloadKinds.ps1).
+          # An escalated selection still runs the complete matrix.
+          if (-not $escalate -and $env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {
+            . ./tools/TestImpact/CiWorkloadKinds.ps1
+            $deferredNames = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]] @(Get-DeferredNightlyShards -Shards @($matrixShards) -Routes $selectionRoutes),
+                [System.StringComparer]::Ordinal)
+            if ($deferredNames.Count -gt 0) {
+              $matrixShards = @($matrixShards | Where-Object { -not $deferredNames.Contains([string] $_.name) })
+              Write-Host "deferred $($deferredNames.Count) nightly-only shard(s) to the nightly coverage run; running $($matrixShards.Count)"
             }
           }
 
@@ -1032,6 +1088,11 @@ jobs:
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "requires_validation=$($requiresValidation.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Separate from requires_validation because the build jobs and the shard matrix share
+          # that flag. A build-only change still compiles - .editorconfig can raise an analyzer to
+          # error - but cannot affect any test.
+          "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
                      elseif (-not $requiresValidation) { 'Non-runtime-only change; no model or test jobs required.' }
@@ -1040,7 +1101,7 @@ jobs:
 
           $carried = @()
           $runWithoutInstrumentation = @()
-          if ('${{ inputs.collect_coverage_everywhere }}' -eq 'true') {
+          if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') {
             # INCREMENTAL INSTRUMENTATION. A shard whose covered files are byte-identical between
             # the previous map's commit and this one has line ranges that still mean what they
             # said, so its digest is carried forward instead of re-measured - instrumentation
@@ -1089,7 +1150,7 @@ jobs:
               $nn.Clear()
             }
 
-            $prevMapOk = (Test-Path map/shard-map.json) -and ('${{ steps.selftest.outcome }}' -eq 'success')
+            $prevMapOk = (Test-Path map/shard-map.json) -and ($env:SELFTEST_OUTCOME -eq 'success')
             if ($prevMapOk -and $nn.Count -ge 2) {
               try {
                 $prevMap = Get-Content map/shard-map.json -Raw | ConvertFrom-Json
@@ -1102,11 +1163,15 @@ jobs:
                 # octal-escaped non-ASCII path can never equal a map key.
                 $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $prevSha HEAD)
                 if ($LASTEXITCODE -ne 0) { throw "git diff from $prevSha failed" }
+                # The manifest lets a changed test source dirty only the shards that run it. Without
+                # it every tests/ change disabled every carry, so the nightly re-instrumented all
+                # 164 shards, ran 5-22 hours, starved for runners and never re-based the map.
                 ./tools/TestImpact/Select-CoverageShards.ps1 `
                     -PreviousMap map/shard-map.json `
                     -ChangedFiles $changedFiles `
                     -AllShards @($all.name) `
                     -NoCoverageShards $nn `
+                    -ShardManifestFile shard-manifest.json `
                     -CarryForwardDirectory carried-digests `
                     -OutFile covsplit.json
                 if ($LASTEXITCODE -ne 0) { throw "Select-CoverageShards exited $LASTEXITCODE" }
@@ -1138,9 +1203,9 @@ jobs:
             [ordered]@{
               schemaVersion = 1
               forcedCoverage = $true
-              runId = '${{ github.run_id }}'
-              runAttempt = '${{ github.run_attempt }}'
-              sha = '${{ github.sha }}'
+              runId = [string] $env:GITHUB_RUN_ID
+              runAttempt = [string] $env:GITHUB_RUN_ATTEMPT
+              sha = [string] $env:GITHUB_SHA
               mapRunId = $mapRunId
               shardNames = @($all.name)
               carriedShardNames = @($carried)
@@ -1187,7 +1252,10 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # requires_shards is the build-only gate: a change that can break the compile but cannot reach
+    # any test (.editorconfig) keeps requires_validation true so the build still runs, and turns
+    # this off. Every other path leaves it true, and an escalation forces it true.
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}

@@ -68,6 +68,7 @@ $ErrorActionPreference = 'Stop'
 
 enum ChangedPathImpact {
     NonRuntime
+    BuildOnly
     MapCandidate
     SelectionControl
     FullValidation
@@ -75,8 +76,16 @@ enum ChangedPathImpact {
 
 $script:SharedInfrastructureFiles = @(
     'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
-    'global.json', 'nuget.config', 'NuGet.config', '.editorconfig'
+    'global.json', 'nuget.config', 'NuGet.config'
 )
+# Compile the change, but do not run the test matrix for it. An .editorconfig edit can raise an
+# analyzer to error and fail the BUILD, which is why it cannot be NonRuntime - the build jobs and
+# the shard matrix share one gate, so calling it non-runtime would skip the compile that catches it.
+# It cannot change runtime behaviour: nothing under src/AiDotNet.Generators reads
+# AnalyzerConfigOptions (verified by grep), so no generated test text depends on it, and the
+# remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
+# to prove an indent rule is the single largest unjustified escalation measured on real PRs.
+$script:BuildOnlyFiles = @('.editorconfig')
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -92,6 +101,18 @@ $script:SelectionControlPaths = @(
 $script:BuildTimeDirectories = @('src/AiDotNet.Generators/')
 $script:FullValidationDirectories = @('.github/actions/', '.github/scripts/') + $script:BuildTimeDirectories
 $script:SelectionControlDirectories = @('tools/TestImpact/')
+# Trees that contain no compilable product code, so no change inside them can alter a C# test.
+#
+# MEASURED, NOT ASSUMED. website/ holds the documentation site: on master it contains zero .cs and
+# zero .csproj files and appears nowhere in AiDotNet.sln, and its pipelines (ci-website.yml,
+# deploy-website.yml) are already listed above as independent. Until this entry existed a change to
+# website/package-lock.json fell through to MapCandidate, found no coverage entry, and escalated --
+# PR #2223 changed that one JavaScript lockfile and ran all 164 shards.
+#
+# AN ALLOWLIST, and deliberately short. A directory earns a place here only by demonstrably holding
+# nothing the solution compiles; Assert-NonRuntimeDirectories re-checks that on every run, so the
+# day someone adds a project under one of these the selector stops trusting it.
+$script:NonRuntimeDirectories = @('website/')
 # These helpers cannot choose shards or certify validation. They are exercised by the
 # mandatory tooling checks before selection, including real HTTP transfer regressions.
 # Keep this exact: unknown helpers and selection/certificate policy remain fail-closed.
@@ -165,6 +186,20 @@ function Get-ChangedPathImpact {
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
     }
+    # Checked after SelectionControl and SharedInfrastructure so a build-only name can never
+    # downgrade a path those already claimed.
+    $buildOnlyName = [System.IO.Path]::GetFileName($normalized)
+    foreach ($entry in $script:BuildOnlyFiles) {
+        if ($buildOnlyName -ieq $entry) { return [ChangedPathImpact]::BuildOnly }
+    }
+
+    # AFTER shared infrastructure, so a build file keeps its meaning wherever it sits, and before the
+    # markdown and map-candidate rules, so a non-product tree is spared whatever its file extension.
+    foreach ($entry in $script:NonRuntimeDirectories) {
+        if ($normalized.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) {
+            return [ChangedPathImpact]::NonRuntime
+        }
+    }
 
     # Markdown cannot alter a build or runtime. Known independent workflows have their own triggers
     # and jobs; changing one cannot alter this validation workflow. This is an allowlist so a newly
@@ -188,6 +223,30 @@ function Get-ChangedPathImpact {
     }
 
     return [ChangedPathImpact]::MapCandidate
+}
+
+<#
+.SYNOPSIS
+Fails when a directory trusted as non-runtime has started holding compilable code.
+
+.DESCRIPTION
+The entries in $script:NonRuntimeDirectories are trusted because they contain nothing the solution
+builds. That is a fact about the tree today, not a law, and the cost of it silently ceasing to be
+true is tests skipped on a change that needed them. So it is re-checked rather than remembered.
+#>
+function Assert-NonRuntimeDirectories {
+    param([string] $Root = (Get-Location).Path)
+    foreach ($entry in $script:NonRuntimeDirectories) {
+        $directory = Join-Path $Root ($entry.TrimEnd('/'))
+        if (-not (Test-Path -LiteralPath $directory)) { continue }
+        $compilable = Get-ChildItem -LiteralPath $directory -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in @('.cs', '.csproj', '.fsproj', '.vbproj') } |
+            Select-Object -First 1
+        if ($compilable) {
+            throw ("$entry is treated as non-runtime but now contains compilable code " +
+                "($($compilable.FullName)); remove it from NonRuntimeDirectories or move the code.")
+        }
+    }
 }
 
 function Test-RangeOverlap {
@@ -1944,6 +2003,54 @@ if ($SelfTest) {
     $expected = @('Alpha', 'Beta', 'HeavyNoCoverage')
     try { Assert-ShardMap -Map $map -Expected $expected } catch { [void] $failures.Add("valid map rejected: $_") }
 
+    # CLASSIFICATION PINNED TO REAL PULL REQUESTS, because the failures this feature keeps shipping
+    # are classification failures and none of them were visible from a synthetic map. Each case below
+    # is the exact path set of a merged or open pull request, with the shard count it actually ran.
+    #
+    #   #1889  CHANGELOG.md + .release-please-manifest.json          ran 1 of 164   (correct)
+    #   #2223  website/package-lock.json                             ran 164 of 164 (the defect)
+    #   #2204  src/ActivationFunctions/GumbelSoftmaxActivation.cs    ran 49 of 164
+    #   #2098  98 .cs files across generators and models             ran 161 of 164
+    $classification = @(
+        @{ Pr = 1889; Path = 'CHANGELOG.md'; Expect = [ChangedPathImpact]::NonRuntime },
+        @{ Pr = 1889; Path = '.release-please-manifest.json'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 2223; Path = 'website/package-lock.json'; Expect = [ChangedPathImpact]::NonRuntime },
+        @{ Pr = 2223; Path = 'website/src/pages/index.tsx'; Expect = [ChangedPathImpact]::NonRuntime },
+        @{ Pr = 2204; Path = 'src/ActivationFunctions/GumbelSoftmaxActivation.cs'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 2098; Path = 'src/AiDotNet.Generators/PaperOptimizerAnalyzer.cs'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = 'Directory.Build.props'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = 'website/Directory.Build.props'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = '.github/workflows/sonarcloud.yml'; Expect = [ChangedPathImpact]::SelectionControl }
+    )
+    foreach ($case in $classification) {
+        $actual = Get-ChangedPathImpact -Path $case.Path
+        Assert-True ($actual -eq $case.Expect) (
+            "classification: $($case.Path) expected $($case.Expect) but got $actual" +
+            $(if ($case.Pr) { " (PR #$($case.Pr))" } else { '' }))
+    }
+    # THE TRIP-WIRE, ARMED. Pointed at the repository root rather than $PSScriptRoot: this script
+    # lives in tools/TestImpact, so the original looked for tools/TestImpact/website, found nothing,
+    # and passed without checking anything -- a guard that cannot fail is not a guard.
+    $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    try { Assert-NonRuntimeDirectories -Root $repositoryRoot } catch {
+        [void] $failures.Add("non-runtime directory trip-wire: $_")
+    }
+    # And proved to fire, against a tree built for the purpose, so the check above is not merely
+    # passing because the directory happens to be absent from this checkout.
+    $tripwire = Join-Path ([IO.Path]::GetTempPath()) ("nonruntime-" + [Guid]::NewGuid().ToString('n'))
+    try {
+        [void] (New-Item -ItemType Directory -Path (Join-Path $tripwire 'website/src') -Force)
+        Set-Content -LiteralPath (Join-Path $tripwire 'website/src/Leaked.cs') -Value 'class Leaked {}'
+        Assert-Throws { Assert-NonRuntimeDirectories -Root $tripwire } `
+            'a non-runtime directory holding compilable code must be rejected'
+        Remove-Item -LiteralPath (Join-Path $tripwire 'website/src/Leaked.cs') -Force
+        try { Assert-NonRuntimeDirectories -Root $tripwire } catch {
+            [void] $failures.Add("trip-wire rejected a clean non-runtime directory: $_")
+        }
+    } finally {
+        Remove-Item -LiteralPath $tripwire -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) }
     Assert-True (-not $r.Escalate) 'a mapped, fully covered change must not escalate'
     Assert-True $r.RequiresValidation 'a mapped change must require validation'
@@ -2321,6 +2428,27 @@ file class Private { }
         Assert-True ($null -eq (Get-CSharpTestShape -Text $text).ParseError) `
             "a literal was misparsed and reported unbalanced braces for: $($case.Name)"
     }
+
+    # .editorconfig must compile but must not drag in the shard matrix. It cannot change runtime
+    # behaviour - nothing under src/AiDotNet.Generators reads AnalyzerConfigOptions - but it can
+    # raise an analyzer to error, so it is BuildOnly rather than NonRuntime. Measured on PR #2112,
+    # this was one of the two files escalating it to 130 shards.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        '.editorconfig is not classified BuildOnly'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
+        'a nested .editorconfig is not classified BuildOnly'
+    # The neighbours it used to sit beside must keep escalating: they really can change compilation
+    # output, not merely diagnostics.
+    foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {
+        Assert-True ((Get-ChangedPathImpact -Path $shared) -eq [ChangedPathImpact]::FullValidation) `
+            "$shared stopped requiring full validation"
+    }
+    # BuildOnly must never be mistaken for NonRuntime: that shares a gate with the build jobs, so
+    # an analyzer promoted to error would ship without ever being compiled.
+    Assert-True ((Get-ChangedPathImpact -Path '.editorconfig') -ne [ChangedPathImpact]::NonRuntime) `
+        '.editorconfig was downgraded to NonRuntime, which would skip the build that catches it'
+    Assert-True ((Get-ChangedPathImpact -Path 'src/AiDotNet.Generators/TestScaffoldGenerator.cs') -eq [ChangedPathImpact]::FullValidation) `
+        'a generator edit stopped requiring full validation'
     $fqns = @($shape.Tests | Where-Object { -not $_.PrefixOnly } | ForEach-Object Fqn | Sort-Object)
     $expectedFqns = @('AiDotNet.Tests.IntegrationTests.Finance.TradingTests+Nested.Inner',
         'AiDotNet.Tests.IntegrationTests.Finance.TradingTests.Converges',
@@ -2821,8 +2949,11 @@ function Exit-Escalated {
 
     if ($Message) { Write-Host "::warning::$Message" }
     # Same shape as a successful selection, routes included: consumers read it under StrictMode.
+    # requiresShards is true here on purpose: an escalation is the fail-closed path, so it must
+    # never be the thing that talks the workflow out of running the matrix.
     $result = [pscustomobject]@{
-        escalate = $true; requiresValidation = $true; reason = $Reason; reasons = @(); routes = @(); shards = @()
+        escalate = $true; requiresValidation = $true; requiresShards = $true
+        reason = $Reason; reasons = @(); routes = @(); shards = @()
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -3032,15 +3163,38 @@ try {
         }
     }
 
+    # A build-only change still has to COMPILE - an .editorconfig edit can raise an analyzer to
+    # error - but it cannot alter runtime behaviour, so it must not drag in the shard matrix. The
+    # build jobs and the shard matrix share requiresValidation today, so the distinction needs its
+    # own flag rather than reusing that one.
+    $impacts = @($currentPaths | ForEach-Object { Get-ChangedPathImpact -Path ([string] $_) })
+    $buildOnlyChange = $impacts.Count -gt 0 -and
+        @($impacts | Where-Object { $_ -eq [ChangedPathImpact]::BuildOnly }).Count -gt 0 -and
+        @($impacts | Where-Object {
+            $_ -ne [ChangedPathImpact]::BuildOnly -and $_ -ne [ChangedPathImpact]::NonRuntime
+        }).Count -eq 0
+    if ($buildOnlyChange) {
+        Write-Host 'build-only change: compiling it, but no test shard can be affected by it'
+    }
+    $emittedShards = @(if ($buildOnlyChange) { @() } else { $selection.Shards })
+
     $result = [pscustomobject]@{
         escalate          = $selection.Escalate
-        requiresValidation = $selection.RequiresValidation
-        reason            = $(if ($selection.Escalate) { 'impact-unknown' }
+        # A build-only change adds no mapped path, so Select-ImpactedShards reports no validation
+        # needed. The workflow requires validation for anything that compiles and treats false as
+        # the selector contradicting it - which sent every .editorconfig change to the full matrix.
+        # It must compile, so validation stays required; only the shard matrix is skipped.
+        requiresValidation = [bool] ($selection.RequiresValidation -or $buildOnlyChange)
+        requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
+        reason            = $(if ($buildOnlyChange) { 'build-only' }
+                              elseif ($selection.Escalate) { 'impact-unknown' }
                               elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
                               else { 'selected' })
         reasons           = $selection.Reasons
+        # @() inside a $( ) subexpression unrolls to nothing, which serialises as null and makes
+        # every consumer that binds this to a [string[]] fail. Build the array first.
+        shards            = $emittedShards
         routes            = @($selection.Routes)
-        shards            = $selection.Shards
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }
