@@ -27,7 +27,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// // Create an AudioLM model for codec-based speech synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 16000);
 ///

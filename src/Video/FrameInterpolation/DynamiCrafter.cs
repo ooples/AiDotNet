@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2310.12190",
     Year = 2024,
     Authors = "Jinbo Xing, Menghan Xia, Yong Zhang, Haoxin Chen, Wangbo Yu, Hanyuan Liu, Gongye Liu, Xintao Wang, Ying Shan, Tien-Tsin Wong")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 64,
+                Source = "Xing et al. 2024, Sec. 4: the projector and newly injected image "
+                        + "cross-attention layers are trained for 1000K steps at a learning rate of 1e-4 "
+                        + "and a valid mini-batch size of 64. The optimizer is left unspecified because "
+                        + "the paper names none -- the Adam its text appears to mention is the author "
+                        + "name Adam Polyak in a reference.")]
 public partial class DynamiCrafter<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -89,7 +96,9 @@ public partial class DynamiCrafter<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new DynamiCrafterOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

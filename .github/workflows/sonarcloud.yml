@@ -1,4 +1,4 @@
-name: Build & SonarCloud
+﻿name: Build & SonarCloud
 
 permissions: read-all
 
@@ -15,7 +15,7 @@ on:
       - 'ci-proof/**'
   pull_request:
     # ready_for_review is REQUIRED: the build/test/sonar jobs below are gated on
-    # `github.event.pull_request.draft != true`, so without this event type a draft→ready
+    # `github.event.pull_request.draft != true`, so without this event type a draftâ†’ready
     # transition never re-triggers them and the PR is left with no Build/Tests run.
     types: [opened, synchronize, reopened, ready_for_review]
   # Merge-queue compatibility: when the repository enables a queue, this is the authoritative
@@ -69,11 +69,11 @@ env:
   #
   # Streaming-pool threshold engagement (AIDOTNET_STREAMING_THRESHOLD_PARAMS
   # below the compiled 10 B default) has been attempted twice in this PR:
-  #  1. b43dd9323: 1 M — produced
+  #  1. b43dd9323: 1 M â€” produced
   #     `WeightRegistry.Configure: existing streaming pool has N registered
   #     entries` because the pool state leaked across xUnit-parallel
   #     collections.
-  #  2. 81052b16f: 100 M — even with `WeightRegistry.Reset()` in
+  #  2. 81052b16f: 100 M â€” even with `WeightRegistry.Reset()` in
   #     NeuralNetworkModelTestBase.InitializeAsync (commit 8ab358d2b), this
   #     produced a new class of failures: `Streaming pool: handle N is
   #     unknown` on SimCSE and other models. The pool was being reset, but
@@ -93,7 +93,7 @@ env:
   # adapter; only the JSON is honored.)
 
   # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
-  # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
+  # segments, batched Gen-2 collections) â€” Workstation GC's per-thread heap
   # mode keeps Gen-2 retention pinned to the test thread for longer than we
   # can afford under parallel test collections. ServerGC ALSO triggers
   # background concurrent collection more aggressively, reducing the chance
@@ -312,7 +312,7 @@ jobs:
           dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -333,7 +333,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -360,7 +360,7 @@ jobs:
 
       # The full-solution Release build spans three target frameworks
       # (net471/net8.0/net10.0) across ~20 projects and overflows the hosted
-      # runner's ~14 GB free space — the runner worker dies with
+      # runner's ~14 GB free space â€” the runner worker dies with
       # "No space left on device" mid-build (not a compile error). Reclaim
       # ~25 GB by deleting preinstalled toolchains this .NET build never uses.
       # We deliberately do NOT touch /usr/share/dotnet (the SDK the build needs).
@@ -372,8 +372,8 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/share/swift /usr/local/share/boost || true
           sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
-          # The toolchain deletions above reclaim ~25 GB, leaving ~39 GB free — ample for this .NET
-          # build — so we skip `docker image prune --all` here: on a fresh runner the preloaded images
+          # The toolchain deletions above reclaim ~25 GB, leaving ~39 GB free â€” ample for this .NET
+          # build â€” so we skip `docker image prune --all` here: on a fresh runner the preloaded images
           # aren't dangling (so a dangling-only prune reclaims ~nothing), and a full --all prune is a
           # slow, variable step that can contend with any concurrent Docker use on the runner.
           echo "Disk after cleanup:"; df -h /
@@ -412,7 +412,7 @@ jobs:
             printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
             echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
           else
-            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set — skipping (offline aidn2 verification unavailable in this build)."
+            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set â€” skipping (offline aidn2 verification unavailable in this build)."
           fi
           if [ -n "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" ]; then
             printf '%s' "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" > src/BuildKey/LicenseRevocation.json
@@ -619,6 +619,10 @@ jobs:
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
       requires_validation: ${{ steps.select.outputs.requires_validation }}
+      # JSON boolean, and deliberately NOT the same as requires_validation: the build jobs consume
+      # that one, so a build-only change (.editorconfig) has to keep it true while still skipping
+      # every test shard. Absent or malformed leaves the matrix unauthorized, same as above.
+      requires_shards: ${{ steps.select.outputs.requires_shards }}
       # Slugs of the shards deliberately not run, for the regression analyzer. It treats any
       # baseline shard with no current artifact as Incomplete and fails the policy on it - which
       # is right for a host that died and wrong for a shard we chose to skip.
@@ -738,6 +742,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Receive-RequiredArtifact self-test failed' }
           ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub API retry self-test failed' }
+          ./.github/scripts/Set-ShardEnvironment.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Set-ShardEnvironment self-test failed' }
+          ./.github/scripts/New-CoverageRunSettings.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'New-CoverageRunSettings self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -772,6 +780,10 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           PARTIAL_SHARDS: ${{ needs.validation-source.outputs.partial_shards }}
           IMPORT_SHARDS: ${{ needs.validation-source.outputs.import_shards }}
+          # The script body carries no GitHub expressions, so the 21,000-character expression cap
+          # does not apply to it. Everything it needs from the context comes in through env.
+          SELFTEST_OUTCOME: ${{ steps.selftest.outcome }}
+          COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
@@ -818,7 +830,13 @@ jobs:
 
           $escalate = $true
           $requiresValidation = $true
+          # Defaults to true so every path that does not explicitly prove a change is build-only
+          # still runs the shard matrix. Only the selector may lower it.
+          $requiresShards = $true
           $selected = @()
+          # Per-shard reasons from the mapped selector ("<shard> <= <why>"). Null on every other
+          # path, which makes the nightly-only deferral below keep everything.
+          $selectionRoutes = $null
 
           # Two independent reasons to refuse to reduce, reported separately so the log says which
           # one applied. Folding them into one flag made a self-test failure on a PR print "not a
@@ -830,15 +848,29 @@ jobs:
           # validated, selected over what the base branch added since, and named the overlap to
           # re-run. This step never selects a master delta itself, so there is one reuse mechanism.
           # Merge groups, schedules and dispatches always run the full matrix.
-          $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
-          $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+          $selectorTrusted = $env:SELFTEST_OUTCOME -eq 'success'
+          # A post-merge push of a GitHub "Merge pull request" commit has exactly the shape the selector
+          # reads from refs/pull/N/merge: two parents, the first the previous tip and the second the
+          # pull request head, so its change is that pull request's change. Without this every merge to
+          # master ran all 164 shards ("event is 'push', not a pull request"), a full ~2-hour run
+          # behind every merged pull request, competing for runners with every open one. A squash or
+          # rebase landing has one parent, no head to scope to, and keeps the full matrix.
+          $eventName = $env:GITHUB_EVENT_NAME
+          $changeHeadSha = [string] $env:PR_HEAD_SHA
+          if ($eventName -eq 'push') {
+            $changeHeadSha = ''
+            $landing = @(((& git rev-list --parents -n 1 HEAD) -join ' ').Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+            if ($LASTEXITCODE -eq 0 -and $landing.Count -eq 3) { $changeHeadSha = $landing[2] }
+          }
+          $eventCanReduce  = $eventName -eq 'pull_request' -or
+              ($eventName -eq 'push' -and -not [string]::IsNullOrEmpty($changeHeadSha))
           function ConvertFrom-ShardList([string] $Json) {
             if ([string]::IsNullOrWhiteSpace($Json)) { return @() }
             return @($Json | ConvertFrom-Json | ForEach-Object { [string] $_ } | Where-Object { $_ })
           }
           $partialShards = @(ConvertFrom-ShardList $env:PARTIAL_SHARDS)
           $importShards = @(ConvertFrom-ShardList $env:IMPORT_SHARDS)
-          $deltaPartial = '${{ github.event_name }}' -eq 'push' -and $env:DELTA_MODE -ceq 'Partial' -and
+          $deltaPartial = $env:GITHUB_EVENT_NAME -eq 'push' -and $env:DELTA_MODE -ceq 'Partial' -and
             $partialShards.Count -gt 0
           $mapCertified = $false
 
@@ -871,12 +903,13 @@ jobs:
             else {
               $escalate = $false
               $requiresValidation = $true
+              $requiresShards = $true
               $selected = @($partialShards)
               Write-Host "post-merge delta: re-running $($partialShards.Count) shard(s) the base branch's later commits reach; importing $($importShards.Count) from the pull request run"
             }
           }
           elseif (-not $eventCanReduce) {
-            Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
+            Write-Host "event is '$($env:GITHUB_EVENT_NAME)' with no pull request head to scope to - running the full matrix"
           }
           else {
             # Non-runtime classification depends only on the PR's exact base-to-head path set, so
@@ -886,7 +919,7 @@ jobs:
             $pathRequiresValidation = $true
             try {
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
-                  -PullRequestHeadSha $env:PR_HEAD_SHA -OutFile path-classification.json
+                  -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
               $pathRequiresValidation = Read-RequiredJsonBoolean `
@@ -899,6 +932,7 @@ jobs:
             if (-not $pathRequiresValidation) {
               $escalate = $false
               $requiresValidation = $false
+              $requiresShards = $false
               $selected = @()
             }
             elseif ($mapCertified) {
@@ -908,7 +942,7 @@ jobs:
               try {
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
-                    -PullRequestHeadSha $env:PR_HEAD_SHA `
+                    -PullRequestHeadSha $changeHeadSha `
                     -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
@@ -928,12 +962,24 @@ jobs:
                 }
                 $escalate = $selectionEscalated
                 $requiresValidation = $true
+                # A build-only change (.editorconfig) must still compile - it can raise an analyzer
+                # to error - but no test shard can be affected by it. The build jobs and the matrix
+                # share requires_validation, so the distinction needs its own flag. Absent property
+                # means an older selector: fail closed by running the shards.
+                $shardsFlag = $result.PSObject.Properties['requiresShards']
+                $requiresShards = if ($null -eq $shardsFlag) { $true }
+                                  else { Read-RequiredJsonBoolean -Object $result -PropertyName 'requiresShards' }
                 $selected = @($shardsProperty.Value)
+                $routesProperty = $result.PSObject.Properties['routes']
+                if ($null -ne $routesProperty -and $routesProperty.Value -is [System.Array]) {
+                  $selectionRoutes = @($routesProperty.Value | ForEach-Object { [string] $_ })
+                }
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
                 $escalate = $true
                 $requiresValidation = $true
+                $requiresShards = $true
                 $selected = @()
               }
             }
@@ -968,6 +1014,20 @@ jobs:
             else {
               Write-Host "selected $($matrixShards.Count) of $($all.Count) shard(s)"
               foreach ($s in $matrixShards) { Write-Host "  $($s.name)" }
+            }
+          }
+
+          # Sweeps and conformance windows run nightly, not on every pull request and push; which
+          # selected ones may be deferred, and why, is Get-DeferredNightlyShards (CiWorkloadKinds.ps1).
+          # An escalated selection still runs the complete matrix.
+          if (-not $escalate -and $env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {
+            . ./tools/TestImpact/CiWorkloadKinds.ps1
+            $deferredNames = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]] @(Get-DeferredNightlyShards -Shards @($matrixShards) -Routes $selectionRoutes),
+                [System.StringComparer]::Ordinal)
+            if ($deferredNames.Count -gt 0) {
+              $matrixShards = @($matrixShards | Where-Object { -not $deferredNames.Contains([string] $_.name) })
+              Write-Host "deferred $($deferredNames.Count) nightly-only shard(s) to the nightly coverage run; running $($matrixShards.Count)"
             }
           }
 
@@ -1028,6 +1088,11 @@ jobs:
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "requires_validation=$($requiresValidation.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Separate from requires_validation because the build jobs and the shard matrix share
+          # that flag. A build-only change still compiles - .editorconfig can raise an analyzer to
+          # error - but cannot affect any test.
+          "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
                      elseif (-not $requiresValidation) { 'Non-runtime-only change; no model or test jobs required.' }
@@ -1036,7 +1101,7 @@ jobs:
 
           $carried = @()
           $runWithoutInstrumentation = @()
-          if ('${{ inputs.collect_coverage_everywhere }}' -eq 'true') {
+          if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') {
             # INCREMENTAL INSTRUMENTATION. A shard whose covered files are byte-identical between
             # the previous map's commit and this one has line ranges that still mean what they
             # said, so its digest is carried forward instead of re-measured - instrumentation
@@ -1061,7 +1126,7 @@ jobs:
             # lines between here and the real arrays' closer - 220 names instead of 92. Caught
             # only because the proof asserted the expected count. A trimmed-equality match cannot
             # self-match, because this line trims to 'foreach (...)'.
-            $nn = [System.Collections.Generic.List[string]]::new()
+            $nn = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
             $wfLines = Get-Content '.github/workflows/sonarcloud.yml'
             foreach ($marker in @('$heavyShards = @(', '$performanceShards = @(')) {
               $idx = -1
@@ -1076,13 +1141,16 @@ jobs:
                 }
               }
             }
-            Write-Host "no-coverage shard list parsed from workflow: $($nn.Count)"
-            if ($nn.Count -lt 2 -or $nn.Count -gt 200) {
+            foreach ($declared in $all) {
+              if ($declared.PSObject.Properties['heavy'] -and $declared.heavy -eq $true) { [void] $nn.Add([string] $declared.name) }
+            }
+            Write-Host "no-coverage shard list parsed from workflow and heavy entries: $($nn.Count)"
+            if ($nn.Count -lt 2 -or $nn.Count -gt $all.Count) {
               Write-Host "::warning::no-coverage list parse looks wrong ($($nn.Count) names) - carrying nothing"
               $nn.Clear()
             }
 
-            $prevMapOk = (Test-Path map/shard-map.json) -and ('${{ steps.selftest.outcome }}' -eq 'success')
+            $prevMapOk = (Test-Path map/shard-map.json) -and ($env:SELFTEST_OUTCOME -eq 'success')
             if ($prevMapOk -and $nn.Count -ge 2) {
               try {
                 $prevMap = Get-Content map/shard-map.json -Raw | ConvertFrom-Json
@@ -1095,11 +1163,15 @@ jobs:
                 # octal-escaped non-ASCII path can never equal a map key.
                 $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $prevSha HEAD)
                 if ($LASTEXITCODE -ne 0) { throw "git diff from $prevSha failed" }
+                # The manifest lets a changed test source dirty only the shards that run it. Without
+                # it every tests/ change disabled every carry, so the nightly re-instrumented all
+                # 164 shards, ran 5-22 hours, starved for runners and never re-based the map.
                 ./tools/TestImpact/Select-CoverageShards.ps1 `
                     -PreviousMap map/shard-map.json `
                     -ChangedFiles $changedFiles `
                     -AllShards @($all.name) `
                     -NoCoverageShards $nn `
+                    -ShardManifestFile shard-manifest.json `
                     -CarryForwardDirectory carried-digests `
                     -OutFile covsplit.json
                 if ($LASTEXITCODE -ne 0) { throw "Select-CoverageShards exited $LASTEXITCODE" }
@@ -1131,9 +1203,9 @@ jobs:
             [ordered]@{
               schemaVersion = 1
               forcedCoverage = $true
-              runId = '${{ github.run_id }}'
-              runAttempt = '${{ github.run_attempt }}'
-              sha = '${{ github.sha }}'
+              runId = [string] $env:GITHUB_RUN_ID
+              runAttempt = [string] $env:GITHUB_RUN_ATTEMPT
+              sha = [string] $env:GITHUB_SHA
               mapRunId = $mapRunId
               shardNames = @($all.name)
               carriedShardNames = @($carried)
@@ -1180,7 +1252,10 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # requires_shards is the build-only gate: a change that can break the compile but cannot reach
+    # any test (.editorconfig) keeps requires_validation true so the build still runs, and turns
+    # this off. Every other path leaves it true, and an escalation forces it true.
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -1204,7 +1279,7 @@ jobs:
         # job with `IOException: No space left on device`. Drop the heaviest preinstalls
         # before tests start. ~25-30 GB freed.
         run: |
-          # NOTE: do NOT delete /usr/share/dotnet/shared — actions/setup-dotnet
+          # NOTE: do NOT delete /usr/share/dotnet/shared â€” actions/setup-dotnet
           # below installs the requested SDK alongside the runner-image
           # frameworks, and several reusable composite actions (and our own
           # later steps) expect the preinstalled host frameworks to remain
@@ -1271,428 +1346,37 @@ jobs:
           # names, and names contain characters PowerShell would parse inside a quoted literal.
           COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
           COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
-          # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
-          # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
+          # Dedicated enterprise CI license key (save-capable â€” lifts the persistence op cap under capability
+          # gating â€” with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
           # suite is licensed with no network round-trip; the key still validates online for any job/consumer
           # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+          # Optional per-shard settings from .github/test-shards.yml, passed as environment so a
+          # value can never be parsed as script. `heavy: true` puts a shard on the heavy path
+          # without adding its name to the list below (the model-inventory sweeps and conformance
+          # windows use it). `env` is applied to the test process by Set-ShardEnvironment.ps1.
+          # `hangTimeout` replaces the 5-minute blame-hang limit for a shard whose single test
+          # legitimately runs longer (a sweep walks the whole inventory under a 30-minute Timeout).
+          SHARD_HEAVY: ${{ matrix.shard.heavy }}
+          SHARD_ENV: ${{ toJSON(matrix.shard.env) }}
+          SHARD_HANG_TIMEOUT: ${{ matrix.shard.hangTimeout }}
+          # `coverageIncludeDirectory`: a directory whose assemblies coverlet should also instrument when this
+          # shard collects coverage - the child worker's own AiDotNet copy, for shards that run models there.
+          SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}
+          # Passed as env, not interpolated into the script: a step's templated run block has a
+          # 21000-character expression limit, and inlining these two tipped it over (HTTP 422
+          # "Exceeded max expression length" on dispatch). yq does not catch that - it validates
+          # YAML, not GitHub's expression limits.
+          SHARD_PROJECT: ${{ matrix.shard.project }}
+          SHARD_FRAMEWORK: ${{ matrix.shard.framework }}
+          SHARD_NAME: ${{ matrix.shard.name }}
+          SHARD_FILTER: ${{ matrix.shard.filter }}
+          SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
         # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
         # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
-          # Sanitize shard name: remove/replace all characters invalid in file paths
-          $shardName = "${{ matrix.shard.name }}"
-          $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
-          $results = Join-Path "TestResults" $sanitizedShardName
-          New-Item -Path $results -ItemType Directory -Force | Out-Null
-
-          # Pre-test resource snapshot. Cancelled-runner shards (Diffusion
-          # S-prefix / T-Z, Unit-03 diffusion, ModelFamily-NN,
-          # Generated Layers A-M/N-Z)
-          # die with `The runner has received a shutdown signal` 2-6 min into
-          # test execution. The dotnet test step exits before producing TRX
-          # output so we have no idea what was running at OOM time. Dump
-          # memory + disk + CPU info on entry so the next cancellation has
-          # forensic data.
-          Write-Host "=== Pre-test resource snapshot ==="
-          Write-Host "Memory:"
-          free -h
-          Write-Host "Disk:"
-          df -h /
-          Write-Host "Processors:"
-          nproc
-
-          # Serialize only the known multi-GB model shards; other shards retain default parallelism.
-          $heavyShards = @(
-            'ModelFamily - Diffusion A-C',
-            'ModelFamily - Diffusion D-I',
-            'ModelFamily - Diffusion J-K',
-            'ModelFamily - Diffusion L',
-            'ModelFamily - Diffusion M A-Mi',
-            'ModelFamily - Diffusion M Mochi-Model',
-            'ModelFamily - Diffusion M Motion-MZ',
-            'ModelFamily - Diffusion N-R',
-            'ModelFamily - Diffusion SA-SD',
-            'ModelFamily - Diffusion SE-SP',
-            'ModelFamily - Diffusion Stable',
-            'ModelFamily - Diffusion Step-Sync',
-            'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A',
-            'ModelFamily - Generated Layers B',
-            'ModelFamily - Generated Layers C',
-            'ModelFamily - Generated Layers D',
-            'ModelFamily - Generated Layers E',
-            'ModelFamily - Generated Layers F',
-            'ModelFamily - Generated Layers G',
-            'ModelFamily - Generated Layers H-I',
-            'ModelFamily - Generated Layers J-L',
-            'ModelFamily - Generated Layers M A-Medi',
-            'ModelFamily - Generated Layers M MedS-Meta',
-            'ModelFamily - Generated Layers M MetaV-Mu',
-            'ModelFamily - Generated Layers N-O',
-            'ModelFamily - Generated Layers P A,C,I,L,N,P',
-            'ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y',
-            'ModelFamily - Generated Layers Q-R1',
-            'ModelFamily - Generated Layers R2-SAI',
-            'ModelFamily - Generated Layers SAL-SAM',
-            'ModelFamily - Generated Layers SAN-Sig',
-            'ModelFamily - Generated Layers Sil-Sq',
-            'ModelFamily - Generated Layers St-Su',
-            'ModelFamily - Generated Layers Sv-Sy',
-            'ModelFamily - Generated Layers T A-Tac',
-            'ModelFamily - Generated Layers T Tem-Tri',
-            'ModelFamily - Generated Layers U',
-            'ModelFamily - Generated Layers VA-VF',
-            'ModelFamily - Generated Layers Video',
-            'ModelFamily - Generated Layers Vi-VM',
-            'ModelFamily - Generated Layers Vo-VR',
-            'ModelFamily - Generated Layers W',
-            'ModelFamily - Generated Layers X',
-            'ModelFamily - Generated Layers Y-Z',
-            'ModelFamily - NeuralNetworks A-F',
-            'ModelFamily - NeuralNetworks G-L',
-            'ModelFamily - NeuralNetworks M-N',
-            'ModelFamily - NeuralNetworks O-R',
-            'ModelFamily - NeuralNetworks S',
-            'ModelFamily - NeuralNetworks T',
-            'ModelFamily - NeuralNetworks U-Z',
-            # TimeSeries/Activation/Loss: the double-precision Transformer/CNN forecasters
-            # (Autoformer, Chronos, DeepANT, LSTM-VAE, ...) each fit the 60 s [Fact] budget in
-            # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism —
-            # their managed-engine forward parallelizes over all cores, so N classes in flight
-            # oversubscribe the runner's 4 cores and stall well past 60 s. Serialize so each runs
-            # uncontended with the whole machine (the contention is CPU, not paper-scale heaviness, so
-            # these stay in the default gate rather than HeavyTimeout). #1706/#1305.
-            'ModelFamily - TimeSeries/Activation/Loss',
-            'ModelFamily - Code/Forecast/Segment/Survival',
-            'Unit - 03a Diffusion Core/Schedulers/Encoding',
-            'Unit - 03b1 Diffusion Preprocessors',
-            'Unit - 03b2 Diffusion DDPM',
-            'Unit - 03b3 Diffusion Control Guidance/Adapters',
-            'Unit - 03b4 Diffusion ControlNet Core A',
-            'Unit - 03b5 Diffusion ControlNet Core B',
-            'Unit - 03c1 Diffusion Contracts A-C',
-            'Unit - 03c2 Diffusion Contracts D-I',
-            'Unit - 03c3 Diffusion Contracts J-R',
-            'Unit - 03c4 Diffusion Contracts S',
-            'Unit - 03c5 Diffusion Contracts T-Z',
-            'Unit - 03c6 Editing Contracts A-I',
-            'Unit - 03c7 Editing Contracts J-Z',
-            'Unit - 03d1 Diffusion FastGen Image/VAE',
-            'Unit - 03d2 Diffusion FastGen Consistency/Turbo',
-            'Unit - 03d3 Diffusion FastGen Flow/AR',
-            'Unit - 03d4 Diffusion FastGen Schedulers',
-            'Unit - 03d5 Diffusion FastGen SDXL State',
-            'Unit - 03d6 Diffusion FastGen Flux State',
-            'Unit - 03d7 Diffusion FastGen Distillation',
-            'Unit - 03d8 Diffusion New Conditioners',
-            # Integration shards that instantiate paper-scale models (Document AI,
-            # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
-            # etc.) — serialize like the ModelFamily shards to stay under the runner
-            # memory envelope. The light integration letter-shards run parallel.
-            'Integration C - ComputerVision Detection',
-            'Integration C - ComputerVision Segmentation Models',
-            'Integration C - ComputerVision Segmentation Contracts',
-            # This clone-heavy shard previously exhausted a 16 GiB runner.
-            'Integration C - Core',
-            'Integration D',
-            'Integration E-G',
-            'Integration M',
-            'Integration N-O',
-            'Integration P-Q',
-            'Integration R',
-            'Integration S',
-            'Integration T-Z',
-            'Integration - Serial Perf',
-            'TopLevel - FederatedLearning',
-            'TopLevel - Audio/Onnx/Tokenization'
-          )
-          $heavyShard = $heavyShards -contains $shardName
-
-          # Coverage instrumentation distorts the CPU/wall ratios asserted by timing shards.
-          $performanceShards = @(
-            'Integration - Serial Perf',
-            'Integration - CPU Parallelism Probe'
-          )
-          $measuresTiming = $performanceShards -contains $shardName
-          # EVERY heavy shard serializes. D-F used to be carved out of this on the grounds that
-          # it needed "the repository's four-thread xUnit default" to fit the 45-minute budget, but
-          # that default no longer exists: tests/AiDotNet.Tests/xunit.runner.json now sets
-          # parallelizeTestCollections=false, so the carve-out bought nothing and only hid the fact
-          # that the shard was running one-at-a-time anyway -- straight into the OOM killer. D-F is
-          # now split into D/E/F, each serialized like every other heavy shard and each given a
-          # 60-minute ceiling to pay for the lost concurrency.
-          $serializeShard = $heavyShard
-          # Heavy and timing shards normally skip coverage - the first for memory, the second
-          # because instrumentation distorts the ratios under test. That is right for PR
-          # validation. A dedicated map run instruments them only until it has positive evidence
-          # that a shard cannot produce a digest safely; a previous-map alwaysRun classification
-          # is that evidence, and keeps the complete correctness run mandatory without repeating
-          # the instrumentation failure.
-          #
-          # The memory ceiling belongs to the PR matrix, not to a nightly job, so a dispatch can
-          # ask for coverage everywhere. That run feeds the map; it is not meant to gate a PR.
-          # A shard whose digest select-shards carried forward is not re-instrumented: its map
-          # entry comes from the carried artifact, and instrumenting it anyway would only spend
-          # the 3.21x overhead re-measuring what is byte-identical. Any parse failure of the
-          # carried or run-without-instrumentation list degrades to Instrument, which is the
-          # pre-incremental behaviour and is selection-safe.
-          enum CoverageDisposition {
-            Instrument
-            Carried
-            RunWithoutCoverage
-          }
-
-          $carriedSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-          $runWithoutInstrumentationSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-          try {
-            $rawCarried = $env:COVERAGE_CARRIED
-            if ($rawCarried) {
-              foreach ($c in @($rawCarried | ConvertFrom-Json)) { [void] $carriedSet.Add([string] $c) }
-            }
-          }
-          catch {
-            $carriedSet.Clear()
-            Write-Host "::warning::carried-shard list unreadable - instrumenting this shard"
-          }
-
-          try {
-            $rawRunWithoutInstrumentation = $env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION
-            if ($rawRunWithoutInstrumentation) {
-              foreach ($c in @($rawRunWithoutInstrumentation | ConvertFrom-Json)) {
-                [void] $runWithoutInstrumentationSet.Add([string] $c)
-              }
-            }
-          }
-          catch {
-            $runWithoutInstrumentationSet.Clear()
-            Write-Host "::warning::run-without-instrumentation list unreadable - instrumenting this shard"
-          }
-
-          if ($carriedSet.Contains($shardName) -and $runWithoutInstrumentationSet.Contains($shardName)) {
-            throw "coverage disposition for '$shardName' is both Carried and RunWithoutCoverage"
-          }
-
-          $coverageDisposition = [CoverageDisposition]::Instrument
-          if ('${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true') {
-            if ($carriedSet.Contains($shardName)) {
-              $coverageDisposition = [CoverageDisposition]::Carried
-            }
-            elseif ($runWithoutInstrumentationSet.Contains($shardName)) {
-              $coverageDisposition = [CoverageDisposition]::RunWithoutCoverage
-            }
-          }
-
-          if ($coverageDisposition -ne [CoverageDisposition]::Instrument -and
-              -not ($heavyShard -or $measuresTiming)) {
-            throw "coverage disposition '$coverageDisposition' is invalid for coverage-producing shard '$shardName'"
-          }
-
-          $forcedCoverageRun = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true'
-          $collectCoverage = if ($forcedCoverageRun) {
-            $coverageDisposition -eq [CoverageDisposition]::Instrument
-          } else {
-            -not ($heavyShard -or $measuresTiming)
-          }
-
-          if ($forcedCoverageRun -and $coverageDisposition -eq [CoverageDisposition]::Instrument -and
-              ($heavyShard -or $measuresTiming)) {
-            Write-Host 'collect_coverage_everywhere: coverage forced on for this shard to feed the test-impact map'
-          }
-          elseif ($coverageDisposition -eq [CoverageDisposition]::Carried) {
-            Write-Host 'coverage carried forward from the previous map - not instrumenting this shard'
-          }
-          elseif ($coverageDisposition -eq [CoverageDisposition]::RunWithoutCoverage) {
-            Write-Host 'previous map classified this memory/timing-bound shard as always-run - executing correctness tests without instrumentation'
-          }
-          Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
-
-          # Build the argument list as a PowerShell array so the `--`
-          # separator and the runner args reach `dotnet test` as distinct
-          # tokens. Earlier we joined them into one string and pwsh's
-          # token splitter parsed `--` as a standalone switch that MSBuild
-          # then rejected with `MSB1001: Unknown switch`.
-          $dotnetArgs = @(
-            'test', '${{ matrix.shard.project }}',
-            '-c', 'Release',
-            '--framework', '${{ matrix.shard.framework }}',
-            '--no-build', '--no-restore',
-            # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
-            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
-          )
-          if ($collectCoverage) {
-            $dotnetArgs += @(
-              '--collect:XPlat Code Coverage',
-              '--settings', 'coverlet.runsettings'
-            )
-          } else {
-            # Coverage collection instruments every loaded assembly and keeps
-            # extra per-test state in the VSTest process. On these serialized
-            # big-model shards that overhead is the remaining memory multiplier
-            # after xUnit parallelism and Server GC were disabled, so run them
-            # as correctness-only shards and collect coverage from the lighter
-            # matrix entries.
-            if ($heavyShard) {
-              Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
-            } else {
-              Write-Host "Timing shard: XPlat Code Coverage disabled because instrumentation would distort the ratio under test"
-            }
-          }
-          # Detailed VSTest output still prints individual tests only on completion with the current
-          # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
-          # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
-          # an attributable [test-start] class marker in the live log.
-          $consoleVerbosity = if ($heavyShard) { 'detailed' } else { 'normal' }
-          $dotnetArgs += @(
-            '--logger', 'trx;LogFileName=test-results.trx',
-            '--logger', "console;verbosity=$consoleVerbosity",
-            '--results-directory', $results,
-            # Crash collection writes a Sequence file naming the in-flight test even when the host
-            # dies before producing TRX. Mini dumps retain faulting stacks without exhausting disk;
-            # they stay on the runner because this public workflow carries a license secret.
-            '--blame-crash',
-            '--blame-crash-dump-type', 'mini',
-            '--blame-hang-timeout', '5min',
-            '--blame-hang-dump-type', 'none'
-          )
-
-          # Use an absolute path because the test host runs from its output directory, not from the
-          # workspace. A relative path writes outside the artifact glob and silently loses the GPU
-          # launch journal and buffer-residency evidence.
-          $diagDir = Join-Path (Get-Location).Path $results
-          New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
-          $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $diagDir 'gpu-diagnostics.txt'
-          # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
-          if ($serializeShard) {
-            $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
-            $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
-            if (Test-Path $runnerJson) {
-              $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
-              $cfg.parallelizeTestCollections = $false
-              $cfg.maxParallelThreads = 1
-              # Don't materialize every [Theory]'s data rows at discovery time —
-              # the assembly discovers ~64k cases and pre-enumeration inflates the
-              # retained-case baseline before a single test even runs.
-              $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
-              # Silence xUnit discovery diagnostics on heavy shards. --TestCaseFilter is applied
-              # AFTER xUnit discovers the whole assembly, so every shard enumerates all ~66.8k test
-              # cases; with diagnosticMessages the runner prints one "Discovered [execution] test
-              # case" line each. That output alone exceeds GitHub's per-job log cap: the
-              # "NeuralNetworks A-F" job (90049783747) produced 57,102 discovery lines and its
-              # entire 16.9 MB log covered just the first 2m44s of a 55-minute job, with ZERO test
-              # results retained — the shard became impossible to diagnose from CI. The messages
-              # are pure noise for a filtered shard run; keep them off here and leave the default
-              # (on) in the checked-in xunit.runner.json for local debugging.
-              $cfg.diagnosticMessages = $false
-              $cfg.internalDiagnosticMessages = $false
-              $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
-              Write-Host "Serialized heavy-shard runner config: $runnerJson"
-            } else {
-              # These shards are flagged heavy precisely because they OOM without
-              # serialization. If the rewrite can't be applied, fail fast rather
-              # than fall through to a parallel run that will OOM and waste the runner.
-              Write-Host "ERROR: runner config not found at $runnerJson — cannot serialize heavy shard"
-              exit 1
-            }
-            # The global Server GC (DOTNET_gcServer=1) reserves a heap segment per
-            # core and collects lazily — high steady-state footprint chosen for
-            # throughput under PARALLEL collections. This shard is now serial, so
-            # we don't need that throughput; switch it to Workstation GC, which has
-            # a much smaller footprint and collects eagerly under memory pressure.
-            # (Confirmed necessary: with serialization alone the shard still OOM'd
-            # ~70s into serial execution — the footprint, not parallelism, was the
-            # remaining cause.)
-            $env:DOTNET_gcServer = '0'
-            Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
-          }
-
-          # Stream memory and active-test markers in-process so evidence survives a runner OOM;
-          # a Start-Process child does not share the captured stdout handle.
-          $memSampler = $null
-          if ($heavyShard) {
-            $testTrace = Join-Path $results 'active-test.trace'
-            $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
-            $memSampler = [powershell]::Create()
-            [void]$memSampler.AddScript({
-              param($tracePath)
-
-              # A HELD READ POSITION, NOT A RE-READ. `Get-Content | Select-Object -Skip N` still
-              # opens the file and enumerates every line before discarding the first N, so each
-              # two-second tick re-read the whole trace and the sampler's own I/O grew quadratically
-              # across a long heavy shard -- on the one job already documented as memory-bound.
-              #
-              # The reader is opened once with FileShare.ReadWrite so the test host can keep
-              # appending, and each tick reads only what has arrived since. Both handles are disposed
-              # in the finally below, which runs when the runspace is stopped.
-              $traceStream = $null
-              $traceReader = $null
-              try {
-              while ($true) {
-                # A THROW HERE ENDS THE SAMPLER SILENTLY. The runspace's IAsyncResult is discarded
-                # at BeginInvoke and nobody calls EndInvoke, so any exception is swallowed whole:
-                # sampling stops for the rest of the shard and the log reads like a clean run right
-                # up to the OOM kill -- defeating the entire purpose of a sampler that exists to
-                # show what memory did BEFORE the kill.
-                #
-                # Both known throwers are in this loop. The test host APPENDS to $tracePath while
-                # this reads it, so a read can hit a sharing violation; and Select-String returns
-                # $null when there is no match, making .Line a property access on $null.
-                try {
-                  if ($null -eq $traceReader -and (Test-Path $tracePath)) {
-                    # ReadWrite sharing: the test host holds this file open for append.
-                    $traceStream = [System.IO.FileStream]::new(
-                      $tracePath,
-                      [System.IO.FileMode]::Open,
-                      [System.IO.FileAccess]::Read,
-                      [System.IO.FileShare]::ReadWrite)
-                    $traceReader = [System.IO.StreamReader]::new($traceStream)
-                  }
-
-                  if ($null -ne $traceReader) {
-                    # StreamReader returns null at end-of-stream and resumes from the same position
-                    # on the next tick once more has been appended, so this reads each line once.
-                    while ($null -ne ($line = $traceReader.ReadLine())) {
-                      [Console]::Out.WriteLine($line)
-                    }
-                  }
-                  $memLine = Select-String -Path /proc/meminfo -Pattern '^MemAvailable:' -ErrorAction Stop | Select-Object -First 1
-                  $avail = if ($memLine) { ($memLine.Line -replace '\s+', ' ').Trim() } else { 'MemAvailable: (unreadable)' }
-                  [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
-                  [Console]::Out.Flush()
-                } catch {
-                  # Reported, never fatal: a sampler that dies quietly is worse than one that says
-                  # it stumbled and carries on.
-                  [Console]::Out.WriteLine("[memdiag] sampler iteration failed: $($_.Exception.Message)")
-                  [Console]::Out.Flush()
-                }
-                Start-Sleep -Seconds 2
-              }
-              }
-              finally {
-                # The runspace is torn down with Stop(), so this is where the handles are released.
-                if ($null -ne $traceReader) { try { $traceReader.Dispose() } catch { } }
-                if ($null -ne $traceStream) { try { $traceStream.Dispose() } catch { } }
-              }
-            })
-            [void]$memSampler.AddArgument($testTrace)
-            [void]$memSampler.BeginInvoke()
-            Write-Host "Heavy shard: started live test-start + memory sampler (runspace)"
-          }
-
-          & dotnet @dotnetArgs
-          $exitCode = $LASTEXITCODE
-
-          if ($memSampler) { try { $memSampler.Stop(); $memSampler.Dispose() } catch {} }
-
-          # Post-test resource snapshot. If the runner survives this point,
-          # the test step finished naturally and the snapshot tells us what
-          # the high-water mark looked like.
-          Write-Host "=== Post-test resource snapshot ==="
-          Write-Host "Memory:"
-          free -h
-          Write-Host "Disk:"
-          df -h /
-          exit $exitCode
+          & ./.github/scripts/Invoke-Shard.ps1
 
       # Surface the COMPLETE per-shard failure list on the run's Summary page.
       # Runs only when the shard is red, parses the TRX the run already wrote,
@@ -1783,7 +1467,12 @@ jobs:
           SHARD_PROJECT: ${{ matrix.shard.project }}
           SHARD_FRAMEWORK: ${{ matrix.shard.framework }}
           RETRY_FILTER: ${{ steps.retry-candidates.outputs.filter }}
+          # The retry needs the shard's configuration as much as the first run did: without it a
+          # conformance or parameter-count retry would walk the whole inventory in one host.
+          SHARD_ENV: ${{ toJSON(matrix.shard.env) }}
         run: |
+          & ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV
+          if ($LASTEXITCODE -ne 0) { throw "shard environment for '$env:SHARD_NAME' was rejected" }
           $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
           $results = "TestResults/$slug/retry"
           New-Item -Path $results -ItemType Directory -Force | Out-Null
@@ -1921,447 +1610,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  parameter-enumeration-sweep:
-    name: Tests (${{ matrix.framework }}) - ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    needs: [validation-source, select-shards]
-    # LEAST PRIVILEGE, DECLARED. With no permissions block this job inherited the workflow
-    # or repository default token scope, which on a repository defaulting to read/write hands
-    # a job that only checks out, builds and uploads an artifact the ability to push commits.
-    # It needs contents: read and nothing else -- actions/upload-artifact uses the Actions
-    # service, not the token's write scopes.
-    permissions:
-      contents: read
-    # Constructs every model in the assembly and measures both parameter APIs on each. Long by
-    # nature, which is exactly why it is not allowed inside a test shard: dropped into
-    # "Integration P-Q" (which its class name matches) it would consume that shard's whole budget.
-    # The Sweep category keeps it out of every shard filter; this job is the only thing that runs it.
-    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || 60 }}
-    # THE SAME CONDITION AS EVERY OTHER JOB IN THIS FILE, and it was not.
-    # 'release-please' without the trailing double dash also matches an unrelated
-    # branch such as release-please-notes, and the release-push guard was missing
-    # entirely -- on a push github.head_ref is empty, so this job ran on release
-    # commits while every other job skipped. The selected workload partition now also
-    # determines whether this family has any current work (including post-merge delta runs).
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_sweeps) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    # NO continue-on-error. It made the guards below decorative: the step printed
-    # `::error::Sweep harness failed to START` and exited 1, and the job was marked
-    # green anyway -- the loud failure those guards promise could never be heard.
-    # The step already separates the two cases and only one exits non-zero: a
-    # FINDING is written to the report and passes, while an infrastructure fault
-    # (did not start / no summary / killed mid-run) fails. So the job stays a
-    # reporter for findings and a gate for its own brokenness, which is what the
-    # surrounding comments claimed all along.
-    # One runner PER sweep workload. The count contract is further split into isolated test hosts:
-    # all eight rows are safe individually, but running them consecutively in one host retains
-    # enough native/runtime state to crash after the third row. The shard selector changes only
-    # discovery; the eight jobs remain a complete, disjoint partition of the model catalog.
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.select-shards.outputs.parameter_matrix) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Free up disk space
-        run: |
-          echo "Disk before cleanup:"; df -h /
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          echo "Disk after cleanup:"; df -h /
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-
-      # THE HARDENING THIS JOB WAS BORN WITHOUT. harden-xunit-runner.ps1 is the single source of
-      # the exit-143 fix, but it was only ever applied inline inside test-net10-sharded, so this
-      # job -- authored later -- inherited none of it and died with "The runner has received a
-      # shutdown signal" / exit code 143 roughly 85 seconds in, against a 60-minute budget. Exit
-      # 143 well inside the budget is the runner being killed for memory, not a timeout.
-      #
-      # The script rewrites xunit.runner.json in the BUILD OUTPUT, which is the only copy the
-      # xunit.runner.visualstudio adapter honors. That file does not exist until the project is
-      # built, and this job used to let `dotnet test` build implicitly -- so there was nothing to
-      # harden until discovery had already enumerated ~72k cases and blown the runner's memory.
-      # Building as its own step is what makes the hardening reachable at all.
-      - name: Build test project
-        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo
-
-      - name: Harden xUnit runner
-        shell: pwsh
-        run: |
-          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
-
-      - name: Connect isolated worker coverage
-        if: ${{ inputs.collect_coverage_everywhere }}
-        shell: pwsh
-        run: |
-          ./tools/TestImpact/Connect-WorkerCoverage.ps1 `
-            -ParentDirectory tests/AiDotNet.Tests/bin/Release/net10.0 `
-            -WorkerDirectory tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
-          if ($LASTEXITCODE -ne 0) { throw 'Worker coverage connection failed' }
-
-      - name: Run the sweep
-        id: auxiliary-tests
-        env:
-          # See the identical note on the conformance window below: the hardening script's
-          # DOTNET_gcServer=0 goes into GITHUB_ENV, and this workflow's top-level
-          # DOTNET_gcServer: 1 is layered back over every step, so a separate hardening step
-          # cannot turn Server GC off. Step-level env outranks both.
-          DOTNET_gcServer: '0'
-          # Empty for the non-count sweeps. ParameterCountContractTests validates this value and
-          # discovers exactly one of its eight theory rows when it is present.
-          AIDOTNET_PARAMETER_COUNT_SHARD: ${{ matrix.count_shard }}
-        # The reporting harness (ParameterEnumerationParityTests) classifies every override as
-        # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
-        # inherited implementation rather than approximating it. Its output is the input to the
-        # single-source-of-truth migration: which overrides can be deleted mechanically, and which
-        # have to be read. It writes rows incrementally, so a killed run still yields evidence.
-        #
-        # continue-on-error above is deliberate: this job answers "how big is the migration", not
-        # "is this PR good". ParameterCountContractTests is the gate; it runs here too so the
-        # violation list lands in one place, but its verdict is enforced by that test, not this job.
-        run: |
-          # `|| true` keeps an OOM-killed or non-zero harness from taking the upload step
-          # with it. The findings are written incrementally, so a dead run still has evidence
-          # on disk -- losing it to a skipped upload is the one outcome with no diagnostic value.
-          # Real newlines, not the literal backslash-n a previous edit wrote here: bash passed
-          # those through as four bare `n` arguments and MSBuild rejected the command with
-          # MSB1008 ("Only one project can be specified"). The sweep never ran at all, and
-          # `|| true` turned that infrastructure failure into a GREEN job -- the harness
-          # reported success three times while measuring nothing.
-          #
-          # `|| true` is kept so a genuinely dead harness cannot skip the upload of findings,
-          # but the output is inspected afterwards: if the harness could not START, or produced
-          # no summary, that is an infrastructure fault and fails loudly. A reporter that cannot
-          # tell "nothing to report" from "never ran" is worse than no reporter.
-          # ONE INVOCATION. A duplicate `dotnet test` used to sit here, ending in a line
-          # continuation that swallowed the comment below, so the sweep ran twice -- and
-          # because the step runs under `bash -e`, the first (uninstrumented) run aborted the
-          # step on any nonzero exit before a single guard below could inspect it.
-          #
-          # PIPESTATUS, NOT THE PIPE. `dotnet test ... | tee` reports TEE's status, so the
-          # pipeline succeeded whenever tee did and `|| true` was measuring nothing. The real
-          # exit code is captured before anything else can overwrite it.
-          set -o pipefail
-          # --no-build/--no-restore are what make the hardening stick: a rebuild here would
-          # regenerate xunit.runner.json from the checked-in copy and silently undo the step above.
-          coverage_args=()
-          if [ '${{ inputs.collect_coverage_everywhere }}' = 'true' ]; then
-            coverage_args=(--collect:'XPlat Code Coverage' --settings coverlet.runsettings)
-          fi
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
-            --no-build --no-restore \
-            --filter "${{ matrix.filter }}" \
-            "${coverage_args[@]}" \
-            --logger 'console;verbosity=detailed' \
-            --logger 'trx;LogFileName=sweep.trx' \
-            --results-directory TestResults 2>&1 | tee sweep-output.txt
-          dotnet_status=${PIPESTATUS[0]}
-          set +o pipefail
-          echo "dotnet test exited ${dotnet_status}"
-
-          if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' sweep-output.txt; then
-            echo '::error::Sweep harness failed to START -- infrastructure fault, not a finding.'
-            exit 1
-          fi
-          if ! grep -qE 'Passed!|Failed!|Total tests' sweep-output.txt; then
-            echo '::error::Sweep produced no test summary -- it did not run to completion.'
-            exit 1
-          fi
-
-          # THE THIRD STATE THE TWO GREPS CANNOT SEE: a harness that starts, prints a partial
-          # summary, and is then OOM-killed. That run still emits `Total tests`, so guard 2
-          # passes and the job reports success on a truncated sweep -- which is exactly what
-          # happened once already (cancelled at 6m48s against a 60-minute limit, i.e. a runner
-          # OOM). A kill shows up as a non-zero dotnet status with a summary present, so the
-          # two facts together are what distinguish it.
-          if [ "${dotnet_status}" -gt 1 ]; then
-            echo "::error::Sweep harness was killed (exit ${dotnet_status}) after printing a partial summary -- the findings are INCOMPLETE."
-            exit 1
-          fi
-
-      # STAGED INTO THE WORKSPACE FIRST. The upload listed absolute /tmp paths, which
-      # ties the artifact to runner-temp layout and makes `if-no-files-found: error`
-      # unusable -- a findings file that is legitimately absent is indistinguishable
-      # from one the uploader simply could not reach. Copying what exists into a
-      # workspace directory means the upload has one root, and an empty root then
-      # genuinely means the sweep produced nothing.
-      - name: Stage sweep findings
-        if: always()
-        run: |
-          mkdir -p sweep-artifacts
-          for f in /tmp/parameter-enumeration-parity.tsv \
-                   /tmp/parameter-count-violations*.txt \
-                   /tmp/chunk-parity.txt; do
-            [ -f "$f" ] && cp "$f" sweep-artifacts/ || echo "absent: $f"
-          done
-          cp sweep-output.txt sweep-artifacts/ 2>/dev/null || true
-          ls -la sweep-artifacts/
-
-      - name: Write auxiliary shard evidence
-        id: auxiliary-evidence
-        if: always()
-        shell: pwsh
-        env:
-          CI_WORKLOAD_JSON: ${{ toJSON(matrix) }}
-        run: |
-          ./tools/TestImpact/Write-AuxiliaryEvidence.ps1 -WorkloadJson $env:CI_WORKLOAD_JSON `
-            -TestStepOutcome '${{ steps.auxiliary-tests.outcome }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence failed' }
-
-      # Keep reporter findings out of the ordinary test-regression ledger. Their existing
-      # job-level policy remains authoritative; incomplete evidence still fails this job.
-      - name: Upload auxiliary coverage and results
-        if: always() && steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: auxiliary-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: TestResults/
-          if-no-files-found: error
-          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
-
-      - name: Upload auxiliary diagnostics
-        if: always() && steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: test-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: |
-            TestResults/**/*.trx
-            TestResults/shard-metadata.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload auxiliary impact digest
-        if: steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: impact-digest-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: impact-digest/*.digest.json
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload sweep report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: parameter-sweep-${{ matrix.artifact_suffix }}-${{ github.sha }}
-          path: |
-            sweep-artifacts/
-            TestResults/
-          # ERROR, NOT WARN. These files ARE the job's output; an upload that finds
-          # none of them means the sweep produced nothing, and `warn` let that pass
-          # silently as a green job with an empty artifact.
-          if-no-files-found: error
-          retention-days: 14
-
-  model-shape-conformance-windows:
-    name: Tests (${{ matrix.framework }}) - ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    needs: [build, validation-source, select-shards]
-    permissions:
-      actions: read
-      contents: read
-    # WHY THIS REMAINS SHARDED. The conformance sweep checks every model's declared shape contract
-    # against a real Predict. Explicitly unavailable laws are now classified without construction,
-    # and each concrete law is probed in its own bounded worker, which fixes the former runner OOM.
-    # Keeping deterministic five-model windows preserves per-family inventory reports and ensures a
-    # future wave of concrete contracts scales horizontally instead of rebuilding one serial bottleneck.
-    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || 60 }}
-    # This is a real gate. Explicitly unavailable contracts are accounted for without construction;
-    # every concrete contract runs in a bounded child process and must agree with Predict. That makes
-    # a window containing only honest declines valid while preserving strict failure for a mismatch,
-    # crash, timeout, or unconstructable claimed contract.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shapes) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        # 170 models in five-model windows. The last window runs past the end, which the harness
-        # handles by simply having fewer candidates - a window that lands entirely past the end
-        # reports zero declared and fails the guard below, which is the intended signal that the
-        # family shrank and this matrix needs updating.
-        # Five is also the forward-looking resource envelope: each concrete contract receives up to
-        # three minutes and 1 GiB in an isolated worker, so one window has a known upper bound even as
-        # the current explicit-unavailability backlog is replaced by generated contracts.
-        include: ${{ fromJSON(needs.select-shards.outputs.shape_matrix) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          df -h /
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Download required build artifact
-        id: download-build-artifacts
-        timeout-minutes: 25
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          ./tools/TestImpact/Receive-RequiredArtifact.ps1 `
-            -Repository '${{ github.repository }}' `
-            -ArtifactId '${{ needs.build.outputs.artifact_id }}' `
-            -ExpectedDigest '${{ needs.build.outputs.artifact_digest }}' `
-            -Destination '.' `
-            -RunId '${{ github.run_id }}' `
-            -JobIndex '${{ strategy.job-index }}'
-
-      - name: Restore test assets
-        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
-
-      - name: Harden xUnit runner
-        shell: pwsh
-        run: |
-          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
-
-      - name: Connect isolated worker coverage
-        if: ${{ inputs.collect_coverage_everywhere }}
-        shell: pwsh
-        run: |
-          ./tools/TestImpact/Connect-WorkerCoverage.ps1 `
-            -ParentDirectory tests/AiDotNet.Tests/bin/Release/net10.0 `
-            -WorkerDirectory tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
-          if ($LASTEXITCODE -ne 0) { throw 'Worker coverage connection failed' }
-
-      - name: Run the conformance window
-        id: auxiliary-tests
-        env:
-          # WORKSTATION GC, SET HERE BECAUSE GITHUB_ENV CANNOT WIN THIS ARGUMENT. The hardening
-          # script exports DOTNET_gcServer=0 two ways: into its own process, and into GITHUB_ENV
-          # for a later step. Neither reaches here. This workflow declares DOTNET_gcServer: 1 at
-          # the top level, and workflow-level env is re-applied to every step ON TOP of whatever
-          # GITHUB_ENV holds -- so a separate hardening step gets Server GC put straight back.
-          # test-net10-sharded never hit this because it hardens INLINE in the same pwsh process
-          # that runs dotnet test, where $env: assignment is inherited by the child and no
-          # workflow env can override it.
-          #
-          # This is why serialization alone was not enough: the script is explicit that removing
-          # Server GC "is not optional -- with serialization alone a shard still died ~70s into
-          # serial execution, so the footprint, not the parallelism, was the remaining cause".
-          # Step-level env has the highest precedence of all, so it holds regardless.
-          DOTNET_gcServer: '0'
-          ADNSHAPE_CONF_NAMESPACE: VisionLanguage
-          ADNSHAPE_CONF_OFFSET: ${{ matrix.offset }}
-          ADNSHAPE_CONF_BUDGET: '5'
-        run: |
-          # PIPESTATUS, not the pipe: `dotnet test | tee` reports tee's status, so a failing run
-          # would look green. Same trap the parameter sweep above documents.
-          set -o pipefail
-          # --no-build/--no-restore: a rebuild would regenerate xunit.runner.json and undo the
-          # hardening step above.
-          coverage_args=()
-          if [ '${{ inputs.collect_coverage_everywhere }}' = 'true' ]; then
-            coverage_args=(--collect:'XPlat Code Coverage' --settings coverlet.runsettings)
-          fi
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
-            --no-build --no-restore \
-            --filter "${{ matrix.filter }}" \
-            "${coverage_args[@]}" \
-            --logger 'console;verbosity=detailed' \
-            --logger 'trx;LogFileName=conformance.trx' \
-            --results-directory TestResults 2>&1 | tee window-output.txt
-          dotnet_status=${PIPESTATUS[0]}
-          set +o pipefail
-          echo "dotnet test exited ${dotnet_status}"
-
-          if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' window-output.txt; then
-            echo '::error::Conformance harness failed to START -- infrastructure fault, not a finding.'
-            exit 1
-          fi
-
-          # A WINDOW THAT MEASURED NOTHING IS NOT A PASS. The sweep reports zero disagreements just
-          # as readily when it declined on everything, which is exactly how the video
-          # super-resolution law looked correct while never executing once. Require the window to
-          # have declared something before its verdict counts.
-          if ! grep -qE 'models declaring a contract' window-output.txt; then
-            echo '::error::Window produced no conformance summary -- it did not run to completion.'
-            exit 1
-          fi
-          declared=$(grep -oE 'models declaring a contract *: *[0-9]+' window-output.txt | grep -oE '[0-9]+$' | head -1)
-          echo "window declared ${declared} contracts"
-          if [ "${declared:-0}" -eq 0 ]; then
-            echo "::error::Window at offset ${ADNSHAPE_CONF_OFFSET} declared 0 contracts -- the family shrank or the filter is wrong; this matrix needs updating."
-            exit 1
-          fi
-
-          if [ "${dotnet_status}" -gt 1 ]; then
-            echo "::error::Window was killed (exit ${dotnet_status}) after printing a partial summary -- results are INCOMPLETE."
-            exit 1
-          fi
-          exit "${dotnet_status}"
-
-      - name: Write auxiliary shard evidence
-        id: auxiliary-evidence
-        if: always()
-        shell: pwsh
-        env:
-          CI_WORKLOAD_JSON: ${{ toJSON(matrix) }}
-        run: |
-          ./tools/TestImpact/Write-AuxiliaryEvidence.ps1 -WorkloadJson $env:CI_WORKLOAD_JSON `
-            -TestStepOutcome '${{ steps.auxiliary-tests.outcome }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary evidence failed' }
-
-      - name: Upload auxiliary coverage and results
-        if: always() && steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: auxiliary-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: TestResults/
-          if-no-files-found: error
-          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
-
-      - name: Upload auxiliary diagnostics
-        if: always() && steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: test-results-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: |
-            TestResults/**/*.trx
-            TestResults/shard-metadata.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload auxiliary impact digest
-        if: steps.auxiliary-evidence.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: impact-digest-${{ github.sha }}-${{ steps.auxiliary-evidence.outputs.slug }}
-          path: impact-digest/*.digest.json
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload window report
-        if: always() && steps.download-build-artifacts.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: model-shape-conformance-${{ matrix.offset }}-${{ github.sha }}
-          path: |
-            window-output.txt
-            TestResults/
-          if-no-files-found: error
-          retention-days: 14
-
   # Aggregate every shard's TRX into one durable outcome ledger and one static status check.
   # Pull requests compare against the exact base SHA's master ledger. During rollout, when that
   # master run predates compact ledgers, the resolver downloads its legacy TRX artifacts once.
@@ -2373,8 +1621,6 @@ jobs:
     needs:
       - build
       - test-net10-sharded
-      - parameter-enumeration-sweep
-      - model-shape-conformance-windows
       - validation-source
       - select-shards
     permissions:
@@ -2683,39 +1929,47 @@ jobs:
     needs:
       - build
       - test-net10-sharded
-      - parameter-enumeration-sweep
-      - model-shape-conformance-windows
       - validation-source
       - select-shards
     env:
       EFFECTIVE_REQUIRES_VALIDATION: ${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}
+      # The instrumented analysis runs only on the scheduled and dispatched full runs. On pull
+      # requests, merge groups and pushes it never finished (timeouts and lost runners, 2026-09)
+      # while blocking every merge, so those events report success without analysing, and CI Gate
+      # treats this job as advisory. Default-branch quality comes from the nightly run.
+      SONAR_ANALYZE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && ((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || 'false' }}
 
     steps:
-      - name: Report non-runtime validation
-        if: ${{ !fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
-        run: echo 'Non-runtime-only change; the required SonarCloud check succeeds without analysis.'
+      - name: Report skipped analysis
+        if: ${{ !fromJSON(env.SONAR_ANALYZE) }}
+        run: |
+          if [ "$EFFECTIVE_REQUIRES_VALIDATION" = 'true' ]; then
+            echo "SonarCloud analysis runs on the nightly full run, not on '${{ github.event_name }}' events."
+          else
+            echo 'Non-runtime-only change; the SonarCloud check succeeds without analysis.'
+          fi
 
       - name: Set up JDK 17
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
         with:
           java-version: 17
           distribution: 'zulu'
 
       - name: Checkout code
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           fetch-depth: 0
 
       - name: Setup .NET 10.0
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -2724,7 +1978,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Cache SonarCloud packages
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.sonar/cache
@@ -2732,7 +1986,7 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache SonarCloud scanner
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         id: cache-sonar-scanner
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
@@ -2741,14 +1995,14 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
         shell: pwsh
         run: |
           New-Item -Path ${{ runner.temp }}/scanner -ItemType Directory -Force
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
       - name: Download current-run coverage artifacts
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.reuse != 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse != 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ github.sha }}-*
@@ -2756,7 +2010,7 @@ jobs:
           merge-multiple: true
 
       - name: Download certified coverage artifacts
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.reuse == 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse == 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           github-token: ${{ github.token }}
@@ -2767,7 +2021,7 @@ jobs:
           merge-multiple: true
 
       - name: Download pull-request coverage for delta import
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           github-token: ${{ github.token }}
@@ -2778,7 +2032,7 @@ jobs:
           merge-multiple: false
 
       - name: Import pull-request coverage
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
         shell: pwsh
         env:
           IMPORT_SHA: ${{ needs.validation-source.outputs.import_sha }}
@@ -2789,14 +2043,14 @@ jobs:
             -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
 
       - name: Restore dependencies
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: dotnet restore
 
       - name: Begin SonarCloud analysis
         # For very large PRs (e.g., repo-wide formatting), Sonar's "new code" metrics are
         # dominated by line churn and can fail the quality gate (e.g., new coverage) despite
         # no semantic changes. Skip PR-mode analysis in that case.
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2832,7 +2086,7 @@ jobs:
           & "${{ runner.temp }}/scanner/dotnet-sonarscanner" begin @params
 
       - name: Build source generator first
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
       - name: Build (Release)
@@ -2853,7 +2107,7 @@ jobs:
         # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
         # instrumentation only increases the need to avoid large csc processes competing inside
         # the 16-GB runner.
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         shell: pwsh
         run: |
           $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
@@ -2882,7 +2136,7 @@ jobs:
           }
 
       - name: End SonarCloud analysis
-        if: ${{ fromJSON(env.EFFECTIVE_REQUIRES_VALIDATION) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         shell: pwsh
@@ -2966,8 +2220,6 @@ jobs:
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - test-net10-sharded
-      - parameter-enumeration-sweep
-      - model-shape-conformance-windows
       - validation-source
       - select-shards
     permissions:
@@ -3127,8 +2379,6 @@ jobs:
       - build-compat
       - select-shards
       - test-net10-sharded
-      - parameter-enumeration-sweep
-      - model-shape-conformance-windows
       - test-regression-analysis
       - ci-test-analysis
       - size-check
@@ -3145,14 +2395,10 @@ jobs:
             -SourceResult '${{ needs.validation-source.result }}' `
             -RequiresValidation '${{ needs.select-shards.outputs.requires_validation || 'true' }}' `
             -RequiresTests '${{ needs.select-shards.outputs.requires_tests || 'true' }}' `
-            -RequiresSweeps '${{ needs.select-shards.outputs.requires_sweeps || 'true' }}' `
-            -RequiresShapes '${{ needs.select-shards.outputs.requires_shapes || 'true' }}' `
             -SelectResult '${{ needs.select-shards.result }}' `
             -BuildResult '${{ needs.build.result }}' `
             -BuildCompatResult '${{ needs.build-compat.result }}' `
             -TestsResult '${{ needs.test-net10-sharded.result }}' `
-            -ParameterSweepResult '${{ needs.parameter-enumeration-sweep.result }}' `
-            -ModelShapeResult '${{ needs.model-shape-conformance-windows.result }}' `
             -RegressionAnalysisResult '${{ needs.test-regression-analysis.result }}' `
             -VerdictEnforced '${{ needs.test-regression-analysis.outputs.verdict_enforced || 'false' }}' `
             -AggregateAnalysisResult '${{ needs.ci-test-analysis.result }}' `
@@ -3286,8 +2532,6 @@ jobs:
       - build-compat
       - select-shards
       - test-net10-sharded
-      - parameter-enumeration-sweep
-      - model-shape-conformance-windows
       - test-regression-analysis
       - ci-test-analysis
       - size-check

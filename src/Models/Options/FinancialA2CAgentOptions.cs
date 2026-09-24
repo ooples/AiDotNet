@@ -17,6 +17,17 @@ public class FinancialA2CAgentOptions<T> : TradingAgentOptions<T>
     public FinancialA2CAgentOptions() { }
 
     /// <summary>
+    /// Copy constructor. A2C had none, so it was the one financial options type that could not be copied
+    /// at all while its siblings could.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialA2CAgentOptions(FinancialA2CAgentOptions<T> other) : base(other)
+    {
+        NumEnvironments = other.NumEnvironments;
+        NSteps = other.NSteps;
+    }
+
+    /// <summary>
     /// Number of parallel environments for training.
     /// </summary>
     /// <remarks>
@@ -37,4 +48,16 @@ public class FinancialA2CAgentOptions<T> : TradingAgentOptions<T>
     /// </para>
     /// </remarks>
     public int NSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Validates the A2C options.
+    /// </summary>
+    public override void Validate()
+    {
+        base.Validate();
+        if (NSteps < 1)
+            throw new ArgumentException("NSteps must be at least 1.", nameof(NSteps));
+        if (NumEnvironments < 1)
+            throw new ArgumentException("NumEnvironments must be at least 1.", nameof(NumEnvironments));
+    }
 }

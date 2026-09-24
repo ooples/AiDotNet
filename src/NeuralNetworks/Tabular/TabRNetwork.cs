@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -44,10 +46,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabROptions { NumFeatures = 20, HiddenSize = 256, NumNeighbors = 96 };
-/// var model = new TabRNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabROptions&lt;double&gt; { NumFeatures = 20, NumNeighbors = 96 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TabRNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -61,6 +68,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2307.14338",
     Year = 2024,
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0003121273641315169,
+                WeightDecay = 1.2260352006404615e-06,
+                Provenance = RecipeProvenance.Searched,
+                Source = "Gorishniy et al. 2024, Sec. 4: the AdamW optimizer, with TabR-S default "
+                        + "values of learning rate 0.0003121273641315169 and weight decay "
+                        + "0.0000012260352006404615. Their sixteen significant figures mark them as the "
+                        + "output of a hyperparameter search rather than chosen values, which is what "
+                        + "the searched provenance records.")]
 public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabROptions<T> _options;
@@ -116,7 +131,9 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new TabROptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         if (_options.EmbeddingDimension % _options.NumAttentionHeads != 0)
         {

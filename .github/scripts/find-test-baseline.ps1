@@ -66,7 +66,15 @@ $run = @($runs.workflow_runs |
     Sort-Object -Property @{ Expression = 'created_at'; Descending = $true },
         @{ Expression = 'run_attempt'; Descending = $true } | Select-Object -First 1)
 if ($run.Count -eq 0) {
-    throw "No completed '$Workflow' push run exists for exact baseline SHA $BaseSha."
+    # No baseline is not a shard failure. This resolves evidence for the TARGETED RETRY, which
+    # exists only to tell a PR-new failure from one the base already had. Without it the retry is
+    # simply unavailable and the shard's own result stands - strictly more failures reported,
+    # never fewer, so the safe direction. Throwing here failed 23 green-tested shards outright
+    # when a merge brought in a base SHA that never had its own push run.
+    Write-Host "::warning::no completed '$Workflow' push run for baseline SHA $BaseSha - targeted retry unavailable, shard result stands as measured"
+    Set-ActionOutput 'baseline_mode' 'none'
+    Set-ActionOutput 'baseline_sha' $BaseSha
+    exit 0
 }
 
 $runId = [string] $run[0].id
@@ -105,4 +113,10 @@ if ($analysisArtifact.Count -gt 0) {
     exit 0
 }
 
-throw "Completed '$Workflow' run $runId for baseline SHA $BaseSha has neither a compact ledger, exact coverage artifacts, nor promoted analysis provenance."
+# Same reasoning as the missing-run case above: a run that kept no reusable evidence leaves the
+# targeted retry with nothing to compare against, which is a lost optimisation, not a red shard.
+Write-Host "::warning::completed '$Workflow' run $runId for baseline SHA $BaseSha has no compact ledger, exact coverage artifacts or promoted analysis - targeted retry unavailable, shard result stands as measured"
+Set-ActionOutput 'baseline_mode' 'none'
+Set-ActionOutput 'baseline_run_id' $runId
+Set-ActionOutput 'baseline_sha' $BaseSha
+exit 0

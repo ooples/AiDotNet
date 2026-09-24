@@ -26,7 +26,10 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </para>
     /// <example>
     /// <code>
-    /// var vectorizer = new CountVectorizer&lt;double&gt;();
+    /// var texts = new[] { "I really enjoyed this!", "Total waste of time.", "Would recommend." };
+/// var labels = new Vector&lt;double&gt;(new double[] { 1.0, 0.0, 1.0 });
+///
+/// var vectorizer = new CountVectorizer&lt;double&gt;();
     /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
     ///     .ConfigureTextVectorizer(vectorizer)

@@ -558,6 +558,18 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
     private bool _disposed;
 
+    /// <summary>
+    /// Claims the one run of derived teardown. Zero until a caller wins the claim, one afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="_disposed"/> cannot serve as the claim. It is set inside <see cref="Dispose(bool)"/>,
+    /// which runs after the derived override has already torn its own state down, so two threads can
+    /// both read it as false and both enter that override. It also cannot be set before the dispatch:
+    /// <see cref="Dispose(bool)"/> would then see it already set and skip its own cleanup entirely.
+    /// A separate flag claimed atomically keeps both properties.
+    /// </remarks>
+    private int _disposeClaimed;
+
     /// <inheritdoc/>
     /// <remarks>
     /// Implements <see cref="System.IDisposable.Dispose"/>. Calls
@@ -570,6 +582,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// </remarks>
     public void Dispose()
     {
+        // A repeated call must not re-enter a derived Dispose(bool) override: overrides do their
+        // own teardown before calling base, so only this entry point can keep that teardown to one run.
+        // Reading a plain field is not enough -- two concurrent callers both read false and both
+        // enter the override, and WaveNet.Dispose(bool) closes its OnnxSession before delegating to
+        // base, so that teardown would run twice. Claim the run atomically instead.
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(disposing: true);
         System.GC.SuppressFinalize(this);
     }

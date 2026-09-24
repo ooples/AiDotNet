@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,6 +61,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 256, WarmupSteps = 1000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Xiong et al. 2024, Sec. 4: AdamW with momentum beta1 0.9 and beta2 0.999, a "
+                        + "global batch size of 256 and an initial learning rate of 4e-4, decayed by a "
+                        + "reciprocal square root schedule with a 1k iteration linear warmup. The 5k "
+                        + "iteration linear cooldown that follows is not declared, as the attribute has "
+                        + "no term for a trailing ramp-down. Routing is handled by "
+                        + "SegmentationModelBase.CreateDefaultOptimizer, which consults "
+                        + "PaperOptimizerFactory itself, so no call is inserted here.")]
 public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
 {
     /// <inheritdoc />

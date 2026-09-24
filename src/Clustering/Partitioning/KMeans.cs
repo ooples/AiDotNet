@@ -40,10 +40,13 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new KMeansOptions&lt;double&gt;();
-/// var kMeans = new KMeans&lt;double&gt;(options);
-/// kMeans.Fit(dataMatrix);
-/// int[] labels = kMeans.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 }, { 1.0, 0.6 }, { 9.0, 11.0 } });
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new KMeans&lt;double&gt;(new KMeansOptions&lt;double&gt;()))
+///     .Build(dataMatrix);
+///
+/// // one cluster index per row
+/// var assignments = result.Predict(dataMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -66,9 +69,9 @@ public partial class KMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The KMeans configuration options.</param>
     public KMeans(KMeansOptions<T>? options = null)
-        : base(options ?? new KMeansOptions<T>())
+        : base(options ??= new KMeansOptions<T>())
     {
-        _options = options ?? new KMeansOptions<T>();
+        _options = options;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -69,6 +70,13 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "https://arxiv.org/abs/2312.00752", Year = 2023, Authors = "Albert Gu, Tri Dao")]
+[PaperOptimizer(OptimizerKind.AdamW, MinLearningRate = 0, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Gu and Dao 2023, Sec. 4 and Table 12: the AdamW optimizer with a gradient "
+                        + "clip value of 1.0 under a cosine schedule. No peak rate is declared because "
+                        + "the paper defers it to the GPT-3 specification, which sets it per model size; "
+                        + "the model therefore keeps its own optimizer and is verified against this "
+                        + "record rather than having the paper's curve applied to a library default.")]
 public partial class Mamba<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -294,7 +302,8 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -340,7 +349,8 @@ public partial class Mamba<T> : ForecastingModelBase<T>
 
         _useNativeMode = true;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;

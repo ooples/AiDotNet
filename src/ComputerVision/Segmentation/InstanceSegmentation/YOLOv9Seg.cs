@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
@@ -61,6 +62,11 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", "https://arxiv.org/abs/2402.13616", Year = 2024, Authors = "Wang et al.")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.01, Momentum = 0.937,
+                WeightDecay = 0.0005, MinLearningRate = 0.0001,
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.006,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Wang et al. 2024, Table 1: SGD over 500 epochs, initial learning rate 0.01 stepping down to 0.0001 in linear decay, momentum 0.937, weight decay 0.0005, warm-up 3 epochs. The warmup is stated in epochs, so it is declared as its share of the 500-epoch run rather than transcribed as a step count.")]
 public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv9SegOptions _options;

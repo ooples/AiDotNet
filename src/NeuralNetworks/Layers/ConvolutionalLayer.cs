@@ -336,34 +336,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     public bool UseBias => _biasMode != BiasMode.Never;
 
     /// <summary>
-    /// Reference-keyed cache of the rank-1 <c>_biases</c> reshaped to
-    /// <c>[1, OutputDepth, 1, 1]</c> for the conv-bias broadcast pattern.
-    /// Populated only on the **inference path** (tape inactive); the cache
-    /// auto-invalidates when <c>_biases</c>'s object identity changes (which
-    /// is how optimizer.Step rebinds parameters, the situation that made the
-    /// prior unguarded cache unsafe).
-    ///
-    /// <para>Skipped on the tape-tracked path because the cached reshape's
-    /// recorded GradFn binds to whichever <c>_biases</c> was current at cache-prime
-    /// time, plus the recording is captured in the FIRST tape that observed the
-    /// op — neither invariant is safe to assume across tape sessions.
-    /// The plan-replay path (which is the dominant Train forward consumer after
-    /// the first iteration) never touches this cache at all because plan replay
-    /// runs traced engine ops directly without invoking <c>layer.Forward()</c>.</para>
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _biasReshaped4D;
-
-    /// <summary>
-    /// Snapshot of the <c>_biases</c> reference and mutation version at the moment
-    /// <see cref="_biasReshaped4D"/> was populated. Optimizers may either rebind the
-    /// tensor or update its storage in place, so both signals are required.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _biasReshaped4DSource;
-    private int _biasReshaped4DVersion = -1;
-
-    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -422,6 +394,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < a.Length; i++)
             if (!comparer.Equals(a[i], b[i])) return false;
         return true;
+    }
+
+    /// <summary>Adds the rank-1 channel bias without retaining a parameter-storage view.</summary>
+    private Tensor<T> AddChannelBias(Tensor<T> value)
+    {
+        if (_biases.Lifetime == WeightLifetime.Streaming)
+            WeightRegistry.Materialize(_biases);
+
+        // Channel bias is a semantic operation, not a general NumPy broadcast. Passing the rank-1
+        // parameter directly lets eager, tape, compiled, and GPU engines record the real dependency
+        // without manufacturing a storage-sharing reshape that outlives graph capture and disables
+        // safe copy-on-write cloning.
+        return Engine.TensorChannelBiasAdd(value, _biases);
     }
 
 
@@ -1412,9 +1397,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // the tape-tracked Engine ops and the backward (DepthwiseConv2DBackward)
             // flows automatically in both eager and compiled-plan training.
             var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
-            result = ApplyActivation(UseBias
-                ? Engine.TensorAdd(dw, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
-                : dw);
+            result = ApplyActivation(UseBias ? AddChannelBias(dw) : dw);
         }
         // ONE COMPUTATION, WHATEVER THE MODE.
         //
@@ -1462,7 +1445,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
                 if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
                 {
-                    var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current!;
+                    var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+                    if (scope is null)
+                        throw new InvalidOperationException("Active graph mode has no recording scope.");
                     var capturedInput = input4D;
                     var capturedKernel = _kernels;
                     int capturedStride = Stride;
@@ -1509,7 +1494,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // On non-Windows FusedConv2D calls the array overload, so its tape-aware reference
                 // must use that exact overload too. Tensors 0.129.4 chooses a different 3x3 algorithm
                 // for scalar Conv2D there. Windows keeps its materially faster scalar Winograd route.
-                if (preferConv2DInto && UseBias && fusedActivation != FusedActivationType.None)
+                if (preferConv2DInto && UseBias)
                 {
                     return Engine.Conv2D(
                         input4D,
@@ -1529,9 +1514,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             Tensor<T> Reference()
             {
                 var conv = CanonicalConvolution();
-                var biased = UseBias
-                    ? Engine.TensorAdd(conv, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
-                    : conv;
+                var biased = UseBias ? AddChannelBias(conv) : conv;
                 return ApplyActivation(biased);
             }
 
@@ -1540,12 +1523,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // Reference because the in-place bias/activation portion is intentionally not tape-tracked.
             Tensor<T> Optimized()
             {
-                if (UseBias && fusedActivation != FusedActivationType.None)
+                if (UseBias)
                 {
-                    // _biases travels as the rank-1 [C] vector; FusedConv2D reshapes internally when
-                    // it needs to and otherwise feeds the raw [C] array to its NCHW fast path.
-                    return Engine.FusedConv2D(input4D, _kernels, _biases,
+                    // _biases travels as the rank-1 [C] vector. The engine's channel-bias
+                    // primitive keeps that semantic shape through eager, tape, graph, and GPU paths.
+                    var fused = Engine.FusedConv2D(input4D, _kernels, _biases,
                         Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+                    return fusedActivation == FusedActivationType.None
+                        ? ApplyActivation(fused)
+                        : fused;
                 }
 
                 // Every invocation owns a distinct destination. Reusing a layer-held buffer would
@@ -1553,33 +1539,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // the later call overwrites an earlier result that is still live (shared encoders,
                 // recurrent blocks, Siamese networks, any caller retaining multiple outputs).
                 var output = CanonicalConvolution();
-
-                if (UseBias)
-                {
-                    // Cache the rank-4 reshape by tensor identity AND mutation version, because an
-                    // optimizer may rebind the parameter or update it in place.
-                    if (!ReferenceEquals(_biasReshaped4DSource, _biases)
-                        || _biasReshaped4D is null
-                        || _biasReshaped4DVersion != _biases.Version)
-                    {
-                        // Reshape returns a VIEW over the bias's storage, and a streaming-allocated
-                        // weight has none until it is paged in: the tensor carries its shape while
-                        // its backing store is empty, and the view constructor throws. The kernel
-                        // above does not hit this because a compute op materializes what it reads;
-                        // a view op does not. Page the bias in first.
-                        if (_biases.Lifetime == WeightLifetime.Streaming)
-                        {
-                            WeightRegistry.Materialize(_biases);
-                        }
-
-                        _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-                        _biasReshaped4DSource = _biases;
-                        _biasReshaped4DVersion = _biases.Version;
-                    }
-
-                    if (_biasReshaped4D is not null)
-                        Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
-                }
 
                 return ApplyActivation(output);
             }
@@ -1602,6 +1561,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             {
                 useOptimized = _optimizedMatchesReference;
             }
+            else if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                // A verification probe is an eager decision, not part of the user's graph.
+                // Recording both candidates creates a dead branch whose output lifetime is still
+                // owned by graph nodes; disposing the losing candidate can then release storage
+                // that a later attention reshape consumes. An unverified exact-mode graph records
+                // only the canonical route. A prior eager verdict, or explicit Fast mode above,
+                // can still select the optimized route without adding a probe to the graph.
+                useOptimized = false;
+            }
             else
             {
                 // First inference forward at this shape: run both once and keep the fast route only
@@ -1613,6 +1582,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _optimizedMatchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
                 _optimizedVerifiedForShape = ShapeSnapshot(input4D);
                 useOptimized = _optimizedMatchesReference;
+                // TensorAllocator may have obtained either candidate from the active TensorArena's
+                // wrapper ring. Do not Dispose the losing probe here: the arena retains that wrapper
+                // and reissues it after the next training-step Reset, and a disposed wrapper then
+                // carries released TensorStorage into an otherwise unrelated operation. The losing
+                // candidate has no escaping reference and is reclaimed normally outside an arena;
+                // inside an arena its backing storage is intentionally owned and recycled by the
+                // arena itself.
                 decided = _optimizedMatchesReference ? optimizedOnce : referenceOnce;
             }
 
@@ -1980,31 +1956,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernelsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    internal override void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
-    {
-        base.CopyTrainableParametersFrom(sources);
-        InvalidateBiasReshapeCache();
-    }
-
-    private void InvalidateBiasReshapeCache()
-    {
-        _biasReshaped4D = null;
-        _biasReshaped4DSource = null;
-        _biasReshaped4DVersion = -1;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainingMode(bool isTraining)
-    {
-        base.SetTrainingMode(isTraining);
-
-        // Parameter-buffer optimizers can update aliased bias storage without
-        // advancing this tensor view's Version. Rebuild the materialized reshape
-        // on the first inference forward after every training phase.
-        if (!isTraining)
-            InvalidateBiasReshapeCache();
     }
 
     /// <summary>

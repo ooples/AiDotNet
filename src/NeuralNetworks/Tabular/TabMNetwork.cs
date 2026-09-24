@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -41,10 +43,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabMOptions { NumFeatures = 20, NumSubmodels = 32, HiddenSize = 128 };
-/// var model = new TabMNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabMOptions&lt;double&gt; { NumFeatures = 20};
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TabMNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -59,6 +66,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.24210",
     Year = 2024,
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Gorishniy et al. 2024, Sec. 4: the AdamW optimizer. No rate, decay or batch "
+                        + "is declared because the paper's table gives tuning distributions (UniformInt, "
+                        + "LogUniform) rather than chosen values, and the Adam appearing elsewhere is "
+                        + "the author Adam Paszke in a PyTorch citation.")]
 public partial class TabMNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabMOptions<T> _options;
@@ -100,7 +112,9 @@ public partial class TabMNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new TabMOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
