@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -48,6 +49,9 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0, Beta2 = 0.99, WeightDecay = 1e-4,
+                LearningRate = 1e-4, ReferenceBatchSize = 16,
+                Source = "Li et al. 2023, Sec. 4: AdamW with beta1 0, beta2 0.99, weight decay 1e-4, learning rate 1e-4 and a batch size of 16. The beta1 of 0 is the paper value, not an omission, and it sits below the adaptive floor of 0.8 that the optimizer would otherwise clamp it to.")]
 public partial class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     /// <inheritdoc />
@@ -113,7 +117,9 @@ public partial class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         _options = options ?? new StyleTTS2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

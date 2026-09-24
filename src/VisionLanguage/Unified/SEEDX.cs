@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -35,7 +37,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// // with unified visual understanding at multiple detail levels
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -60,6 +62,14 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Ge et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Ge et al. 2024, Sec. 4: pre-training runs on 48 H800-80G GPUs over 158M "
+                        + "samples with the learning rate set to 1e-4 under cosine decay. The "
+                        + "identically worded 1e-4 settings elsewhere in the paper train and fine-tune "
+                        + "the visual de-tokenizer, a component rather than this model. The optimizer is "
+                        + "left unspecified because the paper names none.")]
 public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly SEEDXOptions _options;

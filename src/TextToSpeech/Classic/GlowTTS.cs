@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +50,9 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Kim et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam,
+                Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
+                Source = "Kim et al. 2020, Sec. 4: Adam with the Noam learning rate schedule, trained for 240K iterations. No peak rate is declared because the paper states none, and the Noam peak is a function of the model dimension; the warmup is the schedule default of 4000 from Vaswani et al. 2017, which the paper cites without restating a length.")]
 public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GlowTTSOptions _options;
@@ -91,7 +96,9 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new GlowTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

@@ -54,7 +54,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);
 ///
 /// // Create curriculum loader: start easy (2-way 10-shot), end hard (5-way 1-shot)
-/// var loader = new CurriculumEpisodicDataLoader&lt;double&gt;(
+/// var loader = new CurriculumEpisodicDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     targetNWay: 5,         // Final target: 5-way

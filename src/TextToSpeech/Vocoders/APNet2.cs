@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
@@ -43,6 +44,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Du et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, ReferenceBatchSize = 16,
+                DecayRate = 0.999, Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Du et al. 2023, Sec. 4: the model is optimized using AdamW at a batch size of "
+                        + "16, with the learning rate set initially to 2e-4 and scheduled to decay by a "
+                        + "factor of 0.999 at every epoch.")]
 public partial class APNet2<T> : VocoderBase<T>
 {
     private readonly APNet2Options _options;
@@ -107,21 +114,22 @@ public partial class APNet2<T> : VocoderBase<T>
         _useNativeMode = true;
         // AdamW at the paper's 2e-4 (Du et al., 2023). Constructing it with no options left it
         // at AdamW's own 1e-3 default, five times the paper's rate.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // Du et al. 2023 §4: AdamW, beta1 = 0.8, beta2 = 0.99, weight decay 0.01,
-                // initial learning rate 2e-4 decayed by 0.999 each epoch.
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.8,
-                Beta2 = 0.99,
-                WeightDecay = 0.01,
-                // "the exponential decay strategy with a decreasing factor of 0.999 per epoch".
-                // Without it the rate stays at its initial value for the whole run, so late
-                // training keeps taking early-training-sized steps.
-                LearningRateScheduler = new ExponentialLRScheduler(_options.LearningRate, gamma: 0.999),
-                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // Du et al. 2023 §4: AdamW, beta1 = 0.8, beta2 = 0.99, weight decay 0.01,
+                    // initial learning rate 2e-4 decayed by 0.999 each epoch.
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.8,
+                    Beta2 = 0.99,
+                    WeightDecay = 0.01,
+                    // "the exponential decay strategy with a decreasing factor of 0.999 per epoch".
+                    // Without it the rate stays at its initial value for the whole run, so late
+                    // training keeps taking early-training-sized steps.
+                    LearningRateScheduler = new ExponentialLRScheduler(_options.LearningRate, gamma: 0.999),
+                    SchedulerStepMode = SchedulerStepMode.StepPerEpoch
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

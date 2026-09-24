@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -61,6 +62,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers", "https://arxiv.org/abs/2105.15203", Year = 2021, Authors = "Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.00006, ReferenceBatchSize = 16,
+                Schedule = LearningRateSchedulerType.Polynomial, DecayRate = 1.0,
+                MinLearningRate = 0,
+                Source = "Xie et al. 2021, Implementation details: AdamW, initial learning rate 0.00006 with a poly schedule of factor 1.0, batch size 16 for ADE20K and COCO-Stuff.")]
 public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegFormerOptions _options;

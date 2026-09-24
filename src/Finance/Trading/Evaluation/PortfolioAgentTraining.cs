@@ -176,15 +176,41 @@ public static class PortfolioExperimentRunner
             // Each experiment fully specifies its environment (reward + leverage + frictions), so the harness
             // sweeps all those axes, not just the objective.
             var trainEnv = experiment.BuildEnvironment<T>(trainAssetPrices, trainFeatureColumns, windowSize, initialCapital);
-            var agent = agentFactory(trainEnv.ObservationSpaceDimension, trainEnv.ActionSpaceSize);
-            PortfolioAgentTrainer.Train(agent, trainEnv, trainEpisodes);
 
-            // Evaluate the trained agent on the untouched holdout (greedy — no exploration). Reset the agent's
-            // per-episode state first so a recurrent policy starts the holdout with a clean hidden state rather
-            // than one carried over from the last training step.
-            agent.ResetEpisode();
-            var agentEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);
-            var agentResult = PortfolioBacktest.Run(agentEnv, s => agent.SelectAction(s, explore: false));
+            // The factory builds a FRESH agent for this experiment and the runner never hands it back, so the
+            // runner is its only owner and releases it (a RecurrentPolicyAgent holds a pool-rented LSTM cell)
+            // once the experiment is done -- or fails.
+            var agent = agentFactory(trainEnv.ObservationSpaceDimension, trainEnv.ActionSpaceSize);
+            PortfolioBacktestResult agentResult;
+            try
+            {
+                PortfolioAgentTrainer.Train(agent, trainEnv, trainEpisodes);
+
+                // Evaluate the trained agent on the untouched holdout (greedy — no exploration). Reset the agent's
+                // per-episode state first so a recurrent policy starts the holdout with a clean hidden state rather
+                // than one carried over from the last training step.
+                agent.ResetEpisode();
+                var agentEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);
+                agentResult = PortfolioBacktest.Run(agentEnv, s => agent.SelectAction(s, explore: false));
+            }
+            catch
+            {
+                // Release the agent without letting a secondary cleanup failure replace the reason the
+                // experiment failed: the caller needs the original exception.
+                try
+                {
+                    (agent as IDisposable)?.Dispose();
+                }
+                catch (Exception disposeEx) when (disposeEx is not OutOfMemoryException)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"PortfolioExperimentRunner: disposing the agent for '{experiment.Name}' after a failure also threw: {disposeEx.Message}");
+                }
+
+                throw;
+            }
+
+            (agent as IDisposable)?.Dispose();
 
             // The no-skill control on the SAME holdout environment (same frictions/leverage).
             var baseEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);

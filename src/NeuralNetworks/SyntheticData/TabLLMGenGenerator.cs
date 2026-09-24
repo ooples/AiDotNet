@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -72,6 +73,9 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.06280",
     Year = 2023,
     Authors = "Vadim Borisov, Kathrin Seßler, Tobias Leemann, Martin Pawelczyk, Gjergji Kasneci")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5,
+                Source = "Borisov et al. 2023, Sec. 4: the AdamW optimizer, named by its Loshchilov and "
+                        + "Hutter citation, with a learning rate of 5e-5.")]
 public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabLLMGenOptions<T> _options;
@@ -151,11 +155,12 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
         _options = options ?? new TabLLMGenOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
