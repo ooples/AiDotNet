@@ -18783,23 +18783,28 @@ public static partial class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
         }
 
+        // The layers below are not one sequential chain. Each branch root consumes its own input
+        // (the text embedding, the timestep, the latents, the image); chaining the previous
+        // layer's width into them resolved the timestep projection to 1152 input channels.
+
         // Text projection (from CLIP-like encoder)
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
+        yield return LayerGraphContract.FromExternalInput(new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0));
 
         // Time embedding
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
+        yield return LayerGraphContract.FromExternalInput(new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0));
 
         // Final layer (predict noise)
-        yield return new ConvolutionalLayer<T>(latentDim * 4, 1, 1, 0);
+        yield return LayerGraphContract.FromDerivedInput(
+            new ConvolutionalLayer<T>(latentDim * 4, 1, 1, 0), "ditFeatures");
 
         // VAE decoder
-        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
+        yield return LayerGraphContract.FromDerivedInput(new ConvolutionalLayer<T>(256, 3, 1, 1), "latents");
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
 
         // VAE encoder (reverse of decoder for learned image compression)
-        yield return new ConvolutionalLayer<T>(64, 3, 2, 1);
+        yield return LayerGraphContract.FromExternalInput(new ConvolutionalLayer<T>(64, 3, 2, 1));
         yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
