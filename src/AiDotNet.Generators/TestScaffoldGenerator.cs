@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -470,6 +470,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // at full paper scale. The model defaults stay 16B and fully user-customizable; only the default-gate test defers.
         // KimiVLThinking is the same 16B MoE backbone with a reasoning head — same OOM profile, same deferral.
         "KimiVL", "KimiVLThinking",
+        // CascadeRCNN (Cai & Vasconcelos 2018) at paper scale: 1000 proposals through three 12544x1024 stages on
+        // ResNet-50/FPN, every stage on the tape. Measured alone on the 26-test class: 38.6 GB in double (killed
+        // the ~16 GB shard-C runner). The bin-major RoIAlign cut it to 27.2 GB; float cut the double run to
+        // 20.7 GB but broke Detect_ControlledPositiveHead; under a 12 GB GC hard limit two tests still exhaust
+        // the heap. The live set exceeds the runner, so it runs at paper scale in the nightly heavy lane.
+        "CascadeRCNN",
         // MiniGPTv2 (Chen et al. 2023): LLaMA-2-backbone VLM. Already in Fp32, but the LLaMA-2 decoder weights
         // are ~28 GB even at fp32, so the live J-M run OOMs it (NamedLayerActivations). Float is insufficient
         // for a 7B-class backbone; defer to the nightly HeavyTimeout lane. Paper defaults (LLaMA-2 scale) intact.
