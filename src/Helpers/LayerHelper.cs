@@ -37147,7 +37147,10 @@ public static partial class LayerHelper<T>
         // SSM blocks with low-rank B/C projections controlled by ssmRank
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>();
+            // Per-sample normalization. BatchNormalization at the head of every block normalized a single
+            // training sample to zero, so each block emitted its learned shift whatever the input and only the
+            // biases could reduce the loss. State-space stacks normalize each sample (LayerNorm).
+            yield return new LayerNormalizationLayer<T>();
             // SSM: B matrix (input -> low-rank state projection)
             yield return new DenseLayer<T>( outputSize: rankDim, activationFunction: null);
             // SSM: C * A (state dynamics with discretization-aware activation)
