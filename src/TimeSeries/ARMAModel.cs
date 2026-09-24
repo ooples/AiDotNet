@@ -606,7 +606,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
                 { "MaxIterations", armaOptions.MaxIterations },
                 { "Tolerance", armaOptions.Tolerance }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
         return metadata;
     }

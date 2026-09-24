@@ -816,7 +816,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumConditionClasses", _numConditionClasses }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -269,7 +269,7 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
                 { "BufferDim", _options.BufferDim },
                 { "NumLevels", _options.NumLevels }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -369,7 +369,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
                 { "TotalEpochs", _totalEpochs },
                 { "CurrentEpoch", _currentEpoch }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

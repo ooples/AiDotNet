@@ -362,7 +362,7 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
                 { "ModelSize", _modelSize.ToString() }, { "DecoderDim", _decoderDim },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1803,7 +1803,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

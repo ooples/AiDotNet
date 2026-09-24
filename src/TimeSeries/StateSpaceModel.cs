@@ -709,7 +709,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 { "ProcessNoiseDimensions", $"{_processNoise.Rows}x{_processNoise.Columns}" },
                 { "ObservationNoiseDimensions", $"{_observationNoise.Rows}x{_observationNoise.Columns}" }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;
