@@ -317,7 +317,7 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

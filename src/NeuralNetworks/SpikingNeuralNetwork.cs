@@ -1218,7 +1218,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 { "OutputSize", Architecture.OutputSize },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

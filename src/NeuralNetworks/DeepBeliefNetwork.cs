@@ -762,7 +762,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
                 { "LearningRate", Convert.ToDouble(_learningRate) },
                 { "BatchSize", _batchSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 }

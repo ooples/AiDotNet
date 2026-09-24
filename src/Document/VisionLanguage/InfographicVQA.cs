@@ -508,7 +508,7 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

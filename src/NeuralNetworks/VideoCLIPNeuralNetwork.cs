@@ -1644,7 +1644,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
                 { "VocabularySize", _vocabularySize },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

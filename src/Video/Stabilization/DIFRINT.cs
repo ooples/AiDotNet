@@ -593,7 +593,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         {
             { "ModelName", "DIFRINT" }, { "NumFeatures", _numFeatures }, { "NumIterations", _numIterations }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

@@ -617,7 +617,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
             { "NumFeatures", _numFeatures }, { "HiddenDimension", _hiddenDimension },
             { "NumDiffusionSteps", _numDiffusionSteps }, { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
 
