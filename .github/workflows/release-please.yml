@@ -17,7 +17,17 @@ on:
     branches:
       - master
       - main
-
+  # Recovery path: build and publish an EXISTING release whose own run never published (v0.232.0's
+  # "Restore and Build" hit the old 25-minute limit, so Pack and Publish never ran). Re-running that
+  # cancelled run replays its original commit and old workflow, and a fresh push does not pass the
+  # release_created gate for a release that already exists. This input runs the same build-release
+  # and publish jobs, with this workflow, against the named tag. The push path is unchanged.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and publish, e.g. v0.232.0"
+        required: true
+        type: string
 permissions:
   contents: read
 
@@ -30,6 +40,7 @@ concurrency:
 jobs:
   release-please:
     name: Maintain Release PR / cut release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # Scope issues:write (label mutations) to this job only, following least-privilege —
     # a job-level permissions block OVERRIDES the workflow default, so contents/pull-requests
@@ -54,16 +65,79 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  release-target:
+    name: Resolve the release to build
+    needs: release-please
+    # Runs after release-please on a push, and on its own when dispatched (release-please is skipped).
+    if: always() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to confirm the dispatched tag is an existing release.
+    outputs:
+      publish: ${{ steps.target.outputs.publish }}
+      tag_name: ${{ steps.target.outputs.tag_name }}
+      version: ${{ steps.target.outputs.version }}
+    steps:
+      - name: Resolve tag and version
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          CREATED: ${{ needs.release-please.outputs.release_created }}
+          PUSH_TAG: ${{ needs.release-please.outputs.tag_name }}
+          PUSH_VERSION: ${{ needs.release-please.outputs.version }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Only a published semver release may be rebuilt: a typo or an arbitrary ref must not ship.
+            [[ "$DISPATCH_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$DISPATCH_TAG' is not a vX.Y.Z tag."; exit 1; }
+            gh release view "$DISPATCH_TAG" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null \
+              || { echo "::error::No GitHub release exists for $DISPATCH_TAG."; exit 1; }
+            { echo "publish=true"; echo "tag_name=$DISPATCH_TAG"; echo "version=${DISPATCH_TAG#v}"; } >> "$GITHUB_OUTPUT"
+          elif [ "$CREATED" = "true" ]; then
+            { echo "publish=true"; echo "tag_name=$PUSH_TAG"; echo "version=$PUSH_VERSION"; } >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-release:
     name: Build and verify release packages
     permissions:
       contents: read # Required to check out the release tag.
     runs-on: ubuntu-latest
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    timeout-minutes: 25
+    needs: release-target
+    # !cancelled() is REQUIRED, not decoration. On a dispatch, release-please is skipped by design, and GitHub
+    # skips every job downstream of a skipped job unless its `if` calls a status function - a bare
+    # `if: <expr>` is evaluated as `success() && <expr>`, and success() is false once any ancestor was
+    # skipped. Without it the v0.232.0 recovery dispatch (run 36135952615) resolved the tag, then skipped
+    # build and publish and still reported success. The result check keeps a FAILED resolve from building.
+    # !cancelled() rather than always(): always() would keep going after someone cancels the run.
+    if: "!cancelled() && needs.release-target.result == 'success' && needs.release-target.outputs.publish == 'true'"
+    # Sized from measurement, not guessed. The same packed core, built alone for the same frameworks in
+    # "Build (compat frameworks + pack)", took 11-18 min (job 15-21 min) across five master runs on
+    # 2026-09-24; this job also builds and packs seven metapackages and runs the generator consumer check.
+    # 25 min left no margin; 45 is ~2x the worst observed comparable job and still catches a hang.
+    timeout-minutes: 45
     outputs:
       package-artifact-id: ${{ steps.upload-packages.outputs.artifact-id }}
+    env:
+      # The ONE list of what a release ships. Build and pack both read it, so a project can never be
+      # packed without having been built (pack runs --no-build) or built without being shipped.
+      #
+      # v0.232.0 never reached NuGet: "Restore and Build" ran `dotnet build` on the whole solution -
+      # tests, samples and benchmarks included - and was still building when the job hit its 25-minute
+      # limit (13:48:35 -> 14:17:01 UTC, 2026-09-24), so Pack and Publish never ran. Only these
+      # projects and their references are needed to produce the packages.
+      PACKED_PROJECTS: >-
+        src/AiDotNet.csproj
+        src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj
+        src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj
+        src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj
+        src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj
+        src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj
+        src/AiDotNet.Storage.Redis/AiDotNet.Storage.Redis.csproj
+        src/AiDotNet.Dashboard/AiDotNet.Dashboard.csproj
     steps:
       - name: Free up disk space
         run: |
@@ -78,7 +152,7 @@ jobs:
       - name: Checkout the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release-target.outputs.tag_name }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -133,35 +207,33 @@ jobs:
 
       - name: Restore and Build
         run: |
-          dotnet restore
-          dotnet build -c Release --no-restore
+          set -e
+          for proj in $PACKED_PROJECTS; do
+            echo "Building $proj"
+            dotnet restore "$proj"
+            dotnet build "$proj" -c Release --no-restore
+          done
 
       - name: Pack NuGet
         run: |
           set -e
-          version=${{ needs.release-please.outputs.version }}
-          dotnet pack src/AiDotNet.csproj -c Release -o out --no-build /p:PackageVersion=$version
-          echo "Package created: AiDotNet.$version.nupkg"
-
-          # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c). They are versioned in
-          # lockstep with the core package, but only AiDotNet was ever packed here, so a consumer
-          # told to add AiDotNet.Storage.Sqlite could not get it from NuGet at all. Packed with the
-          # SAME version so an opt-in backend can never drift from the core it extends.
-          #
-          # Postgres and Redis were not even in AiDotNet.sln until now, so they never compiled in CI
-          # and could not be packed at all. Dashboard declares its own <Version>1.0.0</Version>;
-          # /p:PackageVersion overrides that at pack time, so it publishes on the release version
-          # like everything else here.
-          for proj in src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj                       src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj                       src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj                       src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj                       src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj                       src/AiDotNet.Storage.Redis/AiDotNet.Storage.Redis.csproj                       src/AiDotNet.Dashboard/AiDotNet.Dashboard.csproj; do
+          version=${{ needs.release-target.outputs.version }}
+          for proj in $PACKED_PROJECTS; do
             echo "Packing $proj"
             dotnet pack "$proj" -c Release -o out --no-build /p:PackageVersion=$version
           done
+          echo "Package created: AiDotNet.$version.nupkg"
+
+          # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c) are versioned in lockstep
+          # with the core package: packed with the SAME version so an opt-in backend can never drift from
+          # the core it extends. Dashboard declares its own <Version>1.0.0</Version>; /p:PackageVersion
+          # overrides that at pack time, so it publishes on the release version like everything else.
 
       - name: Verify packages
         run: |
           set -e
           shopt -s nullglob
-          version=${{ needs.release-please.outputs.version }}
+          version=${{ needs.release-target.outputs.version }}
           main="out/AiDotNet.${version}.nupkg"
           [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
 
@@ -189,13 +261,13 @@ jobs:
 
       - name: Verify PackageReference consumer gets generated factories automatically
         shell: pwsh
-        run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
+        run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-target.outputs.version }}.nupkg"
 
       - name: Upload verified release packages
         id: upload-packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-packages-${{ needs.release-please.outputs.tag_name }}
+          name: release-packages-${{ needs.release-target.outputs.tag_name }}
           path: out/*.nupkg
           if-no-files-found: error
           retention-days: 30
@@ -207,8 +279,11 @@ jobs:
       contents: write # Required for gh release upload.
       id-token: write # Required for NuGet trusted publishing.
     runs-on: ubuntu-latest
-    needs: [release-please, build-release]
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: [release-target, build-release]
+    # Same skip propagation as build-release. Publishing additionally requires the verified build to have
+    # SUCCEEDED, and a cancelled run must stop here: always() would let the NuGet push continue after a
+    # cancellation once the build had already succeeded.
+    if: "!cancelled() && needs.release-target.result == 'success' && needs.build-release.result == 'success' && needs.release-target.outputs.publish == 'true'"
     timeout-minutes: 10
     steps:
       - name: Setup .NET
@@ -228,6 +303,11 @@ jobs:
         with:
           user: ooples
 
+      # A version that is already on NuGet is immutable there: a re-run (the manual path rebuilds
+      # the same tag) must not publish a second, different build under the same identity. Such a
+      # package is not pushed, and the copy NuGet already serves replaces the rebuild in out/, so
+      # the GitHub release asset below is the published package rather than a new build of it.
+      # (Digests cannot be compared directly: nuget.org repository-signs what it accepts.)
       - name: Push to NuGet
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
@@ -241,15 +321,54 @@ jobs:
           pkgs=(out/*.nupkg)
           [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No .nupkg files found in out/"; exit 1; }
           for pkg in "${pkgs[@]}"; do
-            echo "Publishing $pkg to NuGet..."
-            dotnet nuget push "$pkg" \
+            nuspec="$(unzip -p "$pkg" '*.nuspec')"
+            id="$(printf '%s' "$nuspec" | sed -n 's:.*<id>\(.*\)</id>.*:\1:p' | head -n 1)"
+            version="$(printf '%s' "$nuspec" | sed -n 's:.*<version>\(.*\)</version>.*:\1:p' | head -n 1)"
+            if [ -z "$id" ] || [ -z "$version" ]; then
+              echo "::error::Could not read the package id and version from $pkg."
+              exit 1
+            fi
+            lower_id="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+            lower_version="$(printf '%s' "$version" | tr '[:upper:]' '[:lower:]')"
+            published="https://api.nuget.org/v3-flatcontainer/$lower_id/$lower_version/$lower_id.$lower_version.nupkg"
+            status="$(curl -sSI -o /dev/null -w '%{http_code}' "$published")"
+            if [ "$status" = "200" ]; then
+              echo "::notice::$id $version is already on NuGet; keeping the published package instead of this rebuild."
+              curl -fsSL -o "$pkg" "$published"
+              continue
+            fi
+            if [ "$status" != "404" ]; then
+              echo "::error::Could not determine whether $id $version is published (HTTP $status)."
+              exit 1
+            fi
+            echo "Publishing $id $version to NuGet..."
+            # No --skip-duplicate: a conflict here means another build published this version after
+            # the check above (it is not indexed yet), and silently skipping would attach this
+            # different rebuild to the release. Fail instead; a re-run then takes the published copy.
+            if ! dotnet nuget push "$pkg" \
               --api-key "$NUGET_API_KEY" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
+              --source https://api.nuget.org/v3/index.json; then
+              echo "::error::Pushing $id $version failed. If NuGet reports it already exists, another build published it; re-run once it is indexed."
+              exit 1
+            fi
           done
 
+      # Upload only the assets the release does not have yet. Replacing one (--clobber) would put a
+      # different build under a published name, and a failed replacement would remove the asset.
       - name: Attach .nupkg to the GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so gh cannot infer the repository from a git remote.
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.release-target.outputs.tag_name }}
         run: |
-          gh release upload "${{ needs.release-please.outputs.tag_name }}" out/*.nupkg --clobber
+          set -euo pipefail
+          existing="$(gh release view "$TAG_NAME" --json assets --jq '.assets[].name')"
+          for pkg in out/*.nupkg; do
+            name="$(basename "$pkg")"
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
+              echo "::notice::$name is already attached to $TAG_NAME; leaving the published asset in place."
+              continue
+            fi
+            gh release upload "$TAG_NAME" "$pkg"
+          done

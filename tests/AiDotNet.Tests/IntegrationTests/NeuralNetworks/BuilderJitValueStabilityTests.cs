@@ -123,6 +123,37 @@ public class BuilderJitValueStabilityTests
         return worst;
     }
 
+    /// <summary>
+    /// Largest element-wise gap between two predict paths on the same inputs.
+    /// </summary>
+    /// <remarks>
+    /// The pairwise-spread comparison above cannot see a path that is wrong by an input-independent
+    /// offset: a stale output bias shifts every prediction equally and leaves every pairwise distance
+    /// unchanged. That is exactly how FeedForwardNeuralNetwork's cached CompiledMlp plan kept serving
+    /// pre-training biases after BuildAsync (1.4e-2 to 2.7e-2 from the per-layer forward) while the
+    /// spread comparison still passed most of the time. Each output is copied immediately because a
+    /// compiled plan may hand back a buffer that its next execution overwrites.
+    /// </remarks>
+    private static double MaxElementwise(
+        Func<Tensor<float>, Tensor<float>> left,
+        Func<Tensor<float>, Tensor<float>> right,
+        int count = 12)
+    {
+        double worst = 0.0;
+        for (int k = 0; k < count; k++)
+        {
+            var input = new Tensor<float>([1, SeqLen]);
+            for (int s = 0; s < SeqLen; s++) input[0, s] = k + 1;
+
+            float[] a = left(input).ToArray();
+            float[] b = right(input).ToArray();
+            Assert.Equal(a.Length, b.Length);
+            for (int q = 0; q < a.Length; q++) worst = Math.Max(worst, Math.Abs(a[q] - b[q]));
+        }
+
+        return worst;
+    }
+
     private static (Tensor<float> Features, Tensor<float> Labels) Corpus(int outputSize)
     {
         const int samples = 64;
@@ -163,6 +194,7 @@ public class BuilderJitValueStabilityTests
     private static async Task<(
         double JitMax,
         double EagerMax,
+        double MaxElementwiseGap,
         bool SawJitDisabled,
         bool SawJitFallback,
         string Transcript)> BuildAndMeasure(
@@ -188,9 +220,12 @@ public class BuilderJitValueStabilityTests
 
             var result = await builder.BuildAsync();
 
+            double jitMax = MaxPairwise(result.Predict);
+            double eagerMax = MaxPairwise(eagerPredict);
             return (
-                MaxPairwise(result.Predict),
-                MaxPairwise(eagerPredict),
+                jitMax,
+                eagerMax,
+                MaxElementwise(result.Predict, eagerPredict),
                 collector.JitDisabledCountFor(model.GetType()) > 0,
                 collector.JitFallbackCountFor(model.GetType()) > 0,
                 collector.Transcript);
@@ -228,7 +263,7 @@ public class BuilderJitValueStabilityTests
                 new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 { InitialLearningRate = 0.0003 }));
 
-        var (jitMax, eagerMax, sawJitDisabled, sawJitFallback, transcript) =
+        var (jitMax, eagerMax, elementwiseGap, sawJitDisabled, sawJitFallback, transcript) =
             await BuildAndMeasure(model, model.Predict, Vocab);
 
         Assert.False(sawJitDisabled,
@@ -241,6 +276,8 @@ public class BuilderJitValueStabilityTests
             $"result.Predict still ignores its input: max pairwise L2 = {jitMax:E3}");
         Assert.True(Math.Abs(jitMax - eagerMax) < 1e-4,
             $"the JIT path disagrees with the eager forward: {jitMax:E3} against {eagerMax:E3}");
+        Assert.True(elementwiseGap <= 1e-4,
+            $"the JIT path disagrees with the eager forward element-wise by {elementwiseGap:E3}");
     }
 
     [Fact]
@@ -258,7 +295,7 @@ public class BuilderJitValueStabilityTests
 
         var model = new FeedForwardNeuralNetwork<float>(architecture);
 
-        var (jitMax, eagerMax, sawJitDisabled, sawJitFallback, transcript) =
+        var (jitMax, eagerMax, elementwiseGap, sawJitDisabled, sawJitFallback, transcript) =
             await BuildAndMeasure(model, model.Predict, 4);
 
         Assert.False(sawJitDisabled,
@@ -271,6 +308,10 @@ public class BuilderJitValueStabilityTests
             $"the compiled plan ignores its input: max pairwise L2 = {jitMax:E3}");
         Assert.True(Math.Abs(jitMax - eagerMax) < 1e-3,
             $"the compiled plan disagrees with the eager forward: {jitMax:E3} against {eagerMax:E3}");
+        // Identical parameters through two GEMM kernels: measured <= 4.3e-6 once eager Predict stopped
+        // reading a stale CompiledMlp plan (it was 1.4e-2 to 2.7e-2 before, in every trial).
+        Assert.True(elementwiseGap <= 1e-4,
+            $"the compiled plan disagrees with the eager forward element-wise by {elementwiseGap:E3}");
     }
 
     [Fact]

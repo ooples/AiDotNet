@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.Tensors.Engines;
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -39,8 +40,9 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     "https://github.com/ultralytics/ultralytics",
     Year = 2024,
     Authors = "Glenn Jocher, Jing Qiu")]
-public class YOLOv11<T> : ObjectDetectorBase<T>
+public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
+    private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;
     private readonly List<AttentionBlock<T>> _attentionBlocks;
@@ -79,6 +81,8 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
+        _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
+            _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
 
@@ -91,6 +95,21 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (1.33, 1.25),
         _ => (0.67, 0.75)
     };
+
+    /// <summary>Trains the head with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
+    /// <remarks>
+    /// Uses the YOLOv8-family objective (alpha 0.5, beta 6, top-10; box/class/DFL gains 7.5/0.5/1.5); override it
+    /// with <see cref="ObjectDetectionOptions{T}.TaskAlignedLoss"/>. Inputs are model-ready NCHW tensors, as for
+    /// Predict, and targets are normalized against that input size.
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        YoloDetectionTraining.Validate(input, targets, Options.NumClasses, "YOLOv11");
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        TrainWithTargets(input, targets, (heads, batch) => YoloDetectionTraining.HeadLoss(
+            _detectionLoss, heads, 0, _strides.Length, _strides, height, width, batch, _detectionLoss.TopK));
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -316,7 +335,7 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
 /// <summary>
 /// Spatial Pyramid Pooling Fast (SPPF) block.
 /// </summary>
-internal class SPPFBlock<T>
+internal class SPPFBlock<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _conv1;
@@ -391,68 +410,37 @@ internal class SPPFBlock<T>
     }
 
     private Tensor<T> MaxPool(Tensor<T> x, int kernelSize)
-    {
-        int padding = kernelSize / 2;
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        var output = new Tensor<T>(x._shape);
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double maxVal = double.NegativeInfinity;
-                        for (int kh = 0; kh < kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < kernelSize; kw++)
-                            {
-                                int ih = h - padding + kh;
-                                int iw = w - padding + kw;
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                                {
-                                    double val = _numOps.ToDouble(x[n, c, ih, iw]);
-                                    maxVal = Math.Max(maxVal, val);
-                                }
-                            }
-                        }
-                        output[n, c, h, w] = _numOps.FromDouble(maxVal == double.NegativeInfinity ? 0 : maxVal);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // Stride-1 "same" max pooling that ignores out-of-bounds cells (SPPF), tape-visible.
+        => CvTensorOps<T>.MaxPoolSame(x, kernelSize);
 
     private Tensor<T> ConcatenateChannels(params Tensor<T>[] tensors)
     {
         return AiDotNetEngine.Current.TensorConcatenate(tensors, axis: 1);
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
+    /// <summary>
+    /// Elementwise Swish, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplySiLU(Tensor<T> x) => AiDotNetEngine.Current.Swish(x);
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(silu);
-        }
-        return result;
+        yield return _conv1;
+        yield return _conv2;
     }
 }
 
 /// <summary>
 /// Lightweight attention block for feature enhancement.
 /// </summary>
-internal class AttentionBlock<T>
+internal class AttentionBlock<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _query;
@@ -476,67 +464,31 @@ internal class AttentionBlock<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        var engine = AiDotNetEngine.Current;
         int batch = input.Shape[0];
         int channels = input.Shape[1];
         int height = input.Shape[2];
         int width = input.Shape[3];
         int spatialSize = height * width;
 
-        // Compute Q, K, V
         var q = _query.Forward(input);
         var k = _key.Forward(input);
         var v = _value.Forward(input);
 
-        // Reshape and compute attention
-        // For simplicity, compute spatial attention per batch
-        var output = new Tensor<T>(input._shape);
+        // Channel attention: logit_c = sum_hw(Q_c) * sum_hw(K_c) * scale / (H*W), softmax over channels,
+        // then each channel of V is scaled by its weight. The softmax is max-shifted (the loop it
+        // replaces exponentiated unshifted logits, which overflowed to NaN on large activations).
+        var qSum = engine.ReduceSum(q, new[] { 2, 3 }, false);                  // [B, C]
+        var kSum = engine.ReduceSum(k, new[] { 2, 3 }, false);
+        var logits = engine.TensorMultiplyScalar(
+            engine.TensorMultiply(qSum, kSum), _numOps.FromDouble(_scale / spatialSize));
+        var weights = engine.Softmax(logits, -1);
+        var gate = engine.TensorBroadcastTo(
+            engine.Reshape(weights, new[] { batch, channels, 1, 1 }), new[] { batch, channels, height, width });
 
-        for (int n = 0; n < batch; n++)
-        {
-            // Global average for channel attention (simplified)
-            var channelWeights = new double[channels];
-            double sumWeights = 0;
-
-            for (int c = 0; c < channels; c++)
-            {
-                double qSum = 0, kSum = 0;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        qSum += _numOps.ToDouble(q[n, c, h, w]);
-                        kSum += _numOps.ToDouble(k[n, c, h, w]);
-                    }
-                }
-                double attn = Math.Exp(qSum * kSum * _scale / spatialSize);
-                channelWeights[c] = attn;
-                sumWeights += attn;
-            }
-
-            // Normalize and apply
-            for (int c = 0; c < channels; c++)
-            {
-                double weight = channelWeights[c] / sumWeights;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double vVal = _numOps.ToDouble(v[n, c, h, w]);
-                        output[n, c, h, w] = _numOps.FromDouble(vVal * weight);
-                    }
-                }
-            }
-        }
-
-        // Project and add residual
-        var projected = _proj.Forward(output);
-
-        for (int i = 0; i < projected.Length; i++)
-        {
-            projected[i] = _numOps.Add(projected[i], input[i]);
-        }
-
-        return projected;
+        // Project, then add the residual with an engine op (the old in-place indexer write severed
+        // the tape for everything upstream of this block).
+        return engine.TensorAdd(_proj.Forward(engine.TensorMultiply(v, gate)), input);
     }
 
     public long GetParameterCount()
@@ -566,5 +518,14 @@ internal class AttentionBlock<T>
         _key.ReadParameters(reader);
         _value.ReadParameters(reader);
         _proj.ReadParameters(reader);
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        yield return _query;
+        yield return _key;
+        yield return _value;
+        yield return _proj;
     }
 }

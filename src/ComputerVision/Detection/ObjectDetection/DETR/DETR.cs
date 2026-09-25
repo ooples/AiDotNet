@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -41,13 +42,16 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     "https://arxiv.org/abs/2005.12872",
     Year = 2020,
     Authors = "Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko")]
-public class DETR<T> : ObjectDetectorBase<T>
+public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
     private readonly DETREncoder<T> _encoder;
     private readonly DETRDecoder<T> _decoder;
     private readonly Conv2D<T> _inputProj;
     private readonly int _hiddenDim;
     private readonly NMS<T> _nms;
+    private readonly DETRSetLoss<T> _detectionLoss;
+    private readonly int _trainingClassCount;
+    private readonly int _trainingQueryCount;
 
     /// <inheritdoc/>
     public override string Name => $"DETR-{Options.Size}";
@@ -60,6 +64,12 @@ public class DETR<T> : ObjectDetectorBase<T>
     {
         var (hiddenDim, numHeads, numEncoderLayers, numDecoderLayers, numQueries) = GetSizeConfig(options.Size);
         _hiddenDim = hiddenDim;
+        _trainingClassCount = options.NumClasses;
+        _trainingQueryCount = numQueries;
+        var lossOptions = options.SetPredictionLoss ?? DetrSetLossOptions.ForDetr();
+        if (lossOptions.ClassificationLoss != SetPredictionClassificationLoss.SoftmaxCrossEntropy)
+            throw new ArgumentException("DETR's class head is a softmax with a no-object class; use a softmax cross-entropy set loss.", nameof(options));
+        _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1), lossOptions);
 
         // Initialize backbone (ResNet-50 by default)
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
@@ -89,6 +99,33 @@ public class DETR<T> : ObjectDetectorBase<T>
         ModelSize.XLarge => (512, 8, 6, 6, 500),
         _ => (256, 8, 6, 6, 100)
     };
+
+    /// <summary>Trains the final DETR heads with exact assignment, no-object CE, L1 and GIoU.</summary>
+    /// <remarks>
+    /// Inputs are model-ready NCHW tensors, as for Predict; this method does not implicitly resize
+    /// or normalize them. Targets use normalized center-format boxes. An image with more targets
+    /// than this model has queries is rejected before initialization or update. Intermediate decoder
+    /// outputs are not exposed by this architecture, so no auxiliary decoder objective is claimed.
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (input.Rank != 4 || input.Shape[0] <= 0 || input.Shape[1] != 3 || input.Shape[2] <= 0 || input.Shape[3] <= 0)
+            throw new ArgumentException("DETR training requires a nonempty NCHW three-channel image batch.", nameof(input));
+        targets.ValidateForModel(input.Shape[0], _trainingClassCount, _trainingQueryCount);
+        TrainWithTargets(input, targets, ComputeDetectionLoss);
+    }
+
+    private Tensor<T> ComputeDetectionLoss(List<Tensor<T>> heads, DetectionTrainingBatch<T> targets)
+    {
+        if (heads.Count != 2)
+            throw new InvalidOperationException("DETR training requires the actual final class and box heads.");
+        // Forward/Predict intentionally expose raw box logits; DecodeOutputs applies sigmoid for
+        // inference. Apply that same transformation on the tape for semantic training only, keeping
+        // both the normalized-box loss contract and raw-output regression API unchanged.
+        return _detectionLoss.ComputeTapeLoss(heads[0], Engine.Sigmoid(heads[1]), targets);
+    }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -187,7 +224,7 @@ public class DETR<T> : ObjectDetectorBase<T>
 
         // Note: DETR is designed to not need NMS, but we apply it for safety
         // with a very high IoU threshold
-        var nmsResults = _nms.Apply(candidateDetections, Math.Max(0.9, nmsThreshold));
+        var nmsResults = _nms.Apply(candidateDetections, EffectiveNmsThreshold(nmsThreshold));
 
         // Limit to max detections
         if (nmsResults.Count > Options.MaxDetections)
@@ -287,33 +324,7 @@ public class DETR<T> : ObjectDetectorBase<T>
         _decoder.WriteParameters(writer);
     }
 
-    private Tensor<T> FlattenForTransformer(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-        int seqLen = height * width;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, channels });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int seqIdx = h * width + w;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        result[b, seqIdx, c] = x[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+    private Tensor<T> FlattenForTransformer(Tensor<T> x) => CvTensorOps<T>.FlattenSpatial(x);
 
     private Tensor<T> GeneratePositionalEncoding(int[] shape)
     {
@@ -338,12 +349,19 @@ public class DETR<T> : ObjectDetectorBase<T>
 
         return encoding;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One query per object means duplicates are rare, so NMS runs only as a safety net at IoU 0.9
+    /// (or the requested value, if that is higher) instead of the caller's threshold.
+    /// </remarks>
+    public override double EffectiveNmsThreshold(double requested) => Math.Max(0.9, requested);
 }
 
 /// <summary>
 /// Transformer encoder for DETR.
 /// </summary>
-internal class DETREncoder<T>
+internal class DETREncoder<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -372,19 +390,7 @@ internal class DETREncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding)
     {
-        // Create a copy of input to avoid mutating the original tensor
-        var output = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = x[i];
-        }
-
-        // Add positional encoding
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = _numOps.Add(output[i], posEncoding[i]);
-        }
-
+        var output = AiDotNetEngine.Current.TensorAdd(x, posEncoding);
         foreach (var layer in _layers)
         {
             output = layer.Forward(output);
@@ -438,12 +444,18 @@ internal class DETREncoder<T>
             layer.ReadParameters(reader);
         }
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    {
+        foreach (var child in _layers) yield return child;
+    }
 }
 
 /// <summary>
 /// Single encoder layer in DETR.
 /// </summary>
-internal class EncoderLayer<T>
+internal class EncoderLayer<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly MultiHeadSelfAttention<T> _selfAttn;
@@ -531,53 +543,21 @@ internal class EncoderLayer<T>
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int ffnDim = _ffn1.OutputSize;
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var feat = new Tensor<T>(new[] { 1, _hiddenDim });
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    feat[0, d] = x[b, s, d];
-                }
-
-                // FFN1 with GELU
-                var h = _ffn1.Forward(feat);
-                for (int d = 0; d < ffnDim; d++)
-                {
-                    double val = _numOps.ToDouble(h[0, d]);
-                    h[0, d] = _numOps.FromDouble(GELU(val));
-                }
-
-                // FFN2
-                var output = _ffn2.Forward(h);
-
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    result[b, s, d] = output[0, d];
-                }
-            }
-        }
-
-        return result;
-    }
+        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
-    private static double GELU(double x)
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
     {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+        yield return _selfAttn;
+        yield return _ffn1;
+        yield return _ffn2;
+        yield return _norm1;
+        yield return _norm2;
     }
 }
 
@@ -585,7 +565,7 @@ internal class EncoderLayer<T>
 /// Layer normalization with learnable affine parameters (gamma and beta).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class LayerNorm<T>
+internal class LayerNorm<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _hiddenDim;
@@ -620,49 +600,7 @@ internal class LayerNorm<T>
         }
     }
 
-    public Tensor<T> Forward(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Compute mean
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                // Normalize and apply affine transformation: gamma * (x - mean) / std + beta
-                double std = Math.Sqrt(variance + _eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    double gamma = _numOps.ToDouble(_gamma[d]);
-                    double beta = _numOps.ToDouble(_beta[d]);
-                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
-                }
-            }
-        }
-
-        return result;
-    }
+    public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);
 
     public long GetParameterCount()
     {
@@ -719,6 +657,16 @@ internal class LayerNorm<T>
         {
             _beta[i] = _numOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
+
+    /// <inheritdoc />
+    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    {
+        yield return _gamma;
+        yield return _beta;
     }
 }
 
