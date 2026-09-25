@@ -294,6 +294,11 @@ jobs:
         with:
           user: ooples
 
+      # A version that is already on NuGet is immutable there: a re-run (the manual path rebuilds
+      # the same tag) must not publish a second, different build under the same identity. Such a
+      # package is not pushed, and the copy NuGet already serves replaces the rebuild in out/, so
+      # the GitHub release asset below is the published package rather than a new build of it.
+      # (Digests cannot be compared directly: nuget.org repository-signs what it accepts.)
       - name: Push to NuGet
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
@@ -307,15 +312,54 @@ jobs:
           pkgs=(out/*.nupkg)
           [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No .nupkg files found in out/"; exit 1; }
           for pkg in "${pkgs[@]}"; do
-            echo "Publishing $pkg to NuGet..."
-            dotnet nuget push "$pkg" \
+            nuspec="$(unzip -p "$pkg" '*.nuspec')"
+            id="$(printf '%s' "$nuspec" | sed -n 's:.*<id>\(.*\)</id>.*:\1:p' | head -n 1)"
+            version="$(printf '%s' "$nuspec" | sed -n 's:.*<version>\(.*\)</version>.*:\1:p' | head -n 1)"
+            if [ -z "$id" ] || [ -z "$version" ]; then
+              echo "::error::Could not read the package id and version from $pkg."
+              exit 1
+            fi
+            lower_id="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+            lower_version="$(printf '%s' "$version" | tr '[:upper:]' '[:lower:]')"
+            published="https://api.nuget.org/v3-flatcontainer/$lower_id/$lower_version/$lower_id.$lower_version.nupkg"
+            status="$(curl -sS -o /dev/null -w '%{http_code}' "$published")"
+            if [ "$status" = "200" ]; then
+              echo "::notice::$id $version is already on NuGet; keeping the published package instead of this rebuild."
+              curl -fsSL -o "$pkg" "$published"
+              continue
+            fi
+            if [ "$status" != "404" ]; then
+              echo "::error::Could not determine whether $id $version is published (HTTP $status)."
+              exit 1
+            fi
+            echo "Publishing $id $version to NuGet..."
+            # No --skip-duplicate: a conflict here means another build published this version after
+            # the check above (it is not indexed yet), and silently skipping would attach this
+            # different rebuild to the release. Fail instead; a re-run then takes the published copy.
+            if ! dotnet nuget push "$pkg" \
               --api-key "$NUGET_API_KEY" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
+              --source https://api.nuget.org/v3/index.json; then
+              echo "::error::Pushing $id $version failed. If NuGet reports it already exists, another build published it; re-run once it is indexed."
+              exit 1
+            fi
           done
 
+      # Upload only the assets the release does not have yet. Replacing one (--clobber) would put a
+      # different build under a published name, and a failed replacement would remove the asset.
       - name: Attach .nupkg to the GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so gh cannot infer the repository from a git remote.
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.release-target.outputs.tag_name }}
         run: |
-          gh release upload "${{ needs.release-target.outputs.tag_name }}" out/*.nupkg --clobber
+          set -euo pipefail
+          existing="$(gh release view "$TAG_NAME" --json assets --jq '.assets[].name')"
+          for pkg in out/*.nupkg; do
+            name="$(basename "$pkg")"
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
+              echo "::notice::$name is already attached to $TAG_NAME; leaving the published asset in place."
+              continue
+            fi
+            gh release upload "$TAG_NAME" "$pkg"
+          done
