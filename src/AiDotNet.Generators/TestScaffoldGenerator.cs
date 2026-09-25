@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -470,6 +470,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // at full paper scale. The model defaults stay 16B and fully user-customizable; only the default-gate test defers.
         // KimiVLThinking is the same 16B MoE backbone with a reasoning head — same OOM profile, same deferral.
         "KimiVL", "KimiVLThinking",
+        // CascadeRCNN (Cai & Vasconcelos 2018) at paper scale: 1000 proposals through three 12544x1024 stages on
+        // ResNet-50/FPN, every stage on the tape. Measured alone on the 26-test class: 38.6 GB in double (killed
+        // the ~16 GB shard-C runner). The bin-major RoIAlign cut it to 27.2 GB; float cut the double run to
+        // 20.7 GB but broke Detect_ControlledPositiveHead; under a 12 GB GC hard limit two tests still exhaust
+        // the heap. The live set exceeds the runner, so it runs at paper scale in the nightly heavy lane.
+        "CascadeRCNN",
         // MiniGPTv2 (Chen et al. 2023): LLaMA-2-backbone VLM. Already in Fp32, but the LLaMA-2 decoder weights
         // are ~28 GB even at fp32, so the live J-M run OOMs it (NamedLayerActivations). Float is insufficient
         // for a 7B-class backbone; defer to the nightly HeavyTimeout lane. Paper defaults (LLaMA-2 scale) intact.
@@ -2367,33 +2373,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        using var clone = (global::AiDotNet.Diffusion.StyleTransfer.InstantStyleModel<float>)source.Clone();");
         sb.AppendLine("        var sourceLayers = global::AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<float>(source);");
         sb.AppendLine("        var cloneLayers = global::AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<float>(clone);");
-        sb.AppendLine("        Assert.Equal(sourceLayers.Count, cloneLayers.Count);");
+        sb.AppendLine("        var mutablePair = AssertAllParametersRemainCowPeers(");
+        sb.AppendLine("            sourceLayers, cloneLayers, \"InstantStyle\");");
+        sb.AppendLine("        var mutableSource = mutablePair.Source;");
+        sb.AppendLine("        var mutableClone = mutablePair.Clone;");
         sb.AppendLine();
-        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? mutableSource = null;");
-        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? mutableClone = null;");
-        sb.AppendLine("        for (int layer = 0; layer < sourceLayers.Count; layer++)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var sourceParameters = sourceLayers[layer].GetTrainableParameters();");
-        sb.AppendLine("            var cloneParameters = cloneLayers[layer].GetTrainableParameters();");
-        sb.AppendLine("            Assert.Equal(sourceParameters.Count, cloneParameters.Count);");
-        sb.AppendLine("            for (int parameter = 0; parameter < sourceParameters.Count; parameter++)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                if (sourceParameters[parameter].Length == 0) continue;");
-        sb.AppendLine("                Assert.True(");
-        sb.AppendLine("                    global::AiDotNet.Helpers.CopyOnWriteCloneHelper.AreLiveCowPeers(");
-        sb.AppendLine("                        sourceParameters[parameter], cloneParameters[parameter]),");
-        sb.AppendLine("                    $\"Layer {layer} ({sourceLayers[layer].GetType().Name}) parameter {parameter} was copied instead of retaining its existing COW peer; sameTensor={object.ReferenceEquals(sourceParameters[parameter], cloneParameters[parameter])}, sourceCow={sourceParameters[parameter].IsCowShared}, cloneCow={cloneParameters[parameter].IsCowShared}, sameStorage={sourceParameters[parameter].SharesStorageWith(cloneParameters[parameter])}.\");");
-        sb.AppendLine("                mutableSource ??= sourceParameters[parameter];");
-        sb.AppendLine("                mutableClone ??= cloneParameters[parameter];");
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
+        sb.AppendLine("        var sourceToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableSource);");
+        sb.AppendLine("        var cloneToMutate = Assert.IsType<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(mutableClone);");
+        sb.AppendLine("        float sourceValue = sourceToMutate[0];");
+        sb.AppendLine("        cloneToMutate[0] = sourceValue + 1.0f;");
+        sb.AppendLine("        Assert.Equal(sourceValue, sourceToMutate[0]);");
+        sb.AppendLine("        Assert.NotEqual(sourceToMutate[0], cloneToMutate[0]);");
+        sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("        Assert.NotNull(mutableSource);");
-        sb.AppendLine("        Assert.NotNull(mutableClone);");
-        sb.AppendLine("        float sourceValue = mutableSource![0];");
-        sb.AppendLine("        mutableClone![0] = sourceValue + 1.0f;");
-        sb.AppendLine("        Assert.Equal(sourceValue, mutableSource[0]);");
-        sb.AppendLine("        Assert.NotEqual(mutableSource[0], mutableClone[0]);");
+        sb.AppendLine("    [Fact(Timeout = 120000)]");
+        sb.AppendLine("    public async System.Threading.Tasks.Task StyDiffClone_FirstForwardPreservesSharedWeightsAndOutput()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+        sb.AppendLine("        using var source = CreateStyDiffModel(42);");
+        sb.AppendLine("        using var input = CreateStyDiffInput();");
+        sb.AppendLine("        using var sourceOutput = source.Predict(input);");
+        sb.AppendLine("        using var clone = (global::AiDotNet.Diffusion.StyleTransfer.StyDiffModel<float>)source.Clone();");
+        sb.AppendLine();
+        sb.AppendLine("        var sourceLayersBefore = global::AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<float>(source);");
+        sb.AppendLine("        var cloneLayersBefore = global::AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<float>(clone);");
+        sb.AppendLine("        var sourceParametersBefore = SnapshotParameterReferences(sourceLayersBefore);");
+        sb.AppendLine("        var cloneParametersBefore = SnapshotParameterReferences(cloneLayersBefore);");
+        sb.AppendLine("        AssertAllParametersRemainCowPeers(sourceLayersBefore, cloneLayersBefore, \"StyDiff\");");
+        sb.AppendLine("        using var cloneOutput = clone.Predict(input);");
+        sb.AppendLine("        AssertTrainableGraphReferencesUnchanged(source, sourceLayersBefore, sourceParametersBefore, \"source\");");
+        sb.AppendLine("        AssertTrainableGraphReferencesUnchanged(clone, cloneLayersBefore, cloneParametersBefore, \"clone\");");
+        sb.AppendLine("        AssertAllParametersRemainCowPeers(sourceLayersBefore, cloneLayersBefore, \"StyDiff\");");
+        sb.AppendLine("        AssertOutputsClose(sourceOutput, cloneOutput);");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    [Fact(Timeout = 120000)]");
@@ -2465,6 +2476,118 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("                attentionResolutions: global::System.Array.Empty<int>(), contextDim: 0,");
         sb.AppendLine("                numHeads: 1, inputHeight: 8, seed: seed),");
         sb.AppendLine("            vae: CreateVae(seed), seed: seed);");
+        sb.AppendLine();
+        sb.AppendLine("    private static global::AiDotNet.Diffusion.StyleTransfer.StyDiffModel<float> CreateStyDiffModel(int seed)");
+        sb.AppendLine("        => new(");
+        sb.AppendLine("            predictor: new global::AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(");
+        sb.AppendLine("                inputChannels: 4, outputChannels: 4, baseChannels: 32,");
+        sb.AppendLine("                channelMultipliers: new[] { 1, 2, 4 }, numResBlocks: 1,");
+        sb.AppendLine("                attentionResolutions: new[] { 1, 2 }, contextDim: 768,");
+        sb.AppendLine("                inputHeight: 16, seed: seed),");
+        sb.AppendLine("            vae: new global::AiDotNet.Diffusion.VAE.StandardVAE<float>(");
+        sb.AppendLine("                inputChannels: 3, latentChannels: 4, baseChannels: 16,");
+        sb.AppendLine("                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: seed),");
+        sb.AppendLine("            seed: seed);");
+        sb.AppendLine();
+        sb.AppendLine("    private static global::AiDotNet.Tensors.LinearAlgebra.Tensor<float> CreateStyDiffInput()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var input = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, 4, 16, 16 });");
+        sb.AppendLine("        for (int i = 0; i < input.Length; i++)");
+        sb.AppendLine("            input[i] = (i % 97) / 97.0f;");
+        sb.AppendLine("        return input;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>[][] SnapshotParameterReferences(");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ITrainableLayer<float>> layers)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var snapshot = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>[layers.Count][];");
+        sb.AppendLine("        for (int layer = 0; layer < layers.Count; layer++)");
+        sb.AppendLine("            snapshot[layer] = global::System.Linq.Enumerable.ToArray(GetParameterHandlesWithoutMaterialization(layers[layer]));");
+        sb.AppendLine("        return snapshot;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>> GetParameterHandlesWithoutMaterialization(");
+        sb.AppendLine("        global::AiDotNet.Interfaces.ITrainableLayer<float> layer)");
+        sb.AppendLine("        => layer is global::AiDotNet.NeuralNetworks.Layers.LayerBase<float> layerBase");
+        sb.AppendLine("            ? layerBase.GetTrainableParametersWithoutMaterialization()");
+        sb.AppendLine("            : layer.GetTrainableParameters();");
+        sb.AppendLine();
+        sb.AppendLine("    private static void AssertTrainableGraphReferencesUnchanged(");
+        sb.AppendLine("        global::AiDotNet.Diffusion.StyleTransfer.StyDiffModel<float> model,");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ITrainableLayer<float>> layersBefore,");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>[]> parametersBefore,");
+        sb.AppendLine("        string graphName)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var layersAfter = global::AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<float>(model);");
+        sb.AppendLine("        Assert.Equal(layersBefore.Count, layersAfter.Count);");
+        sb.AppendLine("        for (int layer = 0; layer < layersBefore.Count; layer++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            Assert.True(");
+        sb.AppendLine("                object.ReferenceEquals(layersBefore[layer], layersAfter[layer]),");
+        sb.AppendLine("                $\"StyDiff {graphName} layer {layer} ({layersBefore[layer].GetType().Name}) was replaced during inference.\");");
+        sb.AppendLine("            var parametersAfter = GetParameterHandlesWithoutMaterialization(layersAfter[layer]);");
+        sb.AppendLine("            Assert.Equal(parametersBefore[layer].Length, parametersAfter.Count);");
+        sb.AppendLine("            for (int parameter = 0; parameter < parametersBefore[layer].Length; parameter++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Assert.True(");
+        sb.AppendLine("                    object.ReferenceEquals(parametersBefore[layer][parameter], parametersAfter[parameter]),");
+        sb.AppendLine("                    $\"StyDiff {graphName} layer {layer} ({layersBefore[layer].GetType().Name}) parameter {parameter} reference was replaced during inference; beforeShape=[{string.Join(\",\", parametersBefore[layer][parameter].Shape)}], afterShape=[{string.Join(\",\", parametersAfter[parameter].Shape)}].\");");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static (global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? Source, global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? Clone) AssertAllParametersRemainCowPeers(");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ITrainableLayer<float>> sourceLayers,");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ITrainableLayer<float>> cloneLayers,");
+        sb.AppendLine("        string modelName)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Assert.Equal(sourceLayers.Count, cloneLayers.Count);");
+        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? mutableSource = null;");
+        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>? mutableClone = null;");
+        sb.AppendLine("        for (int layer = 0; layer < sourceLayers.Count; layer++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var sourceParameters = GetParameterHandlesWithoutMaterialization(sourceLayers[layer]);");
+        sb.AppendLine("            var cloneParameters = GetParameterHandlesWithoutMaterialization(cloneLayers[layer]);");
+        sb.AppendLine("            Assert.Equal(sourceParameters.Count, cloneParameters.Count);");
+        sb.AppendLine("            for (int parameter = 0; parameter < sourceParameters.Count; parameter++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Assert.True(");
+        sb.AppendLine("                    global::System.Linq.Enumerable.SequenceEqual<int>(sourceParameters[parameter].Shape.ToArray(), cloneParameters[parameter].Shape.ToArray()),");
+        sb.AppendLine("                    $\"{modelName} layer {layer} ({sourceLayers[layer].GetType().Name}) parameter {parameter} lifecycle diverged; sourceShape=[{string.Join(\",\", sourceParameters[parameter].Shape)}], cloneShape=[{string.Join(\",\", cloneParameters[parameter].Shape)}].\");");
+        sb.AppendLine("                if (sourceParameters[parameter].Length == 0) continue;");
+        sb.AppendLine("                Assert.True(");
+        sb.AppendLine("                    global::AiDotNet.Helpers.CopyOnWriteCloneHelper.AreLiveCowPeers(");
+        sb.AppendLine("                        sourceParameters[parameter], cloneParameters[parameter]),");
+        sb.AppendLine("                    $\"{modelName} layer {layer} ({sourceLayers[layer].GetType().Name}) parameter {parameter} shape=[{string.Join(\",\", sourceParameters[parameter].Shape)}] is not a live COW peer; sameTensor={object.ReferenceEquals(sourceParameters[parameter], cloneParameters[parameter])}, sourceCow={sourceParameters[parameter].IsCowShared}, cloneCow={cloneParameters[parameter].IsCowShared}, sameStorage={sourceParameters[parameter].SharesStorageWith(cloneParameters[parameter])}.\");");
+        sb.AppendLine("                mutableSource ??= sourceParameters[parameter];");
+        sb.AppendLine("                mutableClone ??= cloneParameters[parameter];");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return (mutableSource, mutableClone);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static void AssertOutputsClose(");
+        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float> expected,");
+        sb.AppendLine("        global::AiDotNet.Tensors.LinearAlgebra.Tensor<float> actual)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());");
+        sb.AppendLine("        Assert.Equal(expected.Length, actual.Length);");
+        sb.AppendLine("        const double absoluteTolerance = 1e-4;");
+        sb.AppendLine("        const double relativeTolerance = 1e-3;");
+        sb.AppendLine("        for (int i = 0; i < expected.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            double expectedValue = expected[i];");
+        sb.AppendLine("            double actualValue = actual[i];");
+        sb.AppendLine("            Assert.True(!double.IsNaN(expectedValue) && !double.IsInfinity(expectedValue),");
+        sb.AppendLine("                $\"Expected output[{i}] is non-finite: {expectedValue}.\");");
+        sb.AppendLine("            Assert.True(!double.IsNaN(actualValue) && !double.IsInfinity(actualValue),");
+        sb.AppendLine("                $\"Clone output[{i}] is non-finite: {actualValue}.\");");
+        sb.AppendLine("            double allowed = absoluteTolerance + relativeTolerance * System.Math.Abs(expectedValue);");
+        sb.AppendLine("            double difference = System.Math.Abs(actualValue - expectedValue);");
+        sb.AppendLine("            Assert.True(difference <= allowed,");
+        sb.AppendLine("                $\"Clone output[{i}] differs by {difference:E6}; allowed {allowed:E6}.\");");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    private static float[] Snapshot(global::AiDotNet.Tensors.LinearAlgebra.Vector<float> parameters)");
         sb.AppendLine("    {");
@@ -2940,7 +3063,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 bool canConstruct = (model.HasParameterlessConstructor
                                     || model.HasArchitectureOnlyConstructor
-                                    || model.HasVectorOnlyConstructor) &&
+                                    || model.HasVectorOnlyConstructor
+                                    || model.HasOptionsOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -2964,9 +3088,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // together is what made this class of gap unreadable in the first place.
                     bool hasCtor = model.HasParameterlessConstructor
                                 || model.HasArchitectureOnlyConstructor
-                                || model.HasVectorOnlyConstructor;
+                                || model.HasVectorOnlyConstructor
+                                || model.HasOptionsOnlyConstructor;
                     string reason = !hasCtor
-                        ? "it has no supported parameterless, architecture-only, or vector-only constructor, so the "
+                        ? "it has no supported parameterless, architecture-only, vector-only, or options-only "
+                          + "constructor, so the "
                           + "generated fixture has no way to build it"
                         : $"it resolves to test family {family.Value}, whose fixture requires an "
                           + $"interface this type does not implement (see IsCompatibleWithFamily); the "
@@ -3031,6 +3157,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <summary>
     /// Processes a single model type symbol, extracting metadata and checking for test coverage.
     /// </summary>
+    /// <summary>
+    /// Whether a type can be instantiated with <c>new T()</c>: it has a public constructor taking
+    /// no arguments, or one whose parameters all have defaults, or it declares none at all and so
+    /// carries the implicit public parameterless constructor.
+    /// </summary>
+    private static bool IsConstructibleWithNoArguments(INamedTypeSymbol type)
+    {
+        if (type.IsAbstract || type.IsStatic)
+            return false;
+
+        foreach (var ctor in type.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public)
+                continue;
+
+            bool callable = true;
+            foreach (var p in ctor.Parameters)
+            {
+                if (!p.HasExplicitDefaultValue) { callable = false; break; }
+            }
+
+            if (callable)
+                return true;
+        }
+
+        return false;
+    }
+
     private static void ProcessModelSymbol(
         INamedTypeSymbol modelClass,
         INamedTypeSymbol? domainAttrSymbol,
@@ -3200,6 +3354,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsMultiLabel = false, extendsFinancialNLP = false;
         bool extendsRiskModel = false, extendsPortfolioOptimizer = false;
         bool extendsTransformerNER = false, extendsSpanBasedNER = false, extendsSequenceLabelingNER = false;
+        // Computer-vision detection / OCR. These derive from ModelBase<T, Tensor<T>, Tensor<T>>
+        // rather than NeuralNetworkBase, so without their own families they fell through to
+        // NeuralNetwork and were rejected for not implementing INeuralNetworkModel.
+        bool extendsObjectDetector = false, extendsTextDetector = false, extendsOcr = false;
 
         var baseType = modelClass.BaseType;
         while (baseType is not null)
@@ -3269,6 +3427,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsDocumentNN = true;
             else if (baseName.StartsWith("VisionLanguageModelBase", System.StringComparison.Ordinal))
                 extendsVisionLanguage = true;
+            else if (baseName.StartsWith("ObjectDetectorBase", System.StringComparison.Ordinal))
+                extendsObjectDetector = true;
+            else if (baseName.StartsWith("TextDetectorBase", System.StringComparison.Ordinal))
+                extendsTextDetector = true;
+            else if (baseName.StartsWith("OCRBase", System.StringComparison.Ordinal))
+                extendsOcr = true;
             else if (baseName.StartsWith("SegmentationModelBase", System.StringComparison.Ordinal) ||
                      baseName.EndsWith("SegmentationBase", System.StringComparison.Ordinal))
                 extendsSegmentation = true;
@@ -3321,7 +3485,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
         bool hasVectorOnlyCtor = false;
+        bool hasOptionsOnlyCtor = false;
         string? architectureParamTypeName = null;
+        string? optionsOnlyParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
             if (ctor.DeclaredAccessibility != Accessibility.Public)
@@ -3371,6 +3537,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     && restOptional)
                 {
                     hasVectorOnlyCtor = true;
+                }
+
+                // Options-only: the model's single required argument is its own options object, and
+                // that object can itself be built with no arguments (#2137). The detection-family
+                // models are the bulk of this: YOLOv8/v10/v11, DETR, RTDETR, DINO and CascadeRCNN all
+                // take ObjectDetectionOptions<T> and nothing else, and that type declares no
+                // constructor at all, so `new YOLOv8<double>(new ObjectDetectionOptions<double>())`
+                // already compiles. The same holds for TextDetectionOptions<T> and OCROptions<T>.
+                //
+                // Both halves are required. The name check keeps this to types that are genuinely a
+                // model's configuration bag rather than any default-constructible dependency, and the
+                // constructor check is what makes the emitted expression compile -- a name ending in
+                // "Options" proves nothing on its own.
+                if (!firstParam.HasExplicitDefaultValue
+                    && restOptional
+                    && firstParam.Type is INamedTypeSymbol optionsType
+                    && StripBacktick(optionsType.Name).EndsWith("Options", System.StringComparison.Ordinal)
+                    && IsConstructibleWithNoArguments(optionsType))
+                {
+                    hasOptionsOnlyCtor = true;
+                    string optionsTypeName = optionsType.ToDisplayString();
+                    if (optionsType.IsGenericType)
+                    {
+                        var unbound = optionsType.ConstructedFrom.ToDisplayString();
+                        int tick = unbound.IndexOf('<');
+                        if (tick > 0) unbound = unbound.Substring(0, tick);
+                        optionsTypeName = unbound + "<double>";
+                    }
+                    optionsOnlyParamTypeName = optionsTypeName;
                 }
 
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
@@ -3436,6 +3631,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             HasVectorOnlyConstructor = hasVectorOnlyCtor,
+            HasOptionsOnlyConstructor = hasOptionsOnlyCtor,
+            ImplementsDetectionTraining = domainAttrSymbol?.ContainingAssembly.GetTypeByMetadataName(
+                "AiDotNet.Interfaces.IDetectionTrainingModel`1") is INamedTypeSymbol detectionTrainingInterface
+                && modelClass.AllInterfaces.Any(iface => SymbolEqualityComparer.Default.Equals(
+                    iface.OriginalDefinition, detectionTrainingInterface)),
+            OptionsOnlyParamTypeName = optionsOnlyParamTypeName,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
@@ -3446,6 +3647,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
             ExtendsSegmentationModelBase = extendsSegmentation,
+            ExtendsObjectDetectorBase = extendsObjectDetector,
+            ExtendsTextDetectorBase = extendsTextDetector,
+            ExtendsOCRBase = extendsOcr,
             ExtendsVideoNeuralNetworkBase = extendsVideoNN,
             ExtendsTtsModelBase = extendsTts,
             ExtendsFinancialModelBase = extendsFinancial,
@@ -3887,6 +4091,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Priority 10: Vision-Language
         if (model.ExtendsVisionLanguageModelBase)
             return TestFamily.VisionLanguage;
+
+        // Priority 10a: Object detection (YOLO, DETR/DINO/RT-DETR, Faster/Cascade R-CNN).
+        // Checked ahead of Segmentation because instance-segmentation detectors carry masks on
+        // their detections but are still detectors: their invariant set is the box/NMS one.
+        if (model.ExtendsObjectDetectorBase)
+            return TestFamily.ObjectDetection;
+
+        // Priority 10b: Text detection (CRAFT, DBNet, EAST).
+        if (model.ExtendsTextDetectorBase)
+            return TestFamily.TextDetection;
+
+        // Priority 10c: Text recognition / OCR (CRNN, TrOCR).
+        if (model.ExtendsOCRBase)
+            return TestFamily.OCR;
 
         // Priority 11: Segmentation
         if (model.ExtendsSegmentationModelBase)
@@ -5081,8 +5299,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.EagleOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16 })";
             }
             else if (model.ClassName == "FinchLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -5092,9 +5309,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16, " +
-                    "learningRate: 1e-5)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.FinchOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FlamingoNeuralNetwork" && model.TypeParameterCount == 1)
             {
@@ -5109,10 +5324,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
-                    "embeddingDimension: 64, maxSequenceLength: 16, imageSize: 32, channels: 3, " +
-                    "numPerceiverTokens: 4, maxImagesInContext: 1, visionHiddenDim: 64, lmHiddenDim: 64, " +
-                    "numVisionLayers: 1, numLmLayers: 1, numHeads: 2, vocabularySize: 64, " +
-                    "numPerceiverLayers: 1, learningRate: 1e-5)";
+                    "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
+                    "MaxSequenceLength = 16, ImageSize = 32, PatchSize = 8, Channels = 3, NumPerceiverTokens = 4, " +
+                    "MaxImagesInContext = 1, VisionDim = 64, LmHiddenDim = 64, " +
+                    "VisionLayers = 1, NumLmLayers = 4, NumHeads = 2, VocabSize = 64, " +
+                    "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
             {
@@ -5633,8 +5849,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 128, outputSize: 4), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 1, numHeads: 4, maxSeqLength: 128, " +
-                    "options: new AiDotNet.NeuralNetworks.Options.XLSTMOptions { LearningRate = 3e-4 })";
+                    "new AiDotNet.NeuralNetworks.Options.XLSTMOptions { VocabSize = 64, " +
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 128, " +
+                    "LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
             {
@@ -6521,8 +6738,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, inputSize: 32, outputSize: 128), " +
-                    "vocabSize: 128, modelDimension: 32, numLayers: 1, maxSeqLength: 32, " +
-                    $"options: new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ RecurrenceDimension = 40 }})";
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32, " +
+                    // NOT an interpolated segment, so a single brace is a single brace.
+                    "RecurrenceDimension = 40 })";
             }
             else if (model.ClassName == "DocGCN" && model.TypeParameterCount == 1)
             {
@@ -6546,25 +6765,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, maxSeqLength: 32)";
-            }
-            else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
-            {
-                // Float and iteration capping made the paper-default fixture fit the watchdog, but
-                // its 50,277-way embedding/head still reduced the memorization loss by only 0.75%
-                // in 15 steps (the invariant requires >1%). Exercise the same public
-                // embedding -> stacked ExtendedLSTM -> normalization -> LM-head construction path
-                // with two recurrent blocks at smoke width/vocabulary/context. Supplying no custom
-                // architecture layers deliberately preserves the model contract: InitializeLayers
-                // builds these defaults through LayerHelper, while production/user custom layers and
-                // all production constructor defaults remain untouched.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 16, outputSize: 64), vocabSize: 64, modelDimension: 32, " +
-                    "numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Mamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "BloombergGPT" && model.TypeParameterCount == 1)
             {
@@ -6966,10 +7167,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 1, stateDimension: 8, expandFactor: 2, maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.FalconMambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 1, StateDimension = 8, ExpandFactor = 2, MaxSequenceLength = 32 })";
             }
-            else if ((model.ClassName is "HawkLanguageModel" or "GLALanguageModel" or "GatedDeltaNetLanguageModel")
+            else if ((model.ClassName is "GLALanguageModel" or "GatedDeltaNetLanguageModel")
                      && model.TypeParameterCount == 1)
             {
                 // These recurrent language models retain their paper/default vocabulary, width,
@@ -6979,12 +7179,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Pin generated-test initialization because these recurrent gates otherwise draw
                 // from the process-shared RNG and the exact trajectory depends on sibling test order.
                 pinInitSeed = true;
-                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "numHeads: 4, ";
+                string recurrentOptionsType = model.ClassName.Replace("LanguageModel", "Options");
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    $"numLayers: 1, {headArgument}maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), " +
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -6995,8 +7196,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.ZambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "Zamba2LanguageModel" && model.TypeParameterCount == 1)
             {
@@ -7006,8 +7206,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Zamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "ChronosBolt" && model.TypeParameterCount == 1)
             {
@@ -7158,10 +7357,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 32, channels: 3, patchSize: 8, vocabularySize: 64, " +
-                    "maxSequenceLength: 8, embeddingDimension: 4, hiddenDim: 32, " +
-                    "numEncoderLayers: 1, numHeads: 4, audioSampleRate: 16000, " +
-                    "audioMaxDuration: 1, imuTimesteps: 8, numVideoFrames: 2)";
+                    "options: new AiDotNet.NeuralNetworks.Options.ImageBindOptions { ImageSize = 32, Channels = 3, " +
+                    "PatchSize = 8, VocabSize = 64, MaxSequenceLength = 8, EmbeddingDimension = 4, " +
+                    "HiddenDim = 32, NumEncoderLayers = 1, NumHeads = 4, AudioSampleRate = 16000, " +
+                    "AudioMaxDuration = 1, ImuTimesteps = 8, NumVideoFrames = 2 })";
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
@@ -9195,9 +9394,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 112, channels: 3, patchSize: 14, vocabularySize: 32, " +
-                    "maxSequenceLength: 16, embeddingDimension: 32, visionHiddenDim: 32, " +
-                    "numVisionLayers: 2, numLmLayers: 2, numHeads: 4)";
+                    "options: new AiDotNet.NeuralNetworks.Options.LLaVAOptions { ImageSize = 112, Channels = 3, " +
+                    "PatchSize = 14, VocabSize = 32, MaxSequenceLength = 16, " +
+                    "EmbeddingDimension = 32, VisionDim = 32, VisionLayers = 2, " +
+                    "NumLmLayers = 2, NumHeads = 4 })";
             }
             else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)
             {
@@ -9312,9 +9512,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 16), " +
-                    "vocabSize: 16, modelDimension: 32, numLayers: 2, stateDimension: 8, " +
-                    "attentionInterval: 2, maxSeqLength: 8)";
+                    "inputSize: 8, outputSize: 16), new AiDotNet.NeuralNetworks.Options.JambaOptions { VocabSize = 16, ModelDimension = 32, NumLayers = 2, StateDimension = 8, AttentionInterval = 2, MaxSequenceLength = 8 })";
             }
             else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1
                      && model.FullyQualifiedName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
@@ -10970,6 +11168,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
             }
+            else if (model.HasOptionsOnlyConstructor
+                     && model.TypeParameterCount == 1
+                     && model.OptionsOnlyParamTypeName is not null)
+            {
+                // The model's one required argument is its own options object, and that object is
+                // constructible with no arguments, so the fixture builds the model from it (#2137).
+                // The detection families additionally pin InputSize to the fixture's 64x64 image:
+                // Detect resizes every image to InputSize, and at the 640x640 default a CPU fixture
+                // spends minutes per call - and DINO/RT-DETR run dense attention over every pyramid
+                // token, which does not fit at all (#2171). Only the working resolution changes;
+                // architecture and widths stay at their defaults. The OCR family likewise pins the
+                // decoding budget: an untrained autoregressive recognizer (TrOCR) almost never emits
+                // its end token, so every Predict runs to MaxSequenceLength (100 by default) - about
+                // six seconds per call on a CPU fixture. Sixteen steps exercise the same decoder.
+                bool pinInputSize = family == TestFamily.ObjectDetection || family == TestFamily.TextDetection;
+                bool pinDecodeLength = family == TestFamily.OCR;
+                constructorExpr = pinInputSize
+                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }} }})"
+                    : pinDecodeLength
+                        ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ MaxSequenceLength = 16 }})"
+                        : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
+            }
             else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
             {
                 // A coefficient-backed regression model is only meaningful when its coefficient width
@@ -11421,20 +11641,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"taskType: {taskTypeExpr}, " +
                     $"{sizeExpr})";
 
-                // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to a 256k
-                // vocabulary, giving a foundation-sized embedding and language head. Keep the
+                // RecurrentGemma defaults to a 256k vocabulary, giving a foundation-sized
+                // embedding and language head. Keep the
                 // production defaults untouched and construct runnable generated fixtures through
                 // their public scale knobs. RecurrentGemma reached the timeout ladder's shrink rung
                 // even after FP32 and repetition/sample caps: its finite-difference invariant still
                 // exceeded 120 s when run after the rest of its class. Preserve the complete
                 // embedding -> RG-LRU -> normalization -> logits topology at one 32-wide recurrent
-                // block and a 256-token smoke vocabulary; Griffin/Hawk remain at the earlier vocab-
-                // only cap because their full-width fixtures already fit the gate.
+                // block and a 256-token smoke vocabulary. Griffin/Hawk use their dedicated
+                // bounded constructor rule above and never reach this fallback.
+                const string optionsNamespace = "AiDotNet.NeuralNetworks.Options.";
                 string scaleArgs = model.ClassName switch
                 {
                     "RecurrentGemmaLanguageModel" =>
-                        ", vocabSize: 256, modelDimension: 32, numLayers: 1, maxSeqLength: 128",
-                    "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
+                        ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
+                            + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
                     _ => ""
                 };
 
@@ -11689,7 +11910,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isVisionModel = (model.Domains.Contains(1) || model.Domains.Contains(11))
             && !model.ExtendsForecastingModelBase;
         bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
-        if (model.ClassName == "StableVideoSR")
+        if (IsTensorModelFamily(family))
+        {
+            // Detection and OCR fixtures declare InputShape only -- see IsTensorModelFamily. The
+            // OCR base already defaults to a wide, short text crop, so only the detection families
+            // need a shape here; both stay a multiple of 32 so the feature-pyramid strides divide
+            // evenly.
+            if (family != TestFamily.OCR)
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
+            }
+        }
+        else if (model.ClassName == "StableVideoSR")
         {
             // Keep this in lockstep with the bounded four-level constructor above. An 8x8 input is
             // the minimum geometry that still traverses every spatial and four-frame temporal stage,
@@ -13259,7 +13491,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // rising to step 2 = 0.646797, the same first-update hump Vocos records at the
                     // same 2e-4 rate. Fifteen steps clear it (measured ~2.5 s for the pair, so the
                     // added steps are free). The DEFAULT 1 % decrease threshold is untouched.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // AudioPaLM is the same artifact once more, and its recipe is the reason: the
+                    // paper's Adafactor ramps LINEARLY to 1e-4 (Rubenstein et al. 2023), so the
+                    // first update lands at the very bottom of the warm-up where the step size is
+                    // near zero. The two-step window therefore measures the ramp rather than the
+                    // trajectory - measured step 1 = 2.412728 falling only to step 2 = 2.409396,
+                    // a 0.14 % drop against the generic 1 % bar. The descent is real, just slower
+                    // to start: measured on the same fixed pair, step 15 = 1.771684, a 26.6 %
+                    // reduction from step 1. It clears the SAME unchanged 1 % threshold by step 5
+                    // and stays clear at 10, 15 and 20, and the whole 15-step probe still runs in
+                    // under a second, so the added steps are free. Fifteen matches the window its
+                    // twelve siblings above already use. The DEFAULT 1 % threshold is untouched.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -14614,6 +14857,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool TrainsViaSingleTransitionAdapter => false;");
             }
+
+            // Agents whose Train() CANNOT be driven by a single-agent store-then-Train loop at all,
+            // because they consume joint multi-agent transitions through a different API. Both throw
+            // rather than under-train: MADDPG reports "requires joint transitions stored via
+            // StoreMultiAgentExperience ... expected 8/4/8" for a 4/2/4 single-agent transition.
+            // - MADDPG (Lowe et al. 2017): centralised critic over the joint observation/action.
+            // - QMIX (Rashid et al. 2018): value decomposition over a joint observation.
+            if (model.ClassName == "MADDPGAgent"
+                || model.ClassName == "QMIXAgent")
+            {
+                sb.AppendLine("    protected override bool SupportsSingleAgentOnlineLoop => false;");
+            }
+
+            // Agents that DO run the online loop but cannot be expected to shift their greedy action
+            // toward whichever action was just rewarded, so the reward-following OUTCOME invariant does
+            // not apply. This is about the learning signal, not about state-conditionality, so it is a
+            // separate flag from IsStateConditional (whose membership is different).
+            // - A2C / PPO / TRPO: on-policy actor-critic; the update needs whole trajectories with
+            //   advantages, so a stream of isolated transitions yields a near-zero policy step.
+            // - REINFORCE (Williams 1992): Monte-Carlo policy gradient; it needs COMPLETE episodes,
+            //   as the return is only defined at episode end.
+            // - SARSA(lambda): on-policy with eligibility traces; it evaluates the action actually
+            //   taken by the behaviour policy rather than the one that was paid.
+            // - CQL / IQL: OFFLINE RL by construction -- they learn from a fixed dataset and add a
+            //   conservative (CQL) or expectile (IQL) penalty that deliberately resists moving toward
+            //   actions not supported by that dataset.
+            // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
+            //   value, so it follows the learned world model's reward head rather than the reward
+            //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            if (model.ClassName == "A2CAgent"
+                || model.ClassName == "PPOAgent"
+                || model.ClassName == "TRPOAgent"
+                || model.ClassName == "REINFORCEAgent"
+                || model.ClassName == "SARSALambdaAgent"
+                || model.ClassName == "CQLAgent"
+                || model.ClassName == "IQLAgent"
+                || model.ClassName == "DreamerAgent")
+            {
+                sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
+            }
         }
         else if (family == TestFamily.Forecasting)
         {
@@ -14923,7 +15206,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // paper-scale — single-forward tests (DifferentInputs / Clone / Metadata) run at full fidelity.
         // Emitted after the InputShape chain so it applies regardless of family branch; the set is
         // disjoint from every other iteration override above, so it cannot double-emit.
-        if (HeavyTrainingTimeoutClassNames.Contains(model.ClassName))
+        // The detection / OCR bases declare none of the properties this block overrides, and the
+        // set is keyed by SIMPLE class name -- CRAFT, DBNet, EAST, CRNN and TrOCR each name TWO
+        // distinct models (one under ComputerVision, one under Document/OCR), so an entry added for
+        // the Document namesake fires on the ComputerVision one too. Skip the block for these
+        // families rather than widening their bases with knobs they have no invariant for.
+        if (!IsTensorModelFamily(family) && HeavyTrainingTimeoutClassNames.Contains(model.ClassName))
         {
             // Training_ShouldReduceLoss runs TrainingIterations*3 steps; a deep model's Adam moments
             // overshoot for the first few steps (Mask2Former: 5.07 -> 7.76 over 3 steps) then descend,
@@ -14999,6 +15287,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
             sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GatedDeltaNetLanguageModel" ? 100 : 15)};");
+            // TrainingStep_ShouldDependOnTheTarget was never capped here, so every class in this set
+            // stayed exposed to the very timeout the set exists to prevent -- the same gap the heavy
+            // branch above records for RealESRGANVideo, repeated on the OTHER set. It is the heaviest
+            // training probe in the suite: three conditions (target A, an A repeat as the noise
+            // control, target B), each averaged over TargetDependenceRepeatCount runs of
+            // TargetDependenceStepCount steps, on top of its own single-step preamble. At the ~2.8 s
+            // per update measured on Upscale4KAgent above, the default 3 repeats are 3*3*3 = 27 updates
+            // plus the preamble -- around 110 s inside a 120 s bound, which is why that fixture passed
+            // one local run and timed out on the next two. Capping the probe's own per-call wall-clock
+            // budget cannot fix it: that budget is per call and the test makes four of them, so its
+            // ceiling is already above the timeout it is meant to respect.
+            //
+            // Cap the REPEATS, not the steps, for the reason the heavy branch documents: repeats only
+            // average the model's own stochasticity away, so dropping them costs sensitivity (a noisy
+            // model reports INCONCLUSIVE instead of certifying) and never correctness, while a 1-step
+            // comparison would measure nothing at all. 1*3 = 3 updates per condition.
+            //
+            // Seven classes are in BOTH sets; DropDuplicateOverrides keeps the FIRST occurrence, which
+            // is the heavy branch's identical cap, so this cannot conflict.
+            sb.AppendLine("    protected override int TargetDependenceRepeatCount => 1;");
             if (model.ClassName is "GatedDeltaNetLanguageModel" or "GLALanguageModel")
             {
                 // The bounded recurrent-language-model trajectories decrease by about
@@ -15239,6 +15547,36 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine(factoryBody);
         }
+        if (family == TestFamily.TextDetection && model.HasOptionsOnlyConstructor)
+        {
+            // The shared positive invariant supplies an explicit bounded profile and controls
+            // real head weights. Keep the ordinary fixture/default architecture unchanged.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase<double> CreatePositiveTextDetector(");
+            sb.AppendLine("        AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double> options)");
+            sb.AppendLine($"        => new {typeName}<double>(options);");
+        }
+        if (family == TestFamily.ObjectDetection && model.HasOptionsOnlyConstructor)
+        {
+            // Positive object fixtures use actual model heads with an explicit bounded profile;
+            // the existing random/default fixture remains responsible for empty-safe invariants.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<double> CreatePositiveObjectDetector(");
+            sb.AppendLine("        AiDotNet.Models.Options.ObjectDetectionOptions<double> options)");
+            sb.AppendLine($"        => new {typeName}<double>(options);");
+        }
+        if (family == TestFamily.ObjectDetection && model.ImplementsDetectionTraining)
+        {
+            // Emit only for the actual typed capability. Unsupported detector families do not
+            // inherit a returning/no-op test that would falsely count semantic training as covered.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 180000)]");
+            sb.AppendLine("    public async System.Threading.Tasks.Task TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        VerifySemanticDetectionTraining();");
+            sb.AppendLine("    }");
+        }
         if (model.HasVectorOnlyConstructor)
         {
             string featureWidthConstructor = constructorExpr
@@ -15443,6 +15781,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// Verifies that the model's actual interfaces are compatible with the resolved test family.
     /// Prevents generating code that won't compile (e.g., casting to wrong interface).
     /// </summary>
+    /// <summary>
+    /// True for the Tensor -> Tensor computer-vision families, whose fixtures derive from
+    /// <c>DetectionModelTestBase</c> rather than <c>NeuralNetworkModelTestBase</c>.
+    /// </summary>
+    /// <remarks>
+    /// Those bases deliberately declare a much smaller surface: no <c>OutputShape</c> (a detector's
+    /// raw head output has no shape contract worth asserting -- the meaningful contract is the
+    /// decoded DetectionResult, which the family base tests directly) and none of the
+    /// many-iteration convergence knobs (<c>MoreDataShortIterations</c>,
+    /// <c>MemorizationTaskLossThreshold</c> and friends). Emitting an <c>override</c> for a member
+    /// the base does not declare is CS0115, so every emission site that assumes the neural-network
+    /// base has to consult this first.
+    /// </remarks>
+    private static bool IsTensorModelFamily(TestFamily family)
+        => family == TestFamily.ObjectDetection
+        || family == TestFamily.TextDetection
+        || family == TestFamily.OCR;
+
     private static bool IsCompatibleWithFamily(ModelTestInfo model, TestFamily family)
     {
         switch (family)
@@ -15489,6 +15845,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // GP family requires IGaussianProcess interface
             case TestFamily.GaussianProcess:
                 return model.ImplementsGaussianProcess;
+
+            // Detection and OCR families are Tensor -> Tensor IFullModel, NOT INeuralNetworkModel:
+            // they derive from ModelBase and hold their layers as discrete fields rather than a
+            // layer collection, so they expose no Layers/GetArchitecture surface to test against.
+            case TestFamily.ObjectDetection:
+            case TestFamily.TextDetection:
+            case TestFamily.OCR:
+                return model.UsesTensorInput;
 
             // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
@@ -16357,6 +16721,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        finally");
             sb.AppendLine("        {");
             sb.AppendLine("            global::AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+        }
+
+        if (layer.ClassName == "QuantumLayer")
+        {
+            // A parameter update reconstructs the complete circuit from its angles. If it applies
+            // those angles to the already-rotated circuit instead, a zero-sized update still changes
+            // predictions. Emit this with the layer scaffold so the invariant follows QuantumLayer's
+            // generated fixture and cannot drift into a separate hand-maintained test.
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public void ZeroLearningRateUpdate_PreservesCircuitBehavior()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var arena = global::AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var layer = CreateLayer();");
+            sb.AppendLine($"        using var input = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<{numericType}>(InputShape);");
+            sb.AppendLine("        for (int i = 0; i < input.Length; i++) input[i] = ToT((i + 1) * 0.125);");
+            sb.AppendLine("        var before = layer.Forward(input).ToArray();");
+            sb.AppendLine("        layer.UpdateParameters(NumOps.Zero);");
+            sb.AppendLine("        var after = layer.Forward(input).ToArray();");
+            sb.AppendLine("        Assert.Equal(before.Length, after.Length);");
+            sb.AppendLine("        for (int i = 0; i < before.Length; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            double delta = global::System.Math.Abs(ToD(before[i]) - ToD(after[i]));");
+            sb.AppendLine("            Assert.True(delta <= Tolerance,");
+            sb.AppendLine("                $\"A zero-learning-rate update changed circuit output {i} by {delta:R}.\");");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
         }
@@ -17653,6 +18044,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool HasVectorOnlyConstructor { get; set; }
 
         /// <summary>
+        /// The model's only required constructor argument is its own options object, and that
+        /// object is itself constructible with no arguments (#2137).
+        /// </summary>
+        public bool HasOptionsOnlyConstructor { get; set; }
+
+        /// <summary>Implements the framework's resolved semantic detection-training interface.</summary>
+        public bool ImplementsDetectionTraining { get; set; }
+
+        /// <summary>
+        /// The options type to instantiate for <see cref="HasOptionsOnlyConstructor"/>, already
+        /// closed over <c>double</c> when generic.
+        /// </summary>
+        public string? OptionsOnlyParamTypeName { get; set; }
+
+        /// <summary>
         /// The fully-qualified display name of the architecture parameter type (e.g.,
         /// "AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture&lt;double&gt;").
         /// Null when the model uses the base NeuralNetworkArchitecture directly.
@@ -17683,6 +18089,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsDocumentNeuralNetworkBase { get; set; }
         public bool ExtendsVisionLanguageModelBase { get; set; }
         public bool ExtendsSegmentationModelBase { get; set; }
+
+        /// <summary>True when the model derives from ObjectDetectorBase&lt;T&gt;.</summary>
+        public bool ExtendsObjectDetectorBase { get; set; }
+
+        /// <summary>True when the model derives from TextDetectorBase&lt;T&gt;.</summary>
+        public bool ExtendsTextDetectorBase { get; set; }
+
+        /// <summary>True when the model derives from OCRBase&lt;T&gt;.</summary>
+        public bool ExtendsOCRBase { get; set; }
         public bool ExtendsVideoNeuralNetworkBase { get; set; }
         public bool ExtendsLatentDiffusionModelBase { get; set; }
         public bool ExtendsTtsModelBase { get; set; }
@@ -17781,6 +18196,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Classification,
         ProbabilisticClassifier,
         Clustering,
+        ObjectDetection,
+        TextDetection,
+        OCR,
         NeuralNetwork
     }
 
@@ -18529,6 +18947,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.DocumentNN:            return "DocumentNNModelTestBase";
             case TestFamily.VisionLanguage:        return "VisionLanguageTestBase";
             case TestFamily.Segmentation:          return "SegmentationTestBase";
+            case TestFamily.ObjectDetection:       return "ObjectDetectionTestBase";
+            case TestFamily.TextDetection:         return "TextDetectionTestBase";
+            case TestFamily.OCR:                   return "OCRTestBase";
             case TestFamily.VideoNN:               return "VideoNNModelTestBase";
             case TestFamily.TTS:                   return "TTSModelTestBase";
             case TestFamily.Financial:             return "FinancialModelTestBase";
@@ -18660,6 +19081,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
+            case TestFamily.ObjectDetection:
+            case TestFamily.TextDetection:
+            case TestFamily.OCR:
+                return "IFullModel<double, Tensor<double>, Tensor<double>>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.MultiLabelClassifier:

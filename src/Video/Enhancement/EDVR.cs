@@ -30,6 +30,7 @@ namespace AiDotNet.Video.Enhancement;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var model = new EDVR&lt;double&gt;(arch);
 /// var enhancedFrames = model.Enhance(frames);
@@ -300,7 +301,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
             { "ModelName", "EDVR" }, { "NumFeatures", _numFeatures }, { "NumFrames", _numFrames },
             { "NumBlocks", _numBlocks }, { "ScaleFactor", _scaleFactor }, { "UseNativeMode", _useNativeMode }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

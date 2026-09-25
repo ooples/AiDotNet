@@ -52,11 +52,16 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129 });
+///
 /// // Decompose time series into unobserved trend, cycle, and seasonal components
-/// var options = new UnobservedComponentsOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-/// var ucm = new UnobservedComponentsModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
-/// ucm.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = ucm.Forecast(horizon: 24);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new UnobservedComponentsModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///         new UnobservedComponentsOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()))
+///     .Build(trainingMatrix, trainingLabels);
+///
+/// Vector&lt;double&gt; forecast = result.Forecast(horizon: 24);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -751,13 +756,11 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     {
         int n = y.Length;
         var smoothedState = new List<Vector<T>>();
-        var smoothedCovariance = new List<Matrix<T>>();
 
         Vector<T> nextSmoothedState = _filteredState[n - 1];
         Matrix<T> nextSmoothedCovariance = _filteredCovariance[n - 1];
 
         smoothedState.Add(nextSmoothedState);
-        smoothedCovariance.Add(nextSmoothedCovariance);
 
         for (int t = n - 2; t >= 0; t--)
         {
@@ -772,7 +775,6 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
             Matrix<T> smoothedCovarianceT = filteredCovariance + smoother * (nextSmoothedCovariance - predictedCovariance) * smoother.Transpose();
 
             smoothedState.Insert(0, smoothedStateT);
-            smoothedCovariance.Insert(0, smoothedCovarianceT);
 
             nextSmoothedState = smoothedStateT;
             nextSmoothedCovariance = smoothedCovarianceT;
@@ -1790,7 +1792,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
                 { "SeasonalAmplitude", _seasonal.Length > 0 ? Convert.ToDouble(NumOps.Subtract(_seasonal.Max(), _seasonal.Min())) : 0.0 },
                 { "IrregularStdDev", _irregular.Length > 0 ? Convert.ToDouble(_irregular.StandardDeviation()) : 0.0 }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

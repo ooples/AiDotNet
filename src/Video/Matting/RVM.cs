@@ -372,7 +372,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
             { "ModelName", "RVM" }, { "NumFeatures", _numFeatures },
             { "ImageHeight", _imageHeight }, { "ImageWidth", _imageWidth }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

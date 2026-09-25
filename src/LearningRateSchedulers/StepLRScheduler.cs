@@ -28,8 +28,8 @@ namespace AiDotNet.LearningRateSchedulers;
 ///
 /// for (int epoch = 0; epoch &lt; 100; epoch++)
 /// {
-///     Train(model, scheduler.CurrentLearningRate);
-///     scheduler.Step();
+///     double lr = scheduler.CurrentLearningRate;   // hand this to your optimizer for the epoch
+///     scheduler.Step();                            // advance the schedule once the epoch is done
 /// }
 /// </code>
 /// </example>

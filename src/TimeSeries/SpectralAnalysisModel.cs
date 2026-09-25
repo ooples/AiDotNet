@@ -29,12 +29,16 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var signalMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 } });
+/// var signalVector = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+///
 /// // Analyze frequency components in a time series signal
-/// var options = new SpectralAnalysisOptions&lt;double&gt;();
-/// var spectral = new SpectralAnalysisModel&lt;double&gt;(options);
-/// spectral.Train(signalMatrix, signalVector);
-/// Vector&lt;double&gt; frequencies = spectral.GetFrequencies();
-/// Vector&lt;double&gt; periodogram = spectral.GetPeriodogram();
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SpectralAnalysisModel&lt;double&gt;(new SpectralAnalysisOptions&lt;double&gt;()))
+///     .Build(signalMatrix, signalVector);
+///
+/// Vector&lt;double&gt; frequencies = result.GetFrequencies();
+/// Vector&lt;double&gt; periodogram = result.GetPeriodogram();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -601,7 +605,9 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         }
 
         // Add the serialized model data
-        metadata.ModelData = SerializeForMetadata();
+        // Deferred: the metadata object already exists here, so this is the
+        // SetModelDataProvider form of ModelDataProvider = () => ... (#2096).
+        metadata.SetModelDataProvider(() => SerializeForMetadata());
 
         return metadata;
     }

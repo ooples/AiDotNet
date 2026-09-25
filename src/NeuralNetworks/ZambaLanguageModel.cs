@@ -25,9 +25,13 @@ namespace AiDotNet.NeuralNetworks;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration,
 ///     inputSize: 4096, outputSize: 32000);
-/// var model = new ZambaLanguageModel&lt;float&gt;(architecture);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ZambaLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -68,14 +72,8 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public ZambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 32000,
-        int modelDimension = 3712,
-        int numLayers = 76,
-        int stateDimension = 16,
-        int attentionInterval = 6,
-        int maxSeqLength = 4096,
-        ILossFunction<T>? lossFunction = null,
-        ZambaOptions? options = null)
+        ZambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Zamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateZambaLayers), so the loss must be cross-entropy-with-logits (fused
@@ -87,13 +85,14 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ZambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _attentionInterval = attentionInterval;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _attentionInterval = _options.AttentionInterval;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 
@@ -144,7 +143,7 @@ public partial class ZambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

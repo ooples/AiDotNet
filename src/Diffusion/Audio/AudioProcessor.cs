@@ -28,10 +28,12 @@ namespace AiDotNet.Diffusion.Audio;
 /// var processor = new AudioProcessor&lt;float&gt;(sampleRate: 44100);
 ///
 /// // Encode reference audio to latent space (via spectrogram)
+/// var referenceAudio = Tensor&lt;float&gt;.CreateRandom(44100);   // one second at 44.1 kHz
 /// var spectrogram = processor.AudioToSpectrogram(referenceAudio);
 /// var normalized = processor.NormalizeSpectrogram(spectrogram);
 ///
 /// // ... diffusion model generates new spectrogram ...
+/// var generatedSpec = normalized;
 ///
 /// // Decode generated spectrogram back to audio
 /// var denormalized = processor.DenormalizeSpectrogram(generatedSpec);

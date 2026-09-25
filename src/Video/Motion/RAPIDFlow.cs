@@ -428,7 +428,7 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
                 { "Level3Channels", Level3Channels },
                 { "NumRefinementIterations", _numRefinementIterations }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

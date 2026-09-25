@@ -41,8 +41,12 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1506.01497",
     Year = 2015,
     Authors = "Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun")]
-public class FasterRCNN<T> : ObjectDetectorBase<T>
+public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
+    private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
+
+    [AiDotNet.Attributes.Scratch]
+    private Random? _trainingRandom;
     private readonly RPN<T> _rpn;
     private readonly RoIAlign<T> _roiAlign;
     private readonly Dense<T> _fcClassifier;
@@ -99,6 +103,8 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         _fcBoxRegressor = new Dense<T>(roiFeatureSize, (options.NumClasses + 1) * 4);
 
         _nms = new NMS<T>();
+        _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T>(options.NumClasses, 1,
+            options.TwoStageLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions());
     }
 
     private static (int hiddenDim, int roiOutputSize) GetSizeConfig(ModelSize size) => size switch
@@ -133,7 +139,50 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _);
+
+    /// <summary>Trains the proposal network and the detection head with the Faster R-CNN objectives.</summary>
+    /// <remarks>
+    /// <para>
+    /// One update sums the region proposal loss (Ren et al. 2015: IoU above 0.7 or best anchor positive, below 0.3
+    /// negative, 256 anchors at up to 1:1, lambda = 10 over the anchor locations) and the region-of-interest loss
+    /// (Girshick 2015: 64 RoIs with 25% foreground at IoU of at least 0.5, background in [0.1, 0.5), smooth-L1
+    /// regression). As in the reference implementation, the object boxes are added to the proposals the head
+    /// learns from. Override the settings with <see cref="ObjectDetectionOptions{T}.TwoStageLoss"/>.
+    /// </para>
+    /// <para>
+    /// Inputs are model-ready NCHW tensors, as for Predict, and targets are normalized against that input size. The
+    /// detection head here classifies the proposals of a single image per forward pass, so each step takes one image.
+    /// </para>
+    /// </remarks>
+    public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (input.Rank != 4 || input.Shape[1] != 3 || input.Shape[2] <= 0 || input.Shape[3] <= 0)
+            throw new ArgumentException("Faster R-CNN training requires a three-channel NCHW image batch.", nameof(input));
+        if (input.Shape[0] != 1)
+            throw new ArgumentException("Faster R-CNN's detection head classifies one image's proposals per forward pass; train one image per step.", nameof(input));
+        targets.ValidateForModel(1, Options.NumClasses, int.MaxValue);
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        var gold = targets[0].Select(target => TwoStageTargets.PixelCorners(target, width, height)).ToList();
+        var goldClasses = targets[0].Select(target => target.ClassId).ToList();
+        var random = _trainingRandom ??= Options.RandomSeed is int seed
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        List<BoundingBox<T>> anchors = new();
+        TrainWithTargets(input, targets,
+            image => ForwardDetection(image, gold, out anchors),
+            (heads, batch) => Engine.TensorAdd(
+                _detectionLoss.ComputeProposalLoss(TwoStageTargets.FirstImage(heads[3]), TwoStageTargets.FirstImage(heads[4]),
+                    anchors, gold, _rpn.AnchorsPerLocation, random),
+                _detectionLoss.ComputeStageLoss(heads[0], heads[1], heads[2], gold, goldClasses, 0, random)));
+    }
+
+    /// <summary>The detection forward, optionally adding boxes to the proposals the detection head classifies.</summary>
+    private List<Tensor<T>> ForwardDetection(Tensor<T> input, IReadOnlyList<double[]>? extraProposals,
+        out List<BoundingBox<T>> anchors)
     {
         int imageHeight = input.Shape[2];
         int imageWidth = input.Shape[3];
@@ -144,39 +193,41 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         // Apply FPN neck to get multi-scale features
         var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
-        // Use P4 level for RPN (good balance of resolution and receptive field)
-        var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
+        // Faster R-CNN with FPN (Lin et al. 2017; detectron2, torchvision): the shared RPN head runs on
+        // every level P2-P5 plus P6 (P5 subsampled by 2), each with its own anchor size, and each RoI
+        // is pooled from the level matching its size.
+        var rpnLevels = new List<Tensor<T>>(fpnFeatures) { CvTensorOps<T>.MaxPoolPadded(fpnFeatures[^1], 1, 2, 0) };
+        var (objectness, bboxDeltas, levelAnchors, levelAnchorCounts) = _rpn.ForwardLevels(rpnLevels);
+        anchors = levelAnchors;
 
-        // Stage 1: Region Proposal Network
-        var (objectness, bboxDeltas, anchors) = _rpn.Forward(rpnFeatures);
-
-        // Generate proposals
+        // Generate proposals: top 1000 per level, NMS within each level, best 1000 overall.
         var proposals = _rpn.GenerateProposals(
-            objectness, bboxDeltas, anchors,
+            objectness, bboxDeltas, levelAnchors,
             imageHeight, imageWidth,
-            preNmsTopK: 2000,
+            preNmsTopK: 1000,
             postNmsTopK: 1000,
-            nmsThreshold: 0.7);
+            nmsThreshold: 0.7,
+            levelAnchorCounts: levelAnchorCounts);
 
-        if (proposals.Count == 0 || proposals[0].boxes.Shape[0] == 0)
+        var proposalBoxes = proposals.Count == 0 ? new Tensor<T>(new[] { 0, 4 }) : proposals[0].boxes;
+        if (extraProposals is { Count: > 0 })
+            proposalBoxes = TwoStageTargets.AppendBoxes(proposalBoxes, extraProposals);
+
+        if (proposalBoxes.Shape[0] == 0)
         {
             // No proposals, return empty result
             return new List<Tensor<T>>
             {
                 new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
                 new Tensor<T>(new[] { 0, (Options.NumClasses + 1) * 4 }),
-                new Tensor<T>(new[] { 0, 4 })
+                new Tensor<T>(new[] { 0, 4 }),
+                objectness,
+                bboxDeltas
             };
         }
 
-        var proposalBoxes = proposals[0].boxes;
-
-        // Stage 2: RoI feature extraction and classification
-        // Use P4 features for RoI Align
-        var p4Features = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
-        double spatialScale = 1.0 / 16.0; // P4 is typically 1/16 resolution
-
-        var roiFeatures = _roiAlign.Forward(p4Features, proposalBoxes, spatialScale);
+        // Stage 2: RoI feature extraction from the size-matched pyramid level, then classification
+        var roiFeatures = FpnRoIPooler<T>.Pool(_roiAlign, fpnFeatures, EnsureBackbone.Strides, proposalBoxes);
 
         // Flatten RoI features: [num_rois, channels, H, W] -> [num_rois, channels*H*W]
         var flattenedFeatures = FlattenRoIFeatures(roiFeatures);
@@ -185,7 +236,10 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         var classLogits = _fcClassifier.Forward(flattenedFeatures);
         var boxDeltas = _fcBoxRegressor.Forward(flattenedFeatures);
 
-        return new List<Tensor<T>> { classLogits, boxDeltas, proposalBoxes };
+        // The RPN's raw objectness and box deltas are outputs too: proposal selection is a
+        // non-differentiable top-k, so without them nothing would train the RPN. PostProcess reads
+        // only the first three entries.
+        return new List<Tensor<T>> { classLogits, boxDeltas, proposalBoxes, objectness, bboxDeltas };
     }
 
     /// <inheritdoc/>
@@ -271,10 +325,12 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
             double predH = ph * Math.Exp(Math.Min(dh, 4.0));
 
             // Convert to (x1, y1, x2, y2) and clip
-            double x1 = Math.Max(0, predCx - predW / 2);
-            double y1 = Math.Max(0, predCy - predH / 2);
-            double x2 = Math.Min(imageWidth, predCx + predW / 2);
-            double y2 = Math.Min(imageHeight, predCy + predH / 2);
+            // Decoded in network-input coordinates; map to the source image before clipping.
+            var (scaleX, scaleY) = InputToImageScale(imageWidth, imageHeight);
+            double x1 = Math.Max(0, (predCx - predW / 2) * scaleX);
+            double y1 = Math.Max(0, (predCy - predH / 2) * scaleY);
+            double x2 = Math.Min(imageWidth, (predCx + predW / 2) * scaleX);
+            double y2 = Math.Min(imageHeight, (predCy + predH / 2) * scaleY);
 
             if (x2 <= x1 || y2 <= y1) continue;
 
@@ -386,30 +442,6 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)
-    {
-        int numRois = roiFeatures.Shape[0];
-        int channels = roiFeatures.Shape[1];
-        int h = roiFeatures.Shape[2];
-        int w = roiFeatures.Shape[3];
-        int flattenedSize = channels * h * w;
-
-        var result = new Tensor<T>(new[] { numRois, flattenedSize });
-
-        for (int roi = 0; roi < numRois; roi++)
-        {
-            int idx = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        result[roi, idx++] = roiFeatures[roi, c, y, x];
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+        => AiDotNetEngine.Current.Reshape(
+            roiFeatures, new[] { roiFeatures.Shape[0], roiFeatures.Shape[1] * roiFeatures.Shape[2] * roiFeatures.Shape[3] });
 }

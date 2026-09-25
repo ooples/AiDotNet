@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.IO;
 using AiDotNet.Helpers;
@@ -137,6 +138,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                    Source = "Lu et al. 2021, Sec. 4: in all problems the Adam optimizer is used with a "
+                            + "learning rate of 0.001, the number of iterations chosen to guarantee "
+                            + "convergence. The 0.01 and 0.0001 rates elsewhere in the paper belong to its "
+                            + "learning-rate ablation study, not to the trained model.")]
     public partial class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
 
@@ -226,7 +232,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             _p = latentDimension;
             _numSensors = numSensors;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
 
             // Create branch network

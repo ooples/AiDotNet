@@ -311,7 +311,17 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// without another per-model override.
     /// </remarks>
     public virtual IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
-        => _parameterRegistry.GetParameterStateChunks();
+    {
+        // Components are registered lazily, on first access through Components. Every other
+        // parameter surface - GetParameters, SetParameters, ParameterCount, ParameterLayout - goes
+        // through it; this one went straight to the registry, so a caller that enumerated chunks
+        // BEFORE anything else had touched the parameters saw an empty registry and got no chunks
+        // at all, while GetParameters on the same model kept working. A tape-based trainer or a
+        // chunk-based optimizer enumerates chunks first. Not an iterator on purpose: registration
+        // must happen at the call, not whenever the sequence is first enumerated.
+        _ = Components;
+        return _parameterRegistry.GetParameterStateChunks();
+    }
 
     /// <inheritdoc/>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
@@ -347,6 +357,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         {
             byte[] state = Serialize();
             var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            PrepareCopyForStateRestore(copy);
             AiDotNet.Models.CloneEngine.PrepareParameterTopology(
                 this,
                 copy,
@@ -356,6 +367,22 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
             AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
             return copy;
         }
+    }
+
+    /// <summary>
+    /// Called by <see cref="DeepCopy"/> after the copy has been rebuilt from its recorded
+    /// constructor and before this model's state is loaded into it.
+    /// </summary>
+    /// <param name="copy">The freshly rebuilt copy.</param>
+    /// <remarks>
+    /// A model built from lazily-shaped layers - layers that size their weights on their first
+    /// forward pass - has, once used, more parameters than the freshly rebuilt copy, so loading the
+    /// state fails on a parameter-count mismatch. Override this to bring the copy to the same
+    /// parameter topology first, typically by running it once on an input of the shape this model
+    /// has already seen. The default does nothing.
+    /// </remarks>
+    protected virtual void PrepareCopyForStateRestore(ModelBase<T, TInput, TOutput> copy)
+    {
     }
 
     /// <inheritdoc/>
@@ -558,6 +585,18 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
     private bool _disposed;
 
+    /// <summary>
+    /// Claims the one run of derived teardown. Zero until a caller wins the claim, one afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="_disposed"/> cannot serve as the claim. It is set inside <see cref="Dispose(bool)"/>,
+    /// which runs after the derived override has already torn its own state down, so two threads can
+    /// both read it as false and both enter that override. It also cannot be set before the dispatch:
+    /// <see cref="Dispose(bool)"/> would then see it already set and skip its own cleanup entirely.
+    /// A separate flag claimed atomically keeps both properties.
+    /// </remarks>
+    private int _disposeClaimed;
+
     /// <inheritdoc/>
     /// <remarks>
     /// Implements <see cref="System.IDisposable.Dispose"/>. Calls
@@ -570,6 +609,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     /// </remarks>
     public void Dispose()
     {
+        // A repeated call must not re-enter a derived Dispose(bool) override: overrides do their
+        // own teardown before calling base, so only this entry point can keep that teardown to one run.
+        // Reading a plain field is not enough -- two concurrent callers both read false and both
+        // enter the override, and WaveNet.Dispose(bool) closes its OnnxSession before delegating to
+        // base, so that teardown would run twice. Claim the run atomically instead.
+        if (System.Threading.Interlocked.Exchange(ref _disposeClaimed, 1) != 0) return;
         Dispose(disposing: true);
         System.GC.SuppressFinalize(this);
     }

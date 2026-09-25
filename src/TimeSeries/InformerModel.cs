@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -37,18 +39,19 @@ namespace AiDotNet.TimeSeries;
 /// <code>
 /// // Create Informer model for efficient long-sequence time series forecasting
 /// var options = new InformerOptions&lt;double&gt;();
-/// var model = new InformerModel&lt;double&gt;(options);
 ///
 /// // Prepare long-horizon time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
 ///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
-/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+/// var trainingMatrix = new Matrix&lt;double&gt;(history.Length - 1, 1);
 ///
 /// // Train using ProbSparse self-attention for O(L log L) efficiency
-/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new InformerModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, history.SubVector(1, history.Length - 1));
 ///
 /// // Generate multi-step forecasts in parallel via generative decoder
-/// var forecast = model.Predict(trainingMatrix);
+/// var forecast = result.Predict(trainingMatrix);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -59,6 +62,11 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, DecayRate = 0.5, StepSize = 1,
+                Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Zhou et al. 2021, Sec. 4: the proposed methods are optimized with Adam, its "
+                        + "learning rate starting from 1e-4 and decaying two times smaller every epoch.")]
 public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />

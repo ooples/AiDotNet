@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -36,7 +38,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new MPLUGOwl2&lt;double&gt;(architecture, new MPLUGOwl2Options());
 /// </code>
@@ -54,6 +56,12 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Ye et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.98,
+                Epsilon = 1e-6, WarmupSteps = 1000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Ye et al. 2024, Sec. 4: AdamW with beta1 0.9, beta2 0.98 and epsilon 1e-6, "
+                        + "under a cosine learning rate decay scheduler with a peak learning rate of "
+                        + "1e-4 and 1k warmup steps.")]
 public partial class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MPLUGOwl2Options _options;
@@ -103,7 +111,9 @@ public partial class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTune
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

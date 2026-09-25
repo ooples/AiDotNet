@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.Tensors;
 using AiDotNet.Validation;
 
@@ -29,6 +30,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </remarks>
 /// <example>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// // TradingEnvironment is abstract; use StockTradingEnvironment or MarketMakingEnvironment
 /// // Example with StockTradingEnvironment for single-asset discrete trading:
 /// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 });
@@ -50,7 +52,7 @@ namespace AiDotNet.Finance.Trading.Environments;
     "https://arxiv.org/abs/2511.12120",
     Year = 2020,
     Authors = "Hongyang Yang, Xiao-Yang Liu, Shan Zhong, Anwar Walid")]
-public abstract partial class TradingEnvironment<T> : IEnvironment<T>
+public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedActionEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
     protected IEngine Engine => AiDotNetEngine.Current;
@@ -58,7 +60,15 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     protected readonly int WindowSize;
     protected readonly int NumAssets;
     protected readonly T InitialCapital;
-    protected readonly double TransactionCost;
+    /// <summary>
+    /// Cost per unit of trade value actually in force.
+    /// </summary>
+    /// <remarks>
+    /// Seeded from the constructor's <c>transactionCost</c> argument and REPLACED (never added to) by
+    /// <see cref="ApplyAgentOverrides"/> when an agent supplies its own. Not readonly for exactly that
+    /// reason; there is only ever one cost in force.
+    /// </remarks>
+    protected double TransactionCost;
     protected readonly bool AllowShortSelling;
     protected readonly bool RandomStart;
     protected readonly int MaxEpisodeLength;
@@ -161,7 +171,63 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
             }
         }
 
+        // Derived environments reset their own per-episode state here, after the base bookkeeping is
+        // fresh and BEFORE the first observation of the new episode is built from it.
+        OnReset();
+
         return BuildObservation(_currentStep);
+    }
+
+    /// <summary>
+    /// Applies an agent's friction settings to this environment, where the agent's value REPLACES the
+    /// environment's own.
+    /// </summary>
+    /// <param name="options">The agent's options. Only the properties it actually set are applied.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence, in one sentence:</b> an option left <c>null</c> means "unset" and the environment keeps
+    /// the value it was constructed with; an option that is set REPLACES that value. The two are never summed,
+    /// so a cost or penalty configured in both places is applied exactly once.
+    /// </para>
+    /// <para>
+    /// This exists because the agent and the environment are separate objects with no other seam between
+    /// them: <c>TradingAgentOptions.TransactionCost</c> looks authoritative but the environment is what
+    /// actually charges the cost. Rather than leave the agent-side setting silently unread, or add it on top
+    /// of the environment's (which would charge twice), calling this makes the agent's value win explicitly.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Configure frictions in whichever place is convenient. If you set them on the
+    /// agent, they win; if you leave them alone, whatever the environment was built with applies.
+    /// </para>
+    /// </remarks>
+    internal virtual void ApplyAgentOverrides(AiDotNet.Models.Options.TradingAgentOptions<T> options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        if (options.TransactionCost is double transactionCost)
+        {
+            TransactionCost = transactionCost;
+        }
+    }
+
+    /// <summary>
+    /// Resets per-episode state owned by a derived environment. Called by <see cref="Reset"/> after the base
+    /// positions, cash, portfolio value and start index have been reset, and before the first observation of
+    /// the new episode is built.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this when a subclass keeps its own episode state (reward statistics, drawdown peaks,
+    /// turnover, inventory, ...) so that every episode starts from the same baseline without callers having
+    /// to remember a separate reset call. The base implementation does nothing. The base
+    /// <see cref="Random"/> stream has already been used for the random start (if any), so drawing from it
+    /// here stays reproducible under a fixed seed.
+    /// </para>
+    /// <para><b>For Beginners:</b> <see cref="Reset"/> clears the shared portfolio bookkeeping; this hook is
+    /// where a specialized environment clears anything extra it remembers between steps.</para>
+    /// </remarks>
+    protected virtual void OnReset()
+    {
     }
 
     /// <inheritdoc/>
@@ -172,7 +238,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     /// with a reward and done flag.
     /// </para>
     /// </remarks>
-    public (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
+    public virtual (Vector<T> NextState, T Reward, bool Done, Dictionary<string, object> Info) Step(Vector<T> action)
     {
         if (action == null)
         {
@@ -203,6 +269,22 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
             ["cash"] = _cash!,
             ["positions"] = _positions
         };
+
+        // Mirror the legal-action mask into the info dictionary under the conventional key, so a consumer
+        // holding only the step result can read it without a reference to the environment. The property
+        // remains the authority; this is the PettingZoo/Shimmy/RLlib convention, and the entry is simply
+        // absent when the environment does not restrict actions.
+        //
+        // CLONED, not aliased. LegalActionMask is an overridable property, and the natural override returns a
+        // reusable bool[] field recomputed in place each step. Storing that reference would leave every info
+        // dictionary ever returned pointing at the SAME array, so a replay buffer or trajectory log would find
+        // every past step wearing the CURRENT step's legality — a corruption that reads as a plausible mask
+        // rather than as an error. An info entry is a snapshot of one step by construction, so it owns a copy.
+        var mask = LegalActionMask;
+        if (mask is not null)
+        {
+            info[ActionMasking.ActionMaskKey] = (bool[])mask.Clone();
+        }
 
         return (nextState, reward, done, info);
     }
@@ -240,6 +322,25 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>
     /// This method is where "buy/sell/hold" or "target weights" becomes real trades.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Which discrete actions are legal in the current state, or <see langword="null"/> when every action is.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Defaults to no restriction, so no existing environment changes behaviour.</b> A subclass that
+    /// models legality — an options book where the account is cleared only for certain structures, a venue
+    /// that cannot short a given name — overrides this, and the mask reaches the policy through both this
+    /// property and the <c>action_mask</c> entry in <see cref="Step"/>'s info dictionary.</para>
+    ///
+    /// <para>The property exists ALONGSIDE the info entry because <see cref="Reset"/> returns only an
+    /// observation: an agent choosing its first action of an episode has no step result to read, and
+    /// "the mask applies from the second action onward" would be a quietly wrong contract.</para>
+    ///
+    /// <para>Meaningful only for discrete action spaces; see
+    /// <see cref="IMaskedActionEnvironment{T}.LegalActionMask"/> for why a continuous space returns null
+    /// rather than pretending an index set exists.</para>
+    /// </remarks>
+    public virtual bool[]? LegalActionMask => null;
+
     protected abstract void ApplyAction(Vector<T> action, Vector<T> prices);
 
     /// <summary>

@@ -15,13 +15,13 @@ namespace AiDotNet.Initialization;
 /// var strategy = InitializationStrategies&lt;double&gt;.Lazy;
 ///
 /// // Use eager initialization for traditional behavior
-/// var strategy = InitializationStrategies&lt;double&gt;.Eager;
+/// var strategy2 = InitializationStrategies&lt;double&gt;.Eager;
 ///
 /// // Use zero initialization for testing
-/// var strategy = InitializationStrategies&lt;double&gt;.Zero;
+/// var strategy3 = InitializationStrategies&lt;double&gt;.Zero;
 ///
 /// // Load from file for transfer learning
-/// var strategy = InitializationStrategies&lt;double&gt;.FromFile("weights.json");
+/// var strategy4 = InitializationStrategies&lt;double&gt;.FromFile("weights.json");
 /// </code>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

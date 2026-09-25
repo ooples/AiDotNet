@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 /// <example>
 /// <code>
 /// // Create a Conservative Q-Learning agent for offline RL from recorded data
-/// var options = new CQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ConservativeWeight = 5.0 };
+/// var options = new CQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2};
 /// var agent = new CQLAgent&lt;double&gt;(options);
 ///
 /// // Select an action given the current state
@@ -112,6 +112,13 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _q2Network = CreateQNetwork();
         _targetQ1Network = CreateQNetwork();
         _targetQ2Network = CreateQNetwork();
+
+        // Register every network so DeepReinforcementLearningAgentBase.Dispose releases it.
+        Networks.Add(_policyNetwork);
+        Networks.Add(_q1Network);
+        Networks.Add(_q2Network);
+        Networks.Add(_targetQ1Network);
+        Networks.Add(_targetQ2Network);
 
         CopyNetworkWeights(_q1Network, _targetQ1Network);
         CopyNetworkWeights(_q2Network, _targetQ2Network);

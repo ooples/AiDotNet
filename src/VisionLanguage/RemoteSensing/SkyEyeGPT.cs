@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -34,7 +36,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// // with 968K instruction samples for captioning, VQA, and grounding
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -60,6 +62,13 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2024,
     Authors = "Zhan et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhan et al. 2024, Sec. 4: AdamW as the optimizer with a 1e-5 learning rate "
+                        + "and a cosine learning rate scheduler, the same setting across both training "
+                        + "stages. The stated batch size of 1 is not declared as a reference batch size: "
+                        + "at that value it is a per-device figure, and using it to scale rates would "
+                        + "inflate them by the user's whole batch.")]
 public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly SkyEyeGPTOptions _options;
@@ -103,7 +112,9 @@ public partial class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVL
     {
         _options = options ?? new SkyEyeGPTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

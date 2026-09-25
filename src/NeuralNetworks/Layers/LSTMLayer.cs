@@ -2310,40 +2310,40 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
                 switch (paramName)
                 {
                     case "weightsFi":
-                        _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsFi, scaledGradient);
                         break;
                     case "weightsIi":
-                        _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsIi, scaledGradient);
                         break;
                     case "weightsCi":
-                        _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsCi, scaledGradient);
                         break;
                     case "weightsOi":
-                        _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsOi, scaledGradient);
                         break;
                     case "weightsFh":
-                        _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsFh, scaledGradient);
                         break;
                     case "weightsIh":
-                        _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsIh, scaledGradient);
                         break;
                     case "weightsCh":
-                        _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsCh, scaledGradient);
                         break;
                     case "weightsOh":
-                        _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
+                        Engine.TensorSubtractInPlace(_weightsOh, scaledGradient);
                         break;
                     case "biasF":
-                        _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
+                        Engine.TensorSubtractInPlace(_biasF, scaledGradient);
                         break;
                     case "biasI":
-                        _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
+                        Engine.TensorSubtractInPlace(_biasI, scaledGradient);
                         break;
                     case "biasC":
-                        _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
+                        Engine.TensorSubtractInPlace(_biasC, scaledGradient);
                         break;
                     case "biasO":
-                        _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
+                        Engine.TensorSubtractInPlace(_biasO, scaledGradient);
                         break;
                 }
             }

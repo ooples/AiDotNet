@@ -37,10 +37,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ConditionalGANOptions { LatentSize = 100, NumClasses = 10 };
-/// var model = new ConditionalGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
-/// var generated = model.Predict(noise);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ConditionalGAN&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -443,7 +446,12 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
                 new[] { generatorInput.Shape[0], _numConditionClasses });
             var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
-            var discScore = Discriminator.Predict(withConditions);
+
+            // ForwardForTraining, not Predict: Predict runs inside a NoGradScope, so the discriminator's
+            // score came back detached and this loss had no gradient path to the generator at all. Only the
+            // generator's tensors are collected by TrainWithCustomLoss, so the discriminator supplies the
+            // adversarial signal here without being updated by the generator's step.
+            var discScore = Discriminator.ForwardForTraining(withConditions);
             // BCE(disc(fake_with_cond), real_labels) via engine ops
             var diff = Engine.TensorSubtract(discScore, targetLabels);
             var squared = Engine.TensorMultiply(diff, diff);
@@ -602,27 +610,13 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         int batchSize = images.Shape[0];
         int imageSize = images.Length / batchSize;
-        int conditionSize = conditions.Shape[1];
 
-        // Create result tensor with space for both image and condition
-        var result = TensorAllocator.Rent<T>(new int[] { batchSize, imageSize + conditionSize });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy image data
-            for (int i = 0; i < imageSize; i++)
-            {
-                result[b, i] = images.GetFlatIndexValue(b * imageSize + i);
-            }
-
-            // Append condition
-            for (int i = 0; i < conditionSize; i++)
-            {
-                result[b, imageSize + i] = conditions[b, i];
-            }
-        }
-
-        return result;
+        // Engine ops rather than element-wise writes into a rented tensor. Filling a fresh tensor by index
+        // detaches the result from the gradient tape, so a generator output routed through here reached the
+        // discriminator as a constant and the generator could not learn from it at all. The values produced
+        // are identical, so the callers that use this outside a tape are unaffected.
+        var flatImages = Engine.Reshape(images, new int[] { batchSize, imageSize });
+        return Engine.TensorConcatenate(new[] { flatImages, conditions }, axis: 1);
     }
 
     /// <summary>
@@ -688,63 +682,36 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             return ConcatenateFlattenedImageAndCondition(images, conditions);
         }
 
-        // Create output tensor with extra channels for conditions
-        int[] outputShape = isChannelsFirst
-            ? new int[] { batchSize, channels + conditionSize, height, width }
-            : new int[] { batchSize, height, width, channels + conditionSize };
-        var result = TensorAllocator.Rent<T>(outputShape);
+        // Engine ops rather than a triple-nested element-wise fill. Writing into a rented tensor by index
+        // detaches the result from the gradient tape, which is what left the generator update unable to
+        // learn from the discriminator no matter how the discriminator itself was called.
+        //
+        // The image half of the old loop was an identity copy — it read and wrote the same layout — so only
+        // the condition tiling needs expressing: broadcast [B, K] across H and W, then concatenate on the
+        // channel axis. A 3D input is reshaped to [B, H, W, C] first, which is exactly the layout the old
+        // linear index (h*width*channels + w*channels + c) assumed.
+        var spatialImages = images.Shape.Length == 4
+            ? images
+            : Engine.Reshape(images, new int[] { batchSize, height, width, channels });
 
-        for (int b = 0; b < batchSize; b++)
+        Tensor<T> tiledConditions;
+        int channelAxis;
+        if (isChannelsFirst)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Copy original image channels
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T value;
-                        if (images.Shape.Length == 4)
-                        {
-                            value = isChannelsFirst
-                                ? images[b, c, h, w]
-                                : images[b, h, w, c];
-                        }
-                        else
-                        {
-                            // For 3D, calculate linear index
-                            int idx = h * width * channels + w * channels + c;
-                            value = images.GetFlatIndexValue(b * (height * width * channels) + idx);
-                        }
-
-                        if (isChannelsFirst)
-                        {
-                            result[b, c, h, w] = value;
-                        }
-                        else
-                        {
-                            result[b, h, w, c] = value;
-                        }
-                    }
-
-                    // Tile condition across spatial dimensions (replicate at each H, W position)
-                    for (int k = 0; k < conditionSize; k++)
-                    {
-                        T condValue = conditions[b, k];
-                        if (isChannelsFirst)
-                        {
-                            result[b, channels + k, h, w] = condValue;
-                        }
-                        else
-                        {
-                            result[b, h, w, channels + k] = condValue;
-                        }
-                    }
-                }
-            }
+            channelAxis = 1;
+            tiledConditions = Engine.TensorTile(
+                Engine.Reshape(conditions, new int[] { batchSize, conditionSize, 1, 1 }),
+                new int[] { 1, 1, height, width });
+        }
+        else
+        {
+            channelAxis = 3;
+            tiledConditions = Engine.TensorTile(
+                Engine.Reshape(conditions, new int[] { batchSize, 1, 1, conditionSize }),
+                new int[] { 1, height, width, 1 });
         }
 
-        return result;
+        return Engine.TensorConcatenate(new[] { spatialImages, tiledConditions }, axis: channelAxis);
     }
 
     /// <summary>
@@ -876,7 +843,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumConditionClasses", _numConditionClasses }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

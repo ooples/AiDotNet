@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Siuzdak"
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 16, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Siuzdak 2024, Sec. 4: the model is optimized using Adam at a learning rate of "
+                        + "2e-4 with betas set to (0.9, 0.999) and a batch size of 16, the rate decayed "
+                        + "following a cosine schedule.")]
 public partial class Vocos<T> : VocoderBase<T>
 {
     private readonly VocosOptions _options;
@@ -80,14 +88,15 @@ public partial class Vocos<T> : VocoderBase<T>
     {
         _options = options ?? new VocosOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

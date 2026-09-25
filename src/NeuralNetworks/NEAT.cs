@@ -41,10 +41,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NEATOptions { InputSize = 4, OutputSize = 2, PopulationSize = 150 };
-/// var model = new NEAT&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
-/// var output = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NEAT&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -1264,16 +1267,10 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         // Create a dictionary to track nodes that feed into each node
         var incomingConnections = new Dictionary<int, List<Connection<T>>>();
 
-        // Create a set of all nodes
-        var allNodes = new HashSet<int>();
-
-        // Populate incoming connections and collect all nodes
+        // Populate incoming connections
         foreach (var conn in genome.Connections)
         {
             if (!conn.IsEnabled) continue;
-
-            allNodes.Add(conn.FromNode);
-            allNodes.Add(conn.ToNode);
 
             if (!incomingConnections.ContainsKey(conn.ToNode))
             {
@@ -1616,7 +1613,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 { "BestGenomeConnections", bestGenome.Connections.Count },
                 { "BestGenomeEnabledConnections", bestGenome.Connections.Count(c => c.IsEnabled) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

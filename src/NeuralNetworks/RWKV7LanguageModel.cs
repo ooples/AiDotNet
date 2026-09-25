@@ -22,10 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new RWKV7Options { VocabSize = 65536, ModelDim = 4096, NumLayers = 32 };
-/// var model = new RWKV7LanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new RWKV7LanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -71,14 +75,8 @@ public partial class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public RWKV7LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 65536,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 4,
-        double ffnMultiplier = 3.5,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        RWKV7Options? options = null)
+        RWKV7Options? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // RWKV-7's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateRWKV7Layers), so the loss must be cross-entropy-with-logits (fused
@@ -93,20 +91,25 @@ public partial class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
             // normally, matching healthy sibling RWKV4.
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
-        if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
-        if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
-        if (numLayers <= 0) throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
-        if (numHeads <= 0) throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
-        if (modelDimension % numHeads != 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by number of heads ({numHeads}).", nameof(modelDimension));
-
         _options = options ?? new RWKV7Options();
+        _options.Validate();
+
+        // Head-splitting requires an exact division, so this is checked after Validate() has
+        // established both values are positive.
+        if (_options.ModelDimension % _options.NumHeads != 0)
+        {
+            throw new ArgumentException(
+                $"Model dimension ({_options.ModelDimension}) must be divisible by number of heads ({_options.NumHeads}).",
+                nameof(options));
+        }
+
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _ffnMultiplier = ffnMultiplier;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _ffnMultiplier = _options.FfnMultiplier;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 
@@ -161,7 +164,7 @@ public partial class RWKV7LanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 
