@@ -140,33 +140,7 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     /// <param name="input">Input feature map.</param>
     /// <returns>Upsampled feature map.</returns>
-    protected Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, height * 2, width * 2 });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height * 2; h++)
-                {
-                    for (int w = 0; w < width * 2; w++)
-                    {
-                        int srcH = h / 2;
-                        int srcW = w / 2;
-                        output[b, c, h, w] = input[b, c, srcH, srcW];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+    protected Tensor<T> Upsample2x(Tensor<T> input) => CvTensorOps<T>.Upsample2xNearest(input);
 
     /// <summary>
     /// Downsample a feature map by a factor of 2 using max pooling.
@@ -174,59 +148,10 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <param name="input">Input feature map.</param>
     /// <returns>Downsampled feature map.</returns>
     protected Tensor<T> Downsample2x(Tensor<T> input)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        // Use ceiling division so a 5x5 input produces a 3x3 output (matching the
-        // dynamic-spatial pyramid alignment used elsewhere). Floor division would
-        // silently drop the last row/column for odd-sized features and break
-        // multi-scale detection heads at non-power-of-two input sizes.
-        int outHeight = (height + 1) / 2;
-        int outWidth = (width + 1) / 2;
-
-        var output = new Tensor<T>(new[] { batch, channels, outHeight, outWidth });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        int srcRow = h * 2;
-                        int srcCol = w * 2;
-                        // Max pooling 2x2 with bounds-checked sampling: the right/bottom
-                        // edge of an odd-sized window covers fewer than 4 source cells,
-                        // so we take the max only over the in-bounds entries.
-                        T maxVal = input[b, c, srcRow, srcCol];
-                        if (srcCol + 1 < width)
-                        {
-                            T v = input[b, c, srcRow, srcCol + 1];
-                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
-                        }
-                        if (srcRow + 1 < height)
-                        {
-                            T v = input[b, c, srcRow + 1, srcCol];
-                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
-                        }
-                        if (srcRow + 1 < height && srcCol + 1 < width)
-                        {
-                            T v = input[b, c, srcRow + 1, srcCol + 1];
-                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
-                        }
-
-                        output[b, c, h, w] = maxVal;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // 2x2 max pooling in CEIL mode, so a 5x5 input produces a 3x3 output (matching the
+        // dynamic-spatial pyramid alignment used elsewhere) and the partial right/bottom window takes
+        // its max over the in-bounds cells only.
+        => CvTensorOps<T>.MaxPool2x2Ceil(input);
 
     /// <summary>
     /// Applies a 1x1 convolution to change the number of channels.
@@ -243,54 +168,26 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int width = input.Shape[3];
         int outChannels = weights.Shape[0];
 
-        // 1x1 conv = matmul: reshape [B,C_in,H,W] -> [B*H*W, C_in] @ W^T -> [B*H*W, C_out]
-        // Transpose input from NCHW to NHWC: [B, C_in, H, W] -> permute to get [B*H*W, C_in]
-        int spatialSize = height * width;
-        var inputFlat = new Tensor<T>(new[] { batch * spatialSize, inChannels });
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = b * spatialSize + h * width + w;
-                    for (int ic = 0; ic < inChannels; ic++)
-                    {
-                        inputFlat[spatialIdx, ic] = input[b, ic, h, w];
-                    }
-                }
-            }
-        }
+        // A 1x1 convolution is a matmul over the channel axis: NCHW -> [B*H*W, C_in] @ W^T -> NCHW.
+        // Every reshape and transpose here is an ENGINE op. Tensor<T>.Reshape and .Transpose bypass
+        // the autodiff tape, so using them on the input severed the gradient to the backbone, and
+        // using them on the WEIGHTS meant the neck's own weights never received a gradient either.
+        var inputFlat = Engine.Reshape(
+            Engine.TensorPermute(input, new[] { 0, 2, 3, 1 }),
+            new[] { batch * height * width, inChannels });
 
-        // MatMul: [B*H*W, C_in] @ [C_out, C_in]^T = [B*H*W, C_out]
-        var weightsT = weights.Transpose(new[] { 1, 0 });
-        var outputFlat = Engine.TensorMatMul(inputFlat, weightsT);
+        var outputFlat = Engine.TensorMatMul(inputFlat, Engine.TensorPermute(weights, new[] { 1, 0 }));
 
-        // Add bias if present
         if (bias is not null)
         {
-            var biasBroadcast = bias.Reshape(1, outChannels);
-            outputFlat = Engine.TensorAdd(outputFlat, biasBroadcast);
+            outputFlat = Engine.TensorAdd(
+                outputFlat,
+                Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, outChannels }), new[] { batch * height * width, outChannels }));
         }
 
-        // Reshape back to NCHW: [B*H*W, C_out] -> [B, C_out, H, W]
-        var output = new Tensor<T>(new[] { batch, outChannels, height, width });
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = b * spatialSize + h * width + w;
-                    for (int oc = 0; oc < outChannels; oc++)
-                    {
-                        output[b, oc, h, w] = outputFlat[spatialIdx, oc];
-                    }
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorPermute(
+            Engine.Reshape(outputFlat, new[] { batch, height, width, outChannels }),
+            new[] { 0, 3, 1, 2 });
     }
 
     /// <summary>
@@ -306,12 +203,10 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Feature maps must have the same shape for addition");
         }
 
-        var output = new Tensor<T>(a._shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            output[i] = NumOps.Add(a[i], b[i]);
-        }
-        return output;
+        // Engine op rather than a scalar loop so the tape records the addition: FPN's top-down
+        // pathway adds the upsampled higher level into the lateral one, and a severed add there
+        // cuts every level below it out of the gradient.
+        return Engine.TensorAdd(a, b);
     }
 
     #region ModelBase Overrides

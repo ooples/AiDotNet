@@ -58,6 +58,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Swin UNETR: Swin Transformers for Semantic Segmentation of Brain Tumors in MRI Images", "https://arxiv.org/abs/2201.01266", Year = 2022, Authors = "Ali Hatamizadeh, Vishwesh Nath, Yucheng Tang, Dong Yang, Holger R. Roth, Daguang Xu")]
+[PaperOptimizer(OptimizerKind.AdamW, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Tang et al. 2022: 800 epochs with a linear warmup and a cosine annealing scheduler. The paper states neither the peak rate nor the warmup length here, so neither is declared.")]
 public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
 {
     /// <inheritdoc />
@@ -339,7 +342,7 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SwinUNETR" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,

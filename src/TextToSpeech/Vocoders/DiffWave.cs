@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Kong et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 16,
+                Source = "Kong et al. 2021, Sec. 5: Adam with a batch size of 16 and a fixed learning rate of 2e-4, trained for 1M steps. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class DiffWave<T> : VocoderBase<T>
 {
     private readonly DiffWaveOptions _options;
@@ -83,7 +87,8 @@ public partial class DiffWave<T> : VocoderBase<T>
         _options = options ?? new DiffWaveOptions();
         _useNativeMode = true;
         _preserveSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? CreateDefaultOptimizer());
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

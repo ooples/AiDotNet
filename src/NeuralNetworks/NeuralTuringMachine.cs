@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -33,10 +35,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NeuralTuringMachineOptions { InputSize = 8, MemorySize = 128, MemoryWordSize = 20 };
-/// var model = new NeuralTuringMachine&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 8 });
-/// var output = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10, 8 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NeuralTuringMachine&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]
@@ -47,6 +52,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
+[PaperOptimizer(OptimizerKind.RmsProp, Momentum = 0.9,
+                Source = "Graves et al. 2014, Sec. 4.6: for all experiments the RMSProp algorithm was "
+                        + "used with a momentum of 0.9. The paper gives its learning rates in a "
+                        + "per-experiment table rather than as one value, so none is declared.")]
 public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly NeuralTuringMachineOptions _options;
@@ -2237,7 +2246,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
                 { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

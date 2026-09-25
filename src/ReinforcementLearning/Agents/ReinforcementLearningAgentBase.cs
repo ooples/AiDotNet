@@ -4,6 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
@@ -150,7 +151,18 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         Guard.NotNull(options);
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        // An explicit Seed always wins. Failing that, honour the ambient deterministic-initialisation
+        // scope the surrounding code may have opened: an agent built inside one is expected to be
+        // reproducible, and its exploration draws and replay sampling are as much a part of that as
+        // its layer weights. Reading AmbientFallbackSeed does NOT consume the scope's per-layer seed
+        // stream, so the weights an agent's networks receive are unchanged either way. The property
+        // is null unless a caller sets it, so an agent constructed normally still gets secure entropy.
+        int? ambientSeed = LayerInitializationSeedScope.AmbientFallbackSeed;
+        Random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : ambientSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(ambientSeed.Value)
+                : RandomHelper.CreateSecureRandom();
 
         // Apply sensible defaults for required properties per facade pattern.
         // For unconstrained generic T, `options.LearningRate` is annotated `T?` but
@@ -193,6 +205,16 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     /// <param name="nextState">The state after action.</param>
     /// <param name="done">Whether the episode terminated.</param>
     public abstract void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
+
+    /// <summary>Stores a transition with a snapshot of next-state legality, or rejects unsupported nonterminal masks.</summary>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+            throw new InvalidOperationException("This agent does not support next-state action masks.");
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
 
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.
@@ -324,7 +346,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         // collapses the Bellman update to Q(s,a) ← Q(s,a) + α·(r − Q(s,a)) which is
         // exactly the one-shot supervised semantics callers expect. The abstract
         // <see cref="Train()"/> consumes the stored experience and applies one update.
-        StoreExperience(state, actionVec, bestValue, state, done: true);
+        StoreSupervisedExperience(state, actionVec, bestValue, state, done: true);
         // Flag the one-shot supervised update so replay agents bypass warmup and train now.
         SupervisedUpdateRequested = true;
         try
@@ -336,6 +358,21 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             SupervisedUpdateRequested = false;
         }
     }
+
+    /// <summary>
+    /// Stores the labelled transition created by <see cref="Train(Vector{T}, Vector{T})"/>.
+    /// </summary>
+    /// <param name="state">The labelled input state.</param>
+    /// <param name="action">The preferred action decoded from the supervised target.</param>
+    /// <param name="reward">The target value associated with that action.</param>
+    /// <param name="nextState">The terminal successor state.</param>
+    /// <param name="done">Whether this labelled transition is terminal.</param>
+    /// <remarks>
+    /// The default retains the existing public store dispatch. On-policy agents can isolate
+    /// explicitly labelled updates without admitting unverified actions through public collection.
+    /// </remarks>
+    protected virtual void StoreSupervisedExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, done);
 
     /// <summary>
     /// Serializes the agent to bytes.
@@ -412,8 +449,22 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
+        // Structural compatibility is decided HERE, against the agent's real current shape, and before a
+        // single byte of it is mutated. It cannot move later: the V2 topology read below deliberately
+        // RESHAPES components to the checkpoint's own topology, so by the time the flat vector is applied
+        // the counts always agree and a genuinely incompatible checkpoint has already been absorbed.
+        // Opt-in, so the sparse and tabular agents that rely on exactly that reshaping are unaffected.
+        string? incompatibility = DescribeIncompatibleCheckpoint(count, ParameterCount);
+        if (incompatibility is not null && count != ParameterCount)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name} cannot load this checkpoint: it holds {count} parameters but this agent "
+                + $"has {ParameterCount}. {incompatibility}");
+        }
+
         // Keys and shapes are state, not values. Recreate them before generated state and the flat
         // vector are restored so sparse/tabular sources expose the same slots as the checkpoint.
+        OnParametersRestoring();
         if (magic == AgentSerializationMagicV2)
         {
             _ = Components;
@@ -429,6 +480,32 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
 
         SetParameters(parameters);
     }
+
+    /// <summary>
+    /// Lets an agent explain, in its own terms, why a checkpoint's parameter layout no longer matches it.
+    /// </summary>
+    /// <param name="savedParameterCount">Parameter count found in the checkpoint.</param>
+    /// <param name="currentParameterCount">Parameter count this agent now has.</param>
+    /// <returns>
+    /// A sentence appended to the mismatch error, or <c>null</c> to say nothing — the default, which leaves
+    /// restore behaviour exactly as it was.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Returning non-null turns a layout mismatch into an immediate, specific failure instead of a generic
+    /// length error raised while the parameter registry is folding components. Override it when an agent has
+    /// gained or lost networks and an older checkpoint therefore cannot be loaded: the reader of that
+    /// exception is someone holding a file they believed was still valid, and what they need to know is what
+    /// changed and whether anything can be recovered.
+    /// </para>
+    /// <para>
+    /// It is deliberately opt-in. Restore is shared by every agent in the library, including tabular and
+    /// sparse ones whose component sizes are materialized from the payload itself, so the base must not
+    /// assume a count difference is always an error.
+    /// </para>
+    /// </remarks>
+    protected virtual string? DescribeIncompatibleCheckpoint(int savedParameterCount, long currentParameterCount)
+        => null;
 
     private const int AgentSerializationMagicV1 = unchecked((int)0xA1D0A63E);
     private const int AgentSerializationMagicV2 = unchecked((int)0xA1D0A63F);
@@ -483,6 +560,19 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     }
 
     /// <summary>
+    /// Runs before an explicit parameter update or checkpoint restore can mutate components.
+    /// </summary>
+    /// <remarks>
+    /// On-policy agents invalidate pending behavior here, including when a later component restore
+    /// fails after an earlier one changed. Implementations must be idempotent: checkpoint restore
+    /// enters this boundary before restoring structure and again when distributing parameter values.
+    /// The default is a no-op; successful-update behavior remains in <see cref="OnParametersRestored"/>.
+    /// </remarks>
+    protected virtual void OnParametersRestoring()
+    {
+    }
+
+    /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
     /// </summary>
@@ -524,6 +614,31 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     }
 
     /// <summary>
+    /// Yields this agent's registered state as per-component chunks, each carrying the stable ID and
+    /// role of the component it came from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> has exposed this for a while; agents did not,
+    /// so anything outside the agent could only see one anonymous flat vector. That is precisely the
+    /// resolution at which a dead component is invisible: an actor-critic agent concatenates several
+    /// networks into that vector, so a policy network receiving no gradient at all still leaves the
+    /// vector changing, because the critics train.
+    /// </para>
+    /// <para>
+    /// Reconstructing the split from <see cref="ParameterLayout"/> offsets is not a substitute: the
+    /// running offset is accumulated from each slot's anticipated <c>ParameterCount</c>, while a lazily
+    /// shaped component reports a smaller <c>MaterializedParameterCount</c>, so the two disagree exactly
+    /// where the arithmetic matters. Reading the chunks directly avoids the reconstruction entirely.
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        _ = Components;
+        return _parameterRegistry.GetParameterStateChunks();
+    }
+
+    /// <summary>
     /// Sets the agent's parameters.
     /// </summary>
     /// <inheritdoc />
@@ -534,6 +649,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
+        OnParametersRestoring();
         _ = Components;
         _parameterRegistry.SetParameters(parameters);
         OnParametersRestored();

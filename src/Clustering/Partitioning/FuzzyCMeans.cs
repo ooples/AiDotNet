@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
+/// var labels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use AiModelBuilder facade for fuzzy clustering
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new FuzzyCMeans&lt;double&gt;(new FuzzyCMeansOptions&lt;double&gt;()));
@@ -69,9 +72,9 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The FCM options.</param>
     public FuzzyCMeans(FuzzyCMeansOptions<T>? options = null)
-        : base(options ?? new FuzzyCMeansOptions<T>())
+        : base(options ??= new FuzzyCMeansOptions<T>())
     {
-        _options = options ?? new FuzzyCMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>

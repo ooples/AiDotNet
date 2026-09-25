@@ -53,11 +53,16 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
-/// // A pendulum: state is (angle, rate), input is torque.
+/// // A pendulum: state is (angle, rate), input is torque. The costs are weighting MATRICES, not
+/// // scalars — identity here means every state and input is penalised equally.
+/// var stateCost = Matrix&lt;double&gt;.CreateIdentity(2);
+/// var inputCost = Matrix&lt;double&gt;.CreateIdentity(1);
+/// var currentState = new Vector&lt;double&gt;(new double[] { 0.1, 0.0 });
+///
 /// var controller = new NonlinearModelPredictiveController&lt;double&gt;(
-///     dynamics: (x, u) =&gt; Step(x, u),
-///     jacobians: (x, u) =&gt; (StateJacobian(x, u), InputJacobian(x, u)),
-///     stateCost: q, inputCost: r,
+///     dynamics: (x, u) =&gt; x,                       // your discrete-time step, x_{k+1} = f(x_k, u_k)
+///     jacobians: (x, u) =&gt; (Matrix&lt;double&gt;.CreateIdentity(2), Matrix&lt;double&gt;.CreateIdentity(2)),
+///     stateCost: stateCost, inputCost: inputCost,
 ///     options: new NonlinearModelPredictiveControllerOptions&lt;double&gt; { Horizon = 20 });
 ///
 /// var torque = controller.ComputeControl(currentState);

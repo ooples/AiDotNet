@@ -33,7 +33,7 @@ var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
 
 var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(model)
-    .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Int8 })
+    .ConfigureQuantization(new QuantizationConfig { Mode = AiDotNet.Enums.QuantizationMode.Int8 })
     .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
     .BuildAsync();
 

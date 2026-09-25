@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -77,6 +78,13 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unified Training of Universal Time Series Forecasting Transformers", "https://arxiv.org/abs/2402.02592", Year = 2024, Authors = "Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.98,
+                WeightDecay = 0.1, ReferenceBatchSize = 256, WarmupSteps = 10000,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Woo et al. 2024, Sec. 5: AdamW with a learning rate of 1e-3, weight decay "
+                        + "1e-1, beta1 0.9 and beta2 0.98, warming up over the first 10,000 steps and "
+                        + "cosine annealing thereafter, at a batch size of 256.")]
 public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
@@ -316,7 +324,9 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;

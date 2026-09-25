@@ -1,3 +1,4 @@
+using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,10 +63,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphSAGENetworkOptions { NodeFeatureSize = 16, HiddenSize = 128, NumLayers = 2 };
-/// var model = new GraphSAGENetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 50, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 50, 16 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphSAGENetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
@@ -76,6 +80,13 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
+[PaperOptimizer(OptimizerKind.Adam, SearchedValues = [0.01, 0.001, 0.0001],
+                Provenance = RecipeProvenance.Searched,
+                Source = "Hamilton et al. 2017, Sec. 4: all models use the Adam optimizer, with the "
+                        + "learning rate selected from {0.01, 0.001, 0.0001}. No single rate is declared "
+                        + "because the paper states a search space; the candidates are recorded instead. "
+                        + "DeepWalk, which the paper notes performed better with vanilla gradient "
+                        + "descent, is a baseline rather than this model.")]
 public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
@@ -202,7 +213,8 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
                 baseLearningRate: 0.001, gamma: 0.99),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts));
 
         InitializeLayers();
     }

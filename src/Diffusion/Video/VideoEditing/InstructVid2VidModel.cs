@@ -37,10 +37,14 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 50 };
-/// var model = new InstructVid2VidModel&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 24, 64, 64 });
-/// var edited = model.Predict(input);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 50 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 24, 64, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new InstructVid2VidModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var edited = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

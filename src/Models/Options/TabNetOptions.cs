@@ -241,7 +241,7 @@ public class TabNetOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Creates a copy of the options.
     /// </summary>
-    /// <returns>A new TabNetOptions instance with the same values.</returns>
+    /// <returns>A new TabNetOptions&lt;double&gt; instance with the same values.</returns>
     public TabNetOptions<T> Clone()
     {
         return new TabNetOptions<T>

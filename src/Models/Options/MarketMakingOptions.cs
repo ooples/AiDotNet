@@ -17,50 +17,54 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     public MarketMakingOptions() { }
 
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public MarketMakingOptions(MarketMakingOptions<T> other) : this()
+    public MarketMakingOptions(MarketMakingOptions<T> other) : base(other)
     {
-        if (other is null) throw new ArgumentNullException(nameof(other));
-
-        // Copy base class (TradingAgentOptions) properties
-        LearningRate = other.LearningRate;
-        DiscountFactor = other.DiscountFactor;
-        LossFunction = other.LossFunction;
-        Seed = other.Seed;
-        BatchSize = other.BatchSize;
-        ReplayBufferSize = other.ReplayBufferSize;
-        TargetUpdateFrequency = other.TargetUpdateFrequency;
-        WarmupSteps = other.WarmupSteps;
-        EpsilonStart = other.EpsilonStart;
-        EpsilonEnd = other.EpsilonEnd;
-        EpsilonDecay = other.EpsilonDecay;
-        StateSize = other.StateSize;
-        ActionSize = other.ActionSize;
-        ContinuousActions = other.ContinuousActions;
-        HiddenLayers = other.HiddenLayers;
-        InitialCapital = other.InitialCapital;
-        TransactionCost = other.TransactionCost;
-        MaxPositionSize = other.MaxPositionSize;
-        RiskFreeRate = other.RiskFreeRate;
-        AllowShortSelling = other.AllowShortSelling;
-        UseRiskAdjustedReward = other.UseRiskAdjustedReward;
-        VariancePenalty = other.VariancePenalty;
-        RewardScale = other.RewardScale;
-
-        // Copy MarketMaking-specific properties
+        // Base properties are copied by the base copy constructor; only market-making's own are listed here.
         MaxInventory = other.MaxInventory;
         InventoryPenalty = other.InventoryPenalty;
         BaseSpread = other.BaseSpread;
     }
 
     /// <summary>
-    /// The maximum inventory size the agent can hold.
+    /// Maximum absolute inventory, as an OVERRIDE of the environment's own limit.
     /// </summary>
-    public int MaxInventory { get; set; } = 100;
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>maxInventory</c> constructor argument binds. When set, it REPLACES that value once the environment
+    /// receives these options through <c>TradingEnvironment.ApplyAgentOverrides</c>. Exactly one limit is
+    /// ever in force.
+    /// </para>
+    /// <para><b>For Beginners:</b> A market maker ends up holding whatever other people sell it. This is the
+    /// most it is allowed to hold in either direction before it must stop quoting that side — the cap that
+    /// keeps one bad run from turning into an unbounded position.</para>
+    /// </remarks>
+    /// <value>
+    /// A count of units, at least <c>1</c> when set. <c>null</c> (the default) leaves the environment's own
+    /// <c>maxInventory</c> in force rather than overriding it.
+    /// </value>
+    public int? MaxInventory { get; set; }
 
     /// <summary>
-    /// Penalty coefficient for holding inventory (encourages neutral position).
+    /// Penalty coefficient per unit of held inventory, as an OVERRIDE of the environment's own penalty.
     /// </summary>
-    public double InventoryPenalty { get; set; } = 0.01;
+    /// <remarks>
+    /// <para>
+    /// <b>Precedence.</b> <c>null</c> (the default) means "unset": the environment's own
+    /// <c>inventoryPenalty</c> constructor argument binds. When set, it REPLACES that value — it is never
+    /// added on top of it, so the penalty cannot be charged twice.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Holding a big long or short position while making markets is risky, so the
+    /// reward is docked in proportion to inventory. This is how strongly that applies.
+    /// </para>
+    /// </remarks>
+    /// <value>
+    /// A reward penalty per unit of held inventory. Must be non-negative and finite when set; <c>0</c>
+    /// disables the penalty and larger values make the agent flatten its position more eagerly.
+    /// <c>null</c> (the default) leaves the environment's own <c>inventoryPenalty</c> in force.
+    /// </value>
+    public double? InventoryPenalty { get; set; }
 
     /// <summary>
     /// The base spread around the mid-price.
@@ -73,11 +77,14 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     public override void Validate()
     {
         base.Validate();
-        if (MaxInventory < 1)
-            throw new ArgumentException("MaxInventory must be at least 1.", nameof(MaxInventory));
-        if (InventoryPenalty < 0)
-            throw new ArgumentException("InventoryPenalty must be non-negative.", nameof(InventoryPenalty));
-        if (BaseSpread < 0)
-            throw new ArgumentException("BaseSpread must be non-negative.", nameof(BaseSpread));
+        if (MaxInventory is int maxInventory && maxInventory < 1)
+            throw new ArgumentException("MaxInventory must be at least 1 when set.", nameof(MaxInventory));
+        if (InventoryPenalty is double inventoryPenalty
+            && (inventoryPenalty < 0 || double.IsNaN(inventoryPenalty) || double.IsInfinity(inventoryPenalty)))
+            throw new ArgumentException(
+                "InventoryPenalty must be a non-negative, finite number when set.", nameof(InventoryPenalty));
+        if (BaseSpread < 0 || double.IsNaN(BaseSpread) || double.IsInfinity(BaseSpread))
+            throw new ArgumentException(
+                "BaseSpread must be a non-negative, finite number.", nameof(BaseSpread));
     }
 }

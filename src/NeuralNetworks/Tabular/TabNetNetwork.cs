@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -42,10 +44,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabNetOptions { NumFeatures = 20, NumDecisionSteps = 5, RelaxationFactor = 1.5 };
-/// var model = new TabNetNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabNetOptions&lt;double&gt; { NumFeatures = 20, NumDecisionSteps = 5, RelaxationFactor = 1.5 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TabNetNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -59,6 +66,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1908.07442",
     Year = 2021,
     Authors = "Arik, S. O. & Pfister, T.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.02, DecayRate = 0.7, StepSize = 200,
+                Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Arik and Pfister 2021, Sec. 4: all models use Adam with a learning rate of "
+                        + "0.02, decayed by 0.7 every 200 iterations with an exponential decay, over 4k "
+                        + "iterations.")]
 public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabNetOptions<T> _options;
@@ -109,7 +121,9 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new TabNetOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -210,7 +224,7 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

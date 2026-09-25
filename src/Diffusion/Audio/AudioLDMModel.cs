@@ -71,7 +71,7 @@ namespace AiDotNet.Diffusion.Audio;
 ///     guidanceScale: 4.0);
 ///
 /// // Save as audio file
-/// SaveWav(dogBark, "dog_bark.wav", sampleRate: 16000);
+/// // dogBark is the result tensor — write it out with your own encoder.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

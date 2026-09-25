@@ -45,7 +45,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 ///
 /// In graphs:
 /// ```csharp
-/// var txn = new GraphTransaction(store, wal);
+/// var store = new MemoryGraphStore&lt;double&gt;();
+/// var wal = new WriteAheadLog("graph.wal");
+/// var node1 = new GraphNode&lt;double&gt;("n1", "Person");
+/// var edge1 = new GraphEdge&lt;double&gt;("n1", "n1", "KNOWS");
+///
+/// var txn = new GraphTransaction&lt;double&gt;(store, wal);
 /// txn.Begin();
 /// try
 /// {

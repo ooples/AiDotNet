@@ -75,22 +75,102 @@ function Complete-CiMapWorkloads {
     $added = [Collections.Generic.List[string]]::new()
     foreach ($workload in $Manifest) {
         if (-not $current.Add([string] $workload.name)) { throw 'Duplicate workload in the manifest.' }
-        $kind = Get-CiWorkloadKind $workload
+        # Validates the kind even for mapped workloads, so a misspelling cannot slip through.
+        $null = Get-CiWorkloadKind $workload
         if ($existing.Contains([string] $workload.name)) { continue }
-        if ($kind -eq [CiWorkloadKind]::Tests) {
-            throw "The map is missing ordinary workload '$($workload.name)'; auxiliary rollout cannot repair that."
-        }
+        # A workload the map has never measured runs on every selection until a map includes it.
+        # Throwing here instead sent EVERY pull request to the full matrix from the moment any
+        # ordinary shard was added until a new map was certified - and certification replays
+        # through this same function, so the map could not catch up either (116 -> 209 shards,
+        # 2026-09-15..17, zero reduced PRs).
         $added.Add([string] $workload.name)
     }
-    foreach ($name in $existing) {
-        if (-not $current.Contains($name)) { throw "The source map contains an obsolete workload '$name'." }
-    }
+    # A workload the manifest no longer has is retired. An always-run entry carries no coverage and
+    # is simply dropped. An indexed one keeps its place, because the file index addresses shards by
+    # position; Select-Shards escalates any change that reaches it, since nothing records where its
+    # tests went.
+    $retired = @($existing | Where-Object { -not $current.Contains($_) } | Sort-Object)
     $completed = $Map.PSObject.Copy()
-    $completed.alwaysRun = @($Map.alwaysRun) + $added.ToArray()
+    $completed.alwaysRun = @(@($Map.alwaysRun) | Where-Object { $current.Contains([string] $_) }) + $added.ToArray()
+    # A retired INDEXED shard cannot leave knownShards - the file index addresses shards by
+    # position - but no job will ever report an outcome for it again. Record the retirement so
+    # certification can require outcomes for the live shards only. Without this the first
+    # retirement wedges every later map: certification demands an outcome that cannot exist, and
+    # the previous map only advances when something certifies. (2026-09-17 retirement -> no
+    # certified map from 09-20 on -> every PR and every master push ran the full 164-shard matrix.)
+    $retiredIndexed = @($retired | Where-Object { $_ -cin @($Map.knownShards) })
+    $completed | Add-Member -NotePropertyName retiredShards -NotePropertyValue $retiredIndexed -Force
     # This is a conservative in-memory extension, not newly measured coverage and not
     # a certificate for a larger historical run. The original artifact is untouched.
     if ($added.Count -gt 0) {
         $completed | Add-Member -NotePropertyName requiredWorkloadExtension -NotePropertyValue $added.ToArray() -Force
     }
-    return [pscustomobject]@{ Map = $completed; Added = $added.ToArray() }
+    return [pscustomobject]@{
+        Map = $completed
+        Added = $added.ToArray()
+        Retired = $retired
+        RetiredIndexed = $retiredIndexed
+    }
+}
+
+function Get-DeferredNightlyShards {
+    <#
+    .SYNOPSIS
+        Names of the selected nightlyOnly shards a pull request or push can leave to the nightly run.
+    .DESCRIPTION
+        Sweeps and conformance windows (nightlyOnly in test-shards.yml) exercise every model, so the
+        coverage map attributes almost any model change to them: 46 of them sat on every pull request
+        and every post-merge push. They run nightly instead, in the coverage-everywhere run on master.
+
+        A nightlyOnly shard is KEPT when the change can only be proved by running it:
+         - its manifest or execution policy changed. Without this the change that introduced
+           nightlyOnly deferred itself: the selector required all 46 for their redefinition and a
+           route-blind filter removed exactly those, leaving 2 shards to validate it.
+         - it runs a changed test file that no non-nightly selected shard also runs. Sweep filters
+           are broad - #2226's new Finance test file was routed to every Conformance window - so that
+           route alone does not mean the change touched the sweep. Every owner is kept, because the
+           eight ParameterCountContractTests shards each run a different eighth of one sweep.
+        Everything else (always-run, coverage attribution, map bookkeeping) defers.
+
+        Routes are the selector's "<shard> <= <why>" lines. Null routes - any selection path other
+        than the mapped selector - defer nothing.
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Shards,
+        [AllowNull()] [string[]] $Routes
+    )
+    if ($null -eq $Routes) { return @() }
+    $isNightly = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($shard in $Shards) {
+        if ($shard.PSObject.Properties['nightlyOnly'] -and $shard.nightlyOnly -eq $true) {
+            [void] $isNightly.Add([string] $shard.name)
+        }
+    }
+    if ($isNightly.Count -eq 0) { return @() }
+    $keep = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $testOwners = @{}
+    foreach ($route in $Routes) {
+        $m = [regex]::Match([string] $route, '^(?<shard>.+?) <= (?<why>.*)$')
+        if (-not $m.Success) { continue }
+        $name = $m.Groups['shard'].Value
+        $why = $m.Groups['why'].Value
+        if ($why -ceq 'its manifest or execution policy changed') { [void] $keep.Add($name) }
+        $t = [regex]::Match($why, '^runs tests affected by (?<path>\S+)')
+        if ($t.Success) {
+            $path = $t.Groups['path'].Value
+            if (-not $testOwners.ContainsKey($path)) {
+                $testOwners[$path] = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+            }
+            [void] $testOwners[$path].Add($name)
+        }
+    }
+    foreach ($path in @($testOwners.Keys)) {
+        $owners = $testOwners[$path]
+        if (@($owners | Where-Object { -not $isNightly.Contains($_) }).Count -eq 0) {
+            foreach ($owner in $owners) { [void] $keep.Add($owner) }
+        }
+    }
+    return @($Shards | Where-Object {
+        $isNightly.Contains([string] $_.name) -and -not $keep.Contains([string] $_.name)
+    } | ForEach-Object { [string] $_.name })
 }

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -36,7 +38,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// // in a single transformer for unified text and image generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -62,6 +64,14 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2024,
     Authors = "Zhou et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.95,
+                Epsilon = 1e-8, WarmupSteps = 4000, MinLearningRate = 1.5e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhou et al. 2024, Sec. 3: all parameters are randomly initialized and "
+                        + "optimized with AdamW at beta1 0.9, beta2 0.95 and epsilon 1e-8, at a learning "
+                        + "rate of 3e-4 warmed up over 4000 steps and decaying to 1.5e-5 under a cosine "
+                        + "scheduler. The stated batch of 4M tokens is not declared as a reference batch "
+                        + "size, which counts examples rather than tokens.")]
 public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly TransfusionOptions _options;
@@ -106,7 +116,9 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
     {
         _options = options ?? new TransfusionOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

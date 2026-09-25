@@ -31,10 +31,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
-/// var model = new SD3TurboModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
-/// var generated = model.Predict(noise);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 4 };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 128, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SD3TurboModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

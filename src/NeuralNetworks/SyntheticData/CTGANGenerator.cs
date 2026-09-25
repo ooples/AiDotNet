@@ -1453,7 +1453,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

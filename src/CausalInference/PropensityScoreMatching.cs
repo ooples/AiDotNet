@@ -52,9 +52,18 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 /// <example>
 /// <code>
-/// var psm = new PropensityScoreMatching&lt;double&gt;(caliper: 0.2, matchRatio: 1);
-/// psm.Fit(features, treatment, outcome);
-/// double att = psm.EstimateAtt();
+/// var covariates = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1, 0, 1 });   // who was treated
+/// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new PropensityScoreMatching&lt;double&gt;(caliper: 0.2, matchRatio: 1))
+///     .Build(covariates, treatment, outcome);
+///
+/// var (att, se) = result.EstimateATT(covariates, treatment, outcome);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -151,6 +160,9 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     ///
     /// Usage:
     /// <code>
+    /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+    /// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1 });   // who was treated
     /// var psm = new PropensityScoreMatching&lt;double&gt;(caliper: 0.1, matchRatio: 2);
     /// var (ate, se) = psm.EstimateATE(features, treatment, outcome);
     /// </code>
@@ -161,6 +173,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         bool withReplacement = true,
         int matchRatio = 1,
         int? seed = null)
+        : base(seed)
     {
         if (caliper <= 0)
         {
@@ -730,7 +743,8 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         {
             { "Caliper", _caliper },
             { "WithReplacement", _withReplacement },
-            { "MatchRatio", _matchRatio }
+            { "MatchRatio", _matchRatio },
+            { "RandomSeed", RandomSeed.HasValue ? RandomSeed.Value : (object)string.Empty }
         };
 
         if (_propensityCoefficients is not null)
@@ -764,8 +778,17 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         if (matchRatioToken is not null)
             _matchRatio = matchRatioToken.ToObject<int>();
 
-        // Reinitialize random with cryptographically secure randomness (cannot restore exact state)
-        _random = RandomHelper.CreateSecureRandom();
+        // The generator's internal state cannot be restored, but the seed can — and the seed is what
+        // makes a standard error reproducible, so a round-tripped model keeps producing the same one.
+        var seedToken = modelDataObj["RandomSeed"];
+        int? restoredSeed = seedToken is not null
+            && seedToken.Type == Newtonsoft.Json.Linq.JTokenType.Integer
+                ? seedToken.ToObject<int>()
+                : null;
+        RestoreRandomSeed(restoredSeed);
+        _random = restoredSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(restoredSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)

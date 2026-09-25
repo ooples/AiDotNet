@@ -66,13 +66,19 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="TOutput">The output type.</typeparam>
 /// <example>
 /// <code>
-/// var options = new SparseMAMLOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+/// var model = new NeuralNetwork&lt;double&gt;(architecture);
+/// var options = new SparseMAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model)
 /// {
-///     MetaModel = model,
 ///     InitialGateLogit = 1.0,   // start with every gate open; sparsity is learned, not imposed
 ///     GateLearningRate = 1e-2,
 /// };
-/// var sparseMaml = new SparseMAMLAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// var sparseMaml = new SparseMAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+/// var taskBatch = new TaskBatch&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
+///     new IMetaLearningTask&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;[]
+///     {
+///         new MetaLearningTask&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     });
 /// double metaLoss = Convert.ToDouble(sparseMaml.MetaTrain(taskBatch));
 /// </code>
 /// </example>

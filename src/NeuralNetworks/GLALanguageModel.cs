@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -23,10 +24,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GLAOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
-/// var model = new GLALanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GLALanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -37,6 +42,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Linear Attention Transformers with Hardware-Efficient Training", "https://arxiv.org/abs/2312.06635", Year = 2024, Authors = "Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, Yoon Kim")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, WeightDecay = 0.01,
+                MinLearningRate = 0, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Yang et al. 2024, Sec. 5: AdamW with a maximum learning rate of 3e-4, a "
+                        + "weight decay of 0.01 and gradient clipping of 1.0, under a cosine schedule.")]
 public partial class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GLAOptions _options;
@@ -66,33 +76,30 @@ public partial class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public GLALanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int numHeads = 8,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         GLAOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GLAOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _maxSeqLength = _options.MaxSequenceLength;
         // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
         // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
         // something the caller could change short of building the whole optimizer themselves.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         InitializeLayers();
     }
 
@@ -166,7 +173,7 @@ public partial class GLALanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -41,7 +41,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        using var model = new DocBank<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -49,9 +49,9 @@ public class DocumentAnalysisTests
     public async Task DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DocBank<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -61,7 +61,7 @@ public class DocumentAnalysisTests
     public async Task DocBank_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocBank<double>(arch, imageSize: 64);
+        using var model = new DocBank<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocBank", meta.Name);
     }
@@ -74,7 +74,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        using var model = new TableTransformer<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -82,9 +82,9 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new TableTransformer<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -94,7 +94,7 @@ public class DocumentAnalysisTests
     public async Task TableTransformer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new TableTransformer<double>(arch, imageSize: 64);
+        using var model = new TableTransformer<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("TableTransformer", meta.Name);
     }

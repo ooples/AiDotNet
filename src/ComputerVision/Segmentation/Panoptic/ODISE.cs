@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,11 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0001, WeightDecay = 0.05,
+                ReferenceBatchSize = 64,
+                Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
+                MilestoneFractions = [0.9, 0.9556],
+                Source = "Xu et al. 2023, Training Details: AdamW at a learning rate of 0.0001 with weight decay 0.05 and batch size 64, the rate reduced by a factor of 10 at 81k and 86k of a 90k-iteration run, which is the 0.9 and 0.9556 declared here.")]
 public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
 {
     /// <inheritdoc />
@@ -441,7 +447,7 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ODISE" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
     #endregion
 

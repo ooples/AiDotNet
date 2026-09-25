@@ -24,16 +24,20 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Automatic usage (handled by MixedPrecisionTrainingLoop)
-/// // Users typically don't need to create scopes manually
+/// // Mixed precision is switched on through the builder, which opens and closes the
+/// // scopes for you; layers check MixedPrecisionScope.Current to pick their precision.
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 2);
 ///
-/// // For advanced manual usage:
-/// using (var scope = new MixedPrecisionScope(context, policy))
-/// {
-///     // Forward pass happens here
-///     var output = network.Forward(input);
-///     // Layers check MixedPrecisionScope.Current to determine precision
-/// }
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(8, 4);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(8, 2);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NeuralNetwork&lt;float&gt;(architecture))
+///     .ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative())
+///     .Build(trainX, trainY);
+///
+/// var output = result.Predict(Tensor&lt;float&gt;.CreateRandom(1, 4));
 /// </code>
 /// </example>
 public class MixedPrecisionScope : IDisposable

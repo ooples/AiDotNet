@@ -459,6 +459,21 @@ failed_tests_report.md
 *-SUMMARY.md
 *_SUMMARY.md
 AGENT_*.md
+# Per-PR review "proof" write-ups. These kept reaching master because the rules above cover
+# REPORT/SUMMARY/FINDINGS but not PROOF: .github/PR2128_REVIEW_PROOF.md was tracked on master
+# and inherited by every branch cut from it.
+#
+# Anchored, unlike the unanchored rules above, because these patterns are broad enough to swallow
+# real documentation. Without a leading path an ignore rule matches the filename in EVERY
+# directory, and PR*_REVIEW_*.md then matches docs/PRIVACY_REVIEW_GUIDE.md -- PR + IVACY +
+# _REVIEW_ + GUIDE -- which would be silently omitted from a commit. The write-ups only ever
+# appear at the repo root or in .github/, so those are the only two places the rules apply.
+/*_PROOF.md
+/*-PROOF.md
+/PR*_REVIEW_*.md
+/.github/*_PROOF.md
+/.github/*-PROOF.md
+/.github/PR*_REVIEW_*.md
 
 # One-off / temp scripts at the repo root.
 fix-*.ps1
@@ -473,3 +488,6 @@ wiki-generated/
 # the library's XML doc comments — not committed. Run `npm run gen:wiki` in website/ to build
 # it locally.
 website/src/content/docs/reference/wiki/
+
+# Local knowledge graph written by the token-optimizer plugin; never part of the repository.
+.token-optimizer/
