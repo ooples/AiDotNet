@@ -40,5 +40,29 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.RepViTSAMTests",
     "metric": "peakPrivateMemoryBytes",
     "reason": "The third metric the six required RepViT blocks from 80bcb89c06 move, alongside the allocatedBytes and peakWorkingSetBytes leases above. Correcting the M0.9 backbone from [2,2,14,2] to the official [3,4,16,3] stage depths takes the block count from 20 to 26, and a model that allocates more and holds a larger working set necessarily commits more private memory - ClassifyMetric puts peakWorkingSetBytes and peakPrivateMemoryBytes in the same Memory stability class for exactly that reason. Measured together against the same baseline: allocatedBytes 358,094,848 -> 941,195,096 (2.63x), peakWorkingSetBytes 397,791,232 -> 813,391,872 (2.04x), peakPrivateMemoryBytes 595,144,704 -> 972,644,352 (1.63x) against a 1.60x limit - the smallest of the three, and the last one still undeclared. Declaring two of three left the intended cost incomplete, which is the same gap this run caught one metric further along. Keyed to baseline 969f198b like its siblings, so the lease expires when the baseline advances past it. Re-keyed from 9e2d5031 to 969f198b: the census baseline advanced, at which point the old lease stopped matching - the expiry working as designed, not a new regression. Most environments have since absorbed the growth into their baseline and no longer compare against it at all; this keeps the declaration valid for the ones that still do."
+  },
+  {
+    "commit": "e21af6d62715",
+    "origin": "ce95e3e00dcc",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.FlowStateTests",
+    "reason": "ce95e3e00dcc (with fb6e578e94) made FinancialModelBase publish the [batch, sequence, features] input these models accept. Before it the census could only read a flat architecture InputSize and probed a rank-1 vector the model never sees in use; the census now probes the real window. The model code is unchanged; the workload measured is the one the model is built for, so this is a level change in what is measured, not a regression. Probe shapes read from census records: master e21af6d627 vs PR run 36147619096: [512] -> [1,2048,1] (ContextLength 2048), 4x the elements at the declared context, which accounts for the forward, train-step, allocation and peak-memory steps together."
+  },
+  {
+    "commit": "e21af6d62715",
+    "origin": "ce95e3e00dcc",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MQCNNTests",
+    "reason": "ce95e3e00dcc (with fb6e578e94) made FinancialModelBase publish the [batch, sequence, features] input these models accept. Before it the census could only read a flat architecture InputSize and probed a rank-1 vector the model never sees in use; the census now probes the real window. The model code is unchanged; the workload measured is the one the model is built for, so this is a level change in what is measured, not a regression. Probe shapes read from census records: master e21af6d627 vs PR run 36147619096: [512] -> [1,168,512] (LookbackWindow 168), 168x the elements; allocation 3.3 MB -> 18.6 MB."
+  },
+  {
+    "commit": "e21af6d62715",
+    "origin": "ce95e3e00dcc",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.TS2VecTests",
+    "reason": "ce95e3e00dcc (with fb6e578e94) made FinancialModelBase publish the [batch, sequence, features] input these models accept. Before it the census could only read a flat architecture InputSize and probed a rank-1 vector the model never sees in use; the census now probes the real window. The model code is unchanged; the workload measured is the one the model is built for, so this is a level change in what is measured, not a regression. Probe shapes read from census records: master e21af6d627 vs PR run 36147619096: [512] -> [1,200,1] (ContextLength 200); allocation 8.8 MB -> 50.5 MB."
+  },
+  {
+    "commit": "e21af6d62715",
+    "origin": "ce95e3e00dcc",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.TFCTests",
+    "reason": "ce95e3e00dcc (with fb6e578e94) made FinancialModelBase publish the [batch, sequence, features] input these models accept. Before it the census could only read a flat architecture InputSize and probed a rank-1 vector the model never sees in use; the census now probes the real window. The model code is unchanged; the workload measured is the one the model is built for, so this is a level change in what is measured, not a regression. Probe shapes read from census records: master e21af6d627 vs PR run 36147619096: [200] -> [1,200,1] (ContextLength 200): the same element count, now as the rank-3 sequence the model declares; allocation 18.7 MB -> 84.8 MB."
   }
 ]
