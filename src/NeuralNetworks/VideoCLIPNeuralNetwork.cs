@@ -1623,7 +1623,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
                     { "FrameRate", _frameRate }, { "UseNativeMode", false },
                     { nameof(OnnxConfiguration), configuration }
                 },
-                ModelData = SerializeForMetadata()
+                ModelDataProvider = () => SerializeForMetadata()
             };
         }
         return new ModelMetadata<T>
