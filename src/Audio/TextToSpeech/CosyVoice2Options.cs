@@ -68,6 +68,19 @@ public class CosyVoice2Options : ModelOptions
     /// <summary>Gets or sets the learning rate.</summary>
     public double LearningRate { get; set; } = 1e-4;
 
+    /// <summary>
+    /// Gets or sets how many optimizer steps the learning rate takes to ramp up to <see cref="LearningRate"/>;
+    /// 0 starts at the full rate.
+    /// </summary>
+    /// <remarks>
+    /// Adam's first update moves every parameter by the full rate in the sign of its gradient. Across this
+    /// model's stacked encoder and decoder that one coordinated move overshoots: on the default configuration
+    /// the loss rose after the first step at the full 1e-4 (1.614 -> 1.636 with dropout off). Ramping in over
+    /// a few steps keeps the first updates in the descending, first-order regime. Set a longer ramp for full
+    /// training runs as a training recipe prescribes.
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 32;
+
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.1;
 
