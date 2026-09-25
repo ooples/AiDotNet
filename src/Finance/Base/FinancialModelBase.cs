@@ -64,9 +64,32 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     /// <summary>
     /// Gets the model-specific optimizer used by the common tape training path.
-    /// A null value retains the neural-network default optimizer.
     /// </summary>
-    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => null;
+    /// <remarks>
+    /// Defaults to the optimizer the model itself built into its <c>_optimizer</c> field - usually its paper
+    /// recipe from <c>PaperOptimizerFactory</c>. The default used to be null, which silently trained on the
+    /// network's generic Adam: 63 of 91 financial models built an optimizer that training never used (S4's
+    /// LAMB, and every recipe declared with [PaperOptimizer]). Null (no such field) keeps the network default.
+    /// </remarks>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+        OwnOptimizerField.GetOrAdd(GetType(), FindOwnOptimizerField)?.GetValue(this) as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo?> OwnOptimizerField = new();
+
+    /// <summary>The <c>_optimizer</c> field a financial model declares, if any; looked up once per type.</summary>
+    private static System.Reflection.FieldInfo? FindOwnOptimizerField(Type type)
+    {
+        const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+        for (var current = type; current is not null && current != typeof(FinancialModelBase<T>); current = current.BaseType)
+        {
+            var field = current.GetField("_optimizer", Flags);
+            if (field is not null && typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
+                return field;
+        }
+
+        return null;
+    }
     #region Execution Mode
 
     /// <summary>
