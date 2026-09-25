@@ -197,7 +197,82 @@ public static partial class CloneEngine
         }
 
         Assign(type, clone, pending);
+        RebindSourceBoundOptimizers(source, clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Gives the copy its own optimizer wherever it would otherwise share the source's.
+    /// </summary>
+    /// <remarks>
+    /// A model that owns its optimizer passes it to its constructor, and the constructor argument was read
+    /// straight off the source: the copy was built holding the source's optimizer object, bound to the SOURCE
+    /// model and carrying its moment state. Training the copy then stepped it with the original's Adam
+    /// history - a NeuralNetwork clone's first step came out 0.000372 where the original's was 0.0005 - and
+    /// anything the optimizer reads through its Model saw the original. The copy now gets an optimizer of the
+    /// same type and configuration, bound to it, with fresh state, as a newly constructed model would.
+    /// </remarks>
+    internal static void RebindSourceBoundOptimizers(object source, object clone)
+    {
+        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        for (var current = clone.GetType(); current is not null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (var field in current.GetFields(Flags))
+            {
+                object? value = field.GetValue(clone);
+                if (value is null || !IsOptimizer(value.GetType())) continue;
+                var modelProperty = value.GetType().GetProperty("Model", BindingFlags.Instance | BindingFlags.Public);
+                if (modelProperty is null || !ReferenceEquals(modelProperty.GetValue(value), source)) continue;
+                field.SetValue(clone, RebuildOptimizer(value, clone));
+            }
+        }
+    }
+
+    private static bool IsOptimizer(Type type) =>
+        type.GetInterfaces().Any(i => i.IsGenericType && i.Name.StartsWith("IOptimizer", StringComparison.Ordinal));
+
+    private static object RebuildOptimizer(object optimizer, object model)
+    {
+        var type = optimizer.GetType();
+        object? options = type.GetMethod("GetOptions", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null)
+            ?.Invoke(optimizer, null);
+        object? optionsCopy = options is null ? null : CopyConfiguration(options);
+
+        // Constructors vary (model, options), (model, options, engine = null), (model): take the first whose
+        // leading parameter accepts the model, pass the copied options wherever their type fits, and let every
+        // other parameter take its declared default.
+        var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .OrderByDescending(c => c.GetParameters().Length);
+        foreach (var constructor in constructors)
+        {
+            var parameters = constructor.GetParameters();
+            if (parameters.Length == 0 || !parameters[0].ParameterType.IsInstanceOfType(model)) continue;
+            var arguments = new object?[parameters.Length];
+            arguments[0] = model;
+            bool usable = true;
+            for (int i = 1; i < parameters.Length && usable; i++)
+            {
+                if (optionsCopy is not null && parameters[i].ParameterType.IsInstanceOfType(optionsCopy))
+                    arguments[i] = optionsCopy;
+                else if (parameters[i].HasDefaultValue)
+                    arguments[i] = parameters[i].DefaultValue;
+                else
+                    usable = false;
+            }
+
+            if (!usable) continue;
+            try
+            {
+                return constructor.Invoke(arguments);
+            }
+            catch (TargetInvocationException)
+            {
+                // A constructor that rejects these arguments: try the next shape.
+            }
+        }
+        throw new InvalidOperationException(
+            $"Cannot give the copy its own {type.Name}: no constructor accepts the model with its options or defaults. " +
+            "Sharing the source's optimizer would train the copy with the original's state.");
     }
 
     /// <summary>
