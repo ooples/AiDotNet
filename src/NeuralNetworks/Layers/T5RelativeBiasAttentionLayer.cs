@@ -129,6 +129,12 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     [Scratch]
     private Tensor<T>? _biasTableGradient;
 
+    private readonly bool _usesExternalPositionBias;
+
+    /// <summary>The bias the enclosing stack computed for the current forward pass.</summary>
+    [Scratch]
+    private Tensor<T>? _externalPositionBias;
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -195,7 +201,8 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         int maxDistance = 128,
         bool bidirectional = true,
         int? seed = null,
-        Tensor<T>? sharedRelativeBiasTable = null)
+        Tensor<T>? sharedRelativeBiasTable = null,
+        bool usesExternalPositionBias = false)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0)
@@ -228,7 +235,20 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         _vWeights = new Tensor<T>([0, 0]);
         _oWeights = new Tensor<T>([0, 0]);
 
-        if (sharedRelativeBiasTable is not null)
+        _usesExternalPositionBias = usesExternalPositionBias;
+        if (usesExternalPositionBias)
+        {
+            if (sharedRelativeBiasTable is not null)
+                throw new ArgumentException(
+                    "A layer that receives its position bias from its stack cannot also hold a shared table.",
+                    nameof(sharedRelativeBiasTable));
+
+            // The enclosing T5EncoderStack owns the one table and hands each block the bias it computed,
+            // so this layer holds no table and no reference to one: nothing here can come apart on clone.
+            _relativeBiasTable = new Tensor<T>([0, 0]);
+            _ownsBiasTable = false;
+        }
+        else if (sharedRelativeBiasTable is not null)
         {
             // Validate the shared table matches this layer's geometry. A
             // mismatched shape would silently break attention scoring.
@@ -402,7 +422,9 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         var v = Engine.TensorPermute(vReshaped, new[] { 0, 2, 1, 3 });
 
         // ---- 2. Build the T5 relative position bias [numHeads, seqLen, seqLen] ----
-        var biasForAttn = BuildT5RelativeBias(seqLen);
+        var biasForAttn = _usesExternalPositionBias
+            ? ExternalPositionBias(seqLen)
+            : BuildT5RelativeBias(seqLen);
 
         // ---- 3. Scaled dot-product attention with bias added pre-softmax ----
         // Manual SDPA composition via tape-tracked Engine ops only.
@@ -464,6 +486,24 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// through <see cref="IEngine.TensorEmbeddingLookup{T,T2}"/> so gradients
     /// flow back into <see cref="_relativeBiasTable"/> on backward.
     /// </summary>
+    private Tensor<T> ExternalPositionBias(int seqLen)
+    {
+        var bias = _externalPositionBias
+            ?? throw new InvalidOperationException(
+                "This T5 attention layer takes its relative position bias from its T5EncoderStack; run it " +
+                "through the stack, which computes the shared bias once per forward pass.");
+        if (bias.Shape.Length != 3 || bias.Shape[0] != _numHeads || bias.Shape[1] != seqLen || bias.Shape[2] != seqLen)
+            throw new ArgumentException(
+                $"The supplied position bias must be [{_numHeads}, {seqLen}, {seqLen}], got [{string.Join(", ", bias.Shape.ToArray())}].");
+        return bias;
+    }
+
+    /// <summary>Whether this layer receives its relative position bias from its stack.</summary>
+    public bool UsesExternalPositionBias => _usesExternalPositionBias;
+
+    /// <summary>Supplies the bias for the next forward pass; the stack clears it afterwards.</summary>
+    internal void SetExternalPositionBias(Tensor<T>? bias) => _externalPositionBias = bias;
+
     private Tensor<T> BuildT5RelativeBias(int seqLen)
     {
         // Bucket-index matrix depends only on seqLen (and the layer's
