@@ -616,7 +616,7 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "min_text_area", _minTextArea },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

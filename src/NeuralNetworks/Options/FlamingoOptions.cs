@@ -27,6 +27,7 @@ public class FlamingoOptions : VisionLanguageModelOptions
         EmbeddingDimension = 768;
         MaxSequenceLength = 2048;
         ImageSize = 224;
+        PatchSize = 14;
         NumPerceiverTokens = 64;
         MaxImagesInContext = 5;
         Channels = 3;
@@ -58,8 +59,14 @@ public class FlamingoOptions : VisionLanguageModelOptions
     public int LmHiddenDim { get; set; }
 
     /// <summary>
-    /// Gets or sets the num lm layers.
+    /// Gets or sets the number of language-model transformer layers.
     /// </summary>
+    /// <value>At least 4; defaults to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The native architecture inserts an image cross-attention
+    /// gate once per four language layers. A shorter stack has no gate and cannot condition
+    /// its generated text on the image, so validation rejects it.</para>
+    /// </remarks>
     public int NumLmLayers { get; set; }
 
     /// <summary>
@@ -80,7 +87,31 @@ public class FlamingoOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(LearningRate, nameof(LearningRate));
+        Require(NumPerceiverTokens, nameof(NumPerceiverTokens));
+        Require(MaxImagesInContext, nameof(MaxImagesInContext));
+        Require(VisionDim, nameof(VisionDim));
+        Require(LmHiddenDim, nameof(LmHiddenDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(VocabSize, nameof(VocabSize));
+        Require(NumPerceiverLayers, nameof(NumPerceiverLayers));
+        if (!Enum.IsDefined(typeof(LanguageModelBackbone), LanguageModelBackbone))
+        {
+            // An undefined value reaches the tokenizer factory as a backbone it has no case for,
+            // so reject it here rather than at construction.
+            throw new ArgumentException(
+                $"{GetType().Name}.{nameof(LanguageModelBackbone)} is not a defined backbone.",
+                OptionsParameterName);
+        }
+
+        if (NumLmLayers < 4)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{nameof(NumLmLayers)} must be at least 4 so the language model contains gated cross-attention to its image features.",
+                OptionsParameterName);
+        }
     }
 
     /// <summary>

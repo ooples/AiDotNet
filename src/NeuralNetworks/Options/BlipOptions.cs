@@ -37,15 +37,35 @@ public class BlipOptions : VisionLanguageModelOptions
         MlpDim = 3072;
     }
 
+    /// <summary>Copies every BLIP setting and its inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public BlipOptions(BlipOptions other) : base(other)
+    {
+        NumDecoderLayers = other.NumDecoderLayers;
+        MlpDim = other.MlpDim;
+    }
+
 
     /// <summary>
-    /// Gets or sets the num decoder layers.
+    /// Gets or sets the number of native text-decoder transformer blocks.
     /// </summary>
+    /// <value>A count of decoder blocks. Defaults to 12, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The decoder generates text using the image representation and
+    /// preceding tokens. This controls its native depth; a loaded ONNX decoder keeps its own layers.</para>
+    /// </remarks>
     public int NumDecoderLayers { get; set; }
 
     /// <summary>
-    /// Gets or sets the mlp dim.
+    /// Gets or sets the intermediate feature width of the native transformer's feed-forward sublayers.
     /// </summary>
+    /// <value>The feed-forward width in features. Defaults to 3072, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Inside a transformer block, a small neural network expands
+    /// each token to this width before projecting it back. A wider expansion uses more parameters
+    /// and memory. This native construction setting does not resize loaded ONNX graphs.</para>
+    /// </remarks>
     public int MlpDim { get; set; }
 
     /// <summary>
@@ -56,6 +76,26 @@ public class BlipOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VocabSize, nameof(VocabSize));
+        Require(HiddenDim, nameof(HiddenDim));
+        Require(NumEncoderLayers, nameof(NumEncoderLayers));
+        Require(NumDecoderLayers, nameof(NumDecoderLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(MlpDim, nameof(MlpDim));
+    }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        var defaults = new BlipOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(NumEncoderLayers, defaults.NumEncoderLayers, nameof(NumEncoderLayers));
+        RequireNativeDefaultForOnnx(NumDecoderLayers, defaults.NumDecoderLayers, nameof(NumDecoderLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(MlpDim, defaults.MlpDim, nameof(MlpDim));
     }
 }

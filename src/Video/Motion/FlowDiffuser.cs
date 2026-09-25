@@ -208,7 +208,7 @@ public partial class FlowDiffuser<T> : OpticalFlowBase<T>
                 { "NumFeatures", _numFeatures },
                 { "NumLayers", _numLayers }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

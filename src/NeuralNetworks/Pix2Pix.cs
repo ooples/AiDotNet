@@ -721,7 +721,7 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "L1Lambda", NumOps.ToDouble(_l1Lambda) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

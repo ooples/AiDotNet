@@ -1171,7 +1171,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
             { "NumLayers", _numLayers },
             { "GuidanceScale", _guidanceScale }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
 

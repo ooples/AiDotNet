@@ -32,17 +32,18 @@ namespace AiDotNet.NeuralNetworks;
 /// - Audio-visual retrieval: "Find images that match this sound"
 /// - Scene understanding: "What objects are making sounds in this scene?"
 ///
-/// The network processes audio and video through separate encoders, then learns to
-/// align them in a shared embedding space using contrastive learning.
+/// Separate audio and visual input projections feed one shared Dense encoder. The
+/// paired training objective aligns their normalized embeddings; the feature-input
+/// Predict path returns two correspondence logits through the separate fusion stack.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Embedding,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputSize: 512,
-///     outputSize: 128);
+///     outputSize: 2);
 ///
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 512);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 128);
@@ -93,6 +94,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private readonly int _embeddingDimension;
     private readonly int _audioSampleRate;
+    private readonly int _visualChannels;
 
     /// <summary>
     /// Real log-mel front-end, built for <see cref="_audioSampleRate"/>. Holds no trainable
@@ -101,56 +103,48 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     private readonly AiDotNet.Diffusion.Audio.MelSpectrogram<T> _audioFrontEnd;
     private readonly double _videoFrameRate;
     private readonly int _numEncoderLayers;
-    private readonly int _hiddenDim;
-
-    // Audio encoder components
-    private List<ILayer<T>>? _audioEncoderLayers;
+    // Modality-specific adapters feed one registered Dense encoder. The fusion path is
+    // separate from the encoder; neither path is inferred by subtracting a magic layer count.
+    private List<ILayer<T>>? _sharedEncoderLayers;
+    // The fusion trunk every pair head reads. In the default layout the correspondence head that follows it is the
+    // last registered layer; the trunk list itself never contains a head.
+    private List<ILayer<T>>? _fusionLayers;
     private ILayer<T>? _audioInputProjection;
-    private ILayer<T>? _audioOutputProjection;
+    private ILayer<T>? _pairInputProjection;
+
+    // Task heads on the fusion trunk. Only the correspondence head is part of Look, Listen and Learn; these serve this
+    // model's synchronization and separation APIs and are trained by LearnSynchronization and LearnSeparation. Like
+    // the adapters they are discovered by the model generator (parameters, clone, serialization) without joining the
+    // sequential Predict path.
+    private ILayer<T>? _synchronizationHead;
+    private ILayer<T>? _separationHead;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
-    private List<ILayer<T>>? _visualEncoderLayers;
     private ILayer<T>? _visualInputProjection;
-    private ILayer<T>? _visualOutputProjection;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visualPositionalEmbedding;
-
-    // Cross-modal attention for localization
-    private List<ILayer<T>>? _crossModalAttentionLayers;
-    private ILayer<T>? _localizationHead;
-
-    // Synchronization head
-    private ILayer<T>? _syncHead;
-
-    // Scene classification head
-    private ILayer<T>? _sceneClassificationHead;
-
-    // Separation network components
-    private ILayer<T>? _separationMaskPredictor;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
-    // Scene labels for classification
-    private readonly List<string> _sceneLabels;
+    // Per-label mean joint embeddings learned by LearnScene and scored by ClassifyScene; persisted by RegisterState.
+    private ScenePrototypeState _scenePrototypes = new();
 
     #endregion
 
     #region Non-Null Accessors
 
-    private List<ILayer<T>> AudioEncoderLayers => _audioEncoderLayers ?? throw new InvalidOperationException("Audio encoder layers not initialized.");
-    private ILayer<T> AudioInputProjection => _audioInputProjection ?? throw new InvalidOperationException("Audio input projection not initialized.");
-    private ILayer<T> AudioOutputProjection => _audioOutputProjection ?? throw new InvalidOperationException("Audio output projection not initialized.");
-    private List<ILayer<T>> VisualEncoderLayers => _visualEncoderLayers ?? throw new InvalidOperationException("Visual encoder layers not initialized.");
-    private ILayer<T> VisualInputProjection => _visualInputProjection ?? throw new InvalidOperationException("Visual input projection not initialized.");
-    private ILayer<T> VisualOutputProjection => _visualOutputProjection ?? throw new InvalidOperationException("Visual output projection not initialized.");
-    private List<ILayer<T>> CrossModalAttentionLayers => _crossModalAttentionLayers ?? throw new InvalidOperationException("Cross-modal attention layers not initialized.");
-    private ILayer<T> LocalizationHead => _localizationHead ?? throw new InvalidOperationException("Localization head not initialized.");
-    private ILayer<T> SyncHead => _syncHead ?? throw new InvalidOperationException("Sync head not initialized.");
-    private ILayer<T> SceneClassificationHead => _sceneClassificationHead ?? throw new InvalidOperationException("Scene classification head not initialized.");
-    private ILayer<T> SeparationMaskPredictor => _separationMaskPredictor ?? throw new InvalidOperationException("Separation mask predictor not initialized.");
+    private List<ILayer<T>> GetSharedEncoderLayers() => _sharedEncoderLayers
+        ?? throw new InvalidOperationException("The shared correspondence encoder is not initialized.");
+    private List<ILayer<T>> GetFusionLayers() => _fusionLayers
+        ?? throw new InvalidOperationException("The correspondence fusion trunk is not initialized.");
+    private ILayer<T> GetSynchronizationHead() => _synchronizationHead ?? throw new InvalidOperationException("Synchronization head not initialized.");
+    private ILayer<T> GetSeparationHead() => _separationHead ?? throw new InvalidOperationException("Separation head not initialized.");
+    private ILayer<T> GetAudioInputProjection() => _audioInputProjection ?? throw new InvalidOperationException("Audio input projection not initialized.");
+    private ILayer<T> GetVisualInputProjection() => _visualInputProjection ?? throw new InvalidOperationException("Visual input projection not initialized.");
+    private ILayer<T> GetPairInputProjection() => _pairInputProjection ?? throw new InvalidOperationException("Pair input projection not initialized.");
 
     #endregion
 
@@ -177,7 +171,8 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
             inputSize: 512,
-            outputSize: 1))
+            // The correspondence head's width follows OutputSize; the paper classifies correspondence with a 2-way softmax.
+            outputSize: 2))
     {
     }
 
@@ -185,10 +180,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     /// Creates a new audio-visual correspondence network.
     /// </summary>
     /// <param name="architecture">Network architecture configuration.</param>
-    /// <param name="embeddingDimension">Dimension of shared embedding space.</param>
-    /// <param name="audioSampleRate">Expected audio sample rate.</param>
-    /// <param name="videoFrameRate">Expected video frame rate.</param>
-    /// <param name="numEncoderLayers">Number of encoder layers per modality.</param>
+    /// <param name="options">Shared embedding width, registered encoder-block count, audio sample rate, and nominal video frame rate.</param>
     /// <param name="optimizer">Gradient-based optimizer for training.</param>
     /// <param name="lossFunction">Loss function for training.</param>
     public AudioVisualCorrespondenceNetwork(
@@ -204,25 +196,12 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
         _embeddingDimension = _options.EmbeddingDimension;
         _audioSampleRate = _options.AudioSampleRate;
+        _visualChannels = _options.Channels;
         _audioFrontEnd = CreateAudioFrontEnd(_options.AudioSampleRate);
         _videoFrameRate = _options.VideoFrameRate;
         _numEncoderLayers = _options.NumEncoderLayers;
-        _hiddenDim = _options.EmbeddingDimension * 4;
-
-        // Paper-faithful learning rate. Arandjelovic & Zisserman 2017
-        // "Look, Listen and Learn" (arXiv 1705.08168) §4: SGD with momentum
-        // 0.9 + weight decay 5e-4 + base LR 1e-2 cosine-decayed, on AlexNet
-        // (~60 M params, 400 K-hour AudioSet pretraining). For the smaller
-        // multimodal-encoder default we ship (6 transformer layers ×
-        // 512 hidden dim ≈ 30 M params), the Adam-equivalent LR is 5e-5 —
-        // the standard fine-tuning-from-cold rate for transformer-class
-        // multimodal models in the framework (matches KyutaiMoshi,
-        // SmolVLM, GLaMM, TransformerEmbeddingNetwork). Framework default
-        // Adam LR=1e-3 is BERT-pretraining-from-scratch territory and
-        // diverges on random init within this model's 30-iter test
-        // horizon (the "loss did not reduce: 0.168 → 0.253" CI failure
-        // signal). 1e-4 is mid-range and still overshoots at random
-        // init.
+        // Preserve the implementation's existing Adam learning rate. The native encoder is
+        // a configurable Dense/LayerNorm/Tanh stack, not the paper's convolutional network.
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
@@ -231,8 +210,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
                 InitialLearningRate = 5e-5,
             });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        _sceneLabels = new List<string>();
 
         InitializeLayers();
         InitializePositionalEmbeddings();
@@ -244,6 +221,13 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private void InitializePositionalEmbeddings()
     {
+        if (_sharedEncoderLayers is null)
+        {
+            _audioPositionalEmbedding = null;
+            _visualPositionalEmbedding = null;
+            return;
+        }
+
         const int maxAudioLength = 500;
         const int maxVisualLength = 256;
 
@@ -285,9 +269,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         var spectrogram = ComputeSpectrogram(audioWaveform, sampleRate);
         var projected = ApplyAudioEncoder(spectrogram);
 
-        // Global average pooling
-        var embedding = GlobalAveragePool(projected);
-        return VectorHelper.Normalize(embedding);
+        return new Vector<T>(NormalizeEmbedding(PoolFeatures(projected)).ToArray());
     }
 
     /// <inheritdoc/>
@@ -299,28 +281,15 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             return new Vector<T>(_embeddingDimension);
         }
 
-        // Aggregate frame embeddings
-        var aggregatedEmbedding = new Vector<T>(_embeddingDimension);
-
+        Tensor<T>? sum = null;
         foreach (var frame in frameList)
         {
-            var frameEmbedding = ApplyVisualEncoder(frame);
-            var pooled = GlobalAveragePool(frameEmbedding);
-
-            for (int i = 0; i < _embeddingDimension; i++)
-            {
-                aggregatedEmbedding[i] = NumOps.Add(aggregatedEmbedding[i], pooled[i]);
-            }
+            var pooled = PoolFeatures(ApplyVisualEncoder(frame));
+            sum = sum is null ? pooled : Engine.TensorAdd(sum, pooled);
         }
-
-        // Average
-        var scale = NumOps.FromDouble(1.0 / frameList.Count);
-        for (int i = 0; i < _embeddingDimension; i++)
-        {
-            aggregatedEmbedding[i] = NumOps.Multiply(aggregatedEmbedding[i], scale);
-        }
-
-        return VectorHelper.Normalize(aggregatedEmbedding);
+        if (sum is null) throw new InvalidOperationException("A nonempty frame list produced no embeddings.");
+        return new Vector<T>(NormalizeEmbedding(
+            Engine.TensorDivideScalar(sum, NumOps.FromDouble(frameList.Count))).ToArray());
     }
 
     /// <inheritdoc/>
@@ -363,7 +332,8 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         var combined = ConcatenateVectors(audioEmb, visualEmb);
         var combinedTensor = Tensor<T>.FromVector(combined);
 
-        var syncOutput = SyncHead.Forward(combinedTensor);
+        // The synchronization head (trained by LearnSynchronization) reads the shared fusion trunk.
+        var syncOutput = GetSynchronizationHead().Forward(ApplyPairTrunk(combinedTensor));
         var offsetValue = NumOps.ToDouble(syncOutput.Data.Span[0]);
 
         // Compute confidence from correspondence score
@@ -432,9 +402,8 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         // Predict separation mask
         var combined = ConcatenateVectors(audioPooled, visualPooled);
         var combinedTensor = Tensor<T>.FromVector(combined);
-        var maskOutput = SeparationMaskPredictor.Forward(combinedTensor);
-
-        // Apply sigmoid to get mask
+        // One logit per mel bin from the separation head (trained by LearnSeparation), squashed to a [0, 1] mask.
+        var maskOutput = GetSeparationHead().Forward(ApplyPairTrunk(combinedTensor));
         var mask = ApplySigmoid(maskOutput);
 
         // Apply mask to spectrogram and reconstruct
@@ -473,42 +442,99 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The model has no text encoder, so a label is only meaningful once <see cref="LearnScene"/> has given it a
+    /// prototype: the mean joint audio-visual embedding of its examples. As in prototypical networks (Snell et al.
+    /// 2017), the probability of each requested label is a softmax over the negative squared Euclidean distance
+    /// between this clip's joint embedding and that label's prototype. A label without a prototype is rejected rather
+    /// than given an invented score.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A requested label has no learned prototype.</exception>
     public Dictionary<string, T> ClassifyScene(
         Tensor<T> audioWaveform,
         IEnumerable<Tensor<T>> frames,
         IEnumerable<string> sceneLabels)
     {
-        var audioEmb = GetAudioEmbedding(audioWaveform, _audioSampleRate);
-        var visualEmb = GetVisualEmbedding(frames);
+        if (audioWaveform is null) throw new ArgumentNullException(nameof(audioWaveform));
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        if (sceneLabels is null) throw new ArgumentNullException(nameof(sceneLabels));
 
-        var combined = ConcatenateVectors(audioEmb, visualEmb);
-        var combinedTensor = Tensor<T>.FromVector(combined);
-
-        var classFeatures = SceneClassificationHead.Forward(combinedTensor);
-
-        var labelList = sceneLabels.ToList();
-        var results = new Dictionary<string, T>();
-        var softmaxDenominator = NumOps.Zero;
-
-        // Compute logits for each label
-        var logits = new List<T>();
-        for (int i = 0; i < labelList.Count; i++)
+        var labelList = sceneLabels.Distinct(StringComparer.Ordinal).ToList();
+        if (labelList.Count == 0) throw new ArgumentException("At least one scene label is required.", nameof(sceneLabels));
+        var missing = labelList.Where(label => !_scenePrototypes.Labels.Contains(label)).ToList();
+        if (missing.Count > 0)
         {
-            var logit = i < classFeatures.Length ? classFeatures.Data.Span[i] : NumOps.Zero;
-            logits.Add(logit);
-            softmaxDenominator = NumOps.Add(softmaxDenominator,
-                NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logit))));
+            throw new InvalidOperationException(
+                $"No scene prototype has been learned for: {string.Join(", ", missing)}. " +
+                "Call LearnScene with examples of each label before classifying.");
         }
 
-        // Apply softmax
-        for (int i = 0; i < labelList.Count; i++)
+        var frameList = frames.ToList();
+        if (frameList.Count == 0) throw new ArgumentException("At least one visual frame is required.", nameof(frames));
+        var joint = JointSceneEmbedding(audioWaveform, frameList);
+
+        var negativeDistances = new double[labelList.Count];
+        for (int index = 0; index < labelList.Count; index++)
         {
-            var expLogit = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logits[i])));
-            var prob = NumOps.Divide(expLogit, softmaxDenominator);
-            results[labelList[i]] = prob;
+            var prototype = _scenePrototypes.Means[_scenePrototypes.Labels.IndexOf(labelList[index])];
+            if (prototype.Length != joint.Length)
+                throw new InvalidOperationException($"The prototype for '{labelList[index]}' has width {prototype.Length}, not {joint.Length}.");
+            double squaredDistance = 0;
+            for (int column = 0; column < joint.Length; column++)
+            {
+                double difference = joint[column] - prototype[column];
+                squaredDistance += difference * difference;
+            }
+            negativeDistances[index] = -squaredDistance;
         }
 
+        // Stable softmax: shift by the largest logit before exponentiating.
+        double maxLogit = negativeDistances.Max();
+        var weights = negativeDistances.Select(logit => Math.Exp(logit - maxLogit)).ToArray();
+        double total = weights.Sum();
+        var results = new Dictionary<string, T>(StringComparer.Ordinal);
+        for (int index = 0; index < labelList.Count; index++)
+            results[labelList[index]] = NumOps.FromDouble(weights[index] / total);
         return results;
+    }
+
+    /// <summary>
+    /// Adds one labeled audio-visual example to that label's scene prototype, the running mean of its joint embeddings.
+    /// </summary>
+    /// <remarks>
+    /// <para>Prototypes are computed with the encoders as they are when each example is added, so relearn them after
+    /// further training changes the embeddings.</para>
+    /// <para><b>For Beginners:</b> Show the model a few clips of each kind of scene ("music", "speech", ...) together
+    /// with the label. It remembers the average of each label's clips and later picks the label whose average is
+    /// closest to a new clip.</para>
+    /// </remarks>
+    public void LearnScene(Tensor<T> audioWaveform, IEnumerable<Tensor<T>> frames, string label)
+    {
+        if (audioWaveform is null) throw new ArgumentNullException(nameof(audioWaveform));
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        if (string.IsNullOrWhiteSpace(label)) throw new ArgumentException("A scene label is required.", nameof(label));
+        var frameList = frames.ToList();
+        if (frameList.Count == 0) throw new ArgumentException("At least one visual frame is required.", nameof(frames));
+
+        var joint = JointSceneEmbedding(audioWaveform, frameList);
+        int index = _scenePrototypes.Labels.IndexOf(label);
+        if (index < 0)
+        {
+            _scenePrototypes.Labels.Add(label);
+            _scenePrototypes.Means.Add(joint);
+            _scenePrototypes.Counts.Add(1);
+            return;
+        }
+
+        var mean = _scenePrototypes.Means[index];
+        if (mean.Length != joint.Length)
+            throw new InvalidOperationException($"The prototype for '{label}' has width {mean.Length}, not {joint.Length}.");
+        int count = _scenePrototypes.Counts[index] + 1;
+        for (int column = 0; column < mean.Length; column++)
+            mean[column] += (joint[column] - mean[column]) / count;
+        _scenePrototypes.Counts[index] = count;
     }
 
     /// <inheritdoc/>
@@ -532,92 +558,207 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             throw new ArgumentException("At least one sample pair is required for training.", nameof(audioSamples));
         }
 
-        SetTrainingMode(true);
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new NotSupportedException("Correspondence training requires a tape-compatible loss function.");
 
-        try
+        for (int epoch = 0; epoch < epochs; epoch++)
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            T epochLoss = NumOps.Zero;
+            int sampleCount = 0;
+            for (int pair = 0; pair < audioList.Count; pair++)
             {
-                T epochLoss = NumOps.Zero;
-                int sampleCount = 0;
+                var frames = visualList[pair];
+                if (frames.Count == 0) continue;
 
-                for (int i = 0; i < audioList.Count; i++)
+                var (visualInput, framePatchCounts) = PackFramePatches(frames);
+                T loss = TrainWithCustomObjective(audioList[pair], visualInput, (waveform, packedPatches) =>
                 {
-                    var audio = audioList[i];
-                    var frames = visualList[i];
+                    var (audioEmbedding, visualEmbedding) = PairedTrainingEmbeddings(waveform, packedPatches, framePatchCounts);
+                    var similarity = Engine.ReduceSum(Engine.TensorMultiply(audioEmbedding, visualEmbedding),
+                        new[] { 0 }, keepDims: true);
+                    var target = new Tensor<T>(new[] { 1 });
+                    target[0] = NumOps.One;
+                    return tapeLoss.ComputeTapeLoss(similarity, target);
+                }, _optimizer);
+                epochLoss = NumOps.Add(epochLoss, loss);
+                sampleCount++;
+            }
+            if (sampleCount > 0) LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(sampleCount));
+        }
+    }
 
-                    if (frames.Count == 0) continue;
+    /// <summary>
+    /// Trains the synchronization head, together with the encoders, adapters and fusion trunk beneath it, to predict
+    /// each pair's audio-to-visual offset in seconds.
+    /// </summary>
+    /// <param name="audioSamples">One waveform per pair.</param>
+    /// <param name="visualSamples">The frames of each pair.</param>
+    /// <param name="offsetsSeconds">The true offset of each pair, in seconds.</param>
+    /// <param name="epochs">Passes over the pairs.</param>
+    /// <remarks>The objective is the squared error between <see cref="CheckSynchronization"/>'s offset and the target.</remarks>
+    public void LearnSynchronization(
+        IEnumerable<Tensor<T>> audioSamples,
+        IEnumerable<IEnumerable<Tensor<T>>> visualSamples,
+        IEnumerable<double> offsetsSeconds,
+        int epochs = 10)
+    {
+        if (audioSamples is null) throw new ArgumentNullException(nameof(audioSamples));
+        if (visualSamples is null) throw new ArgumentNullException(nameof(visualSamples));
+        if (offsetsSeconds is null) throw new ArgumentNullException(nameof(offsetsSeconds));
+        if (epochs < 0) throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs cannot be negative.");
 
-                    // Forward pass: compute embeddings
-                    var audioEmb = GetAudioEmbedding(audio, _audioSampleRate);
-                    var visualEmb = GetVisualEmbedding(frames);
+        var audioList = audioSamples.ToList();
+        var visualList = visualSamples.Select(frames => frames.ToList()).ToList();
+        var offsets = offsetsSeconds.ToList();
+        if (audioList.Count == 0) throw new ArgumentException("At least one sample pair is required for training.", nameof(audioSamples));
+        if (visualList.Count != audioList.Count || offsets.Count != audioList.Count)
+        {
+            throw new ArgumentException(
+                $"Audio samples ({audioList.Count}), visual sample groups ({visualList.Count}) and offsets ({offsets.Count}) must match.",
+                nameof(offsetsSeconds));
+        }
+        if (visualList.Any(frames => frames.Count == 0))
+            throw new ArgumentException("Every pair needs at least one visual frame.", nameof(visualSamples));
+        if (offsets.Any(offset => double.IsNaN(offset) || double.IsInfinity(offset)))
+            throw new ArgumentException("Offsets must be finite.", nameof(offsetsSeconds));
 
-                    // Compute contrastive loss using vectorized cosine similarity
-                    T similarity = Engine.CosineSimilarity(audioEmb, visualEmb);
-
-                    // Target is 1.0 for matched pairs (positive pairs)
-                    T target = NumOps.One;
-                    T loss = _lossFunction.CalculateLoss(
-                        new Vector<T>(1) { [0] = similarity },
-                        new Vector<T>(1) { [0] = target });
-
-                    // Backward pass: compute gradients for contrastive loss
-                    var outputGrad = _lossFunction.ComputeGradient(
-                        new Vector<T>(1) { [0] = similarity },
-                        new Vector<T>(1) { [0] = target });
-
-                    // Propagate gradient through embedding layers
-                    // For cosine similarity d(sim)/d(a) = (b - sim*a) / (||a|| * ||b||)
-                    var audioNorm = VectorHelper.L2Norm(audioEmb);
-                    var visualNorm = VectorHelper.L2Norm(visualEmb);
-                    T normProduct = NumOps.Multiply(audioNorm, visualNorm);
-
-                    if (NumOps.GreaterThan(normProduct, NumOps.FromDouble(1e-8)))
-                    {
-                        // Gradient w.r.t. audio embedding
-                        var audioGrad = new Vector<T>(_embeddingDimension);
-                        var visualGrad = new Vector<T>(_embeddingDimension);
-                        T gradScale = NumOps.Divide(outputGrad[0], normProduct);
-
-                        for (int j = 0; j < _embeddingDimension; j++)
-                        {
-                            // d(cos)/d(a_j) = (b_j - sim * a_j) / (||a|| * ||b||)
-                            audioGrad[j] = NumOps.Multiply(gradScale,
-                                NumOps.Subtract(visualEmb[j], NumOps.Multiply(similarity, audioEmb[j])));
-                            // d(cos)/d(b_j) = (a_j - sim * b_j) / (||a|| * ||b||)
-                            visualGrad[j] = NumOps.Multiply(gradScale,
-                                NumOps.Subtract(audioEmb[j], NumOps.Multiply(similarity, visualEmb[j])));
-                        }
-
-                        // Backpropagate through audio encoder
-                        var audioGradTensor = Tensor<T>.FromVector(audioGrad);
-
-                        // Backpropagate through visual encoder
-                        var visualGradTensor = Tensor<T>.FromVector(visualGrad);
-
-                        // Update parameters using optimizer
-                        _optimizer.UpdateParameters(Layers);
-                    }
-
-                    epochLoss = NumOps.Add(epochLoss, loss);
-                    sampleCount++;
-                }
-
-                if (sampleCount > 0)
+        var synchronizationLoss = new MeanSquaredErrorLoss<T>();
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            T epochLoss = NumOps.Zero;
+            for (int pair = 0; pair < audioList.Count; pair++)
+            {
+                var (visualInput, framePatchCounts) = PackFramePatches(visualList[pair]);
+                var target = new Tensor<T>(new[] { 1 });
+                target[0] = NumOps.FromDouble(offsets[pair]);
+                T loss = TrainWithCustomObjective(audioList[pair], visualInput, (waveform, packedPatches) =>
                 {
-                    LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(sampleCount));
-                }
+                    var (audioEmbedding, visualEmbedding) = PairedTrainingEmbeddings(waveform, packedPatches, framePatchCounts);
+                    var pairFeatures = Engine.TensorConcatenate(new[] { audioEmbedding, visualEmbedding }, axis: 0);
+                    var offset = GetSynchronizationHead().Forward(ApplyPairTrunk(pairFeatures));
+                    return synchronizationLoss.ComputeTapeLoss(offset, target);
+                }, _optimizer);
+                epochLoss = NumOps.Add(epochLoss, loss);
+            }
+            LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(audioList.Count));
+        }
+    }
+
+    /// <summary>
+    /// Trains the separation head, together with the encoders, adapters and fusion trunk beneath it, to predict each
+    /// example's per-mel-bin mask for the sound belonging to its visual.
+    /// </summary>
+    /// <param name="mixedAudio">One mixed waveform per example.</param>
+    /// <param name="targetVisuals">The frame showing the source to keep, per example.</param>
+    /// <param name="targetMasks">The ideal mask per example: <c>[128]</c> values in [0, 1], one per mel bin.</param>
+    /// <param name="epochs">Passes over the examples.</param>
+    /// <remarks>The objective is binary cross-entropy between <see cref="SeparateAudioByVisual"/>'s mask and the target.</remarks>
+    public void LearnSeparation(
+        IEnumerable<Tensor<T>> mixedAudio,
+        IEnumerable<Tensor<T>> targetVisuals,
+        IEnumerable<Tensor<T>> targetMasks,
+        int epochs = 10)
+    {
+        if (mixedAudio is null) throw new ArgumentNullException(nameof(mixedAudio));
+        if (targetVisuals is null) throw new ArgumentNullException(nameof(targetVisuals));
+        if (targetMasks is null) throw new ArgumentNullException(nameof(targetMasks));
+        if (epochs < 0) throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs cannot be negative.");
+
+        var audioList = mixedAudio.ToList();
+        var visualList = targetVisuals.ToList();
+        var maskList = targetMasks.ToList();
+        if (audioList.Count == 0) throw new ArgumentException("At least one example is required for training.", nameof(mixedAudio));
+        if (visualList.Count != audioList.Count || maskList.Count != audioList.Count)
+        {
+            throw new ArgumentException(
+                $"Mixed audio ({audioList.Count}), target visuals ({visualList.Count}) and masks ({maskList.Count}) must match.",
+                nameof(targetMasks));
+        }
+        foreach (var mask in maskList)
+        {
+            if (mask is null || mask.Shape.Length != 1 || mask.Shape[0] != SPECTROGRAM_BINS)
+                throw new ArgumentException($"Each target mask must have shape [{SPECTROGRAM_BINS}], one value per mel bin.", nameof(targetMasks));
+            for (int bin = 0; bin < SPECTROGRAM_BINS; bin++)
+            {
+                double value = NumOps.ToDouble(mask[bin]);
+                if (double.IsNaN(value) || value < 0.0 || value > 1.0)
+                    throw new ArgumentException("Target mask values must lie in [0, 1].", nameof(targetMasks));
             }
         }
-        finally
+
+        var separationLoss = new BinaryCrossEntropyLoss<T>();
+        for (int epoch = 0; epoch < epochs; epoch++)
         {
-            SetTrainingMode(false);
+            T epochLoss = NumOps.Zero;
+            for (int sample = 0; sample < audioList.Count; sample++)
+            {
+                var mask = maskList[sample];
+                T loss = TrainWithCustomObjective(audioList[sample], FlattenToPatches(visualList[sample]), (waveform, framePatches) =>
+                {
+                    // Mirrors SeparateAudioByVisual: pooled (unnormalized) encoder features into the fusion trunk.
+                    var audioPooled = PoolFeatures(ApplyAudioEncoder(ComputeSpectrogram(waveform, _audioSampleRate)));
+                    var visualPooled = PoolFeatures(ApplyVisualPatches(framePatches));
+                    var pairFeatures = Engine.TensorConcatenate(new[] { audioPooled, visualPooled }, axis: 0);
+                    var probabilities = Engine.Sigmoid(GetSeparationHead().Forward(ApplyPairTrunk(pairFeatures)));
+                    return separationLoss.ComputeTapeLoss(probabilities, mask);
+                }, _optimizer);
+                epochLoss = NumOps.Add(epochLoss, loss);
+            }
+            LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(audioList.Count));
         }
     }
 
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Packs frames into one patch tensor for a training objective, with the per-frame patch counts needed to unpack it.
+    /// </summary>
+    /// <remarks>
+    /// Packing only raw frame patches preserves real optimizer inputs without capturing precomputed embeddings or
+    /// severing their parameter gradients. Boundaries preserve equal per-frame averaging for unequal image sizes.
+    /// </remarks>
+    private (Tensor<T> Patches, int[] FramePatchCounts) PackFramePatches(IReadOnlyList<Tensor<T>> frames)
+    {
+        var patches = frames.Select(FlattenToPatches).ToArray();
+        return (Engine.TensorConcatenate(patches, axis: 0), patches.Select(frame => frame.Shape[0]).ToArray());
+    }
+
+    /// <summary>The normalized audio and visual embeddings, recomputed on the tape from the raw training inputs.</summary>
+    private (Tensor<T> Audio, Tensor<T> Visual) PairedTrainingEmbeddings(
+        Tensor<T> waveform, Tensor<T> packedPatches, int[] framePatchCounts)
+    {
+        var audioEmbedding = NormalizeEmbedding(PoolFeatures(
+            ApplyAudioEncoder(ComputeSpectrogram(waveform, _audioSampleRate))));
+        Tensor<T>? visualSum = null;
+        int start = 0;
+        foreach (int count in framePatchCounts)
+        {
+            var framePatches = Engine.TensorSlice(packedPatches,
+                new[] { start, 0 }, new[] { count, packedPatches.Shape[1] });
+            var pooled = PoolFeatures(ApplyVisualPatches(framePatches));
+            visualSum = visualSum is null ? pooled : Engine.TensorAdd(visualSum, pooled);
+            start += count;
+        }
+        if (visualSum is null) throw new InvalidOperationException("A paired objective requires visual frames.");
+        var visualEmbedding = NormalizeEmbedding(Engine.TensorDivideScalar(
+            visualSum, NumOps.FromDouble(framePatchCounts.Length)));
+        return (audioEmbedding, visualEmbedding);
+    }
+
+    /// <summary>The unit-length joint embedding scene prototypes are built from and compared against.</summary>
+    private double[] JointSceneEmbedding(Tensor<T> audioWaveform, IReadOnlyList<Tensor<T>> frames)
+    {
+        var audio = GetAudioEmbedding(audioWaveform, _audioSampleRate);
+        var visual = GetVisualEmbedding(frames);
+        // Both embeddings are unit length, so scaling their concatenation by 1/sqrt(2) keeps the joint one unit length.
+        double scale = 1.0 / Math.Sqrt(2.0);
+        var joint = new double[audio.Length + visual.Length];
+        for (int column = 0; column < audio.Length; column++) joint[column] = NumOps.ToDouble(audio[column]) * scale;
+        for (int column = 0; column < visual.Length; column++) joint[audio.Length + column] = NumOps.ToDouble(visual[column]) * scale;
+        return joint;
+    }
 
     /// <summary>
     /// Builds the log-mel front-end for a given sample rate.
@@ -662,104 +803,67 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private Tensor<T> ApplyAudioEncoder(Tensor<T> spectrogram)
     {
-        // Validate layer count is a multiple of 3 (attention + 2 FFN layers per block)
-        if (AudioEncoderLayers.Count % 3 != 0)
-        {
-            throw new InvalidOperationException(
-                $"Audio encoder layer count ({AudioEncoderLayers.Count}) must be a multiple of 3 " +
-                "(each block contains attention + 2 FFN layers).");
-        }
-
-        var projected = AudioInputProjection.Forward(spectrogram);
-
-        // Add positional embeddings
-        if (_audioPositionalEmbedding is not null)
-        {
-            var seqLen = Math.Min(projected.Shape[0], _audioPositionalEmbedding.Shape[0]);
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    var idx = i * _embeddingDimension + j;
-                    if (idx < projected.Length)
-                    {
-                        projected.Data.Span[idx] = NumOps.Add(
-                            projected.Data.Span[idx],
-                            _audioPositionalEmbedding[i, j]);
-                    }
-                }
-            }
-        }
-
-        var current = projected;
-        for (int i = 0; i < AudioEncoderLayers.Count; i += 3)
-        {
-            var attnOutput = AudioEncoderLayers[i].Forward(current);
-            var ffn1 = AudioEncoderLayers[i + 1].Forward(attnOutput);
-            // ffn1 layer already has GELU activation - don't apply again
-            var ffn2 = AudioEncoderLayers[i + 2].Forward(ffn1);
-            current = AddResidual(attnOutput, ffn2);
-        }
-
-        return AudioOutputProjection.Forward(current);
+        _ = GetSharedEncoderLayers();
+        EnsureLayerRandomSeedsWired();
+        if (spectrogram.Shape.Length != 2 || spectrogram.Shape[1] != SPECTROGRAM_BINS)
+            throw new ArgumentException("The audio encoder requires [frames, mel bins] features.", nameof(spectrogram));
+        return AddPositionalEmbedding(
+            ApplySharedEncoder(GetAudioInputProjection().Forward(spectrogram)), _audioPositionalEmbedding);
     }
 
     private Tensor<T> ApplyVisualEncoder(Tensor<T> frame)
     {
-        // Validate layer count is a multiple of 3 (attention + 2 FFN layers per block)
-        if (VisualEncoderLayers.Count % 3 != 0)
-        {
-            throw new InvalidOperationException(
-                $"Visual encoder layer count ({VisualEncoderLayers.Count}) must be a multiple of 3 " +
-                "(each block contains attention + 2 FFN layers).");
-        }
+        return ApplyVisualPatches(FlattenToPatches(frame));
+    }
 
-        // Flatten spatial dimensions for transformer
-        var flattened = FlattenToPatches(frame);
-        var projected = VisualInputProjection.Forward(flattened);
+    private Tensor<T> ApplyVisualPatches(Tensor<T> patches)
+    {
+        _ = GetSharedEncoderLayers();
+        EnsureLayerRandomSeedsWired();
+        if (patches.Shape.Length != 2 || patches.Shape[1] != checked(_visualChannels * 16 * 16))
+            throw new ArgumentException("Visual patch features do not match the configured channel count.", nameof(patches));
+        return AddPositionalEmbedding(
+            ApplySharedEncoder(GetVisualInputProjection().Forward(patches)), _visualPositionalEmbedding);
+    }
 
-        // Add positional embeddings
-        if (_visualPositionalEmbedding is not null)
-        {
-            var seqLen = Math.Min(projected.Shape[0], _visualPositionalEmbedding.Shape[0]);
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    var idx = i * _embeddingDimension + j;
-                    if (idx < projected.Length)
-                    {
-                        projected.Data.Span[idx] = NumOps.Add(
-                            projected.Data.Span[idx],
-                            _visualPositionalEmbedding[i, j]);
-                    }
-                }
-            }
-        }
+    private Tensor<T> ApplySharedEncoder(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in GetSharedEncoderLayers()) current = layer.Forward(current);
+        return current;
+    }
 
-        var current = projected;
-        for (int i = 0; i < VisualEncoderLayers.Count; i += 3)
-        {
-            var attnOutput = VisualEncoderLayers[i].Forward(current);
-            var ffn1 = VisualEncoderLayers[i + 1].Forward(attnOutput);
-            // ffn1 layer already has GELU activation - don't apply again
-            var ffn2 = VisualEncoderLayers[i + 2].Forward(ffn1);
-            current = AddResidual(attnOutput, ffn2);
-        }
+    /// <summary>The fusion trunk every pair head reads: the pair projection followed by the fusion layers.</summary>
+    private Tensor<T> ApplyPairTrunk(Tensor<T> combined)
+    {
+        var current = GetPairInputProjection().Forward(combined);
+        foreach (var layer in GetFusionLayers()) current = layer.Forward(current);
+        return current;
+    }
 
-        return VisualOutputProjection.Forward(current);
+    private Tensor<T> AddPositionalEmbedding(Tensor<T> features, Tensor<T>? positions)
+    {
+        if (positions is null) return features;
+        int count = Math.Min(features.Shape[0], positions.Shape[0]);
+        var prefix = Engine.TensorSlice(positions, new[] { 0, 0 }, new[] { count, _embeddingDimension });
+        var aligned = count == features.Shape[0] ? prefix : Engine.TensorConcatenate(
+            new[] { prefix, new Tensor<T>(new[] { features.Shape[0] - count, _embeddingDimension }) }, axis: 0);
+        return Engine.TensorAdd(features, aligned);
     }
 
     private Tensor<T> FlattenToPatches(Tensor<T> frame)
     {
-        if (frame.Shape.Length < 3)
-        {
-            return frame;
-        }
+        if (frame is null) throw new ArgumentNullException(nameof(frame));
+        _options.ValidateVisualChannels(_visualChannels);
+        if (frame.Shape.Length != 3)
+            throw new ArgumentException("Each visual frame must have shape [channels, height, width].", nameof(frame));
 
         var channels = frame.Shape[^3];
         var height = frame.Shape[^2];
         var width = frame.Shape[^1];
+
+        if (channels != _visualChannels || height <= 0 || width <= 0)
+            throw new ArgumentException("Frame dimensions must be positive and channels must match the configured options.", nameof(frame));
 
         const int patchSize = 16;
 
@@ -776,7 +880,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         var numPatchesH = height / patchSize;
         var numPatchesW = width / patchSize;
         var numPatches = numPatchesH * numPatchesW;
-        var patchDim = channels * patchSize * patchSize;
+        var patchDim = checked(channels * patchSize * patchSize);
 
         // Use computed patchDim instead of hardcoded 768
         var patches = new Tensor<T>([numPatches, patchDim]);
@@ -863,10 +967,10 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         }
 
         // Reshape to spatial dimensions
-        var height = originalShape.Length >= 2 ? originalShape[^2] : 1;
-        var width = originalShape.Length >= 1 ? originalShape[^1] : numPositions;
-        var patchH = (int)Math.Sqrt(numPositions);
-        var patchW = patchH;
+        var patchH = originalShape[^2] / 16;
+        var patchW = originalShape[^1] / 16;
+        if (checked(patchH * patchW) != numPositions)
+            throw new InvalidOperationException("Spatial features do not match the input frame's patch grid.");
 
         var attentionMap = new Tensor<T>([patchH, patchW]);
         for (int i = 0; i < Math.Min(numPositions, patchH * patchW); i++)
@@ -879,26 +983,22 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private Vector<T> GlobalAveragePool(Tensor<T> features)
     {
-        var seqLen = features.Shape[0];
-        var embedding = new Vector<T>(_embeddingDimension);
-
-        // Build vectors for each embedding dimension and use vectorized sum
-        for (int j = 0; j < _embeddingDimension; j++)
-        {
-            var columnVector = new Vector<T>(seqLen);
-            for (int i = 0; i < seqLen; i++)
-            {
-                var idx = i * _embeddingDimension + j;
-                columnVector[i] = idx < features.Length ? features.Data.Span[idx] : NumOps.Zero;
-            }
-            // Use IEngine vectorized sum
-            T sum = Engine.Sum(columnVector);
-            embedding[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
-
-        return embedding;
+        return new Vector<T>(PoolFeatures(features).ToArray());
     }
 
+    private Tensor<T> PoolFeatures(Tensor<T> features)
+    {
+        if (features.Shape.Length != 2 || features.Shape[0] <= 0 || features.Shape[1] != _embeddingDimension)
+            throw new ArgumentException("Encoder features must have nonempty shape [positions, embedding width].", nameof(features));
+        return Engine.ReduceMean(features, new[] { 0 }, keepDims: false);
+    }
+
+    private Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
+    {
+        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(embedding, embedding), new[] { 0 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
+        return Engine.TensorDivide(embedding, norm);
+    }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
@@ -917,28 +1017,19 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         return result;
     }
 
-    private Tensor<T> ApplyGelu(Tensor<T> input)
-    {
-        // Use IEngine vectorized GELU activation
-        return Engine.GELU(input);
-    }
-
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
         // Use IEngine vectorized Sigmoid activation
         return Engine.Sigmoid(input);
     }
 
-    private Tensor<T> AddResidual(Tensor<T> residual, Tensor<T> output)
-    {
-        // Use IEngine vectorized tensor addition
-        return Engine.TensorAdd(residual, output);
-    }
-
     private Tensor<T> ApplyMask(Tensor<T> spectrogram, Tensor<T> mask)
     {
         var numFrames = spectrogram.Shape[0];
         var numBins = spectrogram.Shape[1];
+        // One mask value per bin. Clamping a short mask to its last element gave every bin past it the same weight.
+        if (mask.Length != numBins)
+            throw new InvalidOperationException($"The separation mask has {mask.Length} values for {numBins} mel bins.");
 
         // Broadcast mask across all frames for vectorized multiplication
         var broadcastedMask = new Tensor<T>([numFrames, numBins]);
@@ -946,8 +1037,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         {
             for (int bin = 0; bin < numBins; bin++)
             {
-                var maskIdx = bin < mask.Length ? bin : mask.Length - 1;
-                broadcastedMask.Data.Span[frame * numBins + bin] = mask.Data.Span[maskIdx];
+                broadcastedMask.Data.Span[frame * numBins + bin] = mask.Data.Span[bin];
             }
         }
 
@@ -984,12 +1074,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         return output;
     }
 
-    private T ComputeContrastiveLoss(T similarity, T target)
-    {
-        var diff = NumOps.Subtract(target, similarity);
-        return NumOps.Multiply(diff, diff);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
@@ -998,49 +1082,45 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     protected override void InitializeLayers()
     {
         Layers.Clear();
+        if (Architecture.OutputSize <= 0)
+        {
+            throw new ArgumentException(
+                "AudioVisualCorrespondenceNetwork requires a positive Architecture.OutputSize for its correspondence head.",
+                "architecture");
+        }
+
+        // The fusion path ends in the correspondence head, sized to the declared output (the paper's 2-way softmax by
+        // default), so Predict returns exactly the width the architecture declares.
+        var layout = LayerHelper<T>.CreateAudioVisualCorrespondenceLayout(
+            _embeddingDimension, _numEncoderLayers, Architecture.OutputSize);
+        var correspondenceHead = layout.Fusion[layout.Fusion.Count - 1];
+        _sharedEncoderLayers = layout.Encoder;
+        _fusionLayers = layout.Fusion.Take(layout.Fusion.Count - 1).ToList();
 
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
+            // A custom layer list replaces only the feature-input Predict/Train stack. The modality adapters, shared
+            // encoder, fusion trunk and task heads are still built and registered through their fields, so every
+            // IAudioVisualCorrespondenceModel member keeps working instead of throwing at its first call. The default
+            // correspondence head has no role here and is released.
             Layers.AddRange(Architecture.Layers);
+            if (correspondenceHead is IDisposable disposable) disposable.Dispose();
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateAudioVisualCorrespondenceLayers(
-                _embeddingDimension, _numEncoderLayers, NUM_ATTENTION_HEADS));
+            Layers.AddRange(layout.Encoder);
+            Layers.AddRange(layout.Fusion);
         }
 
-        // Distribute layers to internal fields.
-        // The VGG-style Dense encoder (per Arandjelovic & Zisserman 2017) uses
-        // shared sequential Dense blocks, not separate audio/visual attention stacks.
-        // First 4 layers: shared encoder blocks (64→128→256→512→512)
-        // Last 2 layers: fusion FC (512→128→2)
-        _audioEncoderLayers = new List<ILayer<T>>();
-        _visualEncoderLayers = new List<ILayer<T>>();
-        int encoderLayerCount = Math.Max(0, Layers.Count - 2); // All but last 2 (fusion)
-        for (int i = 0; i < encoderLayerCount; i++)
-        {
-            _audioEncoderLayers.Add(Layers[i]);
-            _visualEncoderLayers.Add(Layers[i]); // Shared encoder
-        }
-        _audioInputProjection = encoderLayerCount > 0 ? Layers[0] : null;
-        _audioOutputProjection = encoderLayerCount > 0 ? Layers[encoderLayerCount - 1] : null;
-        _visualInputProjection = _audioInputProjection;
-        _visualOutputProjection = _audioOutputProjection;
-
-        // Cross-modal layers and task heads use the fusion FC layers
-        _crossModalAttentionLayers = new List<ILayer<T>>();
-        if (Layers.Count > encoderLayerCount)
-        {
-            for (int i = encoderLayerCount; i < Layers.Count; i++)
-                _crossModalAttentionLayers.Add(Layers[i]);
-        }
-
-        // Task heads: reuse last fusion layer as all heads (single output path)
-        var lastLayer = Layers.Count > 0 ? Layers[^1] : null;
-        _localizationHead = lastLayer;
-        _syncHead = lastLayer;
-        _sceneClassificationHead = lastLayer;
-        _separationMaskPredictor = lastLayer;
+        // The public feature-input Predict path and both modality adapters enter the same
+        // encoder width. These distinct layers are discovered by the shared model generator,
+        // so they belong to parameter update, clone, and serialization rather than hidden state.
+        int encoderInputWidth = Architecture.CalculatedInputSize;
+        _audioInputProjection = new DenseLayer<T>(encoderInputWidth, (IActivationFunction<T>?)null);
+        _visualInputProjection = new DenseLayer<T>(encoderInputWidth, (IActivationFunction<T>?)null);
+        _pairInputProjection = new DenseLayer<T>(_embeddingDimension, (IActivationFunction<T>?)null);
+        _synchronizationHead = new DenseLayer<T>(1, (IActivationFunction<T>?)null);
+        _separationHead = new DenseLayer<T>(SPECTROGRAM_BINS, (IActivationFunction<T>?)null);
     }
 
     /// <inheritdoc/>
@@ -1083,6 +1163,25 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             SetTrainingMode(false);
         }
     }
+    /// <inheritdoc/>
+    protected override void RegisterState(ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        // Scene prototypes are learned data, not parameters: without this a restored model forgot every label.
+        state.DeclareObject<ScenePrototypeState>(
+            nameof(AudioVisualCorrespondenceNetwork<T>) + "." + nameof(ScenePrototypeState),
+            () => _scenePrototypes,
+            restored => _scenePrototypes = restored ?? new ScenePrototypeState());
+    }
+
+    /// <summary>Scene labels with the running mean joint embedding and example count of each.</summary>
+    private sealed class ScenePrototypeState
+    {
+        public List<string> Labels { get; set; } = new();
+        public List<double[]> Means { get; set; } = new();
+        public List<int> Counts { get; set; } = new();
+    }
+
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

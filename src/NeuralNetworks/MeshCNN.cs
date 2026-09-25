@@ -501,7 +501,7 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
                 { "DropoutRate", _options.DropoutRate },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 }

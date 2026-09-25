@@ -38,10 +38,26 @@ public class LLaVAOptions : VisionLanguageModelOptions
         VisionEncoderType = "clip-vit-l";
     }
 
+    /// <summary>Copies every LLaVA setting and its inherited configuration.</summary>
+    /// <param name="other">The source options.</param>
+    /// <exception cref="ArgumentNullException">The source is null.</exception>
+    public LLaVAOptions(LLaVAOptions other) : base(other)
+    {
+        NumLmLayers = other.NumLmLayers;
+        LanguageModelBackbone = other.LanguageModelBackbone;
+        VisionEncoderType = other.VisionEncoderType;
+    }
+
 
     /// <summary>
-    /// Gets or sets the num lm layers.
+    /// Gets or sets the number of native language-model decoder blocks.
     /// </summary>
+    /// <value>A count of decoder blocks. Defaults to 32, preserving the previous implementation's constructor default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These blocks process text conditioned on the projected image
+    /// features. More blocks deepen the native language model and increase its computation.
+    /// This option does not change the architecture of a language model loaded from ONNX.</para>
+    /// </remarks>
     public int NumLmLayers { get; set; }
 
     /// <summary>
@@ -52,7 +68,29 @@ public class LLaVAOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VocabSize, nameof(VocabSize));
+        Require(VisionDim, nameof(VisionDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumLmLayers, nameof(NumLmLayers));
+        Require(NumHeads, nameof(NumHeads));
+        if (string.IsNullOrWhiteSpace(VisionEncoderType))
+            throw new ArgumentException($"{GetType().Name}.{nameof(VisionEncoderType)} must identify a vision encoder.", OptionsParameterName);
+    }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        var defaults = new LLaVAOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
+        RequireNativeDefaultForOnnx(VisionDim, defaults.VisionDim, nameof(VisionDim));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
+        RequireNativeDefaultForOnnx(NumLmLayers, defaults.NumLmLayers, nameof(NumLmLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        if (string.IsNullOrWhiteSpace(VisionEncoderType))
+            throw new ArgumentException($"{GetType().Name}.{nameof(VisionEncoderType)} must identify a vision encoder.", OptionsParameterName);
     }
 
     /// <summary>

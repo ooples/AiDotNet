@@ -375,7 +375,7 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
                 { "EmbedDim", _embedDim }, { "DecoderDim", _decoderDim },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

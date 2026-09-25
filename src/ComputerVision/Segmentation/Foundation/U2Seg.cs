@@ -307,7 +307,7 @@ public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
                 { "DecoderDim", _decoderDim }, { "UseNativeMode", _useNativeMode },
                 { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

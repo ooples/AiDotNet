@@ -49,7 +49,7 @@ public class DocumentNeuralNetworkOptions : ModelHyperparameterOptions
     /// <summary>Copies every shared document setting and inherited model setting.</summary>
     /// <param name="other">The source options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
-    protected DocumentNeuralNetworkOptions(DocumentNeuralNetworkOptions other) : base(other)
+    public DocumentNeuralNetworkOptions(DocumentNeuralNetworkOptions other) : base(other)
     {
         ImageSize = other.ImageSize;
         ImageWidth = other.ImageWidth;

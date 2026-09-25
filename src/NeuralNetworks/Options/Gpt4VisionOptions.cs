@@ -25,24 +25,19 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     public Gpt4VisionOptions()
     {
         EmbeddingDimension = 4096;
-        VisionEmbeddingDim = 1024;
+        VisionDim = 1024;
         MaxSequenceLength = 2048;
         ContextWindowSize = 128000;
         ImageSize = 336;
         MaxImagesPerRequest = 10;
         HiddenDim = 4096;
         VisionLayers = 24;
-        NumLanguageLayers = 32;
+        NumLmLayers = 32;
         NumHeads = 32;
         PatchSize = 14;
         VocabSize = 128256;
     }
 
-
-    /// <summary>
-    /// Gets or sets the vision embedding dim.
-    /// </summary>
-    public int VisionEmbeddingDim { get; set; }
 
     /// <summary>
     /// Gets or sets the context window size.
@@ -55,9 +50,10 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     public int MaxImagesPerRequest { get; set; }
 
     /// <summary>
-    /// Gets or sets the num language layers.
+    /// Gets or sets the number of native language-model blocks, using the same name
+    /// as the Flamingo and LLaVA options. This does not resize a loaded ONNX graph.
     /// </summary>
-    public int NumLanguageLayers { get; set; }
+    public int NumLmLayers { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -67,6 +63,30 @@ public class Gpt4VisionOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text | ValidationRequirements.PatchGeometry);
+        Require(VisionDim, nameof(VisionDim));
+        Require(ContextWindowSize, nameof(ContextWindowSize));
+        Require(MaxImagesPerRequest, nameof(MaxImagesPerRequest));
+        Require(HiddenDim, nameof(HiddenDim));
+        Require(VisionLayers, nameof(VisionLayers));
+        Require(NumLmLayers, nameof(NumLmLayers));
+        Require(NumHeads, nameof(NumHeads));
+        Require(VocabSize, nameof(VocabSize));
+    }
+
+    internal void ValidateOnnx()
+    {
+        ValidateInputs(InputValidationRequirements.Text | InputValidationRequirements.Image);
+        Require(VisionDim, nameof(VisionDim));
+        Require(ContextWindowSize, nameof(ContextWindowSize));
+        Require(MaxImagesPerRequest, nameof(MaxImagesPerRequest));
+        var defaults = new Gpt4VisionOptions();
+        RequireNativeDefaultForOnnx(Channels, defaults.Channels, nameof(Channels));
+        RequireNativeDefaultForOnnx(HiddenDim, defaults.HiddenDim, nameof(HiddenDim));
+        RequireNativeDefaultForOnnx(VisionLayers, defaults.VisionLayers, nameof(VisionLayers));
+        RequireNativeDefaultForOnnx(NumLmLayers, defaults.NumLmLayers, nameof(NumLmLayers));
+        RequireNativeDefaultForOnnx(NumHeads, defaults.NumHeads, nameof(NumHeads));
+        RequireNativeDefaultForOnnx(PatchSize, defaults.PatchSize, nameof(PatchSize));
+        RequireNativeDefaultForOnnx(VocabSize, defaults.VocabSize, nameof(VocabSize));
     }
 }

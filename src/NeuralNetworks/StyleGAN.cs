@@ -879,7 +879,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "IntermediateLatentSize", _intermediateLatentSize },
                 { "StyleMixingEnabled", _enableStyleMixing }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

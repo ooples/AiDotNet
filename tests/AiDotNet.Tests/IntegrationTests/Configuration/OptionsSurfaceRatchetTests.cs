@@ -326,13 +326,19 @@ public class OptionsSurfaceRatchetTests
         [SequenceFamily.Zamba] = typeof(ZambaLanguageModel<>)
     };
 
+    private static readonly IReadOnlyDictionary<Type, Type> RequiredImageStateSpaceModels = new Dictionary<Type, Type>
+    {
+        [typeof(VisionMambaModel<>)] = typeof(VisionMambaOptions)
+    };
+
     [Fact]
     public void SequenceCohort_CoversEveryMigratedOptionsType()
     {
         var optionsTypes = typeof(SequenceModelOptions).Assembly.GetTypes()
             .Where(type => !type.IsAbstract && typeof(SequenceModelOptions).IsAssignableFrom(type))
             .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
-        var consumedTypes = RequiredSequenceModels.Values.SelectMany(type => type.GetConstructors())
+        var consumedTypes = RequiredSequenceModels.Values.Concat(RequiredImageStateSpaceModels.Keys)
+            .SelectMany(type => type.GetConstructors())
             .SelectMany(constructor => constructor.GetParameters()).Select(parameter => parameter.ParameterType)
             .Where(type => typeof(SequenceModelOptions).IsAssignableFrom(type)).Distinct()
             .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
@@ -340,8 +346,13 @@ public class OptionsSurfaceRatchetTests
         Assert.Equal(17, RequiredSequenceModels.Count);
         Assert.Equal(Enum.GetValues(typeof(SequenceFamily)).Cast<SequenceFamily>().OrderBy(family => family),
             RequiredSequenceModels.Keys.OrderBy(family => family));
+        var imageConsumer = Assert.Single(RequiredImageStateSpaceModels);
+        Assert.Equal(typeof(VisionMambaModel<>), imageConsumer.Key);
+        Assert.Equal(typeof(VisionMambaOptions), imageConsumer.Value);
+        Assert.Contains(imageConsumer.Key.GetConstructors().SelectMany(constructor => constructor.GetParameters()),
+            parameter => parameter.ParameterType == imageConsumer.Value);
         Assert.Equal(optionsTypes, consumedTypes);
-        Assert.Equal(17, optionsTypes.Length);
+        Assert.Equal(18, optionsTypes.Length);
     }
 
     private static (NeuralNetworkBase<float> Model, SequenceModelOptions Options) CreateSequenceModel(

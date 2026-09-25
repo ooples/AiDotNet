@@ -351,7 +351,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>
             { "NumLayers", Layers.Count },
             { "EncoderLayerEnd", _encoderLayerEnd }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     /// <summary>

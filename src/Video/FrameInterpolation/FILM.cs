@@ -605,7 +605,7 @@ public partial class FILM<T> : FrameInterpolationBase<T>
                 { "InputWidth", _width },
                 { "NumScales", _numScales }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

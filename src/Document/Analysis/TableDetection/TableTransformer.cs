@@ -1027,7 +1027,7 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

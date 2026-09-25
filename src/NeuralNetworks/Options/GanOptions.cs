@@ -83,12 +83,27 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
     /// </exception>
-    protected void ValidateCore()
+    /// <param name="requireLatentSize">
+    /// False for a model that takes its latent size from a constructor argument rather than
+    /// from these options, which then legitimately leave it unset.
+    /// </param>
+    /// <param name="requireChannels">
+    /// False for a model that builds its generator and discriminator widths from its supplied
+    /// architectures rather than from these options.
+    /// </param>
+    protected void ValidateCore(bool requireLatentSize = true, bool requireChannels = true)
     {
-        // Only the channel count is universal. LatentSize stays a REQUIRED constructor
-        // argument on several of these models (DCGAN, BigGAN, SAGAN, ProgressiveGAN build their
-        // generator architecture from it before an instance exists), so it is legitimately unset
-        // on those options objects; and InitialLearningRate carries a default above.
+        // Strict by default: a model whose paper defaults live here must have assigned them.
+        // Only a model that genuinely does not read a value from its options opts out of it, so
+        // requiring it at the shared boundary would throw at construction for a valid model.
+        if (requireLatentSize)
+            Require(LatentSize, nameof(LatentSize));
+        if (requireChannels)
+        {
+            Require(GeneratorChannels, nameof(GeneratorChannels));
+            Require(DiscriminatorChannels, nameof(DiscriminatorChannels));
+        }
         Require(ImageChannels, nameof(ImageChannels));
+        Require(InitialLearningRate, nameof(InitialLearningRate));
     }
 }

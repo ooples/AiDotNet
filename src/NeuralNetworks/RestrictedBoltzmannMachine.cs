@@ -1180,7 +1180,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
                 { "LearningRate", Convert.ToDouble(_learningRate) },
                 { "CDSteps", _cdSteps }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

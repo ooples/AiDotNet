@@ -27,12 +27,6 @@ public class UnifiedMultimodalNetworkOptions : VisionLanguageModelOptions
         EmbeddingDimension = 768; // DEFAULT_EMBEDDING_DIM
         MaxSequenceLength = 2048; // DEFAULT_MAX_SEQ_LEN
         NumTransformerLayers = 12; // DEFAULT_NUM_LAYERS
-        EmbeddingDimension = 768; // DEFAULT_EMBEDDING_DIM
-        MaxSequenceLength = 2048; // DEFAULT_MAX_SEQ_LEN
-        NumTransformerLayers = 12; // DEFAULT_NUM_LAYERS
-        EmbeddingDimension = 768; // DEFAULT_EMBEDDING_DIM
-        MaxSequenceLength = 2048; // DEFAULT_MAX_SEQ_LEN
-        NumTransformerLayers = 12; // DEFAULT_NUM_LAYERS
     }
 
 
@@ -49,6 +43,8 @@ public class UnifiedMultimodalNetworkOptions : VisionLanguageModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        ValidateCore(ValidationRequirements.Text);
+        if (NumTransformerLayers < 0)
+            throw new ArgumentException($"{GetType().Name}.{nameof(NumTransformerLayers)} must be non-negative.", OptionsParameterName);
     }
 }

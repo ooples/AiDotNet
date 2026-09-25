@@ -741,7 +741,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
                 { "ExplorationRate", Convert.ToDouble(_epsilon) },
                 { "ReplayBufferSize", _replayBuffer.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

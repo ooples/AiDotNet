@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.ReinforcementLearning;
 using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
@@ -58,7 +59,8 @@ namespace AiDotNet.Finance.Trading.Agents;
                         + "size of 64 over 10 epochs at a horizon of 2048, for the MuJoCo "
                         + "one-million-timestep benchmark. The Roboschool table leaves the stepsize "
                         + "blank, so only the MuJoCo row is declared.")]
-public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>,
+    IMaskableAgent<T>
 {
 
     #region Fields
@@ -90,6 +92,29 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private Vector<T>? _lastStoredNextRawState;
     private T _lastActionLogProb = default!;
     private bool _hasLastActionLogProb;
+
+    /// <summary>
+    /// The validated legal-action mask that produced <see cref="_lastActionLogProb"/>, or
+    /// <see langword="null"/> when the selection was unrestricted.
+    /// </summary>
+    [Scratch]
+    private bool[]? _lastActionMask;
+
+    /// <summary>
+    /// The mask in force at each stored step, index-aligned with <see cref="_trajectory"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>A parallel list rather than a field on <c>Trajectory&lt;T&gt;</c>: that type is shared with
+    /// the six non-financial policy-gradient agents, none of which can mask, so widening it would add a
+    /// member that is null everywhere except here.</para>
+    /// </remarks>
+    [Scratch]
+    private readonly List<bool[]?> _stepMasks;
+
+    /// <summary>
+    /// Whether this agent has ever been handed a non-null mask.
+    /// </summary>
+    private bool _maskingInUse;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -147,6 +172,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         Networks.Add(_critic);
         _trajectory = new Trajectory<T>();
         _nextStates = new List<Vector<T>>();
+        _stepMasks = new List<bool[]?>();
         _random = options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -267,20 +293,31 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _observationCount = 0;
     }
 
-    private void CacheSelectedAction(Vector<T> rawState, Vector<T> normalizedState, Vector<T> action, T logProb)
+    private void CacheSelectedAction(
+        Vector<T> rawState,
+        Vector<T> normalizedState,
+        Vector<T> action,
+        T logProb,
+        bool[]? mask)
     {
         _lastActionRawState = CopyVector(rawState);
         _lastActionNormalizedState = CopyVector(normalizedState);
         _lastActionVector = CopyVector(action);
         _lastActionLogProb = logProb;
         _hasLastActionLogProb = true;
+
+        // A copy, for the same reason TradingEnvironment.Step publishes one: the caller owns the array it
+        // passed and may reuse it for the next state. A retained reference would silently re-point every
+        // stored step at the latest mask.
+        _lastActionMask = mask is null ? null : (bool[])mask.Clone();
     }
 
     private bool TryGetCachedPolicyState(
         Vector<T> state,
         Vector<T> action,
         out Vector<T> normalizedState,
-        out T logProb)
+        out T logProb,
+        out bool[]? mask)
     {
         if (!_hasLastActionLogProb ||
             _lastActionRawState is null ||
@@ -291,11 +328,13 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         {
             normalizedState = null!;
             logProb = NumOps.Zero;
+            mask = null;
             return false;
         }
 
         normalizedState = CopyVector(_lastActionNormalizedState);
         logProb = _lastActionLogProb;
+        mask = _lastActionMask;
         return true;
     }
 
@@ -355,24 +394,58 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </para>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        => SelectAction(state, training, legalActions: null);
+
+    /// <inheritdoc cref="IMaskableAgent{T}.SelectAction(Vector{T}, bool, bool[])"/>
+    /// <remarks>
+    /// <para><b>The mask is applied to the LOGITS, before the softmax.</b> That ordering is not stylistic.
+    /// Huang and Ontañón (2020) showed masking at this point keeps the policy gradient unbiased, and here it
+    /// is also mechanically necessary: both branches below cache <c>LogProbability(probs, index)</c> for the
+    /// PPO update, so masking after the softmax would take that log-probability against a distribution whose
+    /// entries no longer sum to one — making the importance ratio silently wrong rather than merely worse.</para>
+    ///
+    /// <para>The continuous branch REFUSES a mask rather than returning before applying it. A real-valued
+    /// action vector has no index set to restrict, so a mask there is not a narrower choice, it is a category
+    /// error — and this agent advertises <see cref="IMaskableAgent{T}"/> regardless of the
+    /// <c>ContinuousActions</c> setting, so a caller holding the interface cannot tell which shape it got.
+    /// Dropping the mask silently would hand back an unconstrained action that LOOKS masked, which is the
+    /// failure this whole feature exists to prevent; <c>FinRLAgent</c> refuses the same case for the same
+    /// reason.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// A non-null mask was supplied to a continuous-action policy.
+    /// </exception>
+    public Vector<T> SelectAction(Vector<T> state, bool training, bool[]? legalActions)
     {
         var normalizedState = NormalizeObservation(state, updateStatistics: training);
         var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
 
         if (_options.ContinuousActions)
         {
-            CacheSelectedAction(state, normalizedState, logits, NumOps.Zero);
+            if (legalActions is not null)
+            {
+                throw new InvalidOperationException(
+                    "A legal-action mask was supplied, but this FinancialPPOAgent is configured with "
+                    + "ContinuousActions = true and emits a real-valued action vector, which has no index set "
+                    + "to restrict. Constraining a continuous action is projection onto a feasible region, not "
+                    + "masking. Either configure the agent for discrete actions, or apply the constraint in "
+                    + "the environment.");
+            }
+
+            CacheSelectedAction(state, normalizedState, logits, NumOps.Zero, mask: null);
             return logits;
         }
 
-        var probs = Softmax(logits);
+        var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
+        _maskingInUse |= mask is not null;
+        var probs = Softmax(ActionMasking.MaskLogits(logits, mask, NumOps));
         
         if (training)
         {
             int actionIdx = SampleCategorical(probs);
             var action = new Vector<T>(TradingOptions.ActionSize);
             action[actionIdx] = NumOps.One;
-            CacheSelectedAction(state, normalizedState, action, LogProbability(probs, actionIdx));
+            CacheSelectedAction(state, normalizedState, action, LogProbability(probs, actionIdx), mask);
             return action;
         }
 
@@ -389,7 +462,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         var result = new Vector<T>(TradingOptions.ActionSize);
         result[bestIdx] = NumOps.One;
-        CacheSelectedAction(state, normalizedState, result, LogProbability(probs, bestIdx));
+        CacheSelectedAction(state, normalizedState, result, LogProbability(probs, bestIdx), mask);
         return result;
     }
 
@@ -470,6 +543,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         LossHistory.Add(averageLoss);
 
         _trajectory.Clear();
+        _stepMasks.Clear();
         _nextStates.Clear();
 
         return averageLoss;
@@ -548,11 +622,19 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             actionIndices[i] = ArgMax(_trajectory.Actions[batchIndices[i]]);
         }
 
+        using var maskBias = BuildMaskBias(batchIndices);
+
         var trainableActor = (NeuralNetworkBase<T>)_actor;
         T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
         {
             var engine = AiDotNetEngine.Current;
-            var newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, actorOutput, actionIndices);
+
+            // The same restriction the action was drawn under, re-applied to the CURRENT actor. Without
+            // it the ratio below compares a masked old policy against an unmasked new one, and the
+            // entropy bonus rewards spreading probability onto actions the environment refuses.
+            var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
+
+            var newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
             var logDiff = engine.TensorSubtract(newLogProbs, oldLogProbs);
             var ratio = engine.TensorExp(logDiff);
 
@@ -568,7 +650,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
                     engine.TensorNegate(surr1),
                     engine.TensorNegate(surr2)));
 
-            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, actorOutput);
+            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
             var entropyBonus = engine.TensorMultiplyScalar(entropy, NumOps.FromDouble(TradingOptions.EntropyCoefficient));
             var objective = engine.TensorAdd(minSurr, entropyBonus);
             var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
@@ -579,8 +661,67 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         return NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
     }
 
-    private Tensor<T> CreateStateTensor(Vector<T> normalizedState)
+    /// <summary>
+    /// Builds an additive logit bias for a mini-batch: zero where an action was legal, negative infinity
+    /// where it was not. Returns <see langword="null"/> when no step in the batch carried a mask.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Additive, not multiplicative.</b> A constant added to the logits is a no-op for the
+    /// gradient with respect to the actor - the derivative of <c>x + c</c> is 1 - so the mask restricts
+    /// the distribution without distorting what the network learns about the actions that remain.</para>
+    ///
+    /// <para><b>Negative infinity, matching <see cref="ActionMasking.MaskLogits{T}"/>.</b> The softmax
+    /// downstream subtracts the row max before exponentiating, so an illegal entry becomes exactly zero
+    /// probability rather than merely a small one, and the log-probability helper's <c>+1e-8</c> floor
+    /// keeps the subsequent log finite. Both helpers then multiply that entry by zero - the one-hot
+    /// gather in the log-prob, and the probability itself in the entropy - so nothing non-finite
+    /// reaches the loss. A large finite constant would work numerically and was rejected for the reason
+    /// given on MaskLogits: it is a tuning parameter that stops working once logits grow.</para>
+    /// </remarks>
+    private Tensor<T>? BuildMaskBias(int[] batchIndices)
     {
+        int n = batchIndices.Length;
+        int actionSize = TradingOptions.ActionSize;
+
+        bool anyMasked = false;
+        for (int i = 0; i < n; i++)
+        {
+            if (_stepMasks[batchIndices[i]] is not null)
+            {
+                anyMasked = true;
+                break;
+            }
+        }
+
+        if (!anyMasked)
+        {
+            return null;
+        }
+
+        // default(T) is the additive identity for every numeric T, so the legal entries need no write.
+        var data = new T[n * actionSize];
+        var blocked = ActionMasking.NegativeInfinity(NumOps);
+        for (int i = 0; i < n; i++)
+        {
+            var mask = _stepMasks[batchIndices[i]];
+            if (mask is null)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < actionSize; j++)
+            {
+                if (!mask[j])
+                {
+                    data[(i * actionSize) + j] = blocked;
+                }
+            }
+        }
+
+        return new Tensor<T>(data, [n, actionSize]);
+    }
+
+    private Tensor<T> CreateStateTensor(Vector<T> normalizedState)    {
         return Tensor<T>.FromVector(normalizedState);
     }
 
@@ -774,13 +915,44 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <b>For Beginners:</b> In the FinancialPPOAgent model, StoreExperience performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool done, bool[]? nextLegalActions)
+    {
+        if (!done && nextLegalActions is not null)
+        {
+            if (_options.ContinuousActions)
+                throw new InvalidOperationException("Continuous PPO does not support next-state action masks.");
+            ActionMasking.Validate(nextLegalActions, TradingOptions.ActionSize);
+        }
+        // PPO bootstraps V(s'); its action distribution uses the captured current-state mask.
+        StoreExperience(state, action, reward, nextState, done);
+    }
+
+    /// <inheritdoc/>
+
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         MarkHiddenEpisodeBoundaryIfNeeded(state);
 
-        bool usedCachedPolicy = TryGetCachedPolicyState(state, action, out var normalizedState, out var logProb);
+        bool usedCachedPolicy = TryGetCachedPolicyState(
+            state, action, out var normalizedState, out var logProb, out var mask);
         if (!usedCachedPolicy)
         {
+            // Refused rather than degraded, for the reason IMaskableAgent gives. The cache is the only
+            // record of which actions were legal when this action was chosen; without it the old
+            // log-probability would come from the unrestricted distribution while the action was drawn
+            // from the restricted one, and PPO's ratio would divide two different policies. That does not
+            // fail - it trains, and the numbers stay plausible.
+            if (_maskingInUse)
+            {
+                throw new InvalidOperationException(
+                    "StoreExperience could not match this (state, action) to the selection that produced "
+                    + "it, and this agent has selected under a legal-action mask, so the mask for this step "
+                    + "cannot be recovered. PPO needs the mask to compute the behaviour log-probability "
+                    + "from the same distribution the action was drawn from. Call StoreExperience with the "
+                    + "state and action from the immediately preceding SelectAction call.");
+            }
+
             normalizedState = NormalizeObservation(state, updateStatistics: true);
             logProb = _options.ContinuousActions
                 ? NumOps.Zero
@@ -791,6 +963,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         var value = PredictValueFromNormalized(normalizedState);
 
         _trajectory.AddStep(normalizedState, CopyVector(action), reward, value, logProb, done);
+        _stepMasks.Add(mask);
         _nextStates.Add(normalizedNextState);
         _lastStoredNextRawState = CopyVector(nextState);
     }

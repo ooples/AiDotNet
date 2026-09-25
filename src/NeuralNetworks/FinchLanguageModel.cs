@@ -54,7 +54,6 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
-    private readonly double _learningRate;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
@@ -93,27 +92,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _numLayers = _options.NumLayers;
         _numHeads = _options.NumHeads;
         _maxSeqLength = _options.MaxSequenceLength;
-        _learningRate = _options.LearningRate;
-
-        // Finch published LearningRate, Beta1, Beta2 and WeightDecay, but the model built no
-        // optimizer at all, so every one of them was inert and training ran at the base Adam
-        // default. Building the optimizer with `this` hands it to the base trainer through
-        // AdoptConfiguredOptimizer, so the declared values actually reach training.
-        // Beta2 = 0.99 (not Adam's 0.999) is the paper's value for RWKV-6-style recurrences.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _learningRate,
-                // The floor the decay schedule may not go below. OptimizerBase clamps
-                // CurrentLearningRate against Options.MinLearningRate, so the declared value
-                // lands on the optimizer's own knob rather than needing a second scheduler.
-                MinLearningRate = _options.MinLearningRate,
-                Beta1 = _options.Beta1,
-                Beta2 = _options.Beta2,
-                WeightDecay = _options.WeightDecay,
-            });
-        SetBaseTrainOptimizer(_optimizer);
-
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -137,6 +116,36 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer. Finch's paper trains with AdamW; callers can supply
+    /// any gradient optimizer through the constructor.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    /// <remarks>
+    /// Every value here comes from <see cref="FinchOptions"/> rather than from the optimizer's own
+    /// defaults, which is the point of publishing them: AdamW defaults to 1e-3 / 0.999 / 0.01, none
+    /// of which is the published recipe. Note Beta2 in particular -- arXiv:2404.05892 Appendix H
+    /// uses 0.99, not the 0.999 that AdamWOptimizerOptions would otherwise supply.
+    ///
+    /// MinLearningRate is the floor of the paper's cosine decay. The clipping pair is NOT a paper
+    /// value; see the remark on <see cref="FinchOptions.EnableGradientClipping"/>.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                MinLearningRate = _options.MinLearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -174,7 +183,7 @@ public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

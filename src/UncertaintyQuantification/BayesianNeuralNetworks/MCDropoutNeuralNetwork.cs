@@ -50,6 +50,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
 {
     private readonly int _numSamples;
 
+    /// <summary>The options this network was built with; a clone rebuilds from them.</summary>
+    private readonly MCDropoutNeuralNetworkOptions _options;
+
     /// <summary>
     /// Initializes a new instance of the MCDropoutNeuralNetwork class.
     /// </summary>
@@ -67,6 +70,8 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
         if (options.NumSamples < 1)
             throw new ArgumentException("Number of samples must be at least 1", nameof(options.NumSamples));
 
+        _options = options;
+        Options = _options;
         _numSamples = options.NumSamples;
     }
 

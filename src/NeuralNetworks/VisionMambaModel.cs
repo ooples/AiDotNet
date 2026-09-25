@@ -9,27 +9,6 @@ using AiDotNet.NeuralNetworks.Options;
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Defines the scan pattern used by the Vision Mamba model to convert 2D patch grids into 1D sequences.
-/// </summary>
-public enum VisionScanPattern
-{
-    /// <summary>
-    /// Bidirectional scan: forward + reverse, used by the original Vision Mamba (Vim) paper.
-    /// </summary>
-    Bidirectional,
-
-    /// <summary>
-    /// Cross-scan: four directional scans (L→R, R→L, T→B, B→T), used by VMamba.
-    /// </summary>
-    CrossScan,
-
-    /// <summary>
-    /// Continuous/zigzag scan preserving spatial locality, used by PlainMamba.
-    /// </summary>
-    Continuous
-}
-
-/// <summary>
 /// Implements the Vision Mamba (Vim) model: PatchEmbed + scan pattern + bidirectional Mamba + classifier.
 /// </summary>
 /// <remarks>
@@ -72,8 +51,11 @@ public enum VisionScanPattern
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
 ///         architecture,
-///         imageHeight: 224, imageWidth: 224, patchSize: 16,
-///         modelDimension: 384, numLayers: 24))
+///         new AiDotNet.NeuralNetworks.Options.VisionMambaOptions
+///         {
+///             ImageHeight = 224, ImageWidth = 224, PatchSize = 16,
+///             ModelDimension = 384, NumLayers = 24
+///         }))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(image);
 /// </code>
@@ -161,8 +143,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     {
         _options = options ?? new VisionMambaOptions();
         _options.Validate();
-        if (_options.ImageHeight % _options.PatchSize != 0) throw new ArgumentException($"Image height ({_options.ImageHeight}) must be divisible by patch size ({_options.PatchSize}).", nameof(_options.ImageHeight));
-        if (_options.ImageWidth % _options.PatchSize != 0) throw new ArgumentException($"Image width ({_options.ImageWidth}) must be divisible by patch size ({_options.PatchSize}).", nameof(_options.ImageWidth));
 
         Options = _options;
         _imageHeight = _options.ImageHeight;
@@ -370,7 +350,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
                 { "NumPatches", _numPatches },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

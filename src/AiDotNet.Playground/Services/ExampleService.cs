@@ -2774,11 +2774,14 @@ var architecture = new NeuralNetworkArchitecture<double>(
 // Create Whisper model in native training mode
 var whisper = new WhisperModel<double>(
     architecture: architecture,
-    modelSize: WhisperModelSize.Base,
-    language: ""en"",
-    sampleRate: sampleRate,
-    numMels: numMels,
-    maxAudioLengthSeconds: maxSeconds);
+    options: new WhisperOptions
+    {
+        ModelSize = WhisperModelSize.Base,
+        Language = ""en"",
+        SampleRate = sampleRate,
+        NumMels = numMels,
+        MaxAudioLengthSeconds = maxSeconds
+    });
 
 Console.WriteLine(""Whisper Model:"");
 Console.WriteLine($""  Model Size: Base (74M parameters)"");
@@ -2928,16 +2931,19 @@ var architecture = new NeuralNetworkArchitecture<double>(
 // Create TTS model in native training mode
 var tts = new TtsModel<double>(
     architecture: architecture,
-    sampleRate: sampleRate,
-    numMels: numMels,
-    speakingRate: 1.0,
-    pitchShift: 0.0,
-    energy: 1.0,
-    hiddenDim: 256,
-    numHeads: 4,
-    numEncoderLayers: 4,
-    numDecoderLayers: 4,
-    maxPhonemeLength: maxPhonemes);
+    options: new TtsOptions
+    {
+        SampleRate = sampleRate,
+        NumMels = numMels,
+        SpeakingRate = 1.0,
+        PitchShift = 0.0,
+        Energy = 1.0,
+        HiddenDim = 256,
+        NumHeads = 4,
+        NumEncoderLayers = 4,
+        NumDecoderLayers = 4,
+        MaxPhonemeLength = maxPhonemes
+    });
 
 Console.WriteLine(""TTS Model Configuration:"");
 Console.WriteLine($""  Sample Rate: {sampleRate} Hz"");

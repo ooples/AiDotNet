@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
@@ -360,18 +361,16 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         return output;
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var output = new Tensor<T>(input._shape);
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            output[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-
-        return output;
-    }
+    /// <summary>
+    /// Elementwise ReLU, delegated to the engine.
+    /// </summary>
+    /// <remarks>
+    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
+    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
+    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
+    /// silently never trained. The engine op records itself on the tape.
+    /// </remarks>
+    private Tensor<T> ApplyReLU(Tensor<T> input) => AiDotNetEngine.Current.ReLU(input);
 
     private (int classId, T confidence) GetPrediction(Tensor<T> logits)
     {

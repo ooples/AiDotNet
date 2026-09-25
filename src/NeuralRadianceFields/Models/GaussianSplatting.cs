@@ -2549,7 +2549,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             },
             // License-safe metadata bytes — see NeRF.GetModelMetadata for the
             // same rationale. Fixes #1826.
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

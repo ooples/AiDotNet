@@ -1,4 +1,48 @@
 <Project>
+
+  <!--
+    SQLitePCLRaw.lib.e_sqlite3 2.1.12 breaks every .NET Framework build with MSB3030.
+
+    Its buildTransitive/net461/SQLitePCLRaw.lib.e_sqlite3.targets unconditionally declares
+
+        <Content Include="...\runtimes\win-arm\native\e_sqlite3.dll">
+
+    but 2.1.12 does not ship a runtimes/win-arm folder. The package now contains only
+    win-arm64, win-x64 and win-x86; the ARM32 runtime was dropped and the Content item that
+    copies it was left behind. 2.1.6 and 2.1.11 both shipped runtimes/win-arm, so this is a
+    regression introduced in 2.1.12 rather than long-standing behaviour.
+
+    Only the net461 targets carry these items, so only .NET Framework target frameworks are
+    affected — net471 here. net6.0 and later declare no such items and build fine, which is
+    why the failure looks intermittent: it disappears the moment you build a single modern
+    target framework with -f.
+
+    The result is:
+
+        error MSB3030: Could not copy the file
+        "...\sqlitepclraw.lib.e_sqlite3\2.1.12\runtimes\win-arm\native\e_sqlite3.dll"
+        because it was not found.
+
+    Pinning the package down to 2.1.11 is not an option: Microsoft.Data.Sqlite 10.0.11
+    requires 2.1.12, so an explicit lower pin is a NU1605 downgrade. Instead, drop any
+    Content item this package contributes that does not exist on disk. That is narrow (it
+    cannot hide a missing file from any other package), self-correcting (it does nothing
+    once a future release stops declaring the item, or starts shipping it again), and needs
+    no dependency surgery.
+
+    The match is anchored to the package directory, with a path separator required on both
+    sides, rather than being a bare substring test. A plain Contains('sqlitepclraw') would
+    also match sqlitepclraw.bundle_e_sqlite3, sqlitepclraw.core and sqlitepclraw.provider.*,
+    as well as any repository path that happens to contain the token — so a genuinely missing
+    file from one of those would be swallowed here instead of reported as MSB3030.
+  -->
+  <Target Name="RemoveMissingSqlitePclRawNativeContent" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <Content Remove="@(Content)"
+               Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Content.Identity)', '(?i)[\\/]sqlitepclraw\.lib\.e_sqlite3[\\/]')) AND !Exists('%(Content.Identity)')" />
+    </ItemGroup>
+  </Target>
+
   <!-- Attribution receipts bind the exact commit independently. Avoid changing
        unchanged test-only dependency binaries solely because the commit changed.
        Normal builds and release/package builds retain their version/SourceLink

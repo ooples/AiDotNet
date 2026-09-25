@@ -386,7 +386,7 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
                 { "DecoderDim", _decoderDim }, { "DropRate", _dropRate },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1649,7 +1649,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", ParameterCount }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -47,6 +47,7 @@ public class CycleGANOptions : GanOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore();
+        // These values come from the model's constructor arguments and architectures, not these options.
+        ValidateCore(requireLatentSize: false, requireChannels: false);
     }
 }

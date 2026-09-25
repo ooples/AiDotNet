@@ -1035,7 +1035,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
                 { "GradientPenaltyCoefficient", _gradientPenaltyCoefficient },
                 { "CriticIterations", _criticIterations }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

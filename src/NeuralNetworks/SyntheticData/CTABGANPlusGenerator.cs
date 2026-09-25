@@ -964,7 +964,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

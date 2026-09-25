@@ -345,7 +345,7 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
             { "InputShape", Architecture.GetInputShape() },
             { "OutputShape", Architecture.GetOutputShape() },
         },
-        ModelData = SerializeForMetadata(),
+        ModelDataProvider = () => SerializeForMetadata(),
     };
 
     /// <inheritdoc />

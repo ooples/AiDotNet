@@ -462,7 +462,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
                 { "NumWeightLayers", _configuration.NumWeightLayers },
                 { "DropoutRate", _configuration.DropoutRate }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

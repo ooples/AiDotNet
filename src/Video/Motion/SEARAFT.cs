@@ -199,7 +199,7 @@ public partial class SEARAFT<T> : OpticalFlowBase<T>
                 { "NumFeatures", _numFeatures },
                 { "NumLayers", _numLayers }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 
