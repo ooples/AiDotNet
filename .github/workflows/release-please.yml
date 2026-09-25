@@ -322,7 +322,7 @@ jobs:
             lower_id="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
             lower_version="$(printf '%s' "$version" | tr '[:upper:]' '[:lower:]')"
             published="https://api.nuget.org/v3-flatcontainer/$lower_id/$lower_version/$lower_id.$lower_version.nupkg"
-            status="$(curl -sS -o /dev/null -w '%{http_code}' "$published")"
+            status="$(curl -sSI -o /dev/null -w '%{http_code}' "$published")"
             if [ "$status" = "200" ]; then
               echo "::notice::$id $version is already on NuGet; keeping the published package instead of this rebuild."
               curl -fsSL -o "$pkg" "$published"
