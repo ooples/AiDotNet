@@ -38266,26 +38266,15 @@ public static partial class LayerHelper<T>
         // Vaswani 2017 §3.4 token-embedding scaling, preserved by Raffel 2020.
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
 
-        // Paper-canonical T5: one shared bias table across all encoder blocks.
-        var sharedBias = new Tensor<T>(new[] { numRelativePositionBuckets, numHeads });
-
-        for (int i = 0; i < numLayers; i++)
-        {
-            var attn = new T5RelativeBiasAttentionLayer<T>(
-                hiddenSize: hiddenSize,
-                numHeads: numHeads,
-                numBuckets: numRelativePositionBuckets,
-                maxDistance: relativePositionMaxDistance,
-                bidirectional: true,
-                sharedRelativeBiasTable: i == 0 ? null : sharedBias);
-            if (i == 0) sharedBias = attn.GetRelativeBiasTable();
-
-            yield return new PreLNTransformerBlock<T>(
-                hiddenSize: hiddenSize,
-                ffnDim: hiddenSize * 4,
-                attention: attn,
-                ffnActivation: new GELUActivation<T>());
-        }
+        // Paper-canonical T5: one relative position bias table shared by every block (Raffel 2020, Sec. 2.1).
+        // The stack owns it and hands each block the bias it computes once per forward, so no block holds a
+        // reference to another's tensor and the sharing survives clone, save and restore by construction.
+        yield return new T5EncoderStack<T>(
+            hiddenSize: hiddenSize,
+            numLayers: numLayers,
+            numHeads: numHeads,
+            numBuckets: numRelativePositionBuckets,
+            maxDistance: relativePositionMaxDistance);
         yield return new RMSNormalizationLayer<T>();
     }
 
