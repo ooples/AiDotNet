@@ -237,6 +237,17 @@ public class S4Options<T> : TimeSeriesRegressionOptions<T>
     public bool UseLowRankCorrection { get; set; } = true;
 
     /// <summary>
+    /// The largest learning rate applied to the HiPPO-derived state-space parameters (B, A and the low-rank
+    /// P and Q), or null to train them at the model-wide rate.
+    /// </summary>
+    /// <remarks>
+    /// Gu et al. 2022, Sec. 4: "we reduce the learning rate on the HiPPO parameters to a maximum of 0.001" for
+    /// stability, while the rest of the model trains at 0.005. Without the cap the first updates overshoot:
+    /// the training loss jumped 1.73 -> 13.2 at step 2 at the model-wide 0.005.
+    /// </remarks>
+    public double? HippoMaxLearningRate { get; set; } = 0.001;
+
+    /// <summary>
     /// Gets or sets the rank of the low-rank correction.
     /// </summary>
     /// <value>The low-rank rank, defaulting to 1.</value>

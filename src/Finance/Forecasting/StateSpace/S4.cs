@@ -108,6 +108,14 @@ public partial class S4<T> : ForecastingModelBase<T>
     #region Shared Fields
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
+    /// <summary>The paper's LAMB optimizer, used by the shared tape training path.</summary>
+    /// <remarks>
+    /// FinancialModelBase.Train trains with this hook's optimizer and falls back to the network default when it
+    /// is null. S4 built its LAMB recipe but never returned it here, so it trained on the default optimizer and
+    /// the declared recipe (and the HiPPO learning-rate cap) never ran.
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     /// <summary>
     /// Start index of each residual sub-block in <see cref="NeuralNetworkBase{T}.Layers"/>, or null
     /// when the caller supplied their own layers (their graph is theirs to define, so Forward then
@@ -358,6 +366,25 @@ public partial class S4<T> : ForecastingModelBase<T>
 
             BuildResidualBlockLayout();
             ExtractLayerReferences();
+            ApplyHippoLearningRateCap();
+        }
+    }
+
+    /// <summary>
+    /// Caps the learning rate of each block's HiPPO-derived layers (B, A and, with low-rank correction, P and Q),
+    /// as the paper does (Gu et al. 2022, Sec. 4).
+    /// </summary>
+    private void ApplyHippoLearningRateCap()
+    {
+        if (_options.HippoMaxLearningRate is not { } cap || _residualBlockStarts is null) return;
+        int hippoLayers = _useLowRankCorrection ? 4 : 2; // B, A, [P, Q] follow each block's LayerNorm
+        for (int block = 0; block < _numLayers; block++)
+        {
+            for (int offset = 1; offset <= hippoLayers; offset++)
+            {
+                if (Layers[_residualBlockStarts[block] + offset] is LayerBase<T> layer)
+                    layer.MaxLearningRate = cap;
+            }
         }
     }
 
