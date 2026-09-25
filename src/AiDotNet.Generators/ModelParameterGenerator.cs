@@ -395,15 +395,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     var kind = ComponentKindFor(memberType, elem, isDeclaredSlot: member.IsAbstract);
                     if (kind == "one")
                     {
-                        // [TrainableParameter(Optional = true)] declares that the owner may simply not
-                        // have this component (DETR has no neck). Its null must then be the resolved
-                        // ParameterFree zero that optional: true reports, as for the adapter branch
-                        // below; without it the null read as ShapeDeferred and took the whole model's
-                        // parameter surface offline.
+                        // A nullable-annotated component may legitimately be absent (a detector
+                        // without a neck). A non-optional accessor reports a null component as
+                        // ShapeDeferred with no count, which makes the WHOLE model's layout
+                        // unresolved and every parameter read throw -- the same regression the
+                        // "adapt" branch below documents for absent conditioners. Mark it optional
+                        // so absence is the resolved, parameter-free fact it is; a present
+                        // component is unaffected. [TrainableParameter(Optional = true)] declares the
+                        // same fact explicitly (DETR has no neck), for a member whose type cannot say it.
                         var availability = AvailabilityExpression(member, classification.Kind);
-                        bool declaredOptional = availability.EndsWith(".Conditional", System.StringComparison.Ordinal);
+                        bool absentIsResolved = memberType.NullableAnnotation == NullableAnnotation.Annotated
+                            || availability.EndsWith(".Conditional", System.StringComparison.Ordinal);
                         components.Add((member.Name,
-                            declaredOptional
+                            absentIsResolved
                                 ? $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name}, optional: true)"
                                 : $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
                             RoleExpression(classification.Kind),
