@@ -261,7 +261,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, warmupStepsOverride: _options.WarmupSteps)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, BuildDefaultOptimizerOptions(_options));
 
         _contextLength = _options.ContextLength;
@@ -303,7 +303,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, warmupStepsOverride: _options.WarmupSteps)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, BuildDefaultOptimizerOptions(_options));
 
         _contextLength = _options.ContextLength;
