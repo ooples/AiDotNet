@@ -1848,6 +1848,40 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Configures step-level streaming training: a seeded data order, a global step budget, periodic held-out
+    /// validation, and resuming from the checkpoint manager's latest checkpoint.
+    /// </summary>
+    /// <param name="options">The streaming training options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> See <see cref="StreamingTrainingOptions{T, TInput, TOutput}"/>. Typical
+    /// language-model pretraining setup:</para>
+    /// <example>
+    /// <code>
+    /// var ckpt = new CheckpointManager&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;("runs/lm");
+    /// ckpt.ConfigureAutoCheckpointing(saveFrequency: 500, keepLast: 2, saveOnImprovement: false);
+    /// builder.ConfigureCheckpointManager(ckpt)
+    ///        .ConfigureStreamingTraining(new StreamingTrainingOptions&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;
+    ///        {
+    ///            Seed = 1234, MaxSteps = 20000, ValidationLoader = heldOut, ValidateEveryNSteps = 1000,
+    ///            ResumeFromLatestCheckpoint = true
+    ///        });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureStreamingTraining(StreamingTrainingOptions<T, TInput, TOutput> options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        options.Validate();
+        _streamingTrainingOptions = options;
+        return this;
+    }
+
+    /// <summary>
     /// Configures memory management for training including gradient checkpointing,
     /// activation pooling, and model sharding.
     /// </summary>

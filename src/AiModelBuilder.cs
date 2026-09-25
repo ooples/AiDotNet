@@ -350,6 +350,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Training infrastructure configuration
     private IExperimentTracker<T>? _experimentTracker;
     private ICheckpointManager<T, TInput, TOutput>? _checkpointManager;
+    private StreamingTrainingOptions<T, TInput, TOutput>? _streamingTrainingOptions;
     private ITrainingMonitor<T>? _trainingMonitor;
 
     /// <summary>
