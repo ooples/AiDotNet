@@ -132,7 +132,13 @@ public partial class InputLayer<T> : LayerBase<T>, IShapeContract
                ValidateAndCloneShape(inputShape, nameof(inputShape)),
                new IdentityActivation<T>() as IActivationFunction<T>)
     {
+        // Stored under the parameter's name so the generated clone factory can replay this constructor;
+        // without it a multi-dimensional input layer could not be rebuilt (clone, architecture copy).
+        _inputShape = ValidateAndCloneShape(inputShape, nameof(inputShape));
     }
+
+    /// <summary>Construction state for the multi-dimensional constructor; null for the flat one.</summary>
+    private readonly int[]? _inputShape;
 
     private static int[] ValidateAndCloneShape(int[] shape, string paramName)
     {
