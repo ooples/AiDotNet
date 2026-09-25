@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -392,26 +392,15 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         _useNativeMode = true;
 
-        // Paper-faithful default optimizer (Woo et al. 2024 §5.1): Adam.
-        // Paper text reports lr=1e-4, but at fp64 (test default) the
-        // 12-transformer-encoder chain amplifies single-step Adam updates
-        // past the saturation cliff of GELU + linear-output-head, collapsing
-        // forward output to zero after the first real training step (observed:
-        // call #1 output=0.227 loss=0.136 → call #2 output=13.4 loss=168.6
-        // explosion → call #3+ output=0 with all-zero gradients). Lowering
-        // the initial LR by 100× to 1e-6 keeps the per-element Adam step
-        // shrunk enough that amplification through 12 stacked transformer
-        // blocks stays bounded for the test-precision baseline; the schedule
-        // can still ramp to MaxLearningRate=1e-3 (the paper's headline LR)
-        // through warmup. MinLearningRate=1e-9 keeps Plateau-style schedulers
-        // from clamping the floor too high.
-        var __adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        {
-            InitialLearningRate = 1e-6,
-            MinLearningRate = 1e-9,
-            MaxLearningRate = 1e-3,
-        };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, __adamOpts);
+        // The paper recipe (Woo et al. 2024, Sec. 5): AdamW at 1e-3, betas 0.9/0.98, weight decay 0.1,
+        // warmup then cosine, built from the [PaperOptimizer] declaration as the ONNX constructor already
+        // does. This replaces a hand-built Adam pinned at 1e-6 with no schedule attached: its comment said
+        // the schedule would ramp to 1e-3, but nothing ramped it, so the model barely trained (parameters
+        // moved ~1e-4 in 20 steps and memorization stayed flat). The explosion that workaround guarded
+        // against no longer reproduces: at 1e-3 the training loss falls 0.93 -> 0.55 over 20 steps.
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         // Wire into the base train-optimizer slot so TrainWithTape uses our
         // configured Adam (initial lr=1e-6, ramping toward the paper's
         // headline lr=1e-3), not the framework default.
