@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -125,7 +125,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// through one or more dense layers.
     /// </para>
     /// </remarks>
-    private List<DenseLayer<T>>? _outputProjectionLayers;
+    private List<ILayer<T>>? _outputProjectionLayers;
 
     #endregion
 
@@ -412,7 +412,11 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
         _mambaBlocks = Layers.OfType<MambaBlock<T>>().ToList();
-        _outputProjectionLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
+        // The head is every layer after the last Mamba block, whatever its type. Selecting only DenseLayers
+        // dropped the factory's FeedForwardLayer head, so Predict returned the raw [seqLen * modelDim] hidden
+        // sequence and the forecast head never ran or trained.
+        int lastBlock = Layers.FindLastIndex(layer => layer is MambaBlock<T>);
+        _outputProjectionLayers = lastBlock < 0 ? new List<ILayer<T>>() : Layers.Skip(lastBlock + 1).ToList();
     }
 
     /// <summary>
@@ -438,10 +442,11 @@ public partial class Mamba<T> : ForecastingModelBase<T>
                 "Mamba requires at least one MambaBlock layer for selective SSM processing.");
         }
 
-        if (denseCount < 2)
+        int lastBlock = layers.FindLastIndex(layer => layer is MambaBlock<T>);
+        if (denseCount < 1 || lastBlock == layers.Count - 1)
         {
             throw new ArgumentException(
-                "Mamba requires at least input embedding and output projection DenseLayer layers.");
+                "Mamba requires an input embedding DenseLayer and at least one output layer after the last MambaBlock.");
         }
     }
 
@@ -714,8 +719,11 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         }
 
         // === Phase 3: Output Projection ===
-        // Flatten [batch, seqLen, modelDim] -> [batch, seqLen * modelDim] for output DenseLayers
-        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+        // The causal scan's final state summarizes the whole window (Gu & Dao 2023), so the forecast head reads
+        // the last timestep's [batch, modelDim] hidden state - the width the factory sizes its head for.
+        current = Engine.Reshape(
+            Engine.TensorNarrow(current, 1, seqLen - 1, 1),
+            new[] { batchSize, _modelDimension });
 
         // Apply remaining DenseLayers (output projection chain)
         // These are the DenseLayers after the MambaBlocks in the Layers list
