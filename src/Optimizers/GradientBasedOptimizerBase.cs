@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Attributes;
 using AiDotNet.Deployment.Configuration;
@@ -2693,10 +2693,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public void Step(TapeStepContext<T> context)
     {
+        var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
         try
         {
             StepCore(context);
+            ApplyLearningRateGroups(learningRateGroups);
         }
         finally
         {
@@ -2705,6 +2707,73 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
     }
 
+    /// <summary>
+    /// Snapshots the parameters whose layer declares its own learning rate (a scale or a cap), before the step.
+    /// </summary>
+    /// <remarks>
+    /// Per-parameter-group learning rates without touching every optimizer: a first-order update is linear
+    /// in the learning rate - SGD, momentum, Adam, AdamW (decoupled decay included, as PyTorch scales it by the
+    /// group's lr) and LAMB all multiply their step by it - so running the step at the base rate and rescaling
+    /// the resulting change by <c>groupRate / baseRate</c> is the step each group would have taken at its own
+    /// rate. Optimizer state (moments, trust ratios) is rate-independent and is left untouched. Only tensors of
+    /// layers that declare a policy are snapshotted, so a model without one pays nothing.
+    /// </remarks>
+    private List<(LayerBase<T> Layer, Vector<T> Before, double Factor)>? CaptureLearningRateGroups(TapeStepContext<T> context)
+    {
+        if (Model is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network) return null;
+
+        double baseRate = GetCurrentLearningRate();
+        List<(LayerBase<T>, Vector<T>, double)>? groups = null;
+        // Each entry carries the factor already applied by its nearest declaring ancestor, so a nested
+        // declaration is applied relative to it and the nearest declaration wins.
+        var pending = new Stack<(ILayer<T> Layer, double Inherited)>();
+        for (int i = network.Layers.Count - 1; i >= 0; i--) pending.Push((network.Layers[i], 1.0));
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        while (pending.Count > 0)
+        {
+            var (layer, inherited) = pending.Pop();
+            if (!seen.Add(layer) || layer is not LayerBase<T> owner) continue;
+
+            double effective = inherited;
+            if (owner.LearningRateScale != 1.0 || owner.MaxLearningRate.HasValue)
+            {
+                effective = owner.LearningRateScale;
+                if (owner.MaxLearningRate is { } cap && baseRate > 0)
+                    effective = Math.Min(effective, cap / baseRate);
+                double relative = effective / inherited;
+                if (relative != 1.0 && owner.ParameterCount > 0)
+                {
+                    // Through the layer's own parameter surface rather than tensor identity: the trainer may
+                    // hand the optimizer views over a flat parameter buffer, which are different objects from
+                    // the layer's tensors but the same storage. GetParameters/SetParameters read and write
+                    // that live storage whichever way it is represented.
+                    groups ??= new List<(LayerBase<T>, Vector<T>, double)>();
+                    groups.Add((owner, owner.GetParameters(), relative));
+                }
+            }
+
+            var subLayers = owner.GetSubLayers();
+            if (subLayers is not null)
+                for (int i = subLayers.Count - 1; i >= 0; i--) pending.Push((subLayers[i], effective));
+        }
+
+        return groups;
+    }
+
+    /// <summary>Rescales each group's change from the base-rate step to its own rate, outermost first.</summary>
+    private void ApplyLearningRateGroups(List<(LayerBase<T> Layer, Vector<T> Before, double Factor)>? groups)
+    {
+        if (groups is null) return;
+        foreach (var (layer, before, factor) in groups)
+        {
+            var after = layer.GetParameters();
+            var scale = NumOps.FromDouble(factor);
+            var rescaled = new Vector<T>(after.Length);
+            for (int i = 0; i < after.Length; i++)
+                rescaled[i] = NumOps.Add(before[i], NumOps.Multiply(scale, NumOps.Subtract(after[i], before[i])));
+            layer.SetParameters(rescaled);
+        }
+    }
     /// <summary>The no-grad scope of the step in progress; released while the step re-evaluates.</summary>
     private NoGradScope<T>? _stepNoGrad;
 

@@ -12472,6 +12472,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return acc;
     }
 
+    /// <summary>Whether any layer, at any depth, declares its own learning rate.</summary>
+    private bool HasLayerLearningRatePolicy()
+    {
+        var pending = new Stack<ILayer<T>>(Layers);
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        while (pending.Count > 0)
+        {
+            var layer = pending.Pop();
+            if (!seen.Add(layer) || layer is not LayerBase<T> owner) continue;
+            if (owner.LearningRateScale != 1.0 || owner.MaxLearningRate.HasValue) return true;
+            var subLayers = owner.GetSubLayers();
+            if (subLayers is not null)
+                foreach (var child in subLayers) pending.Push(child);
+        }
+
+        return false;
+    }
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
@@ -12498,6 +12515,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // until the compiler exposes a native multi-input persistence/cache-key contract.
         if (AuxiliaryInput is not null)
             return EmitFusedMissAndFallback("auxiliary-input training requires the eager tape");
+        // A fused kernel updates every parameter at one rate, so a layer that declares its own learning rate
+        // (LayerBase.LearningRateScale / MaxLearningRate - PyTorch's param_groups) must take the eager step,
+        // where GradientBasedOptimizerBase.Step applies each group's rate.
+        if (HasLayerLearningRatePolicy())
+            return EmitFusedMissAndFallback("a layer declares its own learning rate");
         // PR #319 fused-optimizer double-kernel support — paired with the
         // matching gate drop in CompiledTapeTrainingStep.TryStepWithFusedOptimizer
         // (line 232 in that file). Both float and double models can now hit

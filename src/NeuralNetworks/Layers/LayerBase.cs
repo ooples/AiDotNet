@@ -8660,6 +8660,45 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
     /// <summary>
+    /// Multiplies the optimizer's learning rate for this layer's own trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// The per-parameter-group learning rate of PyTorch's <c>param_groups</c>. Papers routinely train
+    /// some parameters at a different rate from the rest - S4 caps its HiPPO state-space parameters
+    /// (Gu et al. 2022, Sec. 4) - and one optimizer over the whole model cannot express that otherwise.
+    /// Applies to this layer's parameters and its sublayers', unless a sublayer declares its own. Default 1.
+    /// </remarks>
+    public double LearningRateScale
+    {
+        get => _learningRateScale;
+        set
+        {
+            if (!(value > 0) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(nameof(value), "A learning rate scale must be positive and finite.");
+            _learningRateScale = value;
+        }
+    }
+
+    private double _learningRateScale = 1.0;
+
+    /// <summary>
+    /// The largest learning rate the optimizer may apply to this layer's own trainable parameters, or null for none.
+    /// </summary>
+    /// <remarks>Combined with <see cref="LearningRateScale"/>: the effective rate is the smaller of the two.</remarks>
+    public double? MaxLearningRate
+    {
+        get => _maxLearningRate;
+        set
+        {
+            if (value is { } cap && (!(cap > 0) || double.IsInfinity(cap)))
+                throw new ArgumentOutOfRangeException(nameof(value), "A maximum learning rate must be positive and finite.");
+            _maxLearningRate = value;
+        }
+    }
+
+    private double? _maxLearningRate;
+
+    /// <summary>
     /// Gets the number of tensors held by this layer's base registration list.
     /// </summary>
     /// <remarks>
