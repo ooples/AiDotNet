@@ -17,7 +17,17 @@ on:
     branches:
       - master
       - main
-
+  # Recovery path: build and publish an EXISTING release whose own run never published (v0.232.0's
+  # "Restore and Build" hit the old 25-minute limit, so Pack and Publish never ran). Re-running that
+  # cancelled run replays its original commit and old workflow, and a fresh push does not pass the
+  # release_created gate for a release that already exists. This input runs the same build-release
+  # and publish jobs, with this workflow, against the named tag. The push path is unchanged.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and publish, e.g. v0.232.0"
+        required: true
+        type: string
 permissions:
   contents: read
 
@@ -30,6 +40,7 @@ concurrency:
 jobs:
   release-please:
     name: Maintain Release PR / cut release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # Scope issues:write (label mutations) to this job only, following least-privilege —
     # a job-level permissions block OVERRIDES the workflow default, so contents/pull-requests
@@ -54,13 +65,49 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  release-target:
+    name: Resolve the release to build
+    needs: release-please
+    # Runs after release-please on a push, and on its own when dispatched (release-please is skipped).
+    if: always() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to confirm the dispatched tag is an existing release.
+    outputs:
+      publish: ${{ steps.target.outputs.publish }}
+      tag_name: ${{ steps.target.outputs.tag_name }}
+      version: ${{ steps.target.outputs.version }}
+    steps:
+      - name: Resolve tag and version
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          CREATED: ${{ needs.release-please.outputs.release_created }}
+          PUSH_TAG: ${{ needs.release-please.outputs.tag_name }}
+          PUSH_VERSION: ${{ needs.release-please.outputs.version }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Only a published semver release may be rebuilt: a typo or an arbitrary ref must not ship.
+            [[ "$DISPATCH_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$DISPATCH_TAG' is not a vX.Y.Z tag."; exit 1; }
+            gh release view "$DISPATCH_TAG" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null \
+              || { echo "::error::No GitHub release exists for $DISPATCH_TAG."; exit 1; }
+            { echo "publish=true"; echo "tag_name=$DISPATCH_TAG"; echo "version=${DISPATCH_TAG#v}"; } >> "$GITHUB_OUTPUT"
+          elif [ "$CREATED" = "true" ]; then
+            { echo "publish=true"; echo "tag_name=$PUSH_TAG"; echo "version=$PUSH_VERSION"; } >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-release:
     name: Build and verify release packages
     permissions:
       contents: read # Required to check out the release tag.
     runs-on: ubuntu-latest
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: release-target
+    if: needs.release-target.outputs.publish == 'true'
     # Sized from measurement, not guessed. The same packed core, built alone for the same frameworks in
     # "Build (compat frameworks + pack)", took 11-18 min (job 15-21 min) across five master runs on
     # 2026-09-24; this job also builds and packs seven metapackages and runs the generator consumer check.
@@ -99,7 +146,7 @@ jobs:
       - name: Checkout the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release-target.outputs.tag_name }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -164,7 +211,7 @@ jobs:
       - name: Pack NuGet
         run: |
           set -e
-          version=${{ needs.release-please.outputs.version }}
+          version=${{ needs.release-target.outputs.version }}
           for proj in $PACKED_PROJECTS; do
             echo "Packing $proj"
             dotnet pack "$proj" -c Release -o out --no-build /p:PackageVersion=$version
@@ -180,7 +227,7 @@ jobs:
         run: |
           set -e
           shopt -s nullglob
-          version=${{ needs.release-please.outputs.version }}
+          version=${{ needs.release-target.outputs.version }}
           main="out/AiDotNet.${version}.nupkg"
           [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
 
@@ -208,13 +255,13 @@ jobs:
 
       - name: Verify PackageReference consumer gets generated factories automatically
         shell: pwsh
-        run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
+        run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-target.outputs.version }}.nupkg"
 
       - name: Upload verified release packages
         id: upload-packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-packages-${{ needs.release-please.outputs.tag_name }}
+          name: release-packages-${{ needs.release-target.outputs.tag_name }}
           path: out/*.nupkg
           if-no-files-found: error
           retention-days: 30
@@ -226,8 +273,8 @@ jobs:
       contents: write # Required for gh release upload.
       id-token: write # Required for NuGet trusted publishing.
     runs-on: ubuntu-latest
-    needs: [release-please, build-release]
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: [release-target, build-release]
+    if: needs.release-target.outputs.publish == 'true'
     timeout-minutes: 10
     steps:
       - name: Setup .NET
@@ -271,4 +318,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ needs.release-please.outputs.tag_name }}" out/*.nupkg --clobber
+          gh release upload "${{ needs.release-target.outputs.tag_name }}" out/*.nupkg --clobber
