@@ -15166,7 +15166,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // so a decrease assertion cannot hold there however the threshold is set. Give
                     // it the same 15-step budget so the probe clears the hump and sees the genuine
                     // net decrease; 15 float steps stay well under the 180 s timeout.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge"
+                    // CosyVoice2 at its declared learning rate (1e-4, now wired) descends 1.49 -> 1.19 -> 1.15 ->
+                    // 0.47 over 20 memorization steps; its 2-step probe landed on a first-step uptick (1.81 -> 1.92).
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");

@@ -112,7 +112,10 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         _options = options ?? new CosyVoice2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // CosyVoice2Options.LearningRate was declared and never read: the optimizer was built on AdamW's
+        // library default (1e-3), ten times the option's 1e-4, and the first steps overshot (loss 1.49 -> 4.21).
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
