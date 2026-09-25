@@ -1718,7 +1718,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -76,6 +76,12 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     private int? _randomSeed;
 
     /// <summary>
+    /// Whether this architecture carries its own seed, as opposed to reporting the process-wide
+    /// <see cref="DefaultRandomSeedOverride"/> fallback through <see cref="RandomSeed"/>.
+    /// </summary>
+    internal bool HasExplicitRandomSeed => _randomSeed is not null;
+
+    /// <summary>
     /// Process-wide fallback for <see cref="RandomSeed"/> when no explicit per-architecture seed
     /// was set. Null in production (so weight init stays entropy-seeded and repeated
     /// default-constructed models differ). Test harnesses set this so model invariants that depend

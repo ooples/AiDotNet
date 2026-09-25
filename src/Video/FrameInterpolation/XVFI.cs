@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -46,6 +47,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create an XVFI model for extreme 4K/8K frame interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new XVFIOptions();
 /// var xvfi = new XVFI&lt;double&gt;(architecture, options);
@@ -64,6 +66,13 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2103.16206",
     Year = 2021,
     Authors = "Hyeonjun Sim, Jihyong Oh, Munchurl Kim")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 16,
+                DecayRate = 0.25, Milestones = [100, 150, 180],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Sim et al. 2021, Sec. 4: the Adam optimizer with an initial learning rate of "
+                        + "1e-4, reduced by a factor of 4 at epochs 100, 150 and 180, at a batch size of "
+                        + "16.")]
 public partial class XVFI<T> : FrameInterpolationBase<T>
 {
     private readonly XVFIOptions _options;
@@ -109,11 +118,12 @@ public partial class XVFI<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new XVFIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
@@ -196,7 +206,7 @@ public partial class XVFI<T> : FrameInterpolationBase<T>
                 { "UseComplementaryFlow", _options.UseComplementaryFlow },
                 { "Complexity", _options.NumPyramidLevels * _options.NumResBlocks }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

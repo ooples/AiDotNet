@@ -219,6 +219,10 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    // An accessor over the Backbone field, not separate storage. Without the alias the generator
+    // registered BOTH, so these weights were counted twice in the flat parameter vector, and for a
+    // detector without a neck (DETR) reading parameters threw from the accessor's null check.
+    [AiDotNet.Attributes.ParameterAlias(nameof(Backbone))]
     protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
@@ -229,8 +233,16 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     public abstract string Name { get; }
 
     /// <summary>
-    /// Creates a new text detector.
+    /// Gets the maximum number of text regions kept for a single image.
     /// </summary>
+    public int MaxDetections => Options.MaxDetections;
+
+    /// <summary>
+    /// Gets the default minimum confidence a text region needs to be reported.
+    /// </summary>
+    public double ConfidenceThreshold => NumOps.ToDouble(Options.ConfidenceThreshold);
+
+    /// <summary>Creates a new text detector.</summary>
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
         Options = options;
@@ -253,57 +265,44 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// </summary>
     protected virtual Tensor<T> Preprocess(Tensor<T> image)
     {
-        // Standard preprocessing: resize to input size, normalize
-        int targetH = Options.InputSize[0];
-        int targetW = Options.InputSize[1];
+        var prepared = PreprocessCore(image);
+        NoteResolvedInput(prepared);
+        return prepared;
+    }
 
-        int batch = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
+    private Tensor<T> PreprocessCore(Tensor<T> image)
+    {
+        var (height, width) = GetValidatedInputSize();
+        // Keep the original asymmetric pixel mapping, but execute through the selected engine so
+        // prediction/training share inference's pixel domain without forcing GPU data onto the CPU
+        // or cutting the gradient path to an upstream image-producing model.
+        var resized = CvTensorOps<T>.ResizeBilinearAsymmetric(
+            image, height, width);
+        return Engine.TensorMultiplyScalar(resized, NumOps.FromDouble(1.0 / 255.0));
+    }
 
-        // Create resized output
-        var output = new Tensor<T>(new[] { batch, channels, targetH, targetW });
-
-        // Bilinear interpolation resize
-        for (int b = 0; b < batch; b++)
+    private (int Height, int Width) GetValidatedInputSize()
+    {
+        // InputSize is publicly mutable: validate at each consuming boundary and return the
+        // validated values rather than reading the caller-owned array again after validation.
+        var inputSize = Options.InputSize;
+        if (inputSize is null || inputSize.Length != 2)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcY = (double)h / targetH * height;
-                        double srcX = (double)w / targetW * width;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, height - 1);
-                        int x1 = Math.Min(x0 + 1, width - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = NumOps.ToDouble(image[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(image[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(image[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(image[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-
-                        // Normalize to [0, 1]
-                        val /= 255.0;
-
-                        output[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
         }
 
-        return output;
+        int height = inputSize[0];
+        int width = inputSize[1];
+        if (height <= 0 || width <= 0)
+        {
+            throw new ArgumentException(
+                "InputSize must contain exactly two positive dimensions [height, width].",
+                nameof(Options.InputSize));
+        }
+
+        return (height, width);
     }
 
     /// <summary>
@@ -428,12 +427,64 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     #region ModelBase Overrides
 
     /// <summary>
-    /// Predicts by returning the preprocessed input (text detection is done via Detect method).
+    /// Predicts by running the forward pass and returning the primary output map.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input) => Preprocess(input);
+    /// <remarks>
+    /// This used to return <c>Preprocess(input)</c> -- the resized, normalised INPUT IMAGE -- so
+    /// the model reported its own input back as a prediction. Nothing downstream could tell,
+    /// because the returned tensor has a plausible shape. It now runs the network, matching
+    /// <c>ObjectDetectorBase.Predict</c>: every output map is flattened per image and concatenated,
+    /// so a model with a probability map and a threshold map (DBNet) or a score and a geometry map
+    /// (EAST) exposes both, and training against the prediction reaches both heads.
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        return CvTensorOps<T>.ConcatenateOutputs(Forward(Preprocess(input)));
+    }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Gets the step size used by <see cref="Train"/>.
+    /// </summary>
+    /// <remarks>
+    /// Detection losses are large early in training, so this is deliberately conservative.
+    /// Override it to match a paper recipe.
+    /// </remarks>
+    protected virtual double TrainingLearningRate => 0.001;
+
+    /// <summary>
+    /// Runs one training step against the model's public prediction.
+    /// </summary>
+    /// <param name="input">The training image.</param>
+    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
+    /// <remarks>
+    /// Previously an empty method, so text detectors ignored training entirely. See
+    /// <c>ObjectDetectorBase.Train</c> for the mechanism and its limits.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
@@ -447,8 +498,125 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (TextDetectorBase<T>)MemberwiseClone();
+    // See the note on ObjectDetectorBase: MemberwiseClone gave a shallow copy that shared
+    // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
+
+    /// <summary>
+    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
+    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
+    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _resolvedInputShape;
+
+    /// <summary>Records the input shape on the first forward pass.</summary>
+    private void NoteResolvedInput(Tensor<T> input)
+    {
+        if (_resolvedInputShape is not null || input is null)
+        {
+            return;
+        }
+
+        var shape = new int[input.Shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            shape[i] = input.Shape[i];
+        }
+
+        _resolvedInputShape = shape;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs the copy once on a zero input of the shape this model has already processed, so its
+    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
+    /// size their weights exactly as this model's did before its state is loaded into them.
+    /// </remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (_resolvedInputShape is not null && copy is TextDetectorBase<T> rebuilt)
+        {
+            var shape = (int[])_resolvedInputShape.Clone();
+            shape[0] = 1;
+            rebuilt.Predict(new Tensor<T>(shape));
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of channels in the images this model reads.
+    /// </summary>
+    /// <remarks>RGB unless a model overrides it; every backbone here is built for three channels.</remarks>
+    protected virtual int InputChannels => 3;
+
+    /// <summary>
+    /// Gives a model that has never run a concrete parameter topology, so its state can be captured.
+    /// </summary>
+    /// <remarks>
+    /// Several layers size their weights on their first forward pass. Until then the model reports
+    /// its parameters as shape-deferred, which is correct for a parameter query but made
+    /// <see cref="Serialize"/> - and therefore <c>Clone</c> - throw on a freshly constructed model.
+    /// Running the network once on a zero image of the configured input size resolves exactly the
+    /// shapes the first real image would, because every image is resized to that size first.
+    /// </remarks>
+    private void ResolveDeferredParameters()
+    {
+        if (_resolvedInputShape is not null)
+        {
+            return;
+        }
+
+        var (height, width) = GetValidatedInputSize();
+        Predict(new Tensor<T>(new[] { 1, InputChannels, height, width }));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Resolves shape-deferred layers first; see <see cref="ResolveDeferredParameters"/>.</remarks>
+    public override byte[] Serialize()
+    {
+        ResolveDeferredParameters();
+        return base.Serialize();
+    }
+
+    /// <summary>
+    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
+    /// its update (zero before the first call).
+    /// </summary>
+    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
+    /// has one.</returns>
+    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
+    public T GetLastLoss() => _lastTrainingLoss;
+
+    /// <summary>Records the loss a training step reported.</summary>
+    /// <param name="loss">The step's loss.</param>
+    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
+
+    /// <summary>
+    /// Whether the model is in training mode.
+    /// </summary>
+    protected bool IsTrainingMode;
+
+    /// <summary>
+    /// Sets the model to training or inference mode.
+    /// </summary>
+    /// <param name="training">True for training mode, false for inference.</param>
+    /// <remarks>
+    /// Batch normalisation depends on it: batch statistics (and running-statistic updates) while
+    /// training, running statistics at inference. The text detectors had no such switch, so their
+    /// backbone's batch-norm layers never left inference mode, even inside <see cref="Train"/> -
+    /// unlike the object detectors, which have always switched theirs. Override to forward the mode to
+    /// head modules that depend on it, calling the base.
+    /// </remarks>
+    public virtual void SetTrainingMode(bool training)
+    {
+        IsTrainingMode = training;
+        Backbone?.SetTrainingMode(training);
+    }
 }

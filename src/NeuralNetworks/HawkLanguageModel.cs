@@ -39,9 +39,13 @@ namespace AiDotNet.NeuralNetworks;
 ///     taskType: NeuralNetworkTaskType.TextGeneration,
 ///     inputSize: 2048,
 ///     outputSize: 256000);
-/// var model = new HawkLanguageModel&lt;float&gt;(architecture);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new HawkLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -81,12 +85,8 @@ public partial class HawkLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public HawkLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 256000,
-        int modelDimension = 2048,
-        int numLayers = 24,
-        int maxSeqLength = 2048,
-        ILossFunction<T>? lossFunction = null,
         HawkOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // Hawk trains on next-token logits. Keep softmax fused with cross-entropy so
@@ -95,12 +95,13 @@ public partial class HawkLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new HawkOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
         _recurrenceDimension = _options.RecurrenceDimension;
-        _numLayers = numLayers;
-        _maxSeqLength = maxSeqLength;
+        _numLayers = _options.NumLayers;
+        _maxSeqLength = _options.MaxSequenceLength;
         if (_recurrenceDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "RecurrenceDimension must be positive.");
         _optimizer = optimizer ?? CreateDefaultOptimizer();
@@ -184,7 +185,7 @@ public partial class HawkLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

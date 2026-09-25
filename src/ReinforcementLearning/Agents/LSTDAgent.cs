@@ -26,7 +26,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// <example>
 /// <code>
 /// // Create an LSTD agent that solves value function weights directly
-/// var options = new LSTDOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var options = new LSTDOptions&lt;double&gt; { FeatureSize = 4, ActionSize = 2 };
 /// var agent = new LSTDAgent&lt;double&gt;(options);
 ///
 /// // Select an action using the computed value function

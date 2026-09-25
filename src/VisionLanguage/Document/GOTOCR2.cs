@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -34,7 +36,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// // handling text, tables, charts, equations, and music scores
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -57,6 +59,13 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Wei et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 128,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Wei et al. 2024, Sec. 3.3: the AdamW optimizer with a cosine annealing "
+                        + "scheduler and a start learning rate of 1e-4, at a global batch size of 128 "
+                        + "over 3 epochs of pre-training.")]
 public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly GOTOCR2Options _options;
@@ -100,7 +109,9 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
     {
         _options = options ?? new GOTOCR2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

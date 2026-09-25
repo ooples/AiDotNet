@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -36,10 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HyperbolicNeuralNetworkOptions { InputSize = 64, HiddenSize = 128, Curvature = 1.0 };
-/// var model = new HyperbolicNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new HyperbolicNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]
@@ -50,6 +55,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hyperbolic Neural Networks", "https://arxiv.org/abs/1805.09112", Year = 2018, Authors = "Octavian-Eugen Ganea, Gary Becigneul, Thomas Hofmann")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+                Source = "Ganea et al. 2018, Sec. 5: the Euclidean parameters are optimized with Adam "
+                        + "at a learning rate of 0.001. The hyperbolic parameters use Riemannian "
+                        + "optimization, which this single optimizer does not express.")]
 public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HyperbolicNeuralNetworkOptions _options;
@@ -121,7 +130,9 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
         // "200-iter loss > 50-iter loss" divergence the MoreData_ShouldNotDegrade
         // invariant catches. SGD+momentum has a single global lr so geometry-induced
         // gradient blowup is contained by maxGradNorm=1 alone.
-        _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -260,7 +271,7 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

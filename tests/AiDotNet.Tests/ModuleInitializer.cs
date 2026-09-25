@@ -35,6 +35,10 @@ internal static class TestModuleInitializer
     private static void InitializeCpuMode()
     {
         if (_initialized) return;
+#if AIDOTNET_TEST_ATTRIBUTION
+        // Bind the inputs before CPU/license setup replaces their values.
+        AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuStartup();
+#endif
         _initialized = true;
 
         // Pin BLAS backends to a single thread per xUnit worker. Without this,
@@ -98,7 +102,22 @@ internal static class TestModuleInitializer
         // This prevents GPU/OpenCL errors on systems without proper GPU support
         try
         {
+#if AIDOTNET_TEST_ATTRIBUTION
+            // Observe the reset inputs at the original reset site, after the
+            // environment/parallelism setup. A CPU result alone cannot tell us
+            // whether reset disposed a previous GPU engine or invoked logging.
+            var resetEngine = AiDotNetEngine.Current;
+            AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuResetInput(new(
+                resetEngine is null ? AiDotNet.TestImpact.RuntimeCpuEntryMode.Missing :
+                resetEngine.GetType() == typeof(CpuEngine) ? AiDotNet.TestImpact.RuntimeCpuEntryMode.PlainCpu :
+                resetEngine is CpuEngine ? AiDotNet.TestImpact.RuntimeCpuEntryMode.DerivedCpu : AiDotNet.TestImpact.RuntimeCpuEntryMode.Other,
+                !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("AIDOTNET_QUIET"))
+                    ? AiDotNet.TestImpact.RuntimeCpuLogging.Suppressed : AiDotNet.TestImpact.RuntimeCpuLogging.MayInvokeCallbacks));
+#endif
             AiDotNetEngine.ResetToCpu();
+#if AIDOTNET_TEST_ATTRIBUTION
+            AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuResetCompletion();
+#endif
         }
         catch
         {
@@ -159,5 +178,11 @@ internal static class TestModuleInitializer
             System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY",
                 Helpers.LicenseTestSupport.SignedKey("testdefault1"));
         }
+#if AIDOTNET_TEST_ATTRIBUTION
+        // DirectGpuTensorEngine also derives from CpuEngine. Only the exact CPU
+        // implementation satisfies this opt-in runtime observation.
+        AiDotNet.TestImpact.Xunit.RuntimeContractInitialization.RecordCpuCompletion(
+            AiDotNetEngine.Current?.GetType() == typeof(CpuEngine), AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
+#endif
     }
 }

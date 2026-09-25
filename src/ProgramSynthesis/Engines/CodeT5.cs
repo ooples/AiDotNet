@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -57,6 +58,14 @@ namespace AiDotNet.ProgramSynthesis.Engines;
     "https://arxiv.org/abs/2109.00859",
     Year = 2021,
     Authors = "Yue Wang, Weishi Wang, Shafiq Joty, Steven C.H. Hoi")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 2e-4,
+                ReferenceBatchSize = 1024, DecayRate = 1.0,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Wang et al. 2021, Sec. 3: the batch size is 1024 with a peak learning rate of "
+                        + "2e-4 under linear decay, pre-training with the denoising objective for 100 "
+                        + "epochs. The linear decay is declared as a polynomial schedule of power 1, "
+                        + "which is that same shape. The optimizer is left unspecified because the paper "
+                        + "names none -- its one occurrence of Adam is the author Adam Roberts.")]
 public class CodeT5<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

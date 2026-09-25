@@ -45,7 +45,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// // Create a ViT-Adapter model for dense prediction with a plain ViT backbone
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
 /// var model = new ViTAdapter&lt;double&gt;(architecture, numClasses: 150);
 ///
@@ -335,7 +335,7 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
                 { "EmbedDim", _embedDim }, { "DecoderDim", _decoderDim }, { "DropRate", _dropRate },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

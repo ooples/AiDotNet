@@ -148,8 +148,10 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     private sealed class TestableRecurrentGemma : RecurrentGemmaLanguageModel<double>, IFusedTrainingProbe
     {
         internal TestableRecurrentGemma(NeuralNetworkArchitecture<double> architecture)
-            : base(architecture, vocabSize: 128, modelDimension: 32,
-                numLayers: 1, maxSeqLength: 32)
+            : base(architecture, new RecurrentGemmaOptions
+            {
+                VocabSize = 128, ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32,
+            })
         {
         }
 
@@ -159,9 +161,11 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     private sealed class TestableGriffin : GriffinLanguageModel<double>, IFusedTrainingProbe
     {
         internal TestableGriffin(NeuralNetworkArchitecture<double> architecture)
-            : base(architecture, vocabSize: 128, modelDimension: 32,
-                numLayers: 1, maxSeqLength: 32,
-                options: new GriffinOptions { RecurrenceDimension = 40 })
+            : base(architecture, new GriffinOptions
+            {
+                VocabSize = 128, ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32,
+                RecurrenceDimension = 40,
+            })
         {
         }
 
@@ -171,9 +175,11 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     private sealed class TestableHawk : HawkLanguageModel<double>, IFusedTrainingProbe
     {
         internal TestableHawk(NeuralNetworkArchitecture<double> architecture)
-            : base(architecture, vocabSize: 128, modelDimension: 32,
-                numLayers: 1, maxSeqLength: 32,
-                options: new HawkOptions { RecurrenceDimension = 40 })
+            : base(architecture, new HawkOptions
+            {
+                VocabSize = 128, ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32,
+                RecurrenceDimension = 40,
+            })
         {
         }
 

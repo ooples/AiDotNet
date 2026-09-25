@@ -42,7 +42,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 /// <example>
 /// <code>
 /// // Create a MuZero agent that learns its own world model
-/// var options = new MuZeroOptions&lt;double&gt; { StateSize = 64, ActionSize = 4, NumSimulations = 50 };
+/// var options = new MuZeroOptions&lt;double&gt; { LatentStateSize = 64, ActionSize = 4, NumSimulations = 50 };
 /// var agent = new MuZeroAgent&lt;double&gt;(options);
 ///
 /// // Select an action using Monte Carlo Tree Search with learned dynamics

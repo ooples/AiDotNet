@@ -67,9 +67,9 @@ public partial class AffinityPropagation<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The affinity propagation options.</param>
     public AffinityPropagation(AffinityPropagationOptions<T>? options = null)
-        : base(options ?? new AffinityPropagationOptions<T>())
+        : base(options ??= new AffinityPropagationOptions<T>())
     {
-        _options = options ?? new AffinityPropagationOptions<T>();
+        _options = options;
     }
 
     /// <summary>

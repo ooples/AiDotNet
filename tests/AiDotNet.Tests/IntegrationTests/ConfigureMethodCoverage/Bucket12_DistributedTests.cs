@@ -44,55 +44,18 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // unrelated to routing — this PR's review C7G8U).
         var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1, DistributedEnvironmentId);
         OwnCommunicationBackend(backend);
-        AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
-        System.Exception? buildException = null;
-        try
-        {
-            result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-                .ConfigureModel(model)
-                .ConfigureDataLoader(loader)
-                .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
-                .BuildAsync();
-        }
-        catch (System.Exception ex)
-        {
-            buildException = ex;
-        }
-
-        // Whether build succeeded or failed downstream, the wrap-switch
-        // runs synchronously BEFORE the optimizer. The strongest
-        // routing-observable is result.Model being an IShardedModel —
-        // a stored-but-not-consumed regression would leave it as the
-        // raw Transformer. If build failed, fall back to checking the
-        // exception originated FROM the distributed namespace by
-        // walking the stack-trace frames for a known DistributedTraining /
-        // ShardedModelBase frame (this PR's review: substring-match on the
-        // raw ex.ToString() is brittle to message renames and matches
-        // frame text from unrelated places).
-        if (result != null)
-        {
-            Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
-        }
-        else
-        {
-            var failure = buildException ?? throw new InvalidOperationException("Build produced neither a result nor an exception.");
-            // Tightened (this PR's review C7G8U): require BOTH a
-            // distributed-namespace origin AND evidence the backend was
-            // touched during construction. A permanent regression
-            // somewhere in AiDotNet.DistributedTraining unrelated to the
-            // routing wouldn't increment AccessCount; the routing fire
-            // must have read Rank/WorldSize at minimum.
-            Assert.True(
-                IsExceptionFromNamespace(failure, "AiDotNet.DistributedTraining"),
-                $"ConfigureDistributedTraining build failed, but the failure did not originate inside " +
-                $"the AiDotNet.DistributedTraining namespace. Stored-but-not-consumed regression likely. " +
-                $"Original failure: {failure}");
-            Assert.True(
-                backend.AccessCount > 0,
-                $"ConfigureDistributedTraining build failed in the DistributedTraining namespace, but " +
-                $"no rank/world-size reads or collective calls were recorded (AccessCount=0). " +
-                $"Initialization may have failed before those operations. Original failure: {failure}");
-        }
+        // A downstream exception is not a successful configuration. Let it fail this
+        // test with its original stack instead of accepting a distributed frame.
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(loader)
+            .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
+            .BuildAsync();
+        Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
+        Assert.True(backend.AccessCount > 0);
+        using var prediction = result.Predict(features);
+        Assert.NotEmpty(prediction.ToArray());
+        Assert.All(prediction.ToArray(), value => Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
     }
 
     /// <summary>
@@ -106,6 +69,9 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
     {
         private int _accessCount;
         public int AccessCount => System.Threading.Interlocked.CompareExchange(ref _accessCount, 0, 0);
+        // Each independent facade fixture owns a communication group, supplied by the fixture's
+        // DistributedEnvironmentId. Reusing "default" collides with unrelated tests that
+        // initialized their own rank zero.
         public RecordingCommBackend(int rank, int worldSize, string environmentId) : base(rank, worldSize, environmentId) { }
         public override int Rank
         {

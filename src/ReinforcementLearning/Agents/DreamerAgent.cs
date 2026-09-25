@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -45,7 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// <example>
 /// <code>
 /// // Create a Dreamer agent that learns a world model for planning
-/// var options = new DreamerOptions&lt;double&gt; { StateSize = 64, ActionSize = 4, ImagineHorizon = 15 };
+/// var options = new DreamerOptions&lt;double&gt; { LatentSize = 64, ActionSize = 4};
 /// var agent = new DreamerAgent&lt;double&gt;(options);
 ///
 /// // Select an action by imagining future trajectories
@@ -63,6 +64,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
     "https://arxiv.org/abs/1912.01603",
     Year = 2020,
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Hafner et al. 2020, Learning updates: batches of 50 sequences of length 50 "
+                        + "train the world, value and action models using Adam. No single learning rate "
+                        + "is declared because the paper sets 6e-4, 8e-5 and 8e-5 for those three models "
+                        + "respectively, and one optimizer over all of them could not honour any single "
+                        + "value. No reference batch size is declared either, since the batch is given "
+                        + "as sequences rather than examples.")]
 public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
@@ -132,13 +140,14 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // The zero was silent until an optimizer validated its rate at construction, at which point
         // it became "Base learning rate must be positive" and took DreamerAgent's whole suite plus
         // AllDefaultConstructableModels_ShouldConstructWithoutException with it. Silent was worse.
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = NumOps.ToDouble(LearningRate),
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+            {
+                InitialLearningRate = NumOps.ToDouble(LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8
+            }));
         _updateCount = 0;
 
         // Initialize networks directly in constructor
@@ -266,7 +275,23 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         int obsSize = _options.ObservationSize;
         int latentSize = _options.LatentSize;
         int actionDim = _options.ActionSize;
-        T gamma = _options.DiscountFactor is not null ? _options.DiscountFactor : NumOps.FromDouble(0.99);
+        // Use the rate the BASE class already resolved, exactly as this type's constructor does for
+        // LearningRate and for exactly the same reason: `DiscountFactor` is declared `T?`, but for a
+        // value-type T -- float and double, i.e. every real use -- that is NOT Nullable<T>, so an
+        // unconfigured option reads as default(T) == 0 while `is not null` is still TRUE. This line
+        // therefore evaluated to gamma = 0 for every default-constructed DreamerAgent, and the 0.99
+        // fallback never ran.
+        //
+        // Zero gamma made the entire behaviour-learning objective identically zero: the actor loss is
+        // gamma * V(dynamics(z,a)), so its gradient was exactly zero for the actor, the dynamics head
+        // and the value head alike -- measured as 0 of 12 reachable tensors in each, and 203408
+        // published gradients with max |g| = 0. The previous finite-difference formulation was dead
+        // for the same reason (grad = gamma * (vPlus - vMinus) / 2eps), which is why replacing it with
+        // a taped gradient changed nothing until this line was fixed.
+        //
+        // The base resolves this properly, treating default(T) as "not configured": see
+        // ReinforcementLearningAgentBase, which checks `is null || == zero` before falling back.
+        T gamma = DiscountFactor;
 
         // ===== World-model learning (Hafner et al. 2020) =====
         // Encode each observation to a latent, and train the predictive heads:
@@ -309,51 +334,58 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             NumOps.Add(_rewardNetwork.GetLastLoss(), _continueNetwork.GetLastLoss()));
 
         // ===== Behaviour learning in imagination =====
-        // Value regresses toward the imagined discounted return; the actor is improved toward the
-        // action that increases the one-step imagined value q(z,a) = gamma * V(dynamics(z,a)) via the
-        // deterministic policy gradient (finite-difference ∇a q).
+        // Value regresses toward the imagined discounted return; the actor ascends the imagined value
+        // q(z,a) = gamma * V(dynamics(z,a)) by the deterministic policy gradient, taken ON THE TAPE.
+        //
+        // This previously estimated dq/da by CENTRAL FINITE DIFFERENCES and then fitted the actor to a
+        // nudged copy of its own output. That degenerates silently: when the value head is locally flat
+        // -- which it is through most of early training, and effectively always on a short run -- vPlus
+        // and vMinus are equal, the estimated gradient is exactly zero, the regression target equals the
+        // actor's current output, and the supervised step applies NO update whatsoever. The actor's
+        // weight-bearing layers then receive nothing while normalization statistics keep moving, so the
+        // agent still looks alive to any parameter-movement check while its policy never improves at
+        // all. A per-component reachability check is what surfaced it: 6 of 36 components, every one of
+        // them in _actorNetwork, received no update across 800 steps.
+        //
+        // Differentiating through the dynamics and value heads instead yields the exact gradient in a
+        // single backward pass, with no epsilon to tune and no dependence on the value surface being
+        // locally non-flat. Both heads are forwarded with ForwardForTraining rather than Predict:
+        // Predict runs inside a NoGradScope and would hand back a detached constant, reintroducing the
+        // very failure this replaces. TrainWithCustomLoss collects only the actor's tensors, so the
+        // world model supplies dq/da here without being updated by the actor's step.
         var valIn = new Tensor<T>([n, latentSize]);
         var valTgt = new Tensor<T>([n, 1]);
         var actIn = new Tensor<T>([n, latentSize]);
-        var actTgt = new Tensor<T>([n, actionDim]);
-        // Named constants for the behaviour-learning hyperparameters (no magic literals). `step` is
-        // the deterministic-policy-gradient ascent step on the imagined value; `eps`/`twoEps` are the
-        // central finite-difference interval used to estimate ∇a q(z,a).
-        const double behaviorUpdateStep = 0.05;
-        const double finiteDifferenceEpsilon = 1e-3;
-        T step = NumOps.FromDouble(behaviorUpdateStep);
-        T eps = NumOps.FromDouble(finiteDifferenceEpsilon);
-        T twoEps = NumOps.FromDouble(2 * finiteDifferenceEpsilon);
         for (int i = 0; i < n; i++)
         {
             var z = latents[i];
             T imaginedReturn = ImagineTrajectory(z);
-            for (int j = 0; j < latentSize; j++) valIn[i, j] = z[j];
-            valTgt[i, 0] = imaginedReturn;
-
-            var a = _actorNetwork.Predict(Tensor<T>.FromVector(z)).ToVector();
-            var grad = new Vector<T>(actionDim);
-            for (int k = 0; k < actionDim; k++)
+            for (int j = 0; j < latentSize; j++)
             {
-                var aPlus = a.Clone();
-                var aMinus = a.Clone();
-                aPlus[k] = NumOps.Add(a[k], eps);
-                aMinus[k] = NumOps.Subtract(a[k], eps);
-                var zPlus = _dynamicsNetwork.Predict(Tensor<T>.FromVector(ConcatenateVectors(z, aPlus))).ToVector();
-                var zMinus = _dynamicsNetwork.Predict(Tensor<T>.FromVector(ConcatenateVectors(z, aMinus))).ToVector();
-                T vPlus = _valueNetwork.Predict(Tensor<T>.FromVector(zPlus)).ToVector()[0];
-                T vMinus = _valueNetwork.Predict(Tensor<T>.FromVector(zMinus)).ToVector()[0];
-                grad[k] = NumOps.Divide(NumOps.Multiply(gamma, NumOps.Subtract(vPlus, vMinus)), twoEps);
+                valIn[i, j] = z[j];
+                actIn[i, j] = z[j];
             }
-            for (int j = 0; j < latentSize; j++) actIn[i, j] = z[j];
-            for (int k = 0; k < actionDim; k++)
-                actTgt[i, k] = MathHelper.Clamp<T>(
-                    NumOps.Add(a[k], NumOps.Multiply(step, grad[k])),
-                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            valTgt[i, 0] = imaginedReturn;
         }
         _valueNetwork.Train(valIn, valTgt);
-        _actorNetwork.Train(actIn, actTgt);
-        T policyLoss = NumOps.Add(_valueNetwork.GetLastLoss(), _actorNetwork.GetLastLoss());
+
+        var tapedActor = (NeuralNetworkBase<T>)_actorNetwork;
+        var tapedDynamics = (NeuralNetworkBase<T>)_dynamicsNetwork;
+        var tapedValue = (NeuralNetworkBase<T>)_valueNetwork;
+        // Ascending gamma * V means minimising its negation; fold the sign into the scalar.
+        T negatedGamma = NumOps.Multiply(gamma, NumOps.FromDouble(-1.0));
+        T actorLoss = tapedActor.TrainWithCustomLoss(actIn, actorOutput =>
+        {
+            // [z | a] for the dynamics head, built with an engine op. Filling a fresh tensor element by
+            // element would detach the action and strand the actor with no gradient path once more.
+            var latentAction = Engine.TensorConcatenate([actIn, actorOutput], axis: 1);
+            var imaginedNext = tapedDynamics.ForwardForTraining(latentAction);
+            var imaginedValue = tapedValue.ForwardForTraining(imaginedNext);
+            var flatValue = Engine.ReduceSum(imaginedValue, new[] { 1 }, keepDims: false);
+            var objective = Engine.TensorMultiplyScalar(flatValue, negatedGamma);
+            return Engine.ReduceMean(objective, new[] { 0 }, keepDims: false);
+        });
+        T policyLoss = NumOps.Add(_valueNetwork.GetLastLoss(), actorLoss);
 
         _updateCount++;
 
@@ -375,7 +407,10 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var reward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
 
             // FIX ISSUE 5: Add discount factor (gamma) to imagination rollout
-            var gamma = _options.DiscountFactor is not null ? NumOps.ToDouble(_options.DiscountFactor) : 0.99;
+            // Base-resolved, not re-derived from the raw option: `is not null` is always true for a
+            // value-type T, so this read zero and every imagined return collapsed to reward * 0^step
+            // -- degenerate for every step past the first, which corrupted the value targets too.
+            var gamma = NumOps.ToDouble(DiscountFactor);
             var discountedReward = NumOps.Multiply(reward, NumOps.FromDouble(Math.Pow(gamma, step)));
             imaginedReturn = NumOps.Add(imaginedReturn, discountedReward);
 

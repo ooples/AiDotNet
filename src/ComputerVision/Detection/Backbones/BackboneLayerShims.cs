@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -15,7 +16,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// written against the pre-lazy parallel-Conv2D contract. Post-#1209 it is a 30-line
 /// adapter, not a parallel implementation.
 /// </summary>
-internal class Conv2D<T>
+internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly ConvolutionalLayer<T> _layer;
     private readonly int _inChannels;
@@ -79,6 +80,55 @@ internal class Conv2D<T>
 
     public long GetParameterCount() => _layer.ParameterCount;
 
+    /// <inheritdoc />
+    /// <remarks>Describes the same underlying state as the live chunks without initializing lazy weights.</remarks>
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
+
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+    }
+
+
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
 
@@ -118,7 +168,7 @@ internal class Conv2D<T>
 }
 
 /// <summary>Thin adapter around <see cref="DenseLayer{T}"/> for legacy detection-head call sites.</summary>
-internal class Dense<T>
+internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly DenseLayer<T> _layer;
     private readonly int _inDim;
@@ -135,6 +185,38 @@ internal class Dense<T>
         _inDim = inDim;
         _outDim = outDim;
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Applies this linear layer independently to every position of a sequence: input
+    /// <c>[..., inDim]</c>, output <c>[..., outDim]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The detection and OCR blocks used to do this one position at a time - copy a row into a fresh
+    /// <c>[1, inDim]</c> tensor, run Forward, copy the result back - which is both slow and invisible to
+    /// the autodiff tape. Folding the leading axes into one batch dimension gives the same per-row result
+    /// (a linear map treats rows independently) through engine reshapes the tape records.
+    /// </remarks>
+    public Tensor<T> ForwardTokens(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank <= 2)
+        {
+            return Forward(input);
+        }
+
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int rows = 1;
+        var outShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+        {
+            rows *= input.Shape[d];
+            outShape[d] = input.Shape[d];
+        }
+
+        outShape[rank - 1] = _outDim;
+        var flat = engine.Reshape(input, new[] { rows, input.Shape[rank - 1] });
+        return engine.Reshape(Forward(flat), outShape);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -162,6 +244,54 @@ internal class Dense<T>
     }
 
     public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
+
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+    }
+
 
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
@@ -206,7 +336,7 @@ internal class Dense<T>
 }
 
 /// <summary>Thin adapter around <see cref="MultiHeadAttentionLayer{T}"/>.</summary>
-internal class MultiHeadSelfAttention<T>
+internal class MultiHeadSelfAttention<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
     private readonly int _dim;
@@ -231,9 +361,217 @@ internal class MultiHeadSelfAttention<T>
 
     public long GetParameterCount() => _layer.ParameterCount;
 
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
+
+    // The shim implements IParameterSource<T> by delegating to the layer it wraps. Without this
+    // the wrapped weights were invisible to ModelBase's parameter registry: a detection or OCR
+    // model built from these shims reported only its backbone and neck from GetParameters(), so
+    // every head weight was missing from the flat parameter vector -- and therefore from
+    // Serialize/Deserialize, and therefore from the rebuild-and-reload DeepCopy, which handed
+    // back a copy whose head had been re-initialised from scratch.
+    //
+    // The wrapped layer is lazy: it resolves its input depth on first Forward(). Before that
+    // resolution it honestly reports zero parameters rather than throwing, so registration at
+    // construction is safe and the count fills in once shapes are known.
+    /// <inheritdoc />
+    public long ParameterCount => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() =>
+        _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Forwards the wrapped layer's own chunks, which are the live tensors its forward pass reads, so
+    /// a trainer handed these chunks updates the real weights. Before the lazy layer has resolved its
+    /// shape it owns nothing yet and yields nothing.
+    /// </remarks>
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        if (!_layer.IsShapeResolved)
+        {
+            return Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+        }
+
+        return ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+    }
+
+
     public void WriteParameters(BinaryWriter writer) =>
         BackboneSerialization.WriteLayerParameters(writer, _layer);
 
     public void ReadParameters(BinaryReader reader) =>
         BackboneSerialization.ReadLayerParameters(reader, _layer);
+}
+
+/// <summary>
+/// Adapter around <see cref="BatchNormalizationLayer{T}"/> for detection heads: 2-D batch
+/// normalisation over the channel axis of an NCHW tensor, with learnable scale and shift and running
+/// statistics for inference.
+/// </summary>
+/// <remarks>
+/// Batch statistics are used while the owning model is in training mode and the running statistics
+/// otherwise, so the owner must forward <see cref="SetTrainingMode"/>. The running statistics are not
+/// trainable, but they are part of the model and are saved and restored with it.
+/// </remarks>
+internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
+{
+    private readonly BatchNormalizationLayer<T> _layer;
+    private readonly int _channels;
+
+    public BatchNorm2D(int channels)
+    {
+        if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
+        _channels = channels;
+        _layer = new BatchNormalizationLayer<T>(channels);
+    }
+
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        if (input.Shape.Length != 4 || input.Shape[1] != _channels)
+        {
+            throw new ArgumentException(
+                $"BatchNorm2D expects NCHW input with {_channels} channels; got [{string.Join(",", input.Shape)}].",
+                nameof(input));
+        }
+
+        return _layer.Forward(input);
+    }
+
+    public void SetTrainingMode(bool training) => _layer.SetTrainingMode(training);
+
+    public long GetParameterCount() => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
+
+    /// <inheritdoc />
+    public long ParameterCount => _layer.ParameterCount;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() => _layer.GetParameters();
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks();
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        BackboneSerialization.WriteLayerParameters(writer, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
+        foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
+        {
+            writer.Write(statistic.Length);
+            for (int i = 0; i < statistic.Length; i++)
+            {
+                writer.Write(ops.ToDouble(statistic[i]));
+            }
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        BackboneSerialization.ReadLayerParameters(reader, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
+        foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
+        {
+            int length = reader.ReadInt32();
+            if (length != statistic.Length)
+            {
+                throw new InvalidDataException(
+                    $"BatchNorm2D running statistic has {length} values on the wire; the layer has {statistic.Length}.");
+            }
+
+            for (int i = 0; i < length; i++)
+            {
+                statistic[i] = ops.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Adapter around <see cref="DeconvolutionalLayer{T}"/> for detection heads: a transposed 2-D
+/// convolution with no activation (the layer's own default is ReLU, so identity is passed explicitly).
+/// </summary>
+internal class ConvTranspose2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
+{
+    private readonly DeconvolutionalLayer<T> _layer;
+    private readonly int _inChannels;
+
+    public ConvTranspose2D(int inChannels, int outChannels, int kernelSize, int stride)
+    {
+        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
+        if (outChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outChannels));
+        _inChannels = inChannels;
+        _layer = new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, padding: 0,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+    }
+
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        if (input.Shape.Length != 4 || input.Shape[1] != _inChannels)
+        {
+            throw new ArgumentException(
+                $"ConvTranspose2D expects NCHW input with {_inChannels} channels; got [{string.Join(",", input.Shape)}].",
+                nameof(input));
+        }
+
+        return _layer.Forward(input);
+    }
+
+    public long GetParameterCount() => _layer.IsShapeResolved ? _layer.ParameterCount : 0L;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _layer.GetParameterLayout();
+
+    /// <inheritdoc />
+    public long ParameterCount => GetParameterCount();
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() => _layer.IsShapeResolved ? _layer.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        _layer.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => _layer.IsShapeResolved
+            ? ((AiDotNet.Models.Parameters.IParameterChunkSource<T>)_layer).GetParameterStateChunks()
+            : Array.Empty<AiDotNet.Models.Parameters.ParameterChunk<T>>();
+
+    public void WriteParameters(BinaryWriter writer) => BackboneSerialization.WriteLayerParameters(writer, _layer);
+
+    public void ReadParameters(BinaryReader reader) => BackboneSerialization.ReadLayerParameters(reader, _layer);
 }

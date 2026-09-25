@@ -307,12 +307,37 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             Deserialize(data);
         }
     }
+
+    /// <summary>
+    /// Disposes the agent and both dueling networks it owns.
+    /// </summary>
+    /// <remarks>
+    /// The online and target networks are <see cref="DuelingNetwork{T}"/> instances rather than
+    /// <see cref="INeuralNetwork{T}"/>, so they cannot be registered in <c>Networks</c> and the base class
+    /// never saw them: disposing this agent used to release none of their layers.
+    /// </remarks>
+    /// <exception cref="AggregateException">Both networks threw from <c>Dispose</c>; a single failure is rethrown unchanged.</exception>
+    public override void Dispose()
+    {
+        try
+        {
+            Helpers.DisposeOnceGuard.DisposeAll(new object?[] { _qNetwork, _targetNetwork }, GetType().Name);
+        }
+        finally
+        {
+            base.Dispose();
+        }
+    }
 }
 
 /// <summary>
 /// Custom dueling network architecture that separates value and advantage streams.
 /// </summary>
-internal class DuelingNetwork<T> : IParameterSource<T>
+/// <remarks>
+/// Owns its dense layers directly (it is not a <see cref="NeuralNetworkBase{T}"/>), so disposing it releases
+/// each of them through the same once-only guard a network uses for its layers.
+/// </remarks>
+internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
 {
     private readonly INumericOperations<T> _numOps;
     private readonly List<DenseLayer<T>> _sharedLayers;
@@ -382,6 +407,16 @@ internal class DuelingNetwork<T> : IParameterSource<T>
             prevSize = size;
         }
         _advantageLayers.Add(new DenseLayer<T>(actionSize, (IActivationFunction<T>)new IdentityActivation<T>())); // Output per-action advantages
+    }
+
+    /// <summary>
+    /// Releases every dense layer of the shared, value and advantage streams, each at most once.
+    /// </summary>
+    /// <exception cref="AggregateException">Two or more layers threw from <c>Dispose</c>; a single failure is rethrown unchanged.</exception>
+    public void Dispose()
+    {
+        AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(
+            _sharedLayers.Concat(_valueLayers).Concat(_advantageLayers), nameof(DuelingNetwork<T>));
     }
 
     public void EnsureInitialized()

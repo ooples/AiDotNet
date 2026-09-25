@@ -26,7 +26,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </para>
 /// </summary>
 /// <typeparam name="T">Element type — <c>float</c> (GPU) or <c>double</c> (CPU/accuracy).</typeparam>
-public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
+public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 {
     private readonly int _tradableCount;
     private readonly IPortfolioReward _reward;
@@ -164,28 +164,12 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         }
 
         // Decode + clamp target weights, then enforce the gross-leverage budget.
-        var weights = new double[_tradableCount];
-        double gross = 0;
-        for (int i = 0; i < _tradableCount; i++)
+        var weights = ResolveTargetWeights(action);
+        if (weights is null || weights.Length != _tradableCount)
         {
-            double w = ToDouble(action[i]);
-            if (double.IsNaN(w) || double.IsInfinity(w))
-            {
-                w = 0.0;
-            }
-
-            w = MathPolyfill.Clamp(w, -1.0, 1.0);
-            weights[i] = w;
-            gross += Math.Abs(w);
-        }
-
-        if (gross > _maxLeverage && gross > 0)
-        {
-            double scale = _maxLeverage / gross;
-            for (int i = 0; i < _tradableCount; i++)
-            {
-                weights[i] *= scale;
-            }
+            throw new InvalidOperationException(
+                $"{nameof(ResolveTargetWeights)} must return one weight per tradable asset "
+                + $"({_tradableCount}); got {(weights is null ? "null" : weights.Length.ToString(CultureInfo.InvariantCulture))}.");
         }
 
         // Reconcile each position toward its exact target weight. Sells run first (they free cash), then buys —
@@ -282,6 +266,58 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     }
 
     /// <summary>
+    /// Turns the agent's raw action into the target weight per tradable asset, before any position is
+    /// reconciled toward it.
+    /// </summary>
+    /// <param name="action">The agent's raw output, one element per tradable asset.</param>
+    /// <returns>One target weight per tradable asset, in the same order.</returns>
+    /// <remarks>
+    /// <para><b>The default is the environment's own rule, unchanged:</b> a non-finite element becomes zero,
+    /// each weight is clamped to <c>[-1, 1]</c>, and the whole vector is scaled down only if gross leverage
+    /// <c>sum(|w|)</c> exceeds the budget. Overriding is opt-in and the base behaviour is what it always was.</para>
+    ///
+    /// <para><b>Why this is a seam.</b> A production system frequently applies a richer allocation rule at
+    /// SERVING time — inverse-volatility weighting, a per-asset concentration cap, net-exposure limits,
+    /// portfolio-volatility targeting — that this environment does not model. When training applies one rule
+    /// and serving applies another, the two can disagree about more than scale: they can ORDER the book
+    /// differently, so the name a policy ranked second is served last. A policy trained against a rule it will
+    /// never be served under has learned a different problem. Overriding this method lets a caller train under
+    /// the same allocation rule it deploys, which is the only way those two agree by construction rather than
+    /// by coincidence.</para>
+    ///
+    /// <para>Implementations must return exactly <c>tradableCount</c> weights; the caller verifies this and
+    /// throws rather than silently trading a mis-sized book.</para>
+    /// </remarks>
+    protected virtual double[] ResolveTargetWeights(Vector<T> action)
+    {
+        var weights = new double[_tradableCount];
+        double gross = 0;
+        for (int i = 0; i < _tradableCount; i++)
+        {
+            double w = ToDouble(action[i]);
+            if (double.IsNaN(w) || double.IsInfinity(w))
+            {
+                w = 0.0;
+            }
+
+            w = MathPolyfill.Clamp(w, -1.0, 1.0);
+            weights[i] = w;
+            gross += Math.Abs(w);
+        }
+
+        if (gross > _maxLeverage && gross > 0)
+        {
+            double scale = _maxLeverage / gross;
+            for (int i = 0; i < _tradableCount; i++)
+            {
+                weights[i] *= scale;
+            }
+        }
+
+        return weights;
+    }
+
+    /// <summary>
     /// Reward = the pluggable objective applied to this step's net portfolio return, with turnover, exposure, and
     /// drawdown context. Frictions are already reflected in the return (deducted from cash in
     /// <see cref="ApplyAction"/>), so the objective sees the true, cost-net outcome.
@@ -316,9 +352,10 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     public double CurrentValue => ToDouble(_portfolioValue);
 
     /// <summary>
-    /// Resets the per-episode reward statistics and drawdown peak. Call after <see cref="TradingEnvironment{T}.Reset"/>
-    /// when reusing one environment instance across independent episodes (e.g. evaluation). Not needed for the
-    /// default single-pass training configuration (one episode over the full series).
+    /// Resets the per-episode reward statistics, drawdown peak, turnover and exposure.
+    /// <see cref="TradingEnvironment{T}.Reset"/> now calls this automatically (through
+    /// <see cref="OnReset"/>), so every episode starts from the same baseline; calling it explicitly as well is
+    /// harmless (it is idempotent).
     /// </summary>
     public void ResetEpisodeState()
     {
@@ -328,4 +365,10 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         _grossExposure = 0;
         _shortExposure = 0;
     }
+
+    /// <summary>
+    /// Clears this environment's per-episode state whenever <see cref="TradingEnvironment{T}.Reset"/> starts a
+    /// new episode — without it, reward statistics and the drawdown peak leaked from one episode into the next.
+    /// </summary>
+    protected override void OnReset() => ResetEpisodeState();
 }

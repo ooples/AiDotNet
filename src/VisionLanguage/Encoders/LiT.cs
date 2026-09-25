@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,7 +42,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new LiT&lt;double&gt;(architecture, new LiTOptions());
 /// </code>
@@ -58,6 +60,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Zhai et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 0.001, Beta1 = 0.9,
+                Beta2 = 0.999,
+                Source = "Zhai et al. 2022, Sec. 4: the AdaFactor optimizer at a learning rate of 0.001 "
+                        + "with the default beta1 of 0.9 and beta2 of 0.999.")]
 public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly LiTOptions _options;
@@ -118,7 +124,9 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
         _options = options ?? new LiTOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,14 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2407.08680",
     Year = 2024,
     Authors = "Zujin Guo, Wei Li, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 64, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Guo et al. 2024, Sec. 4 and appendix table: AdamW with betas (0.9, 0.999) "
+                        + "under cosine annealing, a batch size of 64 and a learning rate of 1e-4 over "
+                        + "240 epochs. The appendix table lists several rates across the GIMM and "
+                        + "GIMM-VFI stages; the value declared is the one the training section states "
+                        + "for this model.")]
 public partial class GIMMVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -92,7 +101,9 @@ public partial class GIMMVFI<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new GIMMVFIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }

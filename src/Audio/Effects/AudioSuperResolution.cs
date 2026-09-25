@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -53,6 +54,13 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Audio Super Resolution using Neural Networks", "https://arxiv.org/abs/1708.00853", Year = 2017, Authors = "Volodymyr Kuleshov, S. Zayd Enam, Stefano Ermon")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Kuleshov et al. 2017, Sec. 4.1: the ADAM optimizer with a learning rate of "
+                        + "1e-4, trained for 400 epochs on patches of length 6000. The model builds its "
+                        + "own AdamW optimizer at a caller-supplied rate that already defaults to this "
+                        + "1e-4, so the hand-built optimizer is verified against this record rather than "
+                        + "replaced -- routing it would discard a rate the caller set. The report notes "
+                        + "the paper says Adam where the model uses AdamW.")]
 public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields
@@ -112,11 +120,12 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
     {
         _options = options ?? new AudioSuperResolutionOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         base.SampleRate = _options.OutputSampleRate;
         InitializeLayers();
     }

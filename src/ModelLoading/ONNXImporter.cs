@@ -23,7 +23,7 @@ namespace AiDotNet.ModelLoading;
 /// var weights = importer.LoadWeights("model.onnx");
 ///
 /// // Apply to your model
-/// var layer = new DenseLayer&lt;float&gt;(inputSize, outputSize);
+/// var layer = new DenseLayer&lt;float&gt;(outputSize: 128);
 /// importer.ApplyWeights(layer, weights);
 /// ```
 /// </para>
