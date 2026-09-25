@@ -282,6 +282,13 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private double GetWarmupLearningRate()
     {
+        // An attached schedule owns the rate, as it does for every other optimizer: the base advances it per
+        // batch and GetCurrentLearningRate reports it. LAMB read only InitialLearningRate here, so a recipe's
+        // warmup or decay was installed and silently ignored, and GetCurrentLearningRate described a rate LAMB
+        // was not using (S4's 32-step warmup never ran; the full 0.005 overshot its first steps).
+        if (LearningRateScheduler is not null)
+            return GetCurrentLearningRate();
+
         if (_t < _warmupSteps && _warmupSteps > 0)
         {
             // Linear warmup
