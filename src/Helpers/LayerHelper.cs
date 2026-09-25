@@ -37615,11 +37615,14 @@ public static partial class LayerHelper<T>
         // Residual blocks with attention (each acts on the per-position hidden vector).
         for (int layer = 0; layer < numResidualLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>();
+            // Per-sample normalization, as in CSDI's transformer residual layers (Tashiro et al. 2021). Batch
+            // normalization of a single training sample outputs its learned shift whatever the input, so the
+            // noise predictor could not see its input and the denoising loss stayed near 1.0 (predicting zero).
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>();
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>( outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
             yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
