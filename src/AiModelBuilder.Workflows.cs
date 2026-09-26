@@ -1858,6 +1858,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// language-model pretraining setup:</para>
     /// <example>
     /// <code>
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;();
+    /// // Held-out data the run never trains on; each sample is read on demand.
+    /// var heldOut = new StreamingDataLoader&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
+    ///     sampleCount: 256,
+    ///     sampleReader: (i, _) =&gt; System.Threading.Tasks.Task.FromResult(
+    ///         (new Tensor&lt;float&gt;(new[] { 16 }), new Tensor&lt;float&gt;(new[] { 1 }))),
+    ///     batchSize: 32);
     /// var ckpt = new CheckpointManager&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;("runs/lm");
     /// ckpt.ConfigureAutoCheckpointing(saveFrequency: 500, keepLast: 2, saveOnImprovement: false);
     /// builder.ConfigureCheckpointManager(ckpt)
