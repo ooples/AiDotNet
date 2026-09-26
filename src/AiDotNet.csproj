@@ -274,6 +274,8 @@
 	     cross-repo debugging without cutting a package first. Default is unchanged. -->
 	<ItemGroup Condition="'$(UseLocalTensors)' != 'true'">
 	  <PackageReference Include="AiDotNet.Tensors" />
+	  <!-- LOCAL MEASUREMENT ONLY: Tensors main depends on AiDotNet.Evolution, whose types duplicate src/Evolution until #2092; aliased out of the global namespace. -->
+	  <PackageReference Include="AiDotNet.Evolution" Aliases="EvolutionPackage" />
 	</ItemGroup>
 	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
 	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
