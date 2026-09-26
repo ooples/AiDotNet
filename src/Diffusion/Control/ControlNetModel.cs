@@ -68,14 +68,14 @@ namespace AiDotNet.Diffusion.Control;
 ///     controlType: ControlType.Canny);
 ///
 /// // Generate with edge control
-/// var edgeMap = LoadCannyEdges("house_edges.png");
+/// var edgeMap = new Tensor&lt;float&gt;([1, 3, 512, 512]);    // your Canny edge image
 /// var image = controlNet.GenerateWithControl(
 ///     prompt: "A beautiful Victorian house",
 ///     controlImage: edgeMap,
 ///     conditioningStrength: 1.0);
 ///
 /// // Multi-control generation
-/// var depthMap = LoadDepthMap("scene_depth.png");
+/// var depthMap = new Tensor&lt;float&gt;([1, 3, 512, 512]);   // your depth map
 /// var imageMulti = controlNet.GenerateWithMultiControl(
 ///     prompt: "Forest landscape",
 ///     controlImages: new[] { edgeMap, depthMap },

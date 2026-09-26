@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +59,8 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2303.11797", Year = 2024, Authors = "Cho et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, WeightDecay = 1e-4,
+                Source = "Cho et al. 2024: AdamW at a learning rate of 2e-4 for the model and 2e-6 for the CLIP backbone, with weight decay 1e-4. The backbone rate is not applied here because this model builds one optimizer over all parameters; applying two would need per-parameter-group rates.")]
 public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly CATSegOptions _options;
@@ -274,7 +277,7 @@ public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "CATSeg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,

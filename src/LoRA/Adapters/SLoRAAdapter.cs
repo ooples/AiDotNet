@@ -49,14 +49,20 @@ namespace AiDotNet.LoRA.Adapters;
 /// Example usage:
 /// ```csharp
 /// // Create S-LoRA serving system for base layer
+/// var baseLayer = new DenseLayer&lt;double&gt;(outputSize: 128);
 /// var sloraAdapter = new SLoRAAdapter&lt;double&gt;(baseLayer, rank: 8);
 ///
 /// // Register multiple adapters for different tasks
-/// sloraAdapter.RegisterAdapter("customer_1", adapter1);
-/// sloraAdapter.RegisterAdapter("customer_2", adapter2);
-/// sloraAdapter.RegisterAdapter("task_classification", adapter3);
+/// var adapter1 = new LoRALayer&lt;double&gt;(128, 128, rank: 8);
+/// var adapter2 = new LoRALayer&lt;double&gt;(128, 128, rank: 8);
+/// var adapter3 = new LoRALayer&lt;double&gt;(128, 128, rank: 4);
+/// sloraAdapter.RegisterAdapter("customer_1", adapter1, rank: 8);
+/// sloraAdapter.RegisterAdapter("customer_2", adapter2, rank: 8);
+/// sloraAdapter.RegisterAdapter("task_classification", adapter3, rank: 4);
 ///
-/// // Process batched requests efficiently
+/// // Process batched requests efficiently — one adapter id per input
+/// var inputs = new[] { Tensor&lt;double&gt;.CreateRandom(1, 128), Tensor&lt;double&gt;.CreateRandom(1, 128) };
+/// var adapterIds = new[] { "customer_1", "task_classification" };
 /// var outputs = sloraAdapter.BatchForward(inputs, adapterIds);
 /// ```
 ///

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Ai et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0002, Beta1 = 0.8, Beta2 = 0.99,
+                DecayRate = 0.999, Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Ai and Ling 2023, Sec. 4: the AdamW optimizer with beta1 0.8 and beta2 0.99, "
+                        + "an initial learning rate of 0.0002 and decay scheduled by a 0.999 factor "
+                        + "every epoch. Its successor APNet 2 states the same 0.999 per-epoch decay.")]
 public partial class APNet<T> : VocoderBase<T>
 {
     private readonly APNetOptions _options;
@@ -80,7 +88,9 @@ public partial class APNet<T> : VocoderBase<T>
     {
         _options = options ?? new APNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

@@ -346,7 +346,7 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
             { "ModelName", "FlowFormer" }, { "EmbedDim", _embedDim },
             { "NumLayers", _numLayers }, { "NumIterations", _numIterations }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

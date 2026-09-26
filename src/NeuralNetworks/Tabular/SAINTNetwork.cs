@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -50,10 +52,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SAINTOptions { NumFeatures = 20, EmbeddingDim = 32, NumHeads = 8, NumLayers = 6 };
-/// var model = new SAINTNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new SAINTOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 32, NumHeads = 8, NumLayers = 6 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SAINTNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -68,6 +75,9 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2106.01342",
     Year = 2021,
     Authors = "Somepalli, G., Goldblum, M., Schwarzschild, A., Bruss, C. B., & Goldstein, T.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01,
+                LearningRate = 0.0001, ReferenceBatchSize = 256,
+                Source = "Somepalli et al. 2021, Training: AdamW with beta1 0.9, beta2 0.999, decay 0.01 and a learning rate of 0.0001 with batches of size 256.")]
 public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly SAINTOptions<T> _options;
@@ -158,7 +168,9 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     {
         _options = options ?? new SAINTOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
@@ -388,7 +400,7 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

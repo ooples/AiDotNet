@@ -33,10 +33,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
-/// var model = new Flux2SchnellModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
-/// var generated = model.Predict(noise);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 4 };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 128, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Flux2SchnellModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -93,7 +97,7 @@ public partial class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
                 // Labs 2024) is a Latent Adversarial Diffusion Distillation
                 // (LADD) student distilled to 1-4 sampling steps. The
                 // model card and XML example in this file's class docs both
-                // specify `NumInferenceSteps = 4` as the canonical default;
+                // specify `DefaultInferenceSteps = 4` as the canonical default;
                 // override the DiffusionModelOptions default of 10 so
                 // `Predict()` doesn't burn 6 extra UNet evaluations the
                 // distillation was specifically trained to skip — the

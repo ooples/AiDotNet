@@ -40,10 +40,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VariationalAutoencoderOptions { InputSize = 784, LatentSize = 20 };
-/// var model = new VariationalAutoencoder&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
-/// var reconstructed = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VariationalAutoencoder&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var reconstructed = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
@@ -826,7 +829,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
                 { "EncoderLayers", Layers.Take(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() },
                 { "DecoderLayers", Layers.Skip(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

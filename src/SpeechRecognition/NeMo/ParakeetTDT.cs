@@ -32,7 +32,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// // Create a Parakeet-TDT model with token-and-duration transducer
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
 /// var model = new ParakeetTDT&lt;double&gt;(architecture);
 ///

@@ -948,7 +948,14 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
     {
-        var randomTensor = Tensor<T>.CreateRandom(probabilities._shape);
+        // Draw from the layer's OWN stream: seeded when RandomSeed is set (architecture seed or
+        // LayerInitializationSeedScope), the thread-local production stream otherwise. The
+        // parameterless CreateRandom overload read the process-shared RNG, so a seeded DBN's
+        // contrastive-divergence pre-training still drew different Gibbs samples on every run and
+        // the supervised fine-tune started from a different point each time -- which is how
+        // DeepBeliefNetworkTests.LossStrictlyDecreasesOnMemorizationTask passed on one CI run and
+        // failed on another with the same code.
+        var randomTensor = Tensor<T>.CreateRandom(Random, probabilities._shape);
         return Engine.TensorGreaterThan(probabilities, randomTensor);
     }
 

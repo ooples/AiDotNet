@@ -63,6 +63,9 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 ///     patchSize: 2);
 ///
 /// // Predict noise
+/// var noisyLatent = new Tensor&lt;float&gt;([1, 4, 32, 32]);      // [batch, latentChannels, h, w]
+/// var timestep = 500;                                          // where we are in the schedule
+/// var textEmbedding = new Tensor&lt;float&gt;([1, 77, 1152]);     // [batch, tokens, hiddenSize]
 /// var noisePrediction = dit.PredictNoise(noisyLatent, timestep, textEmbedding);
 /// </code>
 /// </example>
@@ -338,10 +341,10 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var dit = new DiTNoisePredictor&lt;float&gt;(architecture: arch);
+    /// var dit2 = new DiTNoisePredictor&lt;float&gt;(architecture: arch);
     ///
     /// // DiT-L/2 configuration
-    /// var dit = new DiTNoisePredictor&lt;float&gt;(
+    /// var dit3 = new DiTNoisePredictor&lt;float&gt;(
     ///     hiddenSize: 1024, numLayers: 24, numHeads: 16);
     /// </code>
     /// </para>

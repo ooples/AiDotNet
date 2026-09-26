@@ -58,7 +58,7 @@ namespace AiDotNet.PointCloud.Models;
 ///     useFeatureTransform: true);
 /// // Process a point cloud (1024 points, 3 coordinates each)
 /// var pointCloud = new Tensor&lt;float&gt;(new[] { 1, 1024, 3 });
-/// Vector&lt;float&gt; classProbabilities = pointNet.Classify(pointCloud);
+/// Vector&lt;float&gt; classProbabilities = pointNet.ClassifyPointCloud(pointCloud);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -416,7 +416,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

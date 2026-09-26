@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -32,6 +33,7 @@ namespace AiDotNet.Video.Denoising;
 /// // Create a FloRNN model for optical-flow-guided video denoising
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new FloRNNOptions();
 /// var flornn = new FloRNN&lt;double&gt;(architecture, options);
@@ -50,6 +52,8 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2204.05532",
     Year = 2022,
     Authors = "Junyi Li, Xiaohe Wu, Zhenxing Niu, Wangmeng Zuo")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Li et al. 2022, Sec. 4.1: Adam with an initial learning rate of 1e-4.")]
 public partial class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;
@@ -98,18 +102,19 @@ public partial class FloRNN<T> : VideoDenoisingBase<T>
         _useNativeMode = true;
         // The released FloRNN training script uses torch.optim.Adam at 1e-4
         // with Adam's standard fixed moments (train_models/sRGB_train.py).
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false
+                }));
         InitializeLayers();
     }
 
@@ -170,7 +175,7 @@ public partial class FloRNN<T> : VideoDenoisingBase<T>
                 { "HiddenDim", _options.HiddenDim },
                 { "NumFlowScales", _options.NumFlowScales }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

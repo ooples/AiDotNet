@@ -34,7 +34,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <example>
 /// <code>
 /// var vae = new LiteVAEModel&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 64);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 512, 512 });
 /// var latent = vae.Encode(image);
 /// </code>
 /// </example>

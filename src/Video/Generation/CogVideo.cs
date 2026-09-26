@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -37,6 +39,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
 /// var model = new CogVideo&lt;double&gt;(arch);
 /// model.Train(noisyLatent, cleanLatent);
@@ -47,6 +50,7 @@ namespace AiDotNet.Video.Generation;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
 /// var model = new CogVideo&lt;double&gt;(arch, "cogvideo.onnx");
 /// var videoFrames = model.Generate(textEmbedding);
@@ -72,6 +76,11 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0.01, ReferenceBatchSize = 416,
+                Source = "Hong et al. 2022, Sec. 3: parameters are updated by Adam with a max learning "
+                        + "rate of 2e-4, beta1 0.9, beta2 0.95 and a weight decay of 1e-2, trained in "
+                        + "FP16 at a batch size of 416.")]
 public partial class CogVideo<T> : NeuralNetworkBase<T>
 {
     private readonly CogVideoOptions _options;
@@ -237,6 +246,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
     /// var model = new CogVideo&lt;double&gt;(arch);
     /// </code>
@@ -290,7 +300,9 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
         _latentChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 4;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeNoiseSchedule();
         InitializeLayers();
@@ -309,6 +321,7 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 32, inputWidth: 32, inputDepth: 4);
     /// var model = new CogVideo&lt;double&gt;(arch, "cogvideo.onnx");
     /// var video = model.Generate(textEmbedding);

@@ -36,10 +36,15 @@ namespace AiDotNet.Regression;
 ///
 /// Example usage:
 /// ```csharp
-/// var options = new RidgeRegressionOptions&lt;double&gt; { Alpha = 1.0 };
-/// var ridge = new RidgeRegression&lt;double&gt;(options);
-/// ridge.Train(features, targets);
-/// var predictions = ridge.Predict(newFeatures);
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 11.0, 15.1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new RidgeRegression&lt;double&gt;(new RidgeRegressionOptions&lt;double&gt; { Alpha = 1.0 }))
+///     .Build(features, targets);
+///
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 } });
+/// var predictions = result.Predict(newFeatures);
 /// ```
 /// </para>
 /// </remarks>
@@ -47,19 +52,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create ridge regression with L2 regularization
 /// var options = new RidgeRegressionOptions&lt;double&gt;();
-/// var model = new RidgeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
 ///
 /// // Train with L2 penalty to prevent overfitting
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new RidgeRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict for new input
-/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
-/// var prediction = model.Predict(newFeatures);
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
+/// var prediction = result.Predict(newFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

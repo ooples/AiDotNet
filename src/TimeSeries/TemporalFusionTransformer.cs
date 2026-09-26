@@ -97,9 +97,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     public TemporalFusionTransformer(
         TemporalFusionTransformerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(options ?? new TemporalFusionTransformerOptions<T>())
+        : base(options ??= new TemporalFusionTransformerOptions<T>())
     {
-        _options = options ?? new TemporalFusionTransformerOptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _hiddenSize = _options.HiddenSize;

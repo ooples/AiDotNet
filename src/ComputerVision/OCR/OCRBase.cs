@@ -216,6 +216,21 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     protected readonly Dictionary<char, int> CharToIndex;
 
     /// <summary>
+    /// Gets the set of characters this model can emit.
+    /// </summary>
+    /// <remarks>
+    /// Recognition decodes class indices into characters from this set, so a caller needs it to
+    /// know what the model is capable of reading -- and every character in the recognised text
+    /// must come from it.
+    /// </remarks>
+    public string CharacterSet => Options.CharacterSet ?? DefaultCharacterSet;
+
+    /// <summary>
+    /// Gets the maximum number of characters the decoder will emit for one text region.
+    /// </summary>
+    public int MaxSequenceLength => Options.MaxSequenceLength;
+
+    /// <summary>
     /// Index to character mapping.
     /// </summary>
     protected readonly Dictionary<int, char> IndexToChar;
@@ -271,6 +286,13 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     protected virtual Tensor<T> PreprocessCrop(Tensor<T> crop)
     {
+        var prepared = PreprocessCropCore(crop);
+        NoteResolvedInput(prepared);
+        return prepared;
+    }
+
+    private Tensor<T> PreprocessCropCore(Tensor<T> crop)
+    {
         int targetH = Options.RecognitionHeight;
         int srcH = crop.Shape[2];
         int srcW = crop.Shape[3];
@@ -303,7 +325,9 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var result = new List<char>();
         int prevIndex = 0;
 
-        for (int t = 0; t < seqLen; t++)
+        // The budget is emitted characters, not timesteps: CTC blanks and repeats consume
+        // sequence positions without consuming the caller's character budget.
+        for (int t = 0; t < seqLen && result.Count < Options.MaxSequenceLength; t++)
         {
             // Find argmax
             int maxIdx = 0;
@@ -344,7 +368,7 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         var result = new List<char>();
 
-        for (int t = 0; t < seqLen; t++)
+        for (int t = 0; t < seqLen && result.Count < Options.MaxSequenceLength; t++)
         {
             int maxIdx = 0;
             double maxVal = double.NegativeInfinity;
@@ -490,35 +514,63 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <summary>
-    /// Runs OCR and returns region info as a tensor [numRegions, 6].
-    /// Columns: confidence, textLength, x1, y1, x2, y2.
+    /// Returns the model's raw, differentiable recognition output (see <see cref="ForwardLogits"/>).
     /// </summary>
+    /// <remarks>
+    /// Use <see cref="Recognize"/> to read text. <see cref="Predict"/> used to run
+    /// <see cref="Recognize"/> and pack its decoded regions into a <c>[regions, 6]</c> tensor of
+    /// confidence, text length and box - a decoded summary that has no gradient, so nothing trained
+    /// against it could ever learn. It now returns the network output that
+    /// <see cref="Train"/> fits, matching the detection bases.
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var result = Recognize(input);
-        int regions = result.TextRegions.Count;
-        if (regions == 0)
-            return new Tensor<T>([0, 6]);
-
-        var output = new Tensor<T>([regions, 6]);
-        for (int i = 0; i < regions; i++)
-        {
-            var region = result.TextRegions[i];
-            output[i, 0] = region.Confidence;
-            output[i, 1] = NumOps.FromDouble(region.Text.Length);
-            if (region.Box is not null)
-            {
-                output[i, 2] = region.Box.X1;
-                output[i, 3] = region.Box.Y1;
-                output[i, 4] = region.Box.X2;
-                output[i, 5] = region.Box.Y2;
-            }
-        }
-        return output;
+        NoteResolvedInput(input);
+        return ForwardLogits(input);
     }
 
+    /// <summary>
+    /// Runs the differentiable recognition forward pass on an image and returns its raw output:
+    /// per-timestep character logits for a CTC recognizer, the encoder output and first decoding step
+    /// for an encoder-decoder recognizer. Every trainable weight must be reachable from it.
+    /// </summary>
+    /// <param name="image">The image or cropped text line, NCHW.</param>
+    /// <returns>The raw recognition output that <see cref="Train"/> fits.</returns>
+    protected abstract Tensor<T> ForwardLogits(Tensor<T> image);
+
+    /// <summary>
+    /// Gets the step size used by <see cref="Train"/>. Override it to match a paper recipe.
+    /// </summary>
+    protected virtual double TrainingLearningRate => 0.001;
+
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Runs one training step against the model's raw recognition output.
+    /// </summary>
+    /// <param name="input">The training image.</param>
+    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
+    /// <remarks>
+    /// This was an empty method, so CRNN and TrOCR ignored training entirely. The step records
+    /// <see cref="ForwardLogits"/> on a gradient tape, takes mean squared error against
+    /// <paramref name="expectedOutput"/> and updates every live trainable weight. A recognition loss
+    /// (CTC, or teacher-forced cross-entropy on target text) is the right objective for a full
+    /// training recipe and belongs in an override; this base step is what makes the models trainable.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput));
+        }
+
+        RecordTrainingLoss(TensorModelTrainer<T>.Step(
+            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), ForwardLogits));
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
@@ -532,8 +584,102 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (OCRBase<T>)MemberwiseClone();
+    // See the note on ObjectDetectorBase: MemberwiseClone gave a shallow copy that shared
+    // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
 
     #endregion
+
+    /// <summary>
+    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
+    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
+    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int[]? _resolvedInputShape;
+
+    /// <summary>Records the input shape on the first forward pass.</summary>
+    private void NoteResolvedInput(Tensor<T> input)
+    {
+        if (_resolvedInputShape is not null || input is null)
+        {
+            return;
+        }
+
+        var shape = new int[input.Shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            shape[i] = input.Shape[i];
+        }
+
+        _resolvedInputShape = shape;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs the copy once on a zero input of the shape this model has already processed, so its
+    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
+    /// size their weights exactly as this model's did before its state is loaded into them.
+    /// </remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (_resolvedInputShape is not null && copy is OCRBase<T> rebuilt)
+        {
+            var shape = (int[])_resolvedInputShape.Clone();
+            shape[0] = 1;
+            rebuilt.Predict(new Tensor<T>(shape));
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of channels in the images this model reads.
+    /// </summary>
+    /// <remarks>RGB unless a model overrides it; every backbone here is built for three channels.</remarks>
+    protected virtual int InputChannels => 3;
+
+    /// <summary>
+    /// Gives a model that has never run a concrete parameter topology, so its state can be captured.
+    /// </summary>
+    /// <remarks>
+    /// Several layers size their weights on their first forward pass. Until then the model reports
+    /// its parameters as shape-deferred, which is correct for a parameter query but made
+    /// <see cref="Serialize"/> - and therefore <c>Clone</c> - throw on a freshly constructed model.
+    /// Running the network once on a zero image of the configured recognition height and maximum width resolves exactly the
+    /// shapes the first real image would, because every image is resized to that size first.
+    /// </remarks>
+    private void ResolveDeferredParameters()
+    {
+        if (_resolvedInputShape is not null)
+        {
+            return;
+        }
+
+        Predict(new Tensor<T>(new[] { 1, InputChannels, Options.RecognitionHeight, Options.MaxRecognitionWidth }));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Resolves shape-deferred layers first; see <see cref="ResolveDeferredParameters"/>.</remarks>
+    public override byte[] Serialize()
+    {
+        ResolveDeferredParameters();
+        return base.Serialize();
+    }
+
+    /// <summary>
+    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
+    /// its update (zero before the first call).
+    /// </summary>
+    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
+    /// has one.</returns>
+    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
+    public T GetLastLoss() => _lastTrainingLoss;
+
+    /// <summary>Records the loss a training step reported.</summary>
+    /// <param name="loss">The step's loss.</param>
+    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
 }

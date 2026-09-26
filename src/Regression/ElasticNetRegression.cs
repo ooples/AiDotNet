@@ -32,25 +32,30 @@ namespace AiDotNet.Regression;
 ///
 /// Example usage:
 /// ```csharp
-/// var options = new ElasticNetRegressionOptions&lt;double&gt; { Alpha = 1.0, L1Ratio = 0.5 };
-/// var elasticNet = new ElasticNetRegression&lt;double&gt;(options);
-/// elasticNet.Train(features, targets);
-/// var predictions = elasticNet.Predict(newFeatures);
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 11.0, 15.1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ElasticNetRegression&lt;double&gt;(new ElasticNetRegressionOptions&lt;double&gt; { Alpha = 1.0, L1Ratio = 0.5 }))
+///     .Build(features, targets);
+///
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 } });
+/// var predictions = result.Predict(newFeatures);
 ///
 /// // Check which features were selected (non-zero coefficients)
-/// var selectedFeatures = elasticNet.GetActiveFeatureIndices();
+/// var selectedFeatures = result.GetActiveFeatureIndices();
 /// ```
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// var options = new ElasticNetRegressionOptions&lt;double&gt;();
-/// var model = new ElasticNetRegression&lt;double&gt;(options);
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
-/// model.Train(features, targets);
-/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 }));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ElasticNetRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var prediction = result.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12 } }));
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
