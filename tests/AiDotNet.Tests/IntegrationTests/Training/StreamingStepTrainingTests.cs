@@ -224,8 +224,16 @@ public class StreamingStepTrainingTests : IDisposable
         await Task.Yield();
         var init = InitialWeights();
         WarmupStableDecayScheduler Wsd() => new(0.02, warmupSteps: 5, decayStartStep: 15, decaySteps: 10);
+        var baselineTransform = new FirstFitMeanShift();
         var straight = await Train(25, resume: false, Checkpoints("pp-straight", saveEvery: 1000), init, Wsd(),
-            featureTransform: new FirstFitMeanShift());
+            featureTransform: baselineTransform);
+
+        // Positive controls: the pipeline must actually take part in training, or the resume comparison below
+        // would pass with preprocessing ignored (both runs would train on the same unprocessed data).
+        Assert.True(baselineTransform.IsFitted, "the configured preprocessing was never fitted");
+        var unprocessed = await Train(25, resume: false, Checkpoints("pp-none", saveEvery: 1000), init, Wsd());
+        Assert.True(MaxAbsDiff(straight.Model.GetParameters(), unprocessed.Model.GetParameters()) > 1e-3,
+            "preprocessing did not change the trained parameters, so the resume comparison proves nothing");
 
         await Train(13, resume: true, Checkpoints("pp-resumed", saveEvery: 4), init, Wsd(),
             featureTransform: new FirstFitMeanShift());
