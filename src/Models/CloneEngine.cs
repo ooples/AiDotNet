@@ -60,7 +60,21 @@ public static class CloneEngine
             throw new ArgumentNullException(nameof(getDestinationParameterCount));
         if (source.GetType() != destination.GetType()) return;
 
-        int currentCount = getDestinationParameterCount();
+        // A fresh configuration shell has no resolved parameter layout until it is fitted, and a
+        // fit-deferred layout cannot report a count at all -- it throws rather than answer zero,
+        // precisely so an unfitted model is never mistaken for one with no parameters. There is
+        // then no count mismatch to bridge, and the caller's Deserialize installs the fitted state
+        // and resolves the layout straight after, so leave the destination alone.
+        int currentCount;
+        try
+        {
+            currentCount = getDestinationParameterCount();
+        }
+        catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
+        {
+            return;
+        }
+
         if (currentCount == expectedParameterCount) return;
 
         const BindingFlags Flags =
