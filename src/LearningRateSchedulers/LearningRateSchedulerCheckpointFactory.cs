@@ -57,6 +57,14 @@ internal static class LearningRateSchedulerCheckpointFactory
                     StateValue<double>(state, "warmup_init_lr"),
                     StateEnum<LinearWarmupScheduler.DecayMode>(state, "decay_mode"),
                     StateValue<double>(state, "end_lr")),
+            [typeof(WarmupStableDecayScheduler)] = state =>
+                new WarmupStableDecayScheduler(
+                    StateValue<double>(state, "base_lr"),
+                    StateValue<int>(state, "warmup_steps"),
+                    StateValue<int>(state, "decay_start_step"),
+                    StateValue<int>(state, "decay_steps"),
+                    StateEnum<WarmupStableDecayScheduler.DecayShape>(state, "decay_shape"),
+                    StateValue<double>(state, "end_lr")),
             [typeof(MultiStepLRScheduler)] = state =>
                 new MultiStepLRScheduler(
                     StateValue<double>(state, "base_lr"),

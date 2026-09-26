@@ -175,9 +175,11 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
                 nameof(gradient));
         }
 
-        _step++;
         if (_flatZ.Length != parameters.Length)
         {
+            // A differently sized vector is a different parameter set, so its schedule restarts too: the step
+            // count drives the step size, the averaging weight c = 1/t and the second-moment bias correction.
+            _step = 0;
             _flatZ = new double[parameters.Length];
             _flatX = new double[parameters.Length];
             _flatV = new double[parameters.Length];
@@ -188,6 +190,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             }
         }
 
+        _step++;
         double beta = _options.Interpolation;
         double beta2 = _options.Beta2;
         double epsilon = _options.Epsilon;

@@ -659,8 +659,8 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
 
         // Fresh compiled-plan lifecycle for this model (the per-thread plan cache
         // is keyed by shape and could otherwise replay a prior model's plan).
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
 
         _lastRunEpochLosses = new List<double>();
 

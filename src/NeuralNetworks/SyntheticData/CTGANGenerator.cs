@@ -682,7 +682,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                     trainableDiscLayers, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
@@ -874,7 +874,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                     trainableGenLayers, fusedInput, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }

@@ -2129,6 +2129,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Installs (or clears) the learning-rate scheduler on an already-constructed optimizer.
+    /// </summary>
+    /// <param name="scheduler">The scheduler to drive the learning rate, or <c>null</c> to remove it.</param>
+    /// <remarks>
+    /// <para>
+    /// The scheduler is otherwise read only once, from <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.LearningRateScheduler"/>
+    /// when the optimizer is constructed, so assigning the option afterwards has no effect on training. This is
+    /// the supported way to change it later (for example <c>AiModelBuilder.ConfigureLearningRateScheduler</c>, or
+    /// replacing a restored schedule when extending a resumed run). An explicitly installed scheduler replaces the
+    /// adaptive-learning-rate schedule.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this to change how the learning rate evolves after the optimizer exists.</para>
+    /// </remarks>
+    internal void SetLearningRateScheduler(ILearningRateScheduler? scheduler)
+    {
+        _learningRateScheduler = scheduler;
+        _adaptiveSchedulerStepsOnFitness = false;
+        GradientOptions.LearningRateScheduler = scheduler;
+        SetLearningRate(scheduler?.CurrentLearningRate ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
     /// Steps the learning rate scheduler and updates the current learning rate.
     /// </summary>
     /// <remarks>
@@ -2169,7 +2191,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Whether the schedule is the one auto-installed for <c>UseAdaptiveLearningRate</c>, and so
     /// must step on every fitness observation to preserve that flag's original cadence.
     /// </summary>
-    private readonly bool _adaptiveSchedulerStepsOnFitness;
+    private bool _adaptiveSchedulerStepsOnFitness;
 
     /// <inheritdoc />
     /// <remarks>

@@ -644,7 +644,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     trainableGenLayers, noiseTensor, targetPlaceholder,
                     forward: ForwardG, computeLoss: ComputeGenLoss,
                     optimizer: _generatorOptimizer,
-                    out T _);
+                    out T _, owner: this);
                 if (!ran)
                 {
                     // First-step compile failure → abandon and fall back to eager for the rest of the batch.

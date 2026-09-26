@@ -1904,6 +1904,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         gradientOptions.LearningRateScheduler = _configuredLearningRateScheduler;
+
+        // The optimizer copied its scheduler out of the options when it was constructed, so the assignment
+        // above alone never reached training. Install it on the live optimizer.
+        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer)
+        {
+            gradientOptimizer.SetLearningRateScheduler(_configuredLearningRateScheduler);
+        }
     }
 
     /// <summary>
@@ -2408,6 +2415,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 "Streaming training requires a model to be configured. Use ConfigureModel() before calling BuildAsync().");
         }
 
+        // Push configured training components into the model/optimizer, exactly as the in-memory path does.
+        // The streaming path previously skipped this, so ConfigureLossFunction / ConfigureLearningRateScheduler
+        // were silently ignored whenever a streaming loader was used.
+        ApplyConfiguredLossFunction();
+        ApplyConfiguredLearningRateScheduler();
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Read epoch count from the optimizer's configured options.
@@ -2455,6 +2468,82 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         string? streamingStopReason = null;
         int streamingLastEpoch = 0;
         T streamingLastLoss = numOps.Zero;
+
+        // Step-level state (ConfigureStreamingTraining). A "step" is one loader batch. The data cursor
+        // (epoch, batch-in-epoch) plus the seeded shuffle make a resumed run consume exactly the batches an
+        // uninterrupted run would have.
+        var streamingOptions = _streamingTrainingOptions;
+        long globalStep = 0;
+        long lastCheckpointStep = 0;
+        int startEpoch = 0;
+        int resumeSkipBatches = 0;
+        T? lastValidationLoss = default;
+        bool hasValidationLoss = false;
+        int cursorEpoch = 0;
+        int cursorBatchInEpoch = 0;
+        if (streamingOptions?.ResumeFromLatestCheckpoint == true)
+        {
+            (globalStep, startEpoch, resumeSkipBatches) = ResumeStreamingFromLatestCheckpoint(streamingOptions, streamingLoader);
+            lastCheckpointStep = globalStep;
+        }
+
+        bool stepBudgetReached = streamingOptions?.MaxSteps is long initialBudget && globalStep >= initialBudget;
+
+        // First-batch fit of the feature and target pipelines, shared by the loop and the resume refit below.
+        void FitStreamingPipelines(TInput[] inputs, TOutput[] outputs)
+        {
+            if (_preprocessingPipeline is not null && !pipelineFitted)
+            {
+                if (inputs[0] is Tensor<T> && inputs.Length > 1
+                    && TryStackTensorBatch(inputs.Cast<Tensor<T>>().ToArray(), out var batchedForFit)
+                    && batchedForFit is TInput typedBatch)
+                {
+                    _preprocessingPipeline.Fit(typedBatch);
+                }
+                else
+                {
+                    // Fall back to fitting on a single sample when the
+                    // batch isn't stackable (heterogeneous shapes — the
+                    // loader chose not to override AggregateSamples to
+                    // pad, which is fine but means we can't construct a
+                    // [B, …] tensor for the scaler to compute statistics
+                    // over). The single-sample fit is a degenerate case
+                    // (mean = sample, var = 0) but matches the pre-#1264
+                    // behavior and lets training proceed.
+                    _preprocessingPipeline.Fit(inputs[0]);
+                }
+                pipelineFitted = true;
+            }
+
+            if (_targetPipeline is not null)
+            {
+                if (!_targetPipeline.IsFitted && outputs.Length > 0)
+                {
+                    _targetPipeline.Fit(outputs[0] is Tensor<T> && outputs.Length > 1
+                        && TryStackTensorBatch(outputs.Cast<Tensor<T>>().ToArray(), out var batchedY)
+                        && batchedY is TOutput typedY
+                            ? typedY
+                            : outputs[0]);
+                }
+            }
+        }
+
+        // An uninterrupted run fits the pipelines on the first non-empty batch of epoch 0. The checkpoint does not
+        // store their statistics, so a resumed run would otherwise fit them on the first batch AFTER the skip and
+        // scale every later batch differently from the run it resumes. Refit on that same batch (same epoch-0 seed)
+        // before skipping ahead. With no Seed the shuffle is not reproducible, so no run could match exactly.
+        if ((startEpoch > 0 || resumeSkipBatches > 0)
+            && (!pipelineFitted || (_targetPipeline is not null && !_targetPipeline.IsFitted)))
+        {
+            int? firstEpochSeed = streamingOptions?.Seed;
+            await foreach (var (fitInputs, fitOutputs) in streamingLoader.GetBatchesAsync(shuffle: true, seed: firstEpochSeed))
+            {
+                if (fitInputs.Length == 0) continue;
+                FitStreamingPipelines(fitInputs, fitOutputs);
+                break;
+            }
+        }
+
         InvokeTrainingCallbacksBegin(epochs);
 
         // #1790: guarantee OnTrainEnd fires (and the monitor session closes) even if the streaming loop
@@ -2462,10 +2551,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         try
         {
         // Train for the specified number of epochs
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = startEpoch; epoch < epochs && !stepBudgetReached; epoch++)
         {
             T epochLoss = numOps.Zero;
             int epochBatches = 0;
+            int batchInEpoch = 0;
+            int? epochSeed = streamingOptions?.Seed is int baseSeed ? unchecked(baseSeed + epoch) : null;
 
             // Iterate through all batches in the streaming loader.
             //
@@ -2486,8 +2577,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // batch in a single optimizer step. So we now stack each batch's
             // samples along a new leading batch dim and call _model.Train
             // ONCE per batch.
-            await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true))
+            await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true, seed: epochSeed))
             {
+                batchInEpoch++;
+
+                // Resume: skip the batches of the resumed epoch that the checkpointed run already trained on.
+                if (epoch == startEpoch && batchInEpoch <= resumeSkipBatches) continue;
                 if (inputs.Length == 0) continue;
 
                 // Fit preprocessing pipeline on the FIRST FULL BATCH if not already
@@ -2501,28 +2596,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 // For other TInput types we currently fall back to single-sample fit
                 // since there's no generic batch-stack primitive on those types;
                 // tracked as a follow-up.
-                if (_preprocessingPipeline is not null && !pipelineFitted)
-                {
-                    if (inputs[0] is Tensor<T> && inputs.Length > 1
-                        && TryStackTensorBatch(inputs.Cast<Tensor<T>>().ToArray(), out var batchedForFit)
-                        && batchedForFit is TInput typedBatch)
-                    {
-                        _preprocessingPipeline.Fit(typedBatch);
-                    }
-                    else
-                    {
-                        // Fall back to fitting on a single sample when the
-                        // batch isn't stackable (heterogeneous shapes — the
-                        // loader chose not to override AggregateSamples to
-                        // pad, which is fine but means we can't construct a
-                        // [B, …] tensor for the scaler to compute statistics
-                        // over). The single-sample fit is a degenerate case
-                        // (mean = sample, var = 0) but matches the pre-#1264
-                        // behavior and lets training proceed.
-                        _preprocessingPipeline.Fit(inputs[0]);
-                    }
-                    pipelineFitted = true;
-                }
+                FitStreamingPipelines(inputs, outputs);
 
                 // TARGET scaling (ConfigureTargetScaling) on the streaming path: fit once on the first
                 // batch's targets (mirroring the feature pipeline's first-batch fit above), then transform
@@ -2531,14 +2605,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TOutput[] processedOutputs = outputs;
                 if (_targetPipeline is not null)
                 {
-                    if (!_targetPipeline.IsFitted && outputs.Length > 0)
-                    {
-                        _targetPipeline.Fit(outputs[0] is Tensor<T> && outputs.Length > 1
-                            && TryStackTensorBatch(outputs.Cast<Tensor<T>>().ToArray(), out var batchedY)
-                            && batchedY is TOutput typedY
-                                ? typedY
-                                : outputs[0]);
-                    }
 
                     processedOutputs = new TOutput[outputs.Length];
                     for (int i = 0; i < outputs.Length; i++)
@@ -2695,6 +2761,50 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         epochBatches++;
                     }
                 }
+
+                globalStep++;
+                cursorEpoch = epoch;
+                cursorBatchInEpoch = batchInEpoch;
+                T runningEpochLoss = epochBatches > 0
+                    ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
+                    : numOps.Zero;
+
+                if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
+                    && globalStep % streamingOptions.ValidateEveryNSteps == 0)
+                {
+                    lastValidationLoss = await EvaluateStreamingValidationAsync(
+                        streamingOptions, globalStep, streamingMonitorSessionId);
+                    hasValidationLoss = true;
+                }
+
+                if (_checkpointManager is not null && _optimizer is not null)
+                {
+                    var checkpointId = _checkpointManager.TryAutoSaveCheckpoint(
+                        _model,
+                        _optimizer,
+                        epoch,
+                        checked((int)globalStep),
+                        StreamingCheckpointMetrics(runningEpochLoss, hasValidationLoss, lastValidationLoss),
+                        metricValue: null,
+                        shouldMinimize: true,
+                        metadata: StreamingCheckpointMetadata(epoch, batchInEpoch, globalStep, streamingOptions, streamingLoader));
+                    if (checkpointId is not null)
+                    {
+                        lastCheckpointStep = globalStep;
+                    }
+                }
+
+                if (streamingOptions?.MaxSteps is long budget && globalStep >= budget)
+                {
+                    stepBudgetReached = true;
+                    break;
+                }
+            }
+
+            // A resumed epoch whose remaining batches were all skipped trained nothing; don't report it as an epoch.
+            if (epochBatches == 0 && epoch == startEpoch && resumeSkipBatches > 0)
+            {
+                continue;
             }
 
             totalLoss = numOps.Add(totalLoss, epochLoss);
@@ -2739,6 +2849,34 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
                 break;
             }
+        }
+
+        if (stepBudgetReached)
+        {
+            streamingStopReason ??= $"step budget of {streamingOptions!.MaxSteps} reached";
+        }
+
+        // Final held-out evaluation, unless the last step was just evaluated.
+        if (streamingOptions?.ValidationLoader is not null
+            && (streamingOptions.ValidateEveryNSteps == 0 || globalStep % streamingOptions.ValidateEveryNSteps != 0))
+        {
+            lastValidationLoss = await EvaluateStreamingValidationAsync(
+                streamingOptions, globalStep, streamingMonitorSessionId);
+            hasValidationLoss = true;
+        }
+
+        // Always leave a checkpoint at the exact point training stopped (step budget, early stop or the last
+        // epoch), independent of the auto-save cadence, so a later run can resume or extend from it.
+        if (_checkpointManager is not null && _optimizer is not null && globalStep > lastCheckpointStep)
+        {
+            _checkpointManager.SaveCheckpoint(
+                _model,
+                _optimizer,
+                cursorEpoch,
+                checked((int)globalStep),
+                StreamingCheckpointMetrics(streamingLastLoss, hasValidationLoss, lastValidationLoss),
+                StreamingCheckpointMetadata(cursorEpoch, cursorBatchInEpoch, globalStep, streamingOptions, streamingLoader));
+            _checkpointManager.UpdateAutoSaveState(checked((int)globalStep));
         }
 
         }

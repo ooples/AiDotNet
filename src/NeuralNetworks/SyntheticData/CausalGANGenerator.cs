@@ -715,7 +715,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                     trainableDiscLayers, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
@@ -795,7 +795,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                     trainableGenLayers, noiseBatch, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }

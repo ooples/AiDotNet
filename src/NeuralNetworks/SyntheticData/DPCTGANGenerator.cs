@@ -781,7 +781,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     trainableGenLayers, genInput, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
