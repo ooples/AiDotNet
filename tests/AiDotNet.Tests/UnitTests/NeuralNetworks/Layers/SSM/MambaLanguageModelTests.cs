@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -43,9 +44,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(),
-            vocabSize: 100, modelDimension: 32, numLayers: 2, stateDimension: 8);
+        var model = new MambaLanguageModel<float>(CreateArch(), new MambaOptions { VocabSize = 100, ModelDimension = 32, NumLayers = 2, StateDimension = 8 });
 
         Assert.Equal(100, model.VocabSize);
         Assert.Equal(32, model.ModelDimension);
@@ -59,7 +58,7 @@ public class MambaLanguageModelTests
         await Task.Yield();
 
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(CreateArch(1), vocabSize: 0));
+            new MambaLanguageModel<float>(CreateArch(1), new MambaOptions { VocabSize = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -68,7 +67,7 @@ public class MambaLanguageModelTests
         await Task.Yield();
 
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
+            new MambaLanguageModel<float>(CreateArch(), new MambaOptions { VocabSize = 100, ModelDimension = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -77,7 +76,7 @@ public class MambaLanguageModelTests
         await Task.Yield();
 
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
+            new MambaLanguageModel<float>(CreateArch(), new MambaOptions { VocabSize = 100, NumLayers = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -86,7 +85,7 @@ public class MambaLanguageModelTests
         await Task.Yield();
 
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, stateDimension: 0));
+            new MambaLanguageModel<float>(CreateArch(), new MambaOptions { VocabSize = 100, StateDimension = 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -99,9 +98,7 @@ public class MambaLanguageModelTests
         int vocabSize = 50;
         int modelDim = 32;
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 8, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -119,9 +116,7 @@ public class MambaLanguageModelTests
         int vocabSize = 50;
         int modelDim = 32;
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 8, MaxSequenceLength = seqLen });
 
         // One unbatched sequence of IDs. [1, seq] in, [1, seq, vocab] logits out.
         var input = CreateTokenInput(1, seqLen, vocabSize);
@@ -142,9 +137,7 @@ public class MambaLanguageModelTests
         int vocabSize = 30;
         int modelDim = 16;
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 4, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(1, seqLen, vocabSize);
 
@@ -165,9 +158,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(50),
-            50, 32, numLayers: 2, stateDimension: 8, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(CreateArch(50), new MambaOptions { VocabSize = 50, ModelDimension = 32, NumLayers = 2, StateDimension = 8, MaxSequenceLength = 4 });
 
         var params1 = model.GetParameters();
         Assert.True(params1.Length > 0);
@@ -188,8 +179,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(CreateArch(50), new MambaOptions { VocabSize = 50, ModelDimension = 32, NumLayers = 2, StateDimension = 8, MaxSequenceLength = 4 });
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
@@ -202,12 +192,8 @@ public class MambaLanguageModelTests
         int vocabSize = 30;
         int modelDim = 16;
 
-        var model1 = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
-        var model2 = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
+        var model1 = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 4, MaxSequenceLength = seqLen });
+        var model2 = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 4, MaxSequenceLength = seqLen });
 
         model2.SetParameters(model1.GetParameters());
 
@@ -229,8 +215,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(CreateArch(30), new MambaOptions { VocabSize = 30, ModelDimension = 16, NumLayers = 2, StateDimension = 4, MaxSequenceLength = 4 });
         var input = CreateTokenInput(1, 4, 30);
 
         model.Predict(input);
@@ -246,8 +231,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(CreateArch(30), new MambaOptions { VocabSize = 30, ModelDimension = 16, NumLayers = 2, StateDimension = 4, MaxSequenceLength = 4 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -256,8 +240,7 @@ public class MambaLanguageModelTests
     {
         await Task.Yield();
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
+        var model = new MambaLanguageModel<float>(CreateArch(100), new MambaOptions { VocabSize = 100, ModelDimension = 64, NumLayers = 4, StateDimension = 16, MaxSequenceLength = 32 });
         var metadata = model.GetModelMetadata();
 
 
@@ -278,9 +261,7 @@ public class MambaLanguageModelTests
         int seqLen = 4;
         int vocabSize = 30;
 
-        var model = new MambaLanguageModel<double>(
-            CreateDoubleArch(vocabSize),
-            vocabSize, 16, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<double>(CreateDoubleArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = 16, NumLayers = 2, StateDimension = 4, MaxSequenceLength = seqLen });
 
         var input = CreateTokenDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -298,9 +279,7 @@ public class MambaLanguageModelTests
         int vocabSize = 20;
         int modelDim = 16;
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<float>(CreateArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 4, StateDimension = 4, MaxSequenceLength = seqLen });
 
         var input = CreateTokenInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
@@ -332,9 +311,7 @@ public class MambaLanguageModelTests
         int vocabSize = 12;
         int modelDim = 16;
 
-        var model = new MambaLanguageModel<double>(
-            CreateDoubleArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<double>(CreateDoubleArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 8, MaxSequenceLength = seqLen });
 
         var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 7);
 
@@ -369,9 +346,7 @@ public class MambaLanguageModelTests
         int vocabSize = 10;
         int modelDim = 16;
 
-        var model = new MambaLanguageModel<double>(
-            CreateDoubleArch(vocabSize),
-            vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
+        var model = new MambaLanguageModel<double>(CreateDoubleArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 4, StateDimension = 4, MaxSequenceLength = seqLen });
 
         var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 13);
 
@@ -408,8 +383,7 @@ public class MambaLanguageModelTests
             int vocabSize = 20;
             int modelDim = 16;
 
-            var model = new MambaLanguageModel<double>(
-                CreateDoubleArch(vocabSize), vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
+            var model = new MambaLanguageModel<double>(CreateDoubleArch(vocabSize), new MambaOptions { VocabSize = vocabSize, ModelDimension = modelDim, NumLayers = 2, StateDimension = 4, MaxSequenceLength = seqLen });
 
             var input = CreateTokenDoubleInput(1, seqLen, vocabSize, seed: 5);
 

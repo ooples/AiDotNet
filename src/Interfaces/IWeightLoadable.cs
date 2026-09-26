@@ -17,7 +17,12 @@ namespace AiDotNet.Interfaces;
 /// Example:
 /// ```csharp
 /// // Load pretrained weights
+/// var safeTensorsLoader = new SafeTensorsLoader&lt;float&gt;();
 /// var weights = safeTensorsLoader.Load("model.safetensors");
+///
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: 1);
+/// var model = new NeuralNetwork&lt;float&gt;(architecture);
 ///
 /// // Apply to model
 /// if (model is IWeightLoadable&lt;float&gt; loadable)

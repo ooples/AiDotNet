@@ -255,7 +255,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OMGLLaVA" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and latches
     // _disposed, and OMGLLaVA owns no other unmanaged resource.

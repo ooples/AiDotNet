@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.Video;
 /// var svd = new StableVideoDiffusion&lt;float&gt;();
 ///
 /// // Load your image (batch=1, channels=3, height=576, width=1024)
-/// var inputImage = LoadImage("landscape.jpg");
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("landscape.jpg");
 ///
 /// // Generate video with default settings
 /// var video = svd.GenerateFromImage(inputImage);
@@ -73,7 +73,7 @@ namespace AiDotNet.Diffusion.Video;
 ///     seed: 42);
 ///
 /// // Output shape: [1, 25, 3, 576, 1024] (batch, frames, channels, height, width)
-/// SaveVideo(dynamicVideo, "output.mp4");
+/// // dynamicVideo is the result tensor — write it out with your own encoder.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

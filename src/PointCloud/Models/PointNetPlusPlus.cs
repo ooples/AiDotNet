@@ -68,7 +68,7 @@ namespace AiDotNet.PointCloud.Models;
 /// <example>
 /// <code>
 /// // Create a PointNet++ model for hierarchical point cloud classification
-/// var options = new PointNetPlusPlusOptions
+/// var options = new AiDotNet.Models.Options.PointNetPlusPlusOptions
 /// {
 ///     NumClasses = 40,
 ///     UseMultiScaleGrouping = true
@@ -585,7 +585,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

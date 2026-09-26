@@ -46,7 +46,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// // Create a SegNeXt model for convolutional semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
 /// var model = new SegNeXt&lt;double&gt;(architecture, numClasses: 150);
 ///
@@ -502,7 +502,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

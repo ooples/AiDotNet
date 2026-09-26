@@ -61,17 +61,19 @@ public class SMOTE<T> : OversamplingBase<T>
     /// <b>For Beginners:</b> Example usage:
     ///
     /// <code>
+    /// var trainX = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var trainY = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// // Default: balance classes using 5 nearest neighbors
     /// var smote = new SMOTE&lt;double&gt;();
     ///
     /// // Custom: partial balance (minority = 50% of majority), 3 neighbors
-    /// var smote = new SMOTE&lt;double&gt;(samplingStrategy: 0.5, kNeighbors: 3);
+    /// var smote2 = new SMOTE&lt;double&gt;(samplingStrategy: 0.5, kNeighbors: 3);
     ///
     /// // With reproducibility
-    /// var smote = new SMOTE&lt;double&gt;(seed: 42);
+    /// var smote3 = new SMOTE&lt;double&gt;(seed: 42);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = smote.Resample(trainX, trainY);
+    /// var (newX, newY) = smote3.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

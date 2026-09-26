@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.StyleTransfer;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -27,6 +27,26 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// </remarks>
 public class InstantStyleModelTests : DiffusionModelTestBase<float>
 {
+    // This fixture used to override CloneOutputRelativeTolerance to 1.5e-5, on the same grounds as
+    // its sibling StyDiffModelTests. Removed on the condition both overrides set: that the clone
+    // difference holds at zero once the bit-identity check no longer runs BETWEEN the two forwards
+    // (see DiffusionModelTestBase).
+    //
+    // Validation status. Clone_ShouldProduceIdenticalOutput passed in 133 ms on Linux CI with the
+    // default tolerance restored -- shard "ModelFamily - Diffusion D-I", 247/247 -- and passes on
+    // Windows/x64 and on AVX2 Linux. That is one green CI observation, not a proof the divergence
+    // is gone: the ISA of that runner was not recorded, because the numeric-environment reading
+    // only printed on failure. It is emitted unconditionally from here on, so the next run will
+    // say.
+    //
+    // Unlike StyDiff's, this override was load-bearing: Linux CI observed 1.86e-5 against a
+    // 1.60e-5 allowance on an output of magnitude 4.63 -- about 4e-6 relative, roughly 39 float
+    // ulp -- so at that magnitude the widened relative term dominated the bound. If it returns,
+    // that is the measurement to reproduce, and the history is in StyDiffModelTests: the "cold
+    // versus warm packed-weight path" story is contradicted by Predict_ShouldBeDeterministic,
+    // which makes exactly that cold-then-warm comparison on one instance and matches to 12
+    // decimals, and the divergence has never reproduced on AVX2 hardware.
+
     protected override int[] InputShape => [1, 4, 8, 8];
     protected override int[] OutputShape => [1, 4, 8, 8];
 

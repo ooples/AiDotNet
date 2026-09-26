@@ -254,7 +254,12 @@ public partial class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAg
 
     public override Vector<T> Predict(Vector<T> input)
     {
-        _isFirstAction = false;
+        // Serving must not consume the episode's exploring start. SelectAction already skips the
+        // exploring-start branch whenever training is false, so clearing the flag here changed
+        // nothing about THIS call -- all it did was silently cancel the random start of the episode
+        // already in progress. Evaluating a partly trained agent mid-episode therefore degraded the
+        // very exploration Monte Carlo ES relies on for convergence (Sutton and Barto, Monte Carlo
+        // ES), which is an observation quietly mutating the model.
         return SelectAction(input, training: false);
     }
 

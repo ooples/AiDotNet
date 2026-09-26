@@ -31,10 +31,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new UnifiedMultimodalOptions { ImageSize = 224, EmbeddingDim = 768 };
-/// var model = new UnifiedMultimodalNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
-/// var output = model.Predict(image);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new UnifiedMultimodalNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -138,22 +141,20 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     /// </summary>
     public UnifiedMultimodalNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
-        int maxSequenceLength = DEFAULT_MAX_SEQ_LEN,
-        int numTransformerLayers = DEFAULT_NUM_LAYERS,
+        UnifiedMultimodalNetworkOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null,
-        UnifiedMultimodalNetworkOptions? options = null)
+        int? seed = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new UnifiedMultimodalNetworkOptions();
+        _options.Validate();
         Options = _options;
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _numTransformerLayers = numTransformerLayers;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _numTransformerLayers = _options.NumTransformerLayers;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         // AdamW (decoupled weight decay) is the canonical optimizer for multimodal transformers:

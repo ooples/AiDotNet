@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Stabilization;
 /// // Create a StabStitch model for joint stabilization and stitching
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new StabStitchOptions();
 /// var stabStitch = new StabStitch&lt;double&gt;(architecture, options);
@@ -162,7 +163,7 @@ public partial class StabStitch<T> : VideoStabilizationBase<T>
                 { "MeshGridRows", _options.MeshGridRows },
                 { "MeshGridCols", _options.MeshGridCols }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

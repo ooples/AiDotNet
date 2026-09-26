@@ -3,6 +3,21 @@ name: Test impact map
 # Each invocation first harvests and audits the previous intentional coverage-everywhere run, then
 # dispatches the next one. The expensive run never overlaps the map decision it will later audit.
 on:
+  # Re-certify on every merge. Nothing else does: a fix to the map, the certificate or the
+  # selector only takes effect once a map run executes on master AFTER it lands, and the schedule
+  # below is the only thing that ever did. PR #2176 merged at 10:40 on 2026-09-22, eight and a
+  # half hours after that day's 02:11 run had already failed on the pre-merge code - so every
+  # pull request kept escalating to the full 164-shard matrix until the map was dispatched by
+  # hand. This harvests and audits only; the coverage-everywhere dispatch below stays on the
+  # schedule, so a merge costs the ~5-minute map build, not a ~5-hour instrumented matrix.
+  push:
+    branches:
+      - master
+      # The same acceptance harness sonarcloud.yml uses. A push trigger cannot be exercised from a
+      # pull request - it only fires on the branch it names - so without this the re-certify-on-
+      # merge behaviour could only be tested by merging it, which is the thing it is meant to make
+      # safe. Pushing this branch to ci-proof/** runs the real post-merge path first.
+      - 'ci-proof/**'
   schedule:
     # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
     # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
@@ -52,6 +67,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
           ./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-ShardMapCertificate self-test failed' }
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Selection reduction self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -68,10 +85,8 @@ jobs:
           # Treat workflow_dispatch input as data, never shell source.
           INPUT_RUN_ID: ${{ inputs.run_id }}
         run: |
-          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name]')
-          expected_sorted=$(printf '%s' "$expected" | jq -c 'sort')
-          expected_count=$(printf '%s' "$expected" | jq 'length')
-          if [ "$expected_count" -eq 0 ]; then
+          current_names=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name] | sort')
+          if [ "$(printf '%s' "$current_names" | jq 'length')" -eq 0 ]; then
             echo "::error::.github/test-shards.yml yielded no shards"
             exit 1
           fi
@@ -118,9 +133,30 @@ jobs:
               echo "run $candidate has an invalid coverage-everywhere marker"
               return 1
             fi
+            # The run is judged against the manifest committed at ITS commit, not today's. The map is
+            # the truth at that commit; Select-Shards runs every shard added or redefined since and
+            # drops retired ones, so a manifest edit on master no longer discards a whole night.
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "run $candidate tested $sha, which is not in this checkout"
+              return 1
+            fi
+            if ! git cat-file -e "${sha}:.github/test-shards.yml" 2>/dev/null; then
+              echo "run $candidate has no shard manifest at $sha"
+              return 1
+            fi
+            if ! run_manifest=$(git show "${sha}:.github/test-shards.yml" | yq -o=json -I=0 '.shard') ||
+               ! expected_sorted=$(printf '%s' "$run_manifest" | jq -ce 'if type == "array" then [.[].name] | sort else error("not a list") end'); then
+              echo "run $candidate has an unreadable shard manifest at $sha"
+              return 1
+            fi
+            expected_count=$(printf '%s' "$expected_sorted" | jq 'length')
+            if [ "$expected_count" -eq 0 ]; then
+              echo "run $candidate has an empty shard manifest at $sha"
+              return 1
+            fi
             marker_names=$(jq -c '.shardNames | sort' "$marker")
             if [ "$marker_names" != "$expected_sorted" ]; then
-              echo "run $candidate used a different shard manifest - skipping stale coverage"
+              echo "run $candidate marker does not match the shard manifest at its own commit"
               return 1
             fi
 
@@ -168,7 +204,8 @@ jobs:
             fi
             valid_sha="$sha"
             valid_map_run_id="$map_run_id"
-            echo "run $candidate has the exact $expected_count-shard completed matrix"
+            drift=$(jq -n --argjson run "$expected_sorted" --argjson now "$current_names" '{added: ($now - $run | length), retired: ($run - $now | length)}')
+            echo "run $candidate has the exact $expected_count-shard completed matrix of its commit (manifest drift since: $drift)"
             return 0
           }
 
@@ -280,12 +317,19 @@ jobs:
         if: steps.source.outputs.found == 'true'
         shell: pwsh
         run: |
-          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          # The source commit's manifest: the map's shard universe must equal the audited run's.
+          $all = @(git show '${{ steps.source.outputs.sha }}:.github/test-shards.yml' | yq -o=json -I=0 '.shard' | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $all.Count -eq 0) { throw 'could not read the source commit shard manifest' }
+          # Entries that declare mustCover stay always-run unless their digest reached that code (see the
+          # MODEL-INVENTORY section of test-shards.yml): their subject runs in a child worker process.
+          $requirements = Join-Path $env:RUNNER_TEMP 'shard-coverage-requirements.json'
+          ConvertTo-Json -InputObject @($all) -Depth 6 | Set-Content -LiteralPath $requirements -Encoding utf8
           & ./tools/TestImpact/New-ShardMap.ps1 `
               -DigestDirectory digests `
               -AllShards @($all.name) `
               -Sha '${{ steps.source.outputs.sha }}' `
-              -OutFile shard-map.json
+              -OutFile shard-map.json `
+              -CoverageRequirementsFile $requirements
 
           $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
           $map = Get-Content shard-map.json -Raw | ConvertFrom-Json
@@ -295,6 +339,41 @@ jobs:
           Write-Host "map: $files file(s), $size MB"
           "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # THE NUMBER NOBODY WAS LOOKING AT. The summary above reports how many shards were mapped, but
+      # not that a whole FAMILY can be missing -- and an unmapped shard is silently added to
+      # alwaysRun, so it runs on every validated pull request forever with no warning and no failed
+      # check. That is how the entire Conformance family (35 shards) came to sit under every run
+      # while the job counts still looked like a selector making choices.
+      #
+      # Reported, not enforced, for now: the floor is real today and failing here would only block
+      # the map that is needed to close it. -FailOnEmptyFamily turns it into a gate once a family is
+      # fixed, which is what stops it regressing.
+      - name: Report what the map can actually select
+        if: steps.source.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Measure-MapCoverage.ps1 -MapFile shard-map.json
+          # Reported, never a block: this runs before certification, so throwing here refuses the whole map.
+          if ($LASTEXITCODE -ne 0) { Write-Host '::warning::map coverage report exited non-zero - the map build continues' }
+
+      # Correctness proofs cannot see a map that skips nothing: the 2026-09-21 map was correct and
+      # still left 51 of 164 shards always-run. This is the only gate on how much the map can
+      # actually save, and it only ever ratchets down.
+      - name: Ratchet on selection reduction
+        # Same guard as "Build the map" and "Upload candidate map": with no valid coverage source
+        # those steps are skipped and shard-map.json never exists, so an unguarded ratchet fails on
+        # a missing file and reports a reduction regression that did not happen. The ci-proof run
+        # 35731913393 failed exactly this way before this reached master.
+        if: steps.source.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          yq -o=json -I=0 '.shard' .github/test-shards.yml | Set-Content -LiteralPath reduction-manifest.json -Encoding utf8
+          ./tools/TestImpact/Test-SelectionReduction.ps1 -MapFile shard-map.json `
+              -ShardManifestFile reduction-manifest.json -TestsRoot tests
+          # Measurement only. A regression is reported as a warning inside the script, and a crash of
+          # the measurement itself must not refuse the map either.
+          if ($LASTEXITCODE -ne 0) { Write-Host '::warning::selection reduction measurement exited non-zero - the map build continues' }
 
       - name: Upload candidate map
         if: steps.source.outputs.found == 'true'
@@ -394,9 +473,12 @@ jobs:
             $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
             $extension = Complete-CiMapWorkloads -Map $previousMap -Manifest $auditShards
             $historicalMapFile = 'prevmap/shard-map.json'
-            if ($extension.Added.Count -gt 0) {
+            if ($extension.Added.Count -gt 0 -or $extension.RetiredIndexed.Count -gt 0) {
               # Replay ordinary historical coverage with new auxiliary workloads mandatory.
               # Do not claim that the old source measured these newly introduced workloads.
+              # A retirement must go through here too: the completed map is the only one carrying
+              # retiredShards, and without it certification demands an outcome from a shard that
+              # no longer has a job and can never report one.
               $extension.Map | ConvertTo-Json -Depth 12 -Compress | Set-Content prevmap/selection-map.json
               $historicalMapFile = 'prevmap/selection-map.json'
             }
@@ -503,7 +585,10 @@ jobs:
     name: Dispatch next coverage-everywhere run
     needs: build-map
     # Bootstrap even when no source exists yet; explicit harvest-only invocations do not dispatch.
-    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id }}
+    # Never on a merge: instrumenting the whole matrix is ~5 hours of runner occupancy, and the
+    # push trigger exists to re-certify from evidence that already exists, not to gather new
+    # evidence. The schedule and an explicit dispatch remain the only ways to start one.
+    if: ${{ always() && github.event_name != 'push' && !inputs.skip_coverage_run && !inputs.run_id }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

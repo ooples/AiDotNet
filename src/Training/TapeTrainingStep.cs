@@ -269,26 +269,34 @@ public static class TapeTrainingStep<T>
     {
         foreach (var layer in layers)
         {
-            // Collect this layer's own parameters if it's trainable
-            if (layer is ITrainableLayer<T> trainable)
-            {
-                foreach (var param in trainable.GetTrainableParameters())
-                {
-                    // Deduplicate: shared parameters (e.g., tied weights) appear only once
-                    if (seen.Add(param))
-                    {
-                        parameters.Add(param);
-                    }
-                }
-            }
+            CollectLayerParameters(layer, parameters, seen);
+        }
+    }
 
-            // Recurse into sub-layers (composite layers expose children via GetSubLayers)
-            var subLayers = layer.GetSubLayers();
-            if (subLayers.Count > 0)
+    /// <summary>
+    /// Adds a registered layer subtree without replacing the primary-layer parameter cache.
+    /// </summary>
+    /// <remarks>
+    /// Model-owned auxiliary branches use the same recursive traversal as ordinary layers.
+    /// The caller's identity set also deduplicates tensors shared across those two routes.
+    /// </remarks>
+    internal static void CollectLayerParameters(
+        ILayer<T> layer,
+        List<Tensor<T>> parameters,
+        HashSet<Tensor<T>> seen,
+        bool materializedOnly = false)
+    {
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
             {
-                CollectRecursive(subLayers, parameters, seen);
+                if (materializedOnly && (parameter is null || parameter.Length == 0)) continue;
+                if (seen.Add(parameter)) parameters.Add(parameter);
             }
         }
+
+        foreach (var child in layer.GetSubLayers())
+            CollectLayerParameters(child, parameters, seen, materializedOnly);
     }
 
     /// <summary>

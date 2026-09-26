@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -38,10 +39,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SparseNeuralNetworkOptions { InputSize = 784, HiddenSize = 1024, Sparsity = 0.9 };
-/// var model = new SparseNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SparseNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]
@@ -51,6 +56,16 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks", "https://arxiv.org/abs/1803.03635")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, Momentum = 0.9, DecayRate = 0.1,
+                Milestones = [80, 120], Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Frankle and Carbin 2019, Sec. 4: the convolutional CIFAR-10 experiments use "
+                        + "momentum 0.9 and decrease the learning rate by a factor of 10 at epochs 80 "
+                        + "and 120. The paper deliberately surveys several optimization strategies -- "
+                        + "SGD, momentum and Adam -- so this records the setting of its convolutional "
+                        + "experiments rather than a single choice for all of them, and states no rate, "
+                        + "which is why the model keeps its own optimizer and is verified against this "
+                        + "record.")]
 public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly SparseNeuralNetworkOptions _options;
@@ -117,7 +132,8 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         _sparsity = NumOps.FromDouble(sparsity);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
@@ -423,7 +439,7 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

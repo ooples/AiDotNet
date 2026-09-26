@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -33,7 +35,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 /// var trainModel = new BASIC&lt;double&gt;(architecture, new BASICOptions());
 /// </code>
@@ -51,6 +53,11 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Pham et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, ReferenceBatchSize = 65536,
+                Source = "Pham et al. 2023, Sec. 4: the batch size is 65536, twice CLIP's and four "
+                        + "times ALIGN's. The optimizer is left unspecified because the paper never "
+                        + "names one for its own training -- its Adam references are a discussion of "
+                        + "optimizers that maintain gradient moments, not a stated choice.")]
 public partial class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
@@ -124,7 +131,9 @@ public partial class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
         _options = options ?? new BASICOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

@@ -240,6 +240,8 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         var parameterCount = InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
         if (!_isShardingInitialized || _initializedWrappedParameterCount != parameterCount)
         {
+            // A first forward/backward can materialize lazy parameters after the shard was
+            // inspected. Rebuild the layout instead of returning the old cached vector.
             _isShardingInitialized = false;
             InvalidateLayoutState();
             OnBeforeInitializeSharding();

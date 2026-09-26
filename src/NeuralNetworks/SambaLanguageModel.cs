@@ -22,10 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SambaOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
-/// var model = new SambaLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SambaLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -66,14 +70,8 @@ public partial class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 
     public SambaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 32000,
-        int modelDimension = 256,
-        int numLayers = 8,
-        int stateDimension = 16,
-        int attentionInterval = 2,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        SambaOptions? options = null)
+        SambaOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture,
             // Samba's LM head emits RAW LOGITS (DenseLayer with no activation, see
             // LayerHelper.CreateSambaLayers), so the loss must be cross-entropy-with-logits (fused
@@ -88,13 +86,14 @@ public partial class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SambaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _attentionInterval = attentionInterval;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _stateDimension = _options.StateDimension;
+        _attentionInterval = _options.AttentionInterval;
+        _maxSeqLength = _options.MaxSequenceLength;
         InitializeLayers();
     }
 
@@ -149,7 +148,7 @@ public partial class SambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

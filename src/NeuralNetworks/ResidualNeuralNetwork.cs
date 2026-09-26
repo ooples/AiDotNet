@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -36,10 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ResidualNeuralNetworkOptions { InputSize = 784, NumResidualBlocks = 4, HiddenSize = 256 };
-/// var model = new ResidualNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ResidualNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -50,6 +55,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.1, Momentum = 0.9, WeightDecay = 1e-4, ReferenceBatchSize = 256,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "He et al. 2016, Sec. 3.4 (Implementation): SGD, lr 0.1 divided by 10 when the error plateaus, momentum 0.9, weight decay 1e-4.")]
 public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;
@@ -298,7 +306,9 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         ResidualNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new ResidualNeuralNetworkOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
@@ -726,7 +736,7 @@ finally
                 { "InputSize", Architecture.CalculatedInputSize },
                 { "OutputSize", Architecture.CalculateOutputSize() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -22,10 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new RecurrentGemmaOptions { VocabSize = 256000, ModelDim = 2560, NumLayers = 26 };
-/// var model = new RecurrentGemmaLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new RecurrentGemmaLanguageModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -64,12 +68,8 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
 
     public RecurrentGemmaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         RecurrentGemmaOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
@@ -78,11 +78,12 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RecurrentGemmaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _maxSeqLength = _options.MaxSequenceLength;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
@@ -221,7 +222,7 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 
