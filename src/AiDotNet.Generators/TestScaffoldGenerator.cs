@@ -8894,7 +8894,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options { " +
                     "HiddenDim = 32, EncoderDim = 32, DecoderDim = 32, DiffusionDim = 32, " +
                     "MelChannels = 16, NumEncoderLayers = 1, NumDiffusionSteps = 2, " +
-                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16 })";
+                    // WarmupSteps: the paper's 5000-step ramp leaves the rate near 1e-8 for the
+                    // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
+                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, WarmupSteps = 2 })";
             }
             else if (model.ClassName == "OWSM" && model.TypeParameterCount == 1)
             {
