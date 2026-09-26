@@ -881,20 +881,24 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         return new CapturedLayout(new ParameterLayoutSnapshot(slots), capturedEntries);
     }
 
+    // An accessor whose component is currently absent (Current is null) holds no storage, so it can
+    // never be the same storage as anything else. Comparing it by reference made two absent
+    // components "the same storage": a detector with neither a backbone nor a neck either dropped the
+    // second registration silently or, when their availabilities differed, refused to register at all.
     private static bool ReferencesSameSource(IParameterSource<T>? registered, IParameterSource<T> candidate)
-        => ReferenceEquals(registered, candidate)
-        || registered is ComponentCollectionParameterSource<T> collection
-           && collection.ContainsCurrent(
-               candidate is ComponentAccessorParameterSource<T> collectionCandidateAccessor
-                   ? collectionCandidateAccessor.Current
-                   : candidate)
-        || registered is ComponentAccessorParameterSource<T> accessor
-           && ReferenceEquals(accessor.Current,
-               candidate is ComponentAccessorParameterSource<T> candidateAccessor
-                   ? candidateAccessor.Current
-                   : candidate)
-        || candidate is ComponentAccessorParameterSource<T> reverseAccessor
-           && ReferenceEquals(reverseAccessor.Current, registered);
+    {
+        if (ReferenceEquals(registered, candidate)) return true;
+
+        IParameterSource<T>? candidateCurrent = candidate is ComponentAccessorParameterSource<T> candidateAccessor
+            ? candidateAccessor.Current
+            : candidate;
+        if (candidateCurrent is null) return false;
+
+        return registered is ComponentCollectionParameterSource<T> collection && collection.ContainsCurrent(candidateCurrent)
+            || registered is ComponentAccessorParameterSource<T> accessor
+               && accessor.Current is not null && ReferenceEquals(accessor.Current, candidateCurrent)
+            || candidate is ComponentAccessorParameterSource<T> && ReferenceEquals(candidateCurrent, registered);
+    }
 
     private static bool TryGetNetwork(
         IParameterSource<T>? source,

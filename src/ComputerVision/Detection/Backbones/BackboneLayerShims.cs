@@ -52,10 +52,6 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
         _padding = padding;
         _layer = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, padding,
             (Interfaces.IActivationFunction<T>?)null);
-        // The kernel is [out, in, k, k] whatever the spatial size, and in is known here. Resolving the shape
-        // (without allocating or drawing weights) gives a copy a known slot before its parameters are
-        // restored; left lazy, a clone's convolutions were ShapeDeferred and the restore refused them.
-        _layer.ResolveShapesOnly(new[] { inChannels, Math.Max(kernelSize, 1) + (2 * padding) + stride, Math.Max(kernelSize, 1) + (2 * padding) + stride });
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -213,8 +209,6 @@ internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParame
         _inDim = inDim;
         _outDim = outDim;
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);
-        // [in, out] is known here; resolving it lets a copy restore this slot before its first forward.
-        _layer.ResolveShapesOnly(new[] { 1, inDim });
     }
 
     /// <summary>
