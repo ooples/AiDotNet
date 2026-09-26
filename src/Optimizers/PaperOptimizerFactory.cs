@@ -61,11 +61,24 @@ internal static class PaperOptimizerFactory
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
-        IFullModel<T, TInput, TOutput> model, string component = "")
+        IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0)
     {
         if (model is null) return null;
 
         var recipe = Find(model, component);
+        // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper
+        // recipe here, so the declared optimizer and the model's configuration agree rather than the
+        // configured warmup reaching only the fallback optimizer.
+        if (recipe is not null && warmupStepsOverride > 0)
+            recipe = Merge(new PaperOptimizerAttribute(OptimizerKind.Unspecified)
+            {
+                Phase = recipe.Phase,
+                Variant = recipe.Variant,
+                Component = recipe.Component,
+                Provenance = recipe.Provenance,
+                Source = recipe.Source,
+                WarmupSteps = warmupStepsOverride,
+            }, recipe);
         if (recipe is null)
         {
             // Record the absence too. "This model declares nothing" is a different statement from
@@ -879,7 +892,16 @@ internal static class PaperOptimizerFactory
         ILearningRateScheduler? scheduler, PaperOptimizerAttribute recipe,
         double baseRate, int warmupSteps, int totalSteps)
     {
-        if (scheduler is null || warmupSteps <= 0) return scheduler;
+        if (warmupSteps <= 0) return scheduler;
+        // A warmup over a constant rate: the constant schedule builds no scheduler of its own, and returning
+        // that null here dropped the declared warmup entirely - S4's configured 32-step ramp never ran and its
+        // first LAMB steps overshot at the full rate. Ramp in, then hold the base rate (DecayMode.Constant, so an
+        // unknown run length cannot decay it to zero after the ramp).
+        if (scheduler is null)
+            return new LinearWarmupScheduler(
+                baseRate, warmupSteps,
+                warmupInitLr: FirstWarmupRate(baseRate, warmupSteps),
+                decayMode: LinearWarmupScheduler.DecayMode.Constant);
 
         // These three already ramp; wrapping them would warm up twice.
         if (recipe.Schedule is LearningRateSchedulerType.LinearWarmup

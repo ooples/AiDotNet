@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using System;
 using System.Reflection;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -755,11 +755,13 @@ public abstract class ReinforcementLearningTestBase<T>
         var snapshot = new double[before.Length];
         for (int i = 0; i < before.Length; i++) snapshot[i] = ToD(before[i]);
 
+        bool agentDrawsItsOwnActions = false;
         for (int i = 0; i < 512; i++)
         {
             bool even = i % 2 == 0;
-            agent.StoreExperience(state, even ? rewarded : punished,
-                ToT(even ? 1.0 : -1.0), state, done: i % 64 == 63);
+            StoreDrawnTransition(agent, state, even ? rewarded : punished,
+                action => RewardFor(action, rewarded, punished), state, i % 64 == 63,
+                ref agentDrawsItsOwnActions);
         }
 
         // Run the WHOLE budget rather than stopping at the first flicker of movement. Breaking early
@@ -780,8 +782,9 @@ public abstract class ReinforcementLearningTestBase<T>
             // cadence, next index -- so no agent sees a distribution it would not have seen anyway.
             int fed = 512 + step;
             bool feedRewarded = fed % 2 == 0;
-            agent.StoreExperience(state, feedRewarded ? rewarded : punished,
-                ToT(feedRewarded ? 1.0 : -1.0), state, done: fed % 64 == 63);
+            StoreDrawnTransition(agent, state, feedRewarded ? rewarded : punished,
+                action => RewardFor(action, rewarded, punished), state, fed % 64 == 63,
+                ref agentDrawsItsOwnActions);
 
             agent.Train();
             if (step % 512 != 511) continue;
@@ -800,6 +803,113 @@ public abstract class ReinforcementLearningTestBase<T>
         }
 
         return (moved ? agent.SelectAction(state, explore: false) : null, stepsTrained);
+    }
+
+    /// <summary>
+    /// Stores one transition, handing the agent <paramref name="preferred"/> where it will take it
+    /// and an action it drew itself where it will not, and rewarding whichever action was stored.
+    /// </summary>
+    /// <remarks>
+    /// The two regimes are mutually exclusive, so the first store decides which one this agent is
+    /// in and <paramref name="agentDrawsItsOwnActions"/> carries that decision across the loop.
+    ///
+    /// Most agents accept any action the fixture hands them, and some REQUIRE that. Monte Carlo
+    /// Exploring Starts draws its exploring action on the first step of an episode and is greedy
+    /// afterwards, so a stream assembled only from what it draws revisits one action forever, never
+    /// values the other, and the policy cannot move towards whichever one pays. Feeding it the
+    /// action the fixture chose is what makes exploring starts work at all.
+    ///
+    /// An on-policy agent refuses exactly that. FinancialA2CAgent stamps the action it last returned
+    /// from SelectAction together with the state it was drawn for, and StoreExperience throws
+    /// "Use an unconsumed action sampled by this agent from the current policy for these state
+    /// values." for anything else -- including an action the agent itself produced a moment earlier,
+    /// since drawing two up front and storing the older one, or reusing one draw across a whole
+    /// prefill loop, both break the contract. Redrawing immediately before each store is what a real
+    /// rollout does.
+    ///
+    /// The refusal is therefore the signal: attempt the fixture's action, and switch to redrawing
+    /// only for an agent that rejects it.
+    /// </remarks>
+    private static void StoreDrawnTransition(
+        IRLAgent<T> agent,
+        Vector<T> state,
+        Vector<T> preferred,
+        Func<Vector<T>, double> reward,
+        Vector<T> nextState,
+        bool done,
+        ref bool agentDrawsItsOwnActions)
+    {
+        if (!agentDrawsItsOwnActions)
+        {
+            try
+            {
+                agent.StoreExperience(state, preferred, ToT(reward(preferred)), nextState, done);
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                // The agent polices action provenance. Every later store goes through the draw path.
+                agentDrawsItsOwnActions = true;
+            }
+        }
+
+        var drawn = DrawActionFor(agent, state, preferred);
+        agent.StoreExperience(state, drawn, ToT(reward(drawn)), nextState, done);
+    }
+
+    /// <summary>
+    /// Returns an action for <paramref name="state"/> that the agent itself has just drawn and has
+    /// not yet consumed, reproducing <paramref name="preferred"/> where the policy can.
+    /// </summary>
+    /// <remarks>
+    /// Only a one-hot action is worth redrawing for: a discrete policy assigns every index nonzero
+    /// probability, so the wanted index arrives within a few draws. A continuous policy will never
+    /// reproduce a given vector exactly, and those agents accept whatever action they are given, so
+    /// the preferred vector is returned unchanged.
+    /// </remarks>
+    private static Vector<T> DrawActionFor(IRLAgent<T> agent, Vector<T> state, Vector<T> preferred)
+    {
+        if (!IsOneHot(preferred)) return preferred;
+
+        // The LAST draw is returned when the budget runs out, not the preferred action. A policy
+        // that has learned to avoid the punished action stops producing it -- that is the agent
+        // working, not a fixture fault -- and handing back the preferred vector at that point would
+        // store an action the agent never sampled, which is exactly what the provenance check
+        // refuses. Callers reward the action they get back rather than the one they asked for, so
+        // the stream stays a real on-policy rollout in either case.
+        Vector<T> drawn = preferred;
+        for (int draw = 0; draw < 512; draw++)
+        {
+            drawn = agent.SelectAction(state, explore: true);
+            if (Distance(drawn, preferred) <= 1e-12) break;
+        }
+
+        return drawn;
+    }
+
+    /// <summary>
+    /// The reward an action earns: positive for the rewarded action, negative for the punished one,
+    /// and neutral for anything else the policy happens to draw.
+    /// </summary>
+    private static double RewardFor(Vector<T> action, Vector<T> rewarded, Vector<T> punished)
+    {
+        if (Distance(action, rewarded) <= 1e-12) return 1.0;
+        if (Distance(action, punished) <= 1e-12) return -1.0;
+        return 0.0;
+    }
+
+    /// <summary>True when exactly one component is one and every other is zero.</summary>
+    private static bool IsOneHot(Vector<T> action)
+    {
+        int hot = 0;
+        for (int i = 0; i < action.Length; i++)
+        {
+            double value = ToD(action[i]);
+            if (Math.Abs(value - 1.0) <= 1e-12) { hot++; continue; }
+            if (Math.Abs(value) > 1e-12) return false;
+        }
+
+        return hot == 1;
     }
 
     /// <summary>Largest absolute per-component distance between two actions.</summary>
@@ -871,17 +981,22 @@ public abstract class ReinforcementLearningTestBase<T>
         var stateB = CreateRandomState(rng);
         var actionA = agent.SelectAction(stateA, explore: true);
         var actionB = agent.SelectAction(stateB, explore: true);
+        bool agentDrawsItsOwnActions = false;
         for (int i = 0; i < 512; i++)
         {
             bool even = i % 2 == 0;
             // Differing rewards per state: a constant reward stream is genuinely unlearnable for
             // some correct algorithms (a gradient bandit leaves its preferences untouched).
-            agent.StoreExperience(
-                even ? stateA : stateB,
+            var stored = even ? stateA : stateB;
+            double reward = even ? 1.0 : -1.0;
+            StoreDrawnTransition(
+                agent,
+                stored,
                 even ? actionA : actionB,
-                ToT(even ? 1.0 : -1.0),
+                _ => reward,
                 even ? stateB : stateA,
-                done: i % 64 == 63);
+                i % 64 == 63,
+                ref agentDrawsItsOwnActions);
         }
 
         var moved = new HashSet<string>(StringComparer.Ordinal);

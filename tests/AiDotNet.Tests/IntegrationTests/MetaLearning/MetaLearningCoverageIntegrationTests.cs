@@ -589,10 +589,11 @@ public class MetaLearningCoverageIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ANIL_Adapt_WithL2Penalty_And_ModelAccess()
     {
+        // A one-value-per-example body gives the head a 1-wide representation (see ANIL_MetaTrainAndAdapt_Run).
         var model = new LinearVectorModel(2);
         var options = new ANILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
@@ -608,7 +609,8 @@ public class MetaLearningCoverageIntegrationTests
         var anilModel = Assert.IsType<ANILModel<double, Matrix<double>, Vector<double>>>(adapted);
         var predictions = anilModel.Predict(task.QuerySetX);
 
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score row per query example (Raghu et al. 2020 apply the head to each example).
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
         Assert.True(anilModel.GetParameters().Length > 0);
         Assert.NotNull(anilModel.GetModelMetadata());
     }
@@ -617,17 +619,18 @@ public class MetaLearningCoverageIntegrationTests
     public async Task BOIL_SecondOrder_And_ModelAccess()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body. ReinitializeBody is gone: it copied the current
+        // parameters and so reinitialised nothing, and re-randomising a meta-learned body contradicts BOIL.
         var options = new BOILOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            FeatureDimension = 2,
+            FeatureDimension = 1,
             NumClasses = 2,
             AdaptationSteps = 1,
             InnerLearningRate = 0.01,
             OuterLearningRate = 0.01,
             UseFirstOrder = false,
             UseLayerwiseLearningRates = true,
-            BodyL2Regularization = 0.1,
-            ReinitializeBody = true
+            BodyL2Regularization = 0.1
         };
 
         var algorithm = new BOILAlgorithm<double, Matrix<double>, Vector<double>>(options);
@@ -641,7 +644,7 @@ public class MetaLearningCoverageIntegrationTests
         var boilModel = Assert.IsType<BOILModel<double, Matrix<double>, Vector<double>>>(adapted);
         var predictions = boilModel.Predict(task.QuerySetX);
 
-        Assert.Equal(options.NumClasses, predictions.Length);
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
         Assert.True(boilModel.GetParameters().Length > 0);
         Assert.NotNull(boilModel.GetModelMetadata());
 
@@ -657,9 +660,11 @@ public class MetaLearningCoverageIntegrationTests
     public async Task LEO_MetaTrain_Accumulates_And_ModelAccess()
     {
         var model = new LinearVectorModel(2);
+        // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the
+        // feature encoder's per-example output width, which LEO now checks.
         var options = new LEOOptions<double, Matrix<double>, Vector<double>>(model)
         {
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             LatentDimension = 2,
             HiddenDimension = 2,
             NumClasses = 2,
@@ -810,7 +815,9 @@ public class MetaLearningCoverageIntegrationTests
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
         {
             NumClasses = 2,
-            EmbeddingDimension = 2,
+            // A 1-wide representation from the one-value-per-example body: EmbeddingDimension is the embedding
+            // network's per-example output width, which MetaOptNet now checks.
+            EmbeddingDimension = 1,
             SolverType = ConvexSolverType.LogisticRegression,
             RegularizationStrength = 0.1,
             OuterLearningRate = 0.01,
@@ -841,7 +848,8 @@ public class MetaLearningCoverageIntegrationTests
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
         {
             NumClasses = 2,
-            EmbeddingDimension = 2,
+            // A 1-wide representation from the one-value-per-example body, as above.
+            EmbeddingDimension = 1,
             SolverType = ConvexSolverType.SVM,
             RegularizationStrength = 0.2,
             OuterLearningRate = 0.01,
@@ -1003,7 +1011,8 @@ public class MetaLearningCoverageIntegrationTests
         var rarelyUsed = memory.FindRarelyUsedSlots(2.0);
 
         Assert.False(double.IsNaN(loss));
-        Assert.Equal(options.NumClasses, predictions.Length);
+        // One score row per query example: [rows, classes], which a Vector output flattens to rows * classes.
+        Assert.Equal(task.QuerySetX.Rows * options.NumClasses, predictions.Length);
         Assert.True(parameters.Length > 0);
         Assert.True(penalty > 0);
         Assert.Equal(memory.Size, rarelyUsed.Count);
@@ -1080,7 +1089,9 @@ public class MetaLearningCoverageIntegrationTests
             "AddMemoryRegularization",
             1.0);
 
-        Assert.Equal(options.NumClasses, predictions.Shape[0]);
+        // One score row per query example, [rows, classes].
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(options.NumClasses, predictions.Shape[1]);
         Assert.True(parameters.Length > 0);
         Assert.True(controllerParams.Length > 0);
         Assert.True(readKeys.Count > 0);

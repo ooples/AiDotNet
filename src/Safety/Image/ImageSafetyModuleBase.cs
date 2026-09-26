@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -35,6 +35,12 @@ public abstract class ImageSafetyModuleBase<T> : SafetyModuleBase<T>, IImageSafe
     /// </remarks>
     public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        // Without this, a null reaches content.ToArray() and the caller gets a
+        // NullReferenceException - which says nothing about which argument was wrong and is not an
+        // ArgumentException, so a caller cannot catch it as a bad-input condition.
+        if (content is null)
+            throw new ArgumentNullException(nameof(content));
+
         // Wrap the flat vector as a 1D tensor
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
         return EvaluateImage(tensor);

@@ -38,16 +38,38 @@ public abstract class VideoSafetyModuleBase<T> : SafetyModuleBase<T>, IVideoSafe
     /// <inheritdoc />
     public abstract IReadOnlyList<SafetyFinding> EvaluateVideo(IReadOnlyList<Tensor<T>> frames, double frameRate);
 
+    /// <summary>
+    /// Gets the fewest frames this module needs to judge anything.
+    /// </summary>
+    /// <remarks>
+    /// A module that judges motion - how one frame changes into the next - needs at least two. A single
+    /// content vector carries exactly one frame, so such a module cannot be evaluated through
+    /// <see cref="Evaluate(Vector{T})"/>; it has to be given the clip through
+    /// <see cref="EvaluateVideo(IReadOnlyList{Tensor{T}}, double)"/>.
+    /// </remarks>
+    public virtual int MinimumFrames => 1;
+
     /// <inheritdoc />
     /// <remarks>
     /// The base implementation wraps the vector in a single 1D tensor frame and delegates to
     /// <see cref="EvaluateVideo(IReadOnlyList{Tensor{T}}, double)"/> using the default frame rate.
     /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// The module needs more than one frame (<see cref="MinimumFrames"/>), which a single vector cannot carry.
+    /// It used to return no findings, which reads as "safe" rather than "not evaluated".
+    /// </exception>
     public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         if (content is null)
         {
             throw new ArgumentNullException(nameof(content));
+        }
+
+        if (MinimumFrames > 1)
+        {
+            throw new NotSupportedException(
+                $"{ModuleName} judges change across at least {MinimumFrames} frames, and a single content "
+                + "vector is one frame. Call EvaluateVideo with the clip's frames instead.");
         }
 
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });

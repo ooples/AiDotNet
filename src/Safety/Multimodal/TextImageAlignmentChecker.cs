@@ -161,6 +161,9 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
     /// <inheritdoc />
     public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        if (content is null)
+            throw new ArgumentNullException(nameof(content));
+
         return Array.Empty<SafetyFinding>();
     }
 

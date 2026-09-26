@@ -1,4 +1,4 @@
-using AiDotNet.Augmentation.Image;
+﻿using AiDotNet.Augmentation.Image;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;

@@ -74,6 +74,35 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     private Matrix<T> _alpha;
 
     /// <summary>
+    /// The caller's fixed observation noise variance, or null to learn it by maximizing the marginal
+    /// likelihood.
+    /// </summary>
+    private readonly double? _noiseVariance;
+
+    /// <summary>
+    /// The observation noise variance the model was fitted with. A single entry.
+    /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T> _fittedNoiseVariance;
+
+    /// <summary>
+    /// The fitted signal variance s^2 scaling the kernel. A single entry.
+    /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T> _fittedSignalVariance;
+
+    /// <summary>
+    /// Per-output training mean. The zero-mean prior models each output's deviations from it.
+    /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T> _outputMeans;
+
+    /// <summary>
+    /// Gradient steps of the marginal-likelihood hyperparameter search.
+    /// </summary>
+    private readonly int _hyperparameterOptimizationSteps;
+
+    /// <summary>
     /// Operations for the numeric type T.
     /// </summary>
     private INumericOperations<T> _numOps;
@@ -82,6 +111,10 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// Creates a new instance of the MultiOutputGaussianProcess with the specified kernel function.
     /// </summary>
     /// <param name="kernel">The kernel function to use for the Gaussian Process.</param>
+    /// <param name="noiseVariance">Observation noise variance. Null (the default) learns it by
+    /// maximizing the marginal likelihood, jointly with the signal variance; a value fixes it.</param>
+    /// <param name="hyperparameterOptimizationSteps">Gradient steps of the marginal-likelihood search.
+    /// Default 100; 0 keeps the starting estimates.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is where you set up your Gaussian Process model by choosing a kernel function.
@@ -96,9 +129,22 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// Choose a kernel that matches the kind of patterns you expect in your data.
     /// </para>
     /// </remarks>
-    public MultiOutputGaussianProcess(IKernelFunction<T> kernel)
+    public MultiOutputGaussianProcess(
+        IKernelFunction<T> kernel,
+        double? noiseVariance = null,
+        int hyperparameterOptimizationSteps = 100)
     {
+        if (noiseVariance < 0)
+            throw new ArgumentException("Noise variance must be non-negative.", nameof(noiseVariance));
+        if (hyperparameterOptimizationSteps < 0)
+            throw new ArgumentException("Optimization steps must be non-negative.", nameof(hyperparameterOptimizationSteps));
+
         _kernel = kernel;
+        _noiseVariance = noiseVariance;
+        _hyperparameterOptimizationSteps = hyperparameterOptimizationSteps;
+        _fittedNoiseVariance = new Vector<T>(1);
+        _fittedSignalVariance = new Vector<T>(1);
+        _outputMeans = new Vector<T>(0);
         _numOps = MathHelper.GetNumericOperations<T>();
         _X = Matrix<T>.Empty();
         _Y = Matrix<T>.Empty();
@@ -108,20 +154,27 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// This method is not supported for multi-output Gaussian Processes.
+    /// Fits the model to a single output - the IFullModel entry point, routed through FitMultiOutput.
     /// </summary>
     /// <param name="X">The input training data.</param>
     /// <param name="y">The output training data.</param>
-    /// <exception cref="InvalidOperationException">Always thrown because this method is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method is not used for multi-output Gaussian Processes.
-    /// Use the FitMultiOutput method instead when you have multiple output values to predict.
+    /// <b>For Beginners:</b> A single target vector is treated as one output. Use FitMultiOutput
+    /// when you have several output values to predict at once.
     /// </para>
     /// </remarks>
     public override void Fit(Matrix<T> X, Vector<T> y)
     {
-        throw new InvalidOperationException("Use FitMultiOutput method for multi-output GP");
+        // IFullModel compliance: a single target vector is the one-output case, fitted through the
+        // same multi-output path - exactly how MultiTaskGaussianProcess.Fit(Matrix, Vector) treats it.
+        // Throwing here made the model unusable through the IFullModel contract it implements.
+        if (y is null)
+            throw new ArgumentNullException(nameof(y));
+        var yMatrix = new Matrix<T>(y.Length, 1);
+        for (int i = 0; i < y.Length; i++)
+            yMatrix[i, 0] = y[i];
+        FitMultiOutput(X, yMatrix);
     }
 
     /// <summary>
@@ -151,8 +204,47 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         _X = X;
         _Y = Y;
 
-        // Calculate the kernel matrix
-        _K = CalculateKernelMatrix(X, X);
+        var inputKernel = CalculateKernelMatrix(X, X);
+
+        // Each output is modelled as deviations from its training mean, under K = s^2 K_x + sigma^2 I
+        // with s^2 and sigma^2 fitted by maximum marginal likelihood. The model used to have a zero-mean
+        // prior of fixed unit amplitude and no noise at all: targets far from zero or far larger than 1
+        // could not be explained except as noise, and its uncertainty collapsed on noisy data.
+        int n = X.Rows;
+        _outputMeans = new Vector<T>(Y.Columns);
+        var columns = new List<double[]>(Y.Columns);
+        for (int c = 0; c < Y.Columns; c++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++)
+                mean += _numOps.ToDouble(Y[i, c]) / n;
+            _outputMeans[c] = _numOps.FromDouble(mean);
+
+            var column = new double[n];
+            for (int i = 0; i < n; i++)
+                column[i] = _numOps.ToDouble(Y[i, c]) - mean;
+            columns.Add(column);
+        }
+
+        var kernel = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                kernel[i, j] = _numOps.ToDouble(inputKernel[i, j]);
+
+        var (signal, noise) = GaussianProcessEvidence.FitSignalAndNoise(
+            kernel, columns, _noiseVariance, _hyperparameterOptimizationSteps, jitter: 1e-6);
+        _fittedSignalVariance = new Vector<T>(1);
+        _fittedSignalVariance[0] = _numOps.FromDouble(signal);
+        _fittedNoiseVariance = new Vector<T>(1);
+        _fittedNoiseVariance[0] = _numOps.FromDouble(noise);
+
+        _K = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+                _K[i, j] = _numOps.Multiply(_fittedSignalVariance[0], inputKernel[i, j]);
+            _K[i, i] = _numOps.Add(_K[i, i], _fittedNoiseVariance[0]);
+        }
 
         // Add adaptive jitter to diagonal for numerical stability.
         // Kernels like Exponential and Laplacian produce ill-conditioned matrices
@@ -164,7 +256,10 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         _alpha = new Matrix<T>(Y.Rows, Y.Columns);
         for (int i = 0; i < Y.Columns; i++)
         {
-            var y_col = Y.GetColumn(i);
+            // The deviations from the output's mean - what the zero-mean prior describes.
+            var y_col = new Vector<T>(Y.Rows);
+            for (int r = 0; r < Y.Rows; r++)
+                y_col[r] = _numOps.Subtract(Y[r, i], _outputMeans[i]);
             var alpha_col = MatrixSolutionHelper.SolveLinearSystem(_K, y_col, MatrixDecompositionType.Cholesky);
             for (int j = 0; j < Y.Rows; j++)
             {
@@ -177,20 +272,38 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// This method is not supported for multi-output Gaussian Processes.
+    /// Predicts the mean and variance of a single-output model at <paramref name="x"/>.
     /// </summary>
     /// <param name="x">The input vector for prediction.</param>
-    /// <returns>This method does not return as it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because this method is not supported.</exception>
+    /// <returns>The predicted mean and variance of the model's one output.</returns>
+    /// <exception cref="InvalidOperationException">Thrown before <c>Fit</c>, or when the model was
+    /// fitted with more than one output (use <see cref="PredictMultiOutput"/> for those).</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method is not used for multi-output Gaussian Processes.
-    /// Use the PredictMultiOutput method instead when you want to predict multiple output values.
+    /// This is the entry point every model shares. <c>Fit(Matrix, Vector)</c> fits one output column,
+    /// and this returns that column's prediction. It used to throw unconditionally, so the shared
+    /// fit-then-predict path could never be used on this model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> With a single output this works like any other model's Predict. When
+    /// you fitted several outputs at once, use PredictMultiOutput to get all of them.
     /// </para>
     /// </remarks>
     public override (T mean, T variance) Predict(Vector<T> x)
     {
-        throw new InvalidOperationException("Use PredictMultiOutput method for multi-output GP");
+        if (_Y.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+
+        if (_Y.Columns != 1)
+        {
+            throw new InvalidOperationException(
+                $"This model was fitted with {_Y.Columns} outputs and Predict returns one; use PredictMultiOutput.");
+        }
+
+        var (means, covariance) = PredictMultiOutput(x);
+        return (means[0], covariance[0, 0]);
     }
 
     /// <summary>
@@ -220,12 +333,15 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     public (Vector<T> means, Matrix<T> covariance) PredictMultiOutput(Vector<T> x)
     {
+        // The cross-covariance and the prior variance are the kernel scaled by the fitted signal variance.
         var k_star = CalculateKernelVector(_X, x);
+        for (int j = 0; j < k_star.Length; j++)
+            k_star[j] = _numOps.Multiply(_fittedSignalVariance[0], k_star[j]);
         var means = new Vector<T>(_Y.Columns);
 
         for (int i = 0; i < _Y.Columns; i++)
         {
-            means[i] = _numOps.Zero;
+            means[i] = _outputMeans[i];
             for (int j = 0; j < k_star.Length; j++)
             {
                 means[i] = _numOps.Add(means[i], _numOps.Multiply(k_star[j], _alpha[j, i]));
@@ -233,7 +349,8 @@ public partial class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
         }
 
         var v = MatrixSolutionHelper.SolveLinearSystem(_K, k_star, MatrixDecompositionType.Cholesky);
-        var variance = _numOps.Subtract(_kernel.Calculate(x, x), k_star.DotProduct(v));
+        var variance = _numOps.Subtract(
+            _numOps.Multiply(_fittedSignalVariance[0], _kernel.Calculate(x, x)), k_star.DotProduct(v));
         var covariance = new Matrix<T>(_Y.Columns, _Y.Columns);
 
         for (int i = 0; i < _Y.Columns; i++)

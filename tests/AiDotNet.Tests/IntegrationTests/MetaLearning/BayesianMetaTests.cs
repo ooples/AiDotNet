@@ -148,7 +148,13 @@ public class BayesianMetaTests
             AdaptationPosteriorSamples = 4,
         };
         var algorithm = new SImPaAlgorithm<double, Matrix<double>, Vector<double>>(options);
-        var paramsBefore = model.GetParameters();
+
+        // SImPa meta-learns psi, the initialisation of the GENERATOR, and not the base network's weights:
+        // every w_i is G(z; lambda_i) (eq. 10), so the base network owns no persistent weights to train.
+        // Posterior carries psi, so reading it either side of MetaTrain is how "the meta-parameter moved"
+        // is observed for this algorithm.
+        var baseParamsBefore = model.GetParameters();
+        var psiBefore = algorithm.Posterior.GetParameters();
 
         var task = CreateTask(158);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
@@ -156,7 +162,10 @@ public class BayesianMetaTests
         var loss = algorithm.MetaTrain(batch);
         Assert.False(double.IsNaN(loss), "SImPa loss is NaN");
         Assert.False(double.IsInfinity(loss), "SImPa loss is infinite");
-        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "SImPa params unchanged");
+        Assert.True(ParamsChanged(psiBefore, algorithm.Posterior.GetParameters()),
+            "SImPa left psi, the generator initialisation it meta-learns, exactly where it was");
+        Assert.False(ParamsChanged(baseParamsBefore, model.GetParameters()),
+            "SImPa must not meta-train the base network: its weights are generated, never learned");
         Assert.Equal(MetaLearningAlgorithmType.SImPa, algorithm.AlgorithmType);
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
 

@@ -1546,13 +1546,67 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Concatenates channels for skip connections.
+    /// Concatenates channels for skip connections, cropping the upsampled map to the skip's
+    /// spatial size first.
     /// </summary>
+    /// <remarks>
+    /// CreateDownsample rounds UP (stride-2, kernel-3, padding-1 gives ceil(H/2)) while
+    /// CreateUpsample always doubles (stride-2, kernel-4, padding-1 gives 2H), so the encoder and
+    /// decoder agree only while every level's resolution stays even. This is the same asymmetry
+    /// <see cref="UNetNoisePredictor{T}"/> carries, resolved the same way: diffusers forces the
+    /// upsampler's output to the stored skip's size (UNet2DConditionModel passes
+    /// down_block_res_samples[-1].shape[2:] as upsample_size), and the original U-Net
+    /// (Ronneberger et al. 2015) cropped. The deconvolution takes no output-size argument, so the
+    /// equivalent is to crop - at most one row and one column, because 2*ceil(H/2) - H is 0 or 1.
+    /// </remarks>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b, bool isVideo)
     {
         // Concatenate along axis 1 (channel dimension) for both NCFHW (5D) and NCHW (4D)
         // The engine handles proper interleaving of data along the specified axis
+        a = AlignSpatialToSkip(a, b);
         return Engine.TensorConcatenate(new[] { a, b }, axis: 1);
+    }
+
+    /// <summary>
+    /// Trims the trailing two (spatial) axes of an upsampled decoder map down to the skip it is
+    /// about to be concatenated with. The frame axis is untouched because the downsample is a 2D
+    /// convolution and never changes it.
+    /// </summary>
+    /// <remarks>
+    /// A map SMALLER than its skip is left alone: that cannot arise from this geometry, so
+    /// concatenation reports the real mismatch instead of a padded-over one.
+    /// </remarks>
+    private Tensor<T> AlignSpatialToSkip(Tensor<T> upsampled, Tensor<T> skip)
+    {
+        int rank = upsampled.Rank;
+        if (rank < 3 || rank != skip.Rank)
+        {
+            return upsampled;
+        }
+
+        int hAxis = rank - 2;
+        int wAxis = rank - 1;
+        int targetHeight = skip.Shape[hAxis];
+        int targetWidth = skip.Shape[wAxis];
+        if (upsampled.Shape[hAxis] < targetHeight || upsampled.Shape[wAxis] < targetWidth)
+        {
+            return upsampled;
+        }
+        if (upsampled.Shape[hAxis] == targetHeight && upsampled.Shape[wAxis] == targetWidth)
+        {
+            return upsampled;
+        }
+
+        var start = new int[rank];
+        var size = new int[rank];
+        for (int axis = 0; axis < rank; axis++)
+        {
+            size[axis] = upsampled.Shape[axis];
+        }
+        size[hAxis] = targetHeight;
+        size[wAxis] = targetWidth;
+
+        return Engine.TensorSlice(upsampled, start, size);
     }
 
     /// <summary>

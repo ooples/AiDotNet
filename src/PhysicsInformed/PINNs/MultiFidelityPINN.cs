@@ -88,6 +88,34 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>
+    /// The multi-fidelity solution: the low-fidelity network's output plus this network's learned
+    /// correction, u_HF(x) = u_LF(x) + delta(x).
+    /// </summary>
+    /// <remarks>
+    /// Predict, GetSolution, the PDE residual and training all evaluate this. Predict used to return the
+    /// correction alone while GetHighFidelitySolution returned the sum, and SolveMultiFidelity's joint
+    /// stage fit the correction by itself to the high-fidelity targets. While the low-fidelity network is
+    /// frozen its output is detached from the gradient tape, so joint training updates only the
+    /// correction - the freeze flag used to be set and never read.
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var lowFidelity = _lowFidelityNetwork.Forward(input);
+        if (_lowFidelityFrozen)
+        {
+            lowFidelity = Engine.StopGradient(lowFidelity);
+        }
+
+        return Engine.TensorAdd(lowFidelity, base.Forward(input));
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The multi-fidelity solution. The default walked only this network's own correction layers.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
     private readonly PhysicsInformedNeuralNetwork<T> _lowFidelityNetwork;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _multiFidelityOptimizer;
 
@@ -98,14 +126,17 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     private readonly bool _freezeLowFidelityAfterPretraining;
     private bool _lowFidelityFrozen;
 
-    // Training data
-    [Buffer]
+    // Caller-supplied training datasets. They are not model state - a reloaded model predicts
+    // without them - so they are [Scratch]. As [Buffer] they were counted as parameters (handing
+    // the model data changed its ParameterCount), and while unset they left the layout
+    // FitDeferred, so every parameter read threw.
+    [Scratch]
     private Tensor<T>? _lowFidelityInputs;
-    [Buffer]
+    [Scratch]
     private Tensor<T>? _lowFidelityOutputs;
-    [Buffer]
+    [Scratch]
     private Tensor<T>? _highFidelityInputs;
-    [Buffer]
+    [Scratch]
     private Tensor<T>? _highFidelityOutputs;
 
     /// <summary>
@@ -461,19 +492,13 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 // The combined solution's derivatives are: d(HF)/dx = d(LF)/dx + d(correction)/dx
                 T[] hfOutput = GetHighFidelitySolution(point);
 
-                // Compute derivatives from both networks
-                var lfDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                    _lowFidelityNetwork,
-                    point,
-                    _pdeSpecification.OutputDimension);
-
-                var correctionDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
+                // This model's Forward IS u_LF + delta, and ComputeDerivatives evaluates through Predict,
+                // so these are already the combined derivatives. Adding the LF derivatives on top (as
+                // when Forward was the correction alone) would count them twice.
+                var combinedDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
                     this,
                     point,
                     _pdeSpecification.OutputDimension);
-
-                // Sum the derivatives: HF derivatives = LF derivatives + correction derivatives
-                var combinedDerivatives = SumDerivatives(lfDerivatives, correctionDerivatives);
 
                 // Compute PDE residual using the combined solution and derivatives
                 T residual = _pdeSpecification.ComputeResidual(new Vector<T>(point), new Vector<T>(hfOutput), combinedDerivatives);
@@ -516,14 +541,13 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
             inputTensor[0, i] = point[i];
         }
 
-        // LF + HF correction
-        var lfOutput = _lowFidelityNetwork.Forward(inputTensor);
-        var hfCorrection = Forward(inputTensor);
+        // Forward IS the multi-fidelity solution, u_LF + delta.
+        var solution = Forward(inputTensor);
 
-        T[] result = new T[lfOutput.Shape[1]];
+        T[] result = new T[solution.Shape[1]];
         for (int i = 0; i < result.Length; i++)
         {
-            result[i] = NumOps.Add(lfOutput[0, i], hfCorrection[0, i]);
+            result[i] = solution[0, i];
         }
 
         return result;
@@ -546,7 +570,22 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// <returns>Fidelity correction values.</returns>
     public T[] GetFidelityCorrection(T[] point)
     {
-        return GetSolution(point);
+        var inputTensor = new Tensor<T>(new int[] { 1, point.Length });
+        for (int i = 0; i < point.Length; i++)
+        {
+            inputTensor[0, i] = point[i];
+        }
+
+        // The correction alone: this network's own layers, without the low-fidelity term. GetSolution
+        // now returns the full multi-fidelity solution.
+        var correction = base.Forward(inputTensor);
+        T[] result = new T[correction.Shape[1]];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = correction[0, i];
+        }
+
+        return result;
     }
 
     /// <summary>

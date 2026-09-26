@@ -33,6 +33,46 @@ namespace AiDotNet.TextToSpeech;
 public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContract
 {
     /// <summary>
+    /// Accepts the public unbatched mel layout for models that declare a whole-waveform
+    /// contract, while retaining the native batched output layout.
+    /// </summary>
+    /// <remarks>
+    /// A documented [mel channels, frames] input becomes [1, mel channels, frames].
+    /// Existing rank-three batches are passed through unchanged. Step-based and undeclared
+    /// vocoders keep their existing Predict semantics; ONNX calls that bypass Predict are
+    /// not normalized by this native-model boundary.
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input) => base.Predict(NormalizeMelPredictionInput(input));
+
+    /// <summary>Normalizes a certified whole-waveform model's mel input on the selected engine.</summary>
+    protected Tensor<T> NormalizeMelPredictionInput(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 2) return input;
+
+        var contract = OutputAxesFor(3);
+        bool wholeWaveform = contract is { Count: 3 }
+            && contract[0].Axis == TensorAxis.Batch
+            && contract[0].Relation.Kind == AxisRelation.Form.Same
+            && contract[0].Relation.Sources.Count == 1
+            && contract[0].Relation.Sources[0] == TensorAxis.Batch
+            && contract[1].Axis == TensorAxis.Channels
+            && contract[1].Relation.Kind == AxisRelation.Form.Fixed
+            && contract[1].Relation.Value == 1
+            && contract[2].Axis == TensorAxis.Length
+            && contract[2].Relation.Kind == AxisRelation.Form.Scaled
+            && contract[2].Relation.Sources.Count == 1
+            && contract[2].Relation.Sources[0] == TensorAxis.Frames
+            && contract[2].Relation.Numerator == UpsampleFactor
+            && contract[2].Relation.Denominator == 1;
+        if (!wholeWaveform) return input;
+
+        if (input.Shape[0] != MelChannels || input.Shape[1] <= 0)
+            throw new ArgumentException($"Expected [{MelChannels}, frames] with nonempty mel frames.", nameof(input));
+        return Engine.Reshape(input, new[] { 1, MelChannels, input.Shape[1] });
+    }
+
+    /// <summary>
     /// The vocoder family's output law: <c>[Batch, Frames * UpsampleFactor]</c>.
     /// </summary>
     /// <remarks>

@@ -4,8 +4,11 @@ using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -92,6 +95,15 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     protected readonly ILossFunction<T> LossFunction;
 
     /// <summary>
+    /// Gets or sets the Adam learning rate <see cref="Train"/> uses, read when its optimizer is first built.
+    /// </summary>
+    /// <remarks>1e-4 is the rate the previous training path hard-coded.</remarks>
+    public double TrainingLearningRate { get; set; } = 1e-4;
+
+    /// <summary>The optimizer <see cref="Train"/> steps, built on first use; its moments are keyed by weight tensor.</summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    /// <summary>
     /// Active feature indices used by the model.
     /// </summary>
     private HashSet<int> _activeFeatureIndices = new HashSet<int>();
@@ -126,13 +138,28 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// implementations should wrap their forward body with this helper.
     /// </summary>
     protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
-        DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
+        IsRecordingGradients
+            ? eagerEncode()
+            : DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
+
+    /// <summary>
+    /// Whether a gradient tape is recording, in which case the eager forward must run on it.
+    /// </summary>
+    /// <remarks>
+    /// The compiled plan replays off the tape and its output is cloned, which detaches it, so a training
+    /// forward routed through it reached the loss with no path back to a single weight: every VAE gradient
+    /// came out exactly zero. The noise predictors make the same test before their inference fast path.
+    /// </remarks>
+    private static bool IsRecordingGradients =>
+        GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed;
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
     /// </summary>
     protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
-        DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
+        IsRecordingGradients
+            ? eagerDecode()
+            : DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
 
     /// <summary>
     /// Returns a tensor the caller can safely RETAIN, copying when the compiled plan handed back its
@@ -438,13 +465,80 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     #region IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One Adam step on the gradient tape: the loss function's reconstruction loss of
+    /// <see cref="ForwardForTraining"/>, differentiated through every registered weight.
+    /// </para>
+    /// <para>
+    /// This used to go through <see cref="ComputeGradients"/>, whose exact path needs
+    /// <see cref="SupportsExactGradients"/>. No VAE sets it, so every VAE trained on a three-sample SPSA
+    /// estimate over all of its weights at once, and <see cref="ComputeGradientsWithTape"/> was never called.
+    /// </para>
+    /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
-        // Compute gradients and apply them
-        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
-        var learningRate = NumOps.FromDouble(1e-4);
-        ApplyGradients(gradients, learningRate);
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null)
+            throw new ArgumentNullException(nameof(expectedOutput));
+
+        var (parameters, gradients, loss) = TapeGradients(input, expectedOutput, LossFunction);
+
+        _trainingOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            model: null,
+            options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = TrainingLearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+
+        Tensor<T> RecomputeForward(Tensor<T> x, Tensor<T> _) => ForwardForTraining(x);
+        Tensor<T> RecomputeLoss(Tensor<T> x, Tensor<T> target)
+        {
+            using var noGrad = new NoGradScope<T>();
+            return LossFunction.ComputeTapeLoss(ForwardForTraining(x), target);
+        }
+
+        _trainingOptimizer.Step(new TapeStepContext<T>(
+            parameters, gradients, loss, input, expectedOutput, RecomputeForward, RecomputeLoss));
+    }
+
+    /// <summary>
+    /// Records <see cref="ForwardForTraining"/> and the loss on a tape and returns the gradient of every live
+    /// registered weight.
+    /// </summary>
+    /// <remarks>
+    /// The weights are collected after the forward, which is when a lazy layer allocates them. Only chunks that
+    /// ARE the stored weight take part; a detached copy would receive a gradient the step could not apply.
+    /// </remarks>
+    private (Tensor<T>[] Parameters, Dictionary<Tensor<T>, Tensor<T>> Gradients, T Loss) TapeGradients(
+        Tensor<T> input,
+        Tensor<T> target,
+        ILossFunction<T> lossFunction)
+    {
+        using var tape = new GradientTape<T>();
+        var loss = lossFunction.ComputeTapeLoss(ForwardForTraining(input), target);
+
+        EnsureComponentsRegistered();
+        var parameters = _parameterRegistry.GetParameterStateChunks()
+            .Where(chunk => chunk.IsWritableInPlace)
+            .Select(chunk => chunk.Tensor)
+            .ToArray();
+        if (parameters.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} exposes no live weight tensors to train; register its layers as parameter components.");
+        }
+
+        var gradients = tape.ComputeGradients(loss, parameters);
+        return (parameters, gradients, loss.Length > 0 ? loss[0] : NumOps.Zero);
     }
 
     /// <inheritdoc />
@@ -825,56 +919,26 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
             return gradients;
         }
 
-        // Fallback: SPSA (6 forward passes total vs 2N for finite differences).
-        // Snapshot parameters BEFORE the perturbation loop and always restore them in a
-        // finally block — without that, an exception inside SetParameters/Predict/
-        // CalculateLoss would exit with perturbed weights still installed and silently
-        // corrupt later training/inference.
-        var parameters = GetParameters();
-        if (parameters.Length == 0 && SupportsParameterInitialization)
+        // The tape, flattened in the registry's chunk order, which is the order GetParameters and
+        // ApplyGradients use. A chunk that is a detached copy gets zeros: the tape cannot reach it. This
+        // replaces a three-sample SPSA estimate, the path every VAE took because none sets
+        // SupportsExactGradients.
+        var (_, tapeGradients, _) = TapeGradients(input, target, effectiveLossFunction);
+        var flat = new List<T>();
+        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
         {
-            // Lazy VAEs return an empty parameter vector before the first forward
-            // resolves their layers' input dims. Run one Predict to materialize
-            // the real weights so SPSA snapshots a populated parameter vector;
-            // otherwise we'd estimate a zero-length gradient and Train() would
-            // hit a length mismatch on the next call.
-            _ = Predict(input);
-            parameters = GetParameters();
-        }
-        try
-        {
-            var gradients_spsa = new Vector<T>(parameters.Length);
-            var epsilon = NumOps.FromDouble(1e-3);
-            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-            var rng = RandomGenerator;
-            var delta = new Vector<T>(parameters.Length);
-
-            for (int s = 0; s < 3; s++)
+            if (chunk.IsWritableInPlace && tapeGradients.TryGetValue(chunk.Tensor, out var gradient))
             {
-                for (int i = 0; i < parameters.Length; i++)
-                    delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
-
-                var eDelta = Engine.Multiply(delta, epsilon);
-                SetParameters(Engine.Add(parameters, eDelta));
-                var lossPlus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
-
-                SetParameters(Engine.Subtract(parameters, eDelta));
-                var lossMinus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
-
-                var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-                var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-                gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
-                    Engine.Fill(parameters.Length, lossDiff), scaledDelta));
+                var values = gradient.AsSpan();
+                for (int i = 0; i < values.Length; i++) flat.Add(values[i]);
             }
+            else
+            {
+                for (int i = 0; i < chunk.Tensor.Length; i++) flat.Add(NumOps.Zero);
+            }
+        }
 
-            gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / 3.0));
-            return gradients_spsa;
-        }
-        finally
-        {
-            // Always restore the original weights, even on exception.
-            SetParameters(parameters);
-        }
+        return new Vector<T>(flat.ToArray());
     }
 
     /// <summary>

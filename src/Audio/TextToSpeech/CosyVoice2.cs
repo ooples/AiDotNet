@@ -105,6 +105,23 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         InitializeLayers();
     }
 
+    /// <summary>AdamW at the configured rate, ramped in over <see cref="CosyVoice2Options.WarmupSteps"/> steps.</summary>
+    private static AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> BuildOptimizerOptions(CosyVoice2Options options)
+    {
+        var adamW = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate };
+        if (options.WarmupSteps > 0)
+        {
+            // Starts at one increment rather than zero, so the first step still moves every parameter, and holds
+            // the configured rate afterwards (DecayMode.Constant: an unknown run length must not decay it to zero).
+            adamW.LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                options.LearningRate, options.WarmupSteps,
+                warmupInitLr: options.LearningRate / options.WarmupSteps,
+                decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Constant);
+            adamW.SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch;
+        }
+
+        return adamW;
+    }
     /// <summary>Creates a CosyVoice2 model in native training mode.</summary>
     public CosyVoice2(NeuralNetworkArchitecture<T> architecture, CosyVoice2Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
@@ -112,7 +129,9 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         _options = options ?? new CosyVoice2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // CosyVoice2Options.LearningRate was declared and never read: the optimizer was built on AdamW's
+        // library default (1e-3), ten times the option's 1e-4, and the first steps overshot (loss 1.49 -> 4.21).
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, BuildOptimizerOptions(_options));
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

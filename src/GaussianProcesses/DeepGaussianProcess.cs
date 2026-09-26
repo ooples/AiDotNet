@@ -547,6 +547,28 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The learned model lives in each layer's inducing inputs and variational parameters, which
+    /// the generator cannot place: they sit inside the layer objects, not on this model. Without
+    /// these declarations a copy or a reloaded checkpoint rebuilt untrained layers and predicted
+    /// only the centred mean. The layer count is fixed at construction, so it indexes stably.
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            state.Declare($"DeepGaussianProcess._layers[{i}].InducingInputs",
+                () => layer.InducingInputs, v => { if (v is not null) layer.RestoreInducingInputs(v); });
+            state.Declare($"DeepGaussianProcess._layers[{i}].VariationalMean",
+                () => layer.VariationalMean, v => { if (v is not null) layer.RestoreVariationalMean(v); });
+            state.Declare($"DeepGaussianProcess._layers[{i}].VariationalCovCholesky",
+                () => layer.VariationalCovCholesky, v => { if (v is not null) layer.RestoreVariationalCovCholesky(v); });
+        }
+    }
+
     /// <inheritdoc/>
     public override void UpdateKernel(IKernelFunction<T> kernel)
     {
@@ -595,6 +617,32 @@ internal class DGPLayer<T>
     private Matrix<T> _Kuu;
 
     public int OutputDim => _outputDim;
+
+    /// <summary>The learned inducing inputs, exposed so the owning model can persist them.</summary>
+    internal Matrix<T> InducingInputs => _inducingInputs;
+
+    /// <summary>The learned variational mean.</summary>
+    internal Matrix<T> VariationalMean => _variationalMean;
+
+    /// <summary>The Cholesky factor of the learned variational covariance.</summary>
+    internal Matrix<T> VariationalCovCholesky => _variationalCovCholesky;
+
+    /// <summary>Restores the inducing inputs and rebuilds the kernel matrix derived from them.</summary>
+    internal void RestoreInducingInputs(Matrix<T> inducingInputs)
+    {
+        _inducingInputs = inducingInputs;
+        if (inducingInputs.IsEmpty)
+            _Kuu = Matrix<T>.Empty();
+        else
+            ComputeKuu();
+    }
+
+    /// <summary>Restores the learned variational mean.</summary>
+    internal void RestoreVariationalMean(Matrix<T> variationalMean) => _variationalMean = variationalMean;
+
+    /// <summary>Restores the Cholesky factor of the learned variational covariance.</summary>
+    internal void RestoreVariationalCovCholesky(Matrix<T> covarianceCholesky) =>
+        _variationalCovCholesky = covarianceCholesky;
 
     public DGPLayer(IKernelFunction<T> kernel, int outputDim, int numInducingPoints, INumericOperations<T> numOps)
     {

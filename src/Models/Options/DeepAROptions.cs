@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -97,8 +98,9 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the number of LSTM layers.
     /// </summary>
-    /// <value>The number of layers, defaulting to 2.</value>
-    public int NumLayers { get; set; } = 2;
+    /// <value>The number of layers, defaulting to 3, the value DeepAR (Salinas et al. 2020) table 3
+    /// reports for every dataset in the paper alongside 40 LSTM nodes, batch size 64 and learning rate 1e-3.</value>
+    public int NumLayers { get; set; } = 3;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.
@@ -127,7 +129,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the batch size for training.
     /// </summary>
     /// <value>The batch size, defaulting to 32.</value>
-    public int BatchSize { get; set; } = 32;
+    public int BatchSize { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of samples to draw for probabilistic forecasts.
@@ -201,4 +203,23 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int EmbeddingDimension { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets how the conditioning range is rescaled before the recurrent trunk sees it.
+    /// </summary>
+    /// <value>The scale-handling rule, defaulting to the paper's <c>1 + mean(z)</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Series arrive on very different magnitudes. DeepAR divides each
+    /// one by a single number summarizing its own level, learns on the result, and multiplies the
+    /// prediction back, so the network is not spending its capacity on magnitudes.
+    /// </para>
+    /// <para>
+    /// Salinas et al. 2020, section 3.3 defines that number as <c>nu = 1 + mean(z)</c>, which is
+    /// the default here. That definition assumes non-negative data, so a signed series centered on
+    /// zero - a return series, say - is better served by
+    /// <see cref="DeepARScaleHandling.MeanAbsolute"/>, and data the caller has already normalized
+    /// by <see cref="DeepARScaleHandling.None"/>.
+    /// </para>
+    /// </remarks>
+    public DeepARScaleHandling ScaleHandling { get; set; } = DeepARScaleHandling.PaperMean;
 }

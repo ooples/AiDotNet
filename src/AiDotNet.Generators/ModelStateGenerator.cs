@@ -134,8 +134,13 @@ public class ModelStateGenerator : IIncrementalGenerator
             // This exclusion is specific to the neural-network trunk. A sibling model base that owns
             // a plain list of layers has no canonical graph serializer, so DeclareLayerList remains
             // its generated persistence mechanism.
+            //
+            // The question here is "is this a reference into the layer graph", not IsLayer's "can
+            // DeclareLayerList restore it", so an ILayer<T>-typed alias counts too: MGTSD holds its
+            // input projection as ILayer<T>, and declaring it restored a stale 256-value copy over a
+            // 21,632-parameter layer.
             if (onNeuralNetworkTrunk
-                && (IsLayer(memberType) || IsLayerCollection(memberType)))
+                && (IsLayerReference(memberType) || IsLayerReferenceCollection(memberType)))
             {
                 continue;
             }
@@ -515,6 +520,37 @@ public class ModelStateGenerator : IIncrementalGenerator
            && IsLayer(list.TypeArguments[0]);
 
     /// <summary>Whether a supported collection carries layers.</summary>
+    /// <summary>
+    /// Whether a member refers to a layer, by base class or through the <c>ILayer&lt;T&gt;</c> interface.
+    /// </summary>
+    /// <remarks>
+    /// Wider than <see cref="IsLayer"/> on purpose, and used only to EXCLUDE members the neural-network
+    /// layer graph already owns; nothing is ever restored through this predicate.
+    /// </remarks>
+    private static bool IsLayerReference(ITypeSymbol type)
+        => IsLayer(type)
+           || IsLayerInterface(type)
+           || type.AllInterfaces.Any(IsLayerInterface);
+
+    private static bool IsLayerInterface(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "ILayer", Arity: 1 } named
+           && named.ContainingNamespace.ToDisplayString() == "AiDotNet.Interfaces";
+
+    /// <summary>A collection of <see cref="IsLayerReference"/> members.</summary>
+    private static bool IsLayerReferenceCollection(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) return IsLayerReference(array.ElementType);
+        if (type is not INamedTypeSymbol { TypeArguments.Length: 1 } collection) return false;
+
+        if (collection.Name is not ("List" or "IList" or "IReadOnlyList" or "IEnumerable"
+            or "ICollection" or "IReadOnlyCollection"))
+        {
+            return false;
+        }
+
+        return IsLayerReference(collection.TypeArguments[0]);
+    }
+
     private static bool IsLayerCollection(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol array) return IsLayer(array.ElementType);

@@ -67,37 +67,43 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
 [PaperOptimizer(OptimizerKind.Adam, Provenance = RecipeProvenance.PerDataset,
                 Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. The paper tunes the learning rate manually per dataset, so there is no single value to declare and the provenance says so rather than the omission being silent.")]
-public partial class DeepAR<T> : ForecastingModelBase<T>
+public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Native Mode Fields
 
     /// <summary>
-    /// Input projection layer to prepare features for LSTM processing.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This layer transforms input features into a format
-    /// suitable for the LSTM layers to process effectively.
-    /// </para>
-    /// </remarks>
-    private ILayer<T>? _inputProjection;
-
-    /// <summary>
-    /// Stacked LSTM layers for sequence modeling.
+    /// The recurrent trunk: every layer ahead of the two distribution heads, applied in order.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> LSTM (Long Short-Term Memory) layers are recurrent neural networks
-    /// that can learn patterns across time. They're good at remembering important information
-    /// from the past while forgetting irrelevant details.
+    /// that can learn patterns across time. They are good at remembering important information
+    /// from the past while forgetting irrelevant details. Any dropout layers sitting between them
+    /// live in this list too, so the trunk is simply run front to back.
+    /// </para>
+    /// <para>
+    /// This is a single ordered list rather than named input-projection / LSTM / layer-norm fields
+    /// because the previous split assigned layers by fixed INDEX: layer 0 was taken to be an input
+    /// projection and the layer before the heads to be a normalization, whatever a caller-supplied
+    /// custom stack actually contained. Running the trunk in order is both correct for a custom
+    /// stack and an exact match for DeepAR (Salinas et al. 2020) section 3.1, where the hidden state
+    /// of a plain stacked LSTM feeds the heads with nothing in between.
     /// </para>
     /// </remarks>
-    private readonly List<ILayer<T>> _lstmLayers = [];
+    private readonly List<ILayer<T>> _trunkLayers = [];
 
     /// <summary>
-    /// Layer normalization for stable training.
+    /// Whether training maximizes the paper's Gaussian log-likelihood rather than a
+    /// caller-supplied loss on the mean head.
     /// </summary>
-    private ILayer<T>? _layerNorm;
+    /// <remarks>
+    /// DeepAR (Salinas et al. 2020) eq. 2 fits the network by maximizing
+    /// sum_i sum_t log l(z_i,t | theta(h_i,t)), where theta is the (mu, sigma) pair of eq. 3.
+    /// That is the default here. A caller who passes an explicit loss function gets that loss
+    /// on the mean head instead, so the paper's objective is the default rather than a
+    /// hardcoded one.
+    /// </remarks>
+    private readonly bool _usePaperLikelihood;
 
     /// <summary>
     /// Output layer for distribution mean (mu).
@@ -133,12 +139,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     [Scratch]
     private Tensor<T>? _lastSigma;
-
-    /// <summary>
-    /// Instance normalization scale for denormalization.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _scaleStd;
 
     #endregion
 
@@ -229,6 +229,18 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Returns the caller's options, or a default instance, so every constructor reads its
+    /// lookback and horizon from one source.
+    /// </summary>
+    /// <remarks>
+    /// The base initializers previously carried their own literals - <c>options?.LookbackWindow ?? 96</c>
+    /// and <c>options?.ForecastHorizon ?? 24</c> - while the body fell back to <c>new DeepAROptions&lt;T&gt;()</c>,
+    /// whose own defaults are 30 and 7. A caller passing no options therefore got a base configured for a
+    /// 96-step lookback and a 24-step horizon wrapped around an options object that reported 30 and 7.
+    /// </remarks>
+    private static DeepAROptions<T> OptionsOrDefault(DeepAROptions<T>? options) => options ?? new DeepAROptions<T>();
+
+    /// <summary>
     /// Creates a DeepAR network using pretrained ONNX model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -249,8 +261,8 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, onnxModelPath,
-               options?.LookbackWindow ?? 96,
-               options?.ForecastHorizon ?? 24,
+               OptionsOrDefault(options).LookbackWindow,
+               OptionsOrDefault(options).ForecastHorizon,
                architecture.InputSize)
     {
         options ??= new DeepAROptions<T>();
@@ -258,9 +270,20 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         Options = _options;
         ValidateOptions(options);
 
+        // The caller's optimizer has to reach the tape trainer, not just a private field.
+        // TrainWithTape resolves _baseTrainOptimizer; without SetBaseTrainOptimizer an
+        // optimizer passed here is silently discarded and training runs on the base Adam
+        // default instead - measured at lr 1e-5 and lr 0, where the trajectory was
+        // unchanged. The self-adopting `new AdamOptimizer(this)` masked it whenever the
+        // caller passed nothing. Same wiring Chronos, MOIRAI, SimMTM, TOTEM and TOTO use.
+        // DeepAR (Salinas et al. 2020) section 4: Adam at 1e-3, which is DeepAROptions.LearningRate's
+        // default - but a caller who changes it must actually get the rate they asked for.
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate });
+        SetBaseTrainOptimizer(_optimizer);
 
         _hiddenSize = options.HiddenSize;
         _numLstmLayers = options.NumLayers;
@@ -268,9 +291,15 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         _dropout = options.DropoutRate;
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
-        _useScaling = true;
+        _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
+        _usePaperLikelihood = lossFunction is null;
 
-        _random = RandomHelper.CreateSecureRandom();
+        // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
+        // decoder to form its forecast, so this RNG decides the prediction, not just an initialization
+        // detail: an unconditionally secure RNG made Predict irreproducible for a caller who set Seed.
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
     }
@@ -298,8 +327,8 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture,
-               options?.LookbackWindow ?? 96,
-               options?.ForecastHorizon ?? 24,
+               OptionsOrDefault(options).LookbackWindow,
+               OptionsOrDefault(options).ForecastHorizon,
                architecture.InputSize,
                lossFunction)
     {
@@ -308,9 +337,20 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         Options = _options;
         ValidateOptions(options);
 
+        // The caller's optimizer has to reach the tape trainer, not just a private field.
+        // TrainWithTape resolves _baseTrainOptimizer; without SetBaseTrainOptimizer an
+        // optimizer passed here is silently discarded and training runs on the base Adam
+        // default instead - measured at lr 1e-5 and lr 0, where the trajectory was
+        // unchanged. The self-adopting `new AdamOptimizer(this)` masked it whenever the
+        // caller passed nothing. Same wiring Chronos, MOIRAI, SimMTM, TOTEM and TOTO use.
+        // DeepAR (Salinas et al. 2020) section 4: Adam at 1e-3, which is DeepAROptions.LearningRate's
+        // default - but a caller who changes it must actually get the rate they asked for.
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate });
+        SetBaseTrainOptimizer(_optimizer);
 
         _hiddenSize = options.HiddenSize;
         _numLstmLayers = options.NumLayers;
@@ -318,9 +358,15 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         _dropout = options.DropoutRate;
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
-        _useScaling = true;
+        _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
+        _usePaperLikelihood = lossFunction is null;
 
-        _random = RandomHelper.CreateSecureRandom();
+        // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
+        // decoder to form its forecast, so this RNG decides the prediction, not just an initialization
+        // detail: an unconditionally secure RNG made Predict irreproducible for a caller who set Seed.
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
     }
@@ -374,35 +420,33 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
-        int idx = 0;
+        _trunkLayers.Clear();
+        _muProjection = null;
+        _sigmaProjection = null;
 
-        // Input projection
-        if (Layers.Count > idx)
-            _inputProjection = Layers[idx++];
+        // The last two layers are always the mean and standard-deviation heads (paper eq. 3);
+        // everything ahead of them is the recurrent trunk, applied in order. Walking back from the
+        // END rather than counting forward from index 0 keeps a caller-supplied custom stack intact:
+        // the previous forward walk consumed a fixed "input projection" slot and a fixed
+        // "layer normalization" slot whether or not the stack held such layers, so a custom stack of
+        // a different shape had its layers silently bound to the wrong roles.
+        int headCount = System.Math.Min(2, Layers.Count);
+        int trunkCount = Layers.Count - headCount;
 
-        // LSTM layers
-        _lstmLayers.Clear();
-        for (int i = 0; i < _numLstmLayers && idx < Layers.Count; i++)
+        for (int i = 0; i < trunkCount; i++)
         {
-            _lstmLayers.Add(Layers[idx++]);
-
-            // Skip dropout layers between LSTMs
-            if (i < _numLstmLayers - 1 && idx < Layers.Count &&
-                Layers[idx] is DropoutLayer<T>)
-            {
-                _lstmLayers.Add(Layers[idx++]);
-            }
+            _trunkLayers.Add(Layers[i]);
         }
 
-        // Layer normalization
-        if (idx < Layers.Count)
-            _layerNorm = Layers[idx++];
-
-        // Distribution heads (mu and sigma)
-        if (idx < Layers.Count)
-            _muProjection = Layers[idx++];
-        if (idx < Layers.Count)
-            _sigmaProjection = Layers[idx++];
+        if (headCount == 2)
+        {
+            _muProjection = Layers[trunkCount];
+            _sigmaProjection = Layers[trunkCount + 1];
+        }
+        else if (headCount == 1)
+        {
+            _muProjection = Layers[0];
+        }
     }
 
     /// <summary>
@@ -467,34 +511,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
 
     #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Trains the model on a single batch of input-output pairs.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="target">Target tensor.</param>
-    /// <param name="output">Model output from forward pass.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the model to make better predictions by
-    /// showing it examples of historical data and what actually happened next.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            // Backward pass
-            var gradient = ComputeGradient(output, target);
-
-            // Update weights via optimizer
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
@@ -574,13 +590,11 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         // returns Forward(input)). DeepAR (Salinas et al. 2020): the point
         // forecast is the predicted mean.
         //
-        // The previous ApplyScaling → base.Forecast → ReverseScaling round-trip
-        // is intentionally NOT used on the point-forecast path: it mutated the
-        // per-instance _scaleStd state, so a model and its clone diverged on the
-        // SAME input (Clone_ShouldProduceIdenticalOutput: original=0 vs
-        // clone=0.16), and it was applied on inference but not on training — an
-        // inconsistency. The mean here is fully deterministic and depends only on
-        // the (cloned-faithfully) layer weights.
+        // Forward itself applies the paper's section 3.3 scale, recomputed from the input on every
+        // call, so the forecast and training paths rescale identically. An earlier round-trip kept
+        // the factor in a mutable field instead, and a model and its clone then disagreed on the
+        // SAME input (Clone_ShouldProduceIdenticalOutput: original=0 vs clone=0.16) while training
+        // saw no rescaling at all. The mean here depends only on the cloned-faithfully weights.
         var mean = Forward(historicalData);
 
         // Probabilistic forecast: sample the requested quantiles from the
@@ -688,7 +702,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        return ApplyScaling(input);
+        return DivideBySeriesScale(input, ComputeSeriesScale(input));
     }
 
     /// <summary>
@@ -732,24 +746,18 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var current = input;
+        // Paper section 3.3: divide the series by its own scale before the trunk, and multiply the
+        // likelihood parameters by that same scale on the way out, so a series' magnitude never
+        // reaches the network. The factor is recomputed from the input on every call and stored
+        // nowhere, which is what lets a model and its clone agree on the same input - the earlier
+        // round-trip kept it in a mutable _scaleStd field and they diverged.
+        var scale = ComputeSeriesScale(input);
+        var current = DivideBySeriesScale(input, scale);
 
-        // Input projection
-        if (_inputProjection is not null)
-        {
-            current = _inputProjection.Forward(current);
-        }
-
-        // LSTM layers
-        foreach (var layer in _lstmLayers)
+        // Recurrent trunk, front to back (paper section 3.1: h_{i,t} = RNN(h_{i,t-1}, z_{i,t-1}, x_{i,t})).
+        foreach (var layer in _trunkLayers)
         {
             current = layer.Forward(current);
-        }
-
-        // Layer normalization
-        if (_layerNorm is not null)
-        {
-            current = _layerNorm.Forward(current);
         }
 
         // Get distribution parameters
@@ -764,13 +772,121 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         if (_sigmaProjection is not null)
         {
             sigma = _sigmaProjection.Forward(current);
-            // Store sigma for use in SampleQuantiles
-            _lastSigma = sigma;
+            // Both parameters are scaled: mu is a value in the series' units and sigma a spread in
+            // the same units, so both carry the factor back (paper section 3.3).
+            _lastSigma = MultiplyBySeriesScale(sigma, scale);
         }
 
         // Combine mu and sigma into output
         // For simplicity, return mu as point forecast; sigma used in sampling
-        return mu;
+        return MultiplyBySeriesScale(mu, scale);
+    }
+
+    /// <summary>
+    /// Computes one scale factor per series in the batch from the conditioning range.
+    /// </summary>
+    /// <param name="input">Conditioning range, whose leading axis indexes the series.</param>
+    /// <returns>One factor per batch element, or an empty array when scaling is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// DeepAR is a univariate model - one series per batch element - so the paper's nu_i is a
+    /// single number per series, not one per feature column. Keeping it that way also makes the
+    /// factor unambiguous to apply to an output whose shape differs from the input's.
+    /// </para>
+    /// <para>
+    /// A factor at or below zero would flip the sign of the whole series, so a series whose mean
+    /// drives nu non-positive is left unscaled rather than inverted. The paper's definition
+    /// assumes non-negative data and does not address the case.
+    /// </para>
+    /// </remarks>
+    private T[] ComputeSeriesScale(Tensor<T> input)
+    {
+        var handling = _options.ScaleHandling;
+        if (handling == DeepARScaleHandling.None || input.Length == 0)
+        {
+            return Array.Empty<T>();
+        }
+
+        int series = input.Shape[0];
+        int stride = input.Length / Math.Max(1, series);
+        if (stride == 0)
+        {
+            return Array.Empty<T>();
+        }
+
+        var scales = new T[series];
+        var minimum = NumOps.FromDouble(1e-5);
+        for (int s = 0; s < series; s++)
+        {
+            var total = NumOps.Zero;
+            for (int i = 0; i < stride; i++)
+            {
+                var value = input[(s * stride) + i];
+                total = NumOps.Add(
+                    total, handling == DeepARScaleHandling.MeanAbsolute ? NumOps.Abs(value) : value);
+            }
+
+            var mean = NumOps.Divide(total, NumOps.FromDouble(stride));
+            var scale = handling == DeepARScaleHandling.PaperMean
+                ? NumOps.Add(NumOps.One, mean)
+                : mean;
+
+            scales[s] = NumOps.LessThan(scale, minimum) ? NumOps.One : scale;
+        }
+
+        return scales;
+    }
+
+    /// <summary>Divides each series in <paramref name="tensor"/> by its own scale factor.</summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <returns>The rescaled tensor, or the original when scaling is disabled.</returns>
+    private Tensor<T> DivideBySeriesScale(Tensor<T> tensor, T[] scales)
+        => ApplySeriesScale(tensor, scales, multiply: false);
+
+    /// <summary>Multiplies each series in <paramref name="tensor"/> by its own scale factor.</summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <returns>The rescaled tensor, or the original when scaling is disabled.</returns>
+    private Tensor<T> MultiplyBySeriesScale(Tensor<T> tensor, T[] scales)
+        => ApplySeriesScale(tensor, scales, multiply: true);
+
+    /// <summary>
+    /// Broadcasts the per-series factors to <paramref name="tensor"/>'s shape and applies them
+    /// through the engine, so the operation stays on the autodiff tape.
+    /// </summary>
+    /// <param name="tensor">Tensor whose leading axis indexes the series.</param>
+    /// <param name="scales">Factors from <see cref="ComputeSeriesScale"/>.</param>
+    /// <param name="multiply">True to multiply, false to divide.</param>
+    /// <returns>The rescaled tensor, or the original when there is nothing to apply.</returns>
+    /// <remarks>
+    /// <para>
+    /// The factors are constants with respect to the parameters, so building the broadcast tensor
+    /// by hand costs nothing; what matters is that the division and multiplication themselves go
+    /// through Engine, because writing the result element by element would hand the tape a
+    /// constant and the trunk would stop receiving gradient.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ApplySeriesScale(Tensor<T> tensor, T[] scales, bool multiply)
+    {
+        if (scales.Length == 0 || tensor.Length == 0 || tensor.Shape[0] != scales.Length)
+        {
+            return tensor;
+        }
+
+        int stride = tensor.Length / scales.Length;
+        var broadcast = new Tensor<T>(tensor.Shape.ToArray());
+        for (int s = 0; s < scales.Length; s++)
+        {
+            for (int i = 0; i < stride; i++)
+            {
+                broadcast[(s * stride) + i] = scales[s];
+            }
+        }
+
+        return multiply
+            ? Engine.TensorMultiply(tensor, broadcast)
+            : Engine.TensorDivide(tensor, broadcast);
     }
 
     /// <summary>
@@ -778,7 +894,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </summary>
     /// <remarks>
     /// The base <c>ForwardNativeForTraining</c> routes through <see cref="Forecast"/>, whose
-    /// <c>ApplyScaling</c> / sampling steps build new tensors by manual indexing — that detaches
+    /// sampling step builds new tensors by manual indexing — that detaches
     /// the autodiff graph, so the gradient tape saw a constant and no weight gradients ever flowed
     /// (params never changed, loss never moved). Training instead runs the differentiable layer
     /// stack straight to the distribution mean head (<see cref="Forward"/>): per DeepAR (Salinas
@@ -787,6 +903,139 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// backpropagates through.
     /// </remarks>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
+    /// Runs one gradient step against DeepAR's paper objective.
+    /// </summary>
+    /// <param name="input">The conditioning range.</param>
+    /// <param name="expectedOutput">The observed series the likelihood is evaluated on.</param>
+    /// <remarks>
+    /// <para>
+    /// Paper eq. 2 maximizes the log-likelihood of the observed series under the predicted
+    /// distribution, so the gradient reaches BOTH heads of eq. 3. The default supervised step
+    /// backpropagated a squared error on the mean alone: the sigma head ran on every forward
+    /// pass, was counted by ParameterCount and was serialized, yet received exactly zero
+    /// gradient - a registered head that never trained, leaving the predictive interval at
+    /// whatever initialization produced.
+    /// </para>
+    /// <para>
+    /// A caller who supplied an explicit loss function keeps it, on the mean head, through the
+    /// ordinary supervised path.
+    /// </para>
+    /// </remarks>
+    protected override void RunTrainingStep(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_usePaperLikelihood)
+        {
+            base.RunTrainingStep(input, expectedOutput);
+            return;
+        }
+
+        // _lastSigma is written by Forward, which TrainWithCustomLoss has already run on the tape
+        // by the time this callback is invoked, so the sigma read here is the tape-connected one.
+        TrainWithCustomLoss(
+            input,
+            mu => GaussianNegativeLogLikelihood(mu, _lastSigma, expectedOutput),
+            _optimizer);
+    }
+
+    /// <summary>
+    /// Mean Gaussian negative log-likelihood of <paramref name="target"/> under N(mu, sigma^2),
+    /// as a recorded scalar the tape can follow.
+    /// </summary>
+    /// <param name="mu">The mean head's output (paper eq. 3, affine).</param>
+    /// <param name="sigma">The standard-deviation head's output (paper eq. 3, softplus).</param>
+    /// <param name="target">The observed series.</param>
+    /// <remarks>
+    /// -log l(z | mu, sigma) = log(sigma) + 0.5*log(2*pi) + (z - mu)^2 / (2*sigma^2).
+    /// Softplus keeps sigma positive but can still underflow to zero in float, so a small floor
+    /// is added before the division and the logarithm. When the sigma head is absent or shaped
+    /// differently from the mean - a caller-supplied custom stack may emit either - this falls
+    /// back to the mean squared error, which is the sigma-constant special case of the same
+    /// objective up to an additive constant.
+    /// </remarks>
+    private Tensor<T> GaussianNegativeLogLikelihood(Tensor<T> mu, Tensor<T>? sigma, Tensor<T> target)
+    {
+        if (sigma is null || !ShapesMatch(sigma, mu))
+        {
+            return MeanSquaredDifference(mu, target);
+        }
+
+        var safeSigma = Engine.TensorAddScalar(sigma, NumOps.FromDouble(SigmaFloor));
+        var standardized = Engine.TensorDivide(Engine.TensorSubtract(mu, target), safeSigma);
+        var quadratic = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(standardized, standardized), NumOps.FromDouble(0.5));
+        var perElement = Engine.TensorAddScalar(
+            Engine.TensorAdd(quadratic, Engine.TensorLog(safeSigma)),
+            NumOps.FromDouble(0.5 * System.Math.Log(2.0 * System.Math.PI)));
+
+        return MeanOverAllAxes(perElement);
+    }
+
+    /// <summary>Whether two tensors have identical shapes, elementwise ops being undefined otherwise.</summary>
+    private static bool ShapesMatch(Tensor<T> left, Tensor<T> right)
+    {
+        if (left.Shape.Length != right.Shape.Length)
+        {
+            return false;
+        }
+
+        for (int axis = 0; axis < left.Shape.Length; axis++)
+        {
+            if (left.Shape[axis] != right.Shape[axis])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Mean squared difference, as a recorded scalar the tape can follow.</summary>
+    private Tensor<T> MeanSquaredDifference(Tensor<T> predicted, Tensor<T> target)
+    {
+        var difference = Engine.TensorSubtract(predicted, target);
+        return MeanOverAllAxes(Engine.TensorMultiply(difference, difference));
+    }
+
+    /// <summary>Reduces every axis of <paramref name="tensor"/> to a scalar mean.</summary>
+    private Tensor<T> MeanOverAllAxes(Tensor<T> tensor)
+    {
+        var allAxes = System.Linq.Enumerable.Range(0, tensor.Shape.Length).ToArray();
+        return Engine.ReduceMean(tensor, allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Floor added to the softplus standard deviation before it is divided by or logged.
+    /// </summary>
+    private const double SigmaFloor = 1e-6;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// DeepAR's target is the caller's observed series; only the objective differs from ordinary
+    /// squared error, so the proposed target passes through unchanged.
+    /// </remarks>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind
+        => TrainingObjectiveKind.Supervised;
+
+    /// <inheritdoc/>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => proposedTarget;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reports the same Gaussian negative log-likelihood the optimizer descends, so a caller
+    /// judging whether training improved measures the objective training actually minimized
+    /// rather than a squared error on the mean that the sigma head does not appear in.
+    /// </remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var mu = Forward(input);
+        var objective = _usePaperLikelihood
+            ? GaussianNegativeLogLikelihood(mu, _lastSigma, target)
+            : MeanSquaredDifference(mu, target);
+        return objective.Length > 0 ? objective[0] : NumOps.Zero;
+    }
 
     /// <summary>
     /// Performs native mode forecasting.
@@ -817,7 +1066,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void ValidateInputShape(Tensor<T> input)
     {
-        // Currently only rank-3 is properly supported by ApplyScaling, ReverseScaling, and ShiftInputWithPredictions
+        // Currently only rank-3 is properly supported by ShiftInputWithPredictions
         // TODO: Add rank-2 support to helper methods if unbatched input is needed
         if (input.Rank != 3)
             throw new ArgumentException("Input tensor must be 3D [batch_size, context_length, num_features].", nameof(input));
@@ -835,103 +1084,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
 
     #region Model-Specific Processing
 
-    /// <summary>
-    /// Applies scaling by dividing by mean absolute value.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Scaled tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Scaling helps DeepAR handle time series with different
-    /// magnitudes. Each series is divided by its mean absolute value, bringing
-    /// everything to a similar scale. This makes training more stable.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyScaling(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
-
-        // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
-        _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-        var scaled = new Tensor<T>(input._shape);
-        T epsilon = NumOps.FromDouble(1e-5);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                // Compute mean absolute value
-                T sumAbs = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < input.Length)
-                        sumAbs = NumOps.Add(sumAbs, NumOps.Abs(input.Data.Span[idx]));
-                }
-                T scale = NumOps.Divide(sumAbs, NumOps.FromDouble(seqLen));
-                scale = NumOps.Add(scale, epsilon); // Avoid division by zero
-
-                // Store scale for reverse
-                int scaleIdx = b * features + f;
-                if (scaleIdx < _scaleStd.Length)
-                    _scaleStd.Data.Span[scaleIdx] = scale;
-
-                // Apply scaling
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < input.Length && idx < scaled.Length)
-                        scaled.Data.Span[idx] = NumOps.Divide(input.Data.Span[idx], scale);
-                }
-            }
-        }
-
-        return scaled;
-    }
-
-    /// <summary>
-    /// Reverses the scaling applied during preprocessing.
-    /// </summary>
-    /// <param name="output">Scaled output tensor.</param>
-    /// <returns>Unscaled tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> After making predictions on scaled data, we need to
-    /// multiply by the original scale to get predictions in the original units.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ReverseScaling(Tensor<T> output)
-    {
-        if (_scaleStd is null)
-            return output;
-
-        int batchSize = output.Shape[0];
-        int seqLen = output.Shape.Length > 1 ? output.Shape[1] : 1;
-        int features = output.Shape.Length > 2 ? output.Shape[2] : 1;
-
-        var unscaled = new Tensor<T>(output._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                int scaleIdx = b * features + f;
-                T scale = scaleIdx < _scaleStd.Length ? _scaleStd.Data.Span[scaleIdx] : NumOps.One;
-
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int idx = b * seqLen * features + t * features + f;
-                    if (idx < output.Length && idx < unscaled.Length)
-                        unscaled.Data.Span[idx] = NumOps.Multiply(output.Data.Span[idx], scale);
-                }
-            }
-        }
-
-        return unscaled;
-    }
 
     /// <summary>
     /// Samples quantiles from the forecast distribution.
@@ -973,16 +1125,9 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
                     T sigma;
                     if (_lastSigma is not null && muIdx < _lastSigma.Length)
                     {
+                        // Forward already multiplied sigma by the series scale (paper section 3.3),
+                        // so it is in the same units as mu and must not be rescaled again here.
                         sigma = _lastSigma.Data.Span[muIdx];
-                        // If scaling was applied, unscale sigma to match unscaled mu
-                        if (_useScaling && _scaleStd is not null)
-                        {
-                            int scaleIdx = b * features + f;
-                            if (scaleIdx < _scaleStd.Length)
-                            {
-                                sigma = NumOps.Multiply(sigma, _scaleStd.Data.Span[scaleIdx]);
-                            }
-                        }
                     }
                     else
                     {
@@ -1064,24 +1209,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
         return LossFunction.CalculateLoss(predictions.ToVector(), targets.ToVector());
     }
 
-    /// <summary>
-    /// Computes gradient for backpropagation.
-    /// </summary>
-    /// <param name="predictions">Predicted values.</param>
-    /// <param name="targets">Target values.</param>
-    /// <returns>Gradient tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The gradient tells us how much each prediction error
-    /// contributes to the overall loss. This guides the model on how to adjust
-    /// its weights to make better predictions.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
-    {
-        var gradVector = LossFunction.ComputeGradient(predictions.ToVector(), targets.ToVector());
-        return Tensor<T>.FromVector(gradVector, predictions._shape);
-    }
 
     /// <summary>
     /// Computes CRPS (Continuous Ranked Probability Score) for probabilistic evaluation.

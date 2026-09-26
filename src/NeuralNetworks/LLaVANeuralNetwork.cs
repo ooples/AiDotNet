@@ -139,6 +139,38 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
     #endregion
 
+    #region Trainable Scope
+
+    /// <summary>
+    /// Which parts of the native model an owning trainer may update. Defaults to every parameter.
+    /// </summary>
+    /// <remarks>
+    /// Freezing is reported through parameter roles, so frozen weights stay in checkpoints and clones while the
+    /// optimizers leave them unchanged. MGIE trains only the word embeddings and the LM head (Fu et al. 2024).
+    /// </remarks>
+    internal AiDotNet.Enums.LanguageModelTrainableScope TrainableScope { get; set; } =
+        AiDotNet.Enums.LanguageModelTrainableScope.All;
+
+    /// <inheritdoc />
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+    {
+        if (declared != AiDotNet.Models.Parameters.ParameterSlotRole.Trainable || TrainableScope == AiDotNet.Enums.LanguageModelTrainableScope.All)
+            return declared;
+        var layer = Layers[layerIndex];
+        bool tokenInterface = ReferenceEquals(layer, _textTokenEmbedding) || ReferenceEquals(layer, _outputProjection);
+        return TrainableScope == AiDotNet.Enums.LanguageModelTrainableScope.WordEmbeddingsAndHead && tokenInterface
+            ? declared
+            : AiDotNet.Models.Parameters.ParameterSlotRole.Frozen;
+    }
+
+    /// <inheritdoc />
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && TrainableScope != AiDotNet.Enums.LanguageModelTrainableScope.All
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
+
+    #endregion
+
     #region IMultimodalEmbedding Properties
 
     /// <inheritdoc/>
@@ -802,13 +834,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Shape[0])
         {
-            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Shape[1]; j++)
-                {
-                    embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
-                }
-            }
+            var positions = Engine.TensorNarrow(_textPositionalEmbeddings, dim: 0, start: 0,
+                length: tokenIds.Count);
+            embedded = Engine.TensorAdd(embedded, positions);
         }
 
         return embedded;
@@ -871,29 +899,14 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
     private Tensor<T> ConcatenateSequences(Tensor<T> seq1, Tensor<T> seq2)
     {
-        int seq1Len = seq1.Shape[0];
-        int seq2Len = seq2.Shape[0];
-        int hiddenDim = seq1.Shape[1];
-
-        var result = Tensor<T>.CreateDefault([seq1Len + seq2Len, hiddenDim], NumOps.Zero);
-
-        for (int i = 0; i < seq1Len; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                result[i, j] = seq1[i, j];
-            }
-        }
-
-        for (int i = 0; i < seq2Len; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                result[seq1Len + i, j] = seq2[i, j];
-            }
-        }
-
-        return result;
+        if (seq1.Rank is not (2 or 3) || seq2.Rank is not (2 or 3) ||
+            seq1.Shape[seq1.Rank - 1] != seq2.Shape[seq2.Rank - 1])
+            throw new ArgumentException("Joint sequences must have matching feature widths and rank two or three.");
+        if (seq1.Rank == 3 && seq2.Rank == 2)
+            seq2 = BroadcastTokenSequence(seq2, seq1.Shape[0]);
+        if (seq1.Rank != seq2.Rank || (seq1.Rank == 3 && seq1.Shape[0] != seq2.Shape[0]))
+            throw new ArgumentException("Joint sequences must have matching batch dimensions.");
+        return Engine.TensorConcatenate(new[] { seq1, seq2 }, axis: seq1.Rank - 2);
     }
 
     private Vector<T> GetNextTokenLogits(Tensor<T> output, double temperature)
@@ -1061,12 +1074,14 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         // side AND _visionClsToken — and the tape optimizer (which sees it via GetExtraTrainableTensors)
         // updates it. The previous body copied clsToken's values into a fresh constant tensor, which
         // detached it: it was counted/serialized as a parameter but training could never move it.
+        if (sequence.Rank == 3)
+            return Engine.TensorConcatenate(new[] { BroadcastTokenSequence(clsToken, sequence.Shape[0]), sequence }, axis: 1);
         return Engine.TensorConcatenate(new[] { clsToken, sequence }, axis: 0);
     }
 
     private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Tensor<T> posEmbeddings)
     {
-        int seqLen = sequence.Shape[0];
+        int seqLen = sequence.Shape[sequence.Rank - 2];
 
         // The narrow below only goes one way. A sequence LONGER than the table would ask
         // TensorNarrow for length > dim and fail with an engine-level error naming neither the
@@ -1091,7 +1106,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
             ? posEmbeddings
             : Engine.TensorNarrow(posEmbeddings, dim: 0, start: 0, length: seqLen);
 
-        return Engine.TensorAdd(sequence, pos);
+        return Engine.TensorAdd(sequence, sequence.Rank == 3
+            ? Engine.Reshape(pos, new[] { 1, seqLen, pos.Shape[1] })
+            : pos);
     }
 
     private Vector<T> MeanPool(Tensor<T> tensor)

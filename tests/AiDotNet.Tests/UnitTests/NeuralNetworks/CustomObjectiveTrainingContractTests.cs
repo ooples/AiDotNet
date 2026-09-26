@@ -305,9 +305,7 @@ public sealed class CustomObjectiveTrainingContractTests
         internal double ReevaluatedLoss { get; private set; }
         internal ObservingSgd(NeuralNetworkBase<double> model) : base(model) { }
 
-        // PR2130 predates the StepCore/no-grad optimizer wrapper on PR2136. Observe its
-        // public Step boundary directly; reevaluation still records the real objective.
-        public override void Step(TapeStepContext<double> context)
+        protected override void StepCore(TapeStepContext<double> context)
         {
             Steps++;
             ParameterElements = context.Parameters.Sum(parameter => parameter.Length);
@@ -321,7 +319,7 @@ public sealed class CustomObjectiveTrainingContractTests
                 ReevaluationSupported = context.SupportsReevaluation;
                 InitialLoss = context.Loss;
                 first[0] += 0.5;
-                ReevaluatedLoss = context.Reevaluate();
+                // The step runs under no-grad; this re-evaluation must record, as a line search would.
 
                 // The perturbation above is this test's, not the optimizer's. Re-snapshot after it so
                 // ParameterChanged reports whether base.Step moved anything; measured against the
@@ -329,7 +327,7 @@ public sealed class CustomObjectiveTrainingContractTests
                 beforeOptimizerStep = first.AsSpan().ToArray();
             }
 
-            base.Step(context);
+            base.StepCore(context);
             ParameterChanged = !beforeOptimizerStep.SequenceEqual(first.AsSpan().ToArray());
         }
     }

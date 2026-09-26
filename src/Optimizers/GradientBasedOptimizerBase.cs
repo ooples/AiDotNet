@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Attributes;
 using AiDotNet.Deployment.Configuration;
@@ -1621,7 +1621,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         T t = NumOps.One;
-        T loss = context.Reevaluate();
+        T loss = ReevaluateWithGradients(context);
 
         // One trial vector for the whole search, overwritten per attempt. SetFlatParameters copies the
         // values out rather than retaining the vector, so reusing it is safe — and at the default bound
@@ -1646,7 +1646,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             context.SetFlatParameters(trial);
-            loss = context.Reevaluate();
+            loss = ReevaluateWithGradients(context);
         }
 
         // A step that still fails Armijo after every halving is worse than not stepping, so don't.
@@ -2684,7 +2684,135 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <inheritdoc />
-    public abstract void Step(TapeStepContext<T> context);
+    /// <remarks>
+    /// The update runs with gradient recording suppressed, as PyTorch's <c>optimizer.step()</c> runs under
+    /// <c>torch.no_grad()</c>. Callers step while the tape they differentiated is still live, so an update
+    /// written with engine tensor ops (RMSProp's momentum-free path among others) was recorded onto that tape
+    /// as if it were part of the model's forward pass (#2155). A re-evaluation inside the step records again;
+    /// see <see cref="ReevaluateWithGradients"/>.
+    /// </remarks>
+    public void Step(TapeStepContext<T> context)
+    {
+        var learningRateGroups = CaptureLearningRateGroups(context);
+        _stepNoGrad = new NoGradScope<T>();
+        try
+        {
+            StepCore(context);
+            ApplyLearningRateGroups(learningRateGroups);
+        }
+        finally
+        {
+            _stepNoGrad?.Dispose();
+            _stepNoGrad = null;
+        }
+    }
+
+    /// <summary>
+    /// Snapshots the parameters whose layer declares its own learning rate (a scale or a cap), before the step.
+    /// </summary>
+    /// <remarks>
+    /// Per-parameter-group learning rates without touching every optimizer: a first-order update is linear
+    /// in the learning rate - SGD, momentum, Adam, AdamW (decoupled decay included, as PyTorch scales it by the
+    /// group's lr) and LAMB all multiply their step by it - so running the step at the base rate and rescaling
+    /// the resulting change by <c>groupRate / baseRate</c> is the step each group would have taken at its own
+    /// rate. Optimizer state (moments, trust ratios) is rate-independent and is left untouched. Only tensors of
+    /// layers that declare a policy are snapshotted, so a model without one pays nothing.
+    /// </remarks>
+    private List<(LayerBase<T> Layer, Vector<T> Before, double Factor)>? CaptureLearningRateGroups(TapeStepContext<T> context)
+    {
+        if (Model is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network) return null;
+
+        double baseRate = GetCurrentLearningRate();
+        List<(LayerBase<T>, Vector<T>, double)>? groups = null;
+        // Each entry carries the factor already applied by its nearest declaring ancestor, so a nested
+        // declaration is applied relative to it and the nearest declaration wins.
+        var pending = new Stack<(ILayer<T> Layer, double Inherited)>();
+        for (int i = network.Layers.Count - 1; i >= 0; i--) pending.Push((network.Layers[i], 1.0));
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        while (pending.Count > 0)
+        {
+            var (layer, inherited) = pending.Pop();
+            if (!seen.Add(layer) || layer is not LayerBase<T> owner) continue;
+
+            double effective = inherited;
+            if (owner.LearningRateScale != 1.0 || owner.MaxLearningRate.HasValue)
+            {
+                effective = owner.LearningRateScale;
+                if (owner.MaxLearningRate is { } cap && baseRate > 0)
+                    effective = Math.Min(effective, cap / baseRate);
+                double relative = effective / inherited;
+                if (relative != 1.0 && owner.ParameterCount > 0)
+                {
+                    // Through the layer's own parameter surface rather than tensor identity: the trainer may
+                    // hand the optimizer views over a flat parameter buffer, which are different objects from
+                    // the layer's tensors but the same storage. GetParameters/SetParameters read and write
+                    // that live storage whichever way it is represented.
+                    groups ??= new List<(LayerBase<T>, Vector<T>, double)>();
+                    groups.Add((owner, owner.GetParameters(), relative));
+                }
+            }
+
+            var subLayers = owner.GetSubLayers();
+            if (subLayers is not null)
+                for (int i = subLayers.Count - 1; i >= 0; i--) pending.Push((subLayers[i], effective));
+        }
+
+        return groups;
+    }
+
+    /// <summary>Rescales each group's change from the base-rate step to its own rate, outermost first.</summary>
+    private void ApplyLearningRateGroups(List<(LayerBase<T> Layer, Vector<T> Before, double Factor)>? groups)
+    {
+        if (groups is null) return;
+        foreach (var (layer, before, factor) in groups)
+        {
+            var after = layer.GetParameters();
+            var scale = NumOps.FromDouble(factor);
+            var rescaled = new Vector<T>(after.Length);
+            for (int i = 0; i < after.Length; i++)
+                rescaled[i] = NumOps.Add(before[i], NumOps.Multiply(scale, NumOps.Subtract(after[i], before[i])));
+            layer.SetParameters(rescaled);
+        }
+    }
+    /// <summary>The no-grad scope of the step in progress; released while the step re-evaluates.</summary>
+    private NoGradScope<T>? _stepNoGrad;
+
+    /// <summary>
+    /// Re-evaluates the loss, and its gradient, at the parameters the step has just written, with gradient
+    /// recording on.
+    /// </summary>
+    /// <param name="context">The step's context.</param>
+    /// <returns>The loss at the current parameters.</returns>
+    /// <remarks>
+    /// The step runs under no-grad, but a line search or a trust-region ratio test scores its trial point by
+    /// re-running the forward pass on a fresh tape, and that tape must record: with the step's scope still
+    /// open it recorded nothing and the re-evaluation threw. The scope is released for the re-evaluation and
+    /// restored after it. A caller's own no-grad scope still applies.
+    /// </remarks>
+    protected T ReevaluateWithGradients(TapeStepContext<T> context)
+    {
+        var scope = _stepNoGrad;
+        if (scope is null)
+        {
+            return context.Reevaluate();
+        }
+
+        scope.Dispose();
+        _stepNoGrad = null;
+        try
+        {
+            return context.Reevaluate();
+        }
+        finally
+        {
+            _stepNoGrad = new NoGradScope<T>();
+        }
+    }
+
+    /// <summary>Applies one update from the tape gradients in <paramref name="context"/>.</summary>
+    /// <param name="context">The step's parameters, their gradients and its loss.</param>
+    /// <remarks>Runs with gradient recording suppressed; see <see cref="Step(TapeStepContext{T})"/>.</remarks>
+    protected abstract void StepCore(TapeStepContext<T> context);
 
     /// <inheritdoc />
     private protected override void SerializeExtensionData(BinaryWriter writer)

@@ -67,6 +67,18 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
+    /// <summary>
+    /// The optimizer <see cref="FinancialModelBase{T}.Train"/> drives the parameter update with.
+    /// </summary>
+    /// <remarks>
+    /// The constructor accepts an optimizer and stored it in <c>_optimizer</c>, but
+    /// <see cref="FinancialModelBase{T}.Train"/> passes <c>TrainingOptimizer</c> to
+    /// <c>TrainWithTape</c> and the base implementation of that property returns null, so
+    /// without this override the caller-supplied optimizer was dropped on the floor and every
+    /// step ran on a freshly allocated default Adam instead. Measured before the override: a
+    /// configured rate of 1e-5, 1e-4, 1e-3, 0.05 and 1.0 all produced the same 1e-3 update.
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private readonly RealizedVolatilityTransformerOptions<T> _options;
 
     /// <inheritdoc/>
@@ -115,8 +127,14 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAMSGrad = false,
+            });
 
         InitializeLayers();
     }
@@ -152,8 +170,14 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAMSGrad = false,
+            });
 
         InitializeLayers();
     }
@@ -230,9 +254,18 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// <remarks>
     /// <para><b>For Beginners:</b> This calls the transformer to produce volatility predictions.</para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// Runs the layer stack directly rather than through <c>Predict</c>. <c>Predict</c> wraps its
+    /// forward in a <c>NoGradScope</c>, and training reaches this method through
+    /// <c>ForwardNativeForTraining</c> -> <c>Forecast</c>, so routing through it detached the tape
+    /// and every trainable weight in the stack received a zero gradient. The caller has already run
+    /// <see cref="ValidateInputShape"/>, which is the only other thing <c>Predict</c> added here.
+    /// </para>
+    /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        return Predict(input);
+        return PredictCore(input);
     }
 
     /// <summary>

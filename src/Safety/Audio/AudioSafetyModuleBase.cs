@@ -51,6 +51,9 @@ public abstract class AudioSafetyModuleBase<T> : SafetyModuleBase<T>, IAudioSafe
     /// </remarks>
     public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        if (content is null)
+            throw new ArgumentNullException(nameof(content));
+
         return EvaluateAudio(content, _defaultSampleRate);
     }
 }

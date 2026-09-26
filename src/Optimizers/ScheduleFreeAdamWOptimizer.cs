@@ -76,7 +76,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
     }
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
         _step++;

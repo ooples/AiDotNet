@@ -15,7 +15,12 @@ namespace AiDotNet.Models.Options;
 public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinancialSACAgentOptions() { }
+    public FinancialSACAgentOptions()
+    {
+        // Haarnoja et al. 2018, Table 1: two hidden layers of 256 units for all networks (ReLU, which the
+        // agent's layer builder applies).
+        HiddenLayers = new[] { 256, 256 };
+    }
 
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions(FinancialSACAgentOptions<T> other) : base(other)

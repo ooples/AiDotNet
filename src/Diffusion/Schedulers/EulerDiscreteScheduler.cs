@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -35,7 +36,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// </remarks>
 [ComponentType(ComponentType.Scheduler)]
 [PipelineStage(PipelineStage.Training)]
-public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>
+public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>, INoiseSchedulerInputScaling<T>
 {
     /// <summary>
     /// Sigma values (noise levels) for each inference timestep.
@@ -73,6 +74,24 @@ public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>
     {
         base.SetTimesteps(inferenceSteps);
         ComputeSigmas();
+    }
+
+    /// <inheritdoc />
+    public T InitialNoiseSigma => _sigmas is { Length: > 1 } sigmas
+        ? sigmas[0]
+        : throw new InvalidOperationException("Call SetTimesteps() before requesting the initial noise scale.");
+
+    /// <inheritdoc />
+    public Tensor<T> ScaleModelInput(Tensor<T> sample, int timestep)
+    {
+        if (sample is null) throw new ArgumentNullException(nameof(sample));
+        if (_sigmas is null)
+            throw new InvalidOperationException("Call SetTimesteps() before scaling the model input.");
+        if (timestep < 0 || timestep >= TrainTimesteps)
+            throw new ArgumentOutOfRangeException(nameof(timestep));
+        T sigma = _sigmas[FindTimestepIndex(timestep)];
+        T denominator = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(sigma, sigma), NumOps.One));
+        return Engine.TensorMultiplyScalar(sample, NumOps.Divide(NumOps.One, denominator));
     }
 
     /// <summary>
