@@ -54,7 +54,7 @@ namespace AiDotNet.Video.ActionRecognition;
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputFrames: 16, inputHeight: 224, inputWidth: 224, inputDepth: 3,
 ///     outputSize: 400);
-/// var model = new VideoMAE&lt;double&gt;(architecture, numClasses: 400, numFrames: 16);
+/// var model = new VideoMAE&lt;double&gt;(architecture, options: new VideoMAEOptions { NumClasses = 400, NumFrames = 16 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

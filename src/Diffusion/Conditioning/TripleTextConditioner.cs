@@ -108,9 +108,9 @@ public class TripleTextConditioner<T> : CompositeConditioningBase<T>
     /// // SD3 / SDXL: CLIP-L and CLIP-G together with a T5
     /// var tokenizer = CharacterTokenizer.CreateAscii();
     /// var conditioner = new TripleTextConditioner&lt;float&gt;(
-    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
-    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
-    ///     new T5TextConditioner&lt;float&gt;(tokenizer, T5Variant.Base));
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, options: new CLIPTextConditionerOptions { Variant = CLIPVariant.ViTL14 }),
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, options: new CLIPTextConditionerOptions { Variant = CLIPVariant.ViTL14 }),
+    ///     new T5TextConditioner&lt;float&gt;(tokenizer, options: new T5TextConditionerOptions { Variant = T5Variant.Base }));
     /// </code>
     /// </example>
     public TripleTextConditioner(

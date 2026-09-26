@@ -47,10 +47,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new OMGSeg&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new OMGSeg&lt;double&gt;(architecture, options: new OMGSegOptions { NumClasses = 150 });
 ///
 /// // Or load a pre-trained ONNX model for unified segmentation
-/// var onnxModel = new OMGSeg&lt;double&gt;(architecture, "omgseg.onnx", numClasses: 150);
+/// var onnxModel = new OMGSeg&lt;double&gt;(architecture, "omgseg.onnx", options: new OMGSegOptions { NumClasses = 150 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

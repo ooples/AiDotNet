@@ -116,11 +116,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// <example>
 /// <code>
 /// // Create a NeRF model with custom architecture parameters
-/// var nerf = new NeRF&lt;float&gt;(
-///     positionEncodingLevels: 10,
-///     directionEncodingLevels: 4,
-///     hiddenDim: 256,
-///     numLayers: 8);
+/// var nerf = new NeRF&lt;float&gt;(options: new NeRFOptions { PositionEncodingLevels = 10, DirectionEncodingLevels = 4, HiddenDim = 256, NumLayers = 8 });
 /// // Render a novel view from camera position and direction
 /// var positions = Tensor&lt;float&gt;.CreateRandom(1024, 3);           // sample points along the rays
 /// var viewingDirections = Tensor&lt;float&gt;.CreateRandom(1024, 3);   // the direction each was seen from
@@ -345,12 +341,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     ///
     /// Standard NeRF configuration:
     /// <code>
-    /// var nerf = new NeRF&lt;float&gt;(
-    ///     positionEncodingLevels: 10,
-    ///     directionEncodingLevels: 4,
-    ///     hiddenDim: 256,
-    ///     numLayers: 8,
-    ///     useHierarchicalSampling: true);
+    /// var nerf = new NeRF&lt;float&gt;(options: new NeRFOptions { PositionEncodingLevels = 10, DirectionEncodingLevels = 4, HiddenDim = 256, NumLayers = 8, UseHierarchicalSampling = true });
     /// </code>
     /// </para>
     /// </remarks>

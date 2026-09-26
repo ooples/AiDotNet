@@ -65,10 +65,7 @@ namespace AiDotNet.Audio.Emotion;
 ///     inputSize: 80,
 ///     outputSize: 7);
 ///
-/// var recognizer = new SpeechEmotionRecognizer&lt;float&gt;(
-///     architecture: architecture,
-///     modelPath: "emotion_model.onnx",
-///     sampleRate: 16000);
+/// var recognizer = new SpeechEmotionRecognizer&lt;float&gt;(architecture: architecture, modelPath: "emotion_model.onnx", options: new SpeechEmotionRecognizerOptions { SampleRate = 16000 });
 ///
 /// // Classify emotions from audio
 /// var result = recognizer.RecognizeEmotion(audioTensor);
@@ -325,11 +322,7 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     /// <code>
     /// var audioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
     /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(...);
-    /// var recognizer = new SpeechEmotionRecognizer&lt;float&gt;(
-    ///     architecture,
-    ///     sampleRate: 16000,
-    ///     numConvBlocks: 4,
-    ///     hiddenDim: 256);
+    /// var recognizer = new SpeechEmotionRecognizer&lt;float&gt;(architecture, options: new SpeechEmotionRecognizerOptions { SampleRate = 16000, NumConvBlocks = 4, HiddenDim = 256 });
     ///
     /// // Train the model
     /// recognizer.Train(audioTensor, emotionLabels);

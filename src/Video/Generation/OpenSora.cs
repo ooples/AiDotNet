@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Generation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
-/// var model = new OpenSora&lt;double&gt;(architecture, numFrames: 16, numInferenceSteps: 50);
+/// var model = new OpenSora&lt;double&gt;(architecture, options: new OpenSoraOptions { NumFrames = 16, NumInferenceSteps = 50 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

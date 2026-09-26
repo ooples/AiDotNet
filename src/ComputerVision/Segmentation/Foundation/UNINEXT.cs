@@ -49,10 +49,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 80);
-/// var model = new UNINEXT&lt;double&gt;(architecture, numClasses: 80);
+/// var model = new UNINEXT&lt;double&gt;(architecture, options: new UNINEXTOptions { NumClasses = 80 });
 ///
 /// // Or load a pre-trained ONNX model for multi-task instance perception
-/// var onnxModel = new UNINEXT&lt;double&gt;(architecture, "uninext.onnx", numClasses: 80);
+/// var onnxModel = new UNINEXT&lt;double&gt;(architecture, "uninext.onnx", options: new UNINEXTOptions { NumClasses = 80 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

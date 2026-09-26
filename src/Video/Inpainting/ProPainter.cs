@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Inpainting;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new ProPainter&lt;double&gt;(architecture, numFeatures: 128, numTransformerBlocks: 6);
+/// var model = new ProPainter&lt;double&gt;(architecture, options: new ProPainterOptions { NumFeatures = 128, NumTransformerBlocks = 6 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

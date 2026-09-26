@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Generation;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 576, inputWidth: 576, inputDepth: 3, outputSize: 3);
 /// var model = new StableVideoDiffusion&lt;double&gt;(architecture,
-///     variant: SVDModelVariant.SVD, numFrames: 14, numInferenceSteps: 25);
+///     new StableVideoDiffusionOptions { Variant = SVDModelVariant.SVD, NumFrames = 14, NumInferenceSteps = 25 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

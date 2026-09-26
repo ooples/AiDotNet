@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new ProgressiveGAN&lt;float&gt;(latentSize: 512, imageChannels: 3, maxResolutionLevel: 6))
+///     .ConfigureModel(new ProgressiveGAN&lt;float&gt;(latentSize: 512, imageChannels: 3, options: new ProgressiveGANOptions { MaxResolutionLevel = 6 }))
 ///     .Build(trainX, trainY);
 /// var generated = result.Predict(noise);
 /// </code>

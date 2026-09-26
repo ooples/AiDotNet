@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Motion;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new RAFT&lt;double&gt;(architecture, numFeatures: 128, numIterations: 12);
+/// var model = new RAFT&lt;double&gt;(architecture, options: new RAFTOptions { NumFeatures = 128, NumIterations = 12 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

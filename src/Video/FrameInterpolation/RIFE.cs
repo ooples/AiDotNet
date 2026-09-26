@@ -54,7 +54,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
-/// var model = new RIFE&lt;double&gt;(architecture, numFeatures: 64, numFlowBlocks: 8);
+/// var model = new RIFE&lt;double&gt;(architecture, options: new RIFEOptions { NumFeatures = 64, NumFlowBlocks = 8 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

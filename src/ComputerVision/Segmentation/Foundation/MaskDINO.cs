@@ -48,10 +48,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 80);
-/// var model = new MaskDINO&lt;double&gt;(architecture, numClasses: 80);
+/// var model = new MaskDINO&lt;double&gt;(architecture, options: new MaskDINOOptions { NumClasses = 80 });
 ///
 /// // Or load a pre-trained ONNX model for unified detection-segmentation
-/// var onnxModel = new MaskDINO&lt;double&gt;(architecture, "maskdino.onnx", numClasses: 80);
+/// var onnxModel = new MaskDINO&lt;double&gt;(architecture, "maskdino.onnx", options: new MaskDINOOptions { NumClasses = 80 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

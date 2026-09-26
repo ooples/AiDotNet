@@ -33,7 +33,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// // Create an MC Dropout network for uncertainty-aware predictions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 10, outputSize: 1);
 /// // Add MCDropoutLayer instances to the architecture for stochastic inference
-/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, numSamples: 50);
+/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, options: new MCDropoutNeuralNetworkOptions { NumSamples = 50 });
 /// var result = mcDropout.PredictWithUncertainty(inputTensor);
 /// // result.Mean = average prediction, result.Variance = epistemic uncertainty
 /// </code>

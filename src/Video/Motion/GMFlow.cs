@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Motion;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new GMFlow&lt;double&gt;(architecture, numFeatures: 128);
+/// var model = new GMFlow&lt;double&gt;(architecture, options: new GMFlowOptions { NumFeatures = 128 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

@@ -61,11 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 9);
 ///
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new GraphGenerationModel&lt;float&gt;(
-///         inputFeatures: 9,
-///         hiddenDim: 128,
-///         maxNodes: 50,
-///         learningRate: 0.005))
+///     .ConfigureModel(new GraphGenerationModel&lt;float&gt;(options: new GraphGenerationModelOptions { InputFeatures = 9, HiddenDim = 128, MaxNodes = 50, LearningRate = 0.005 }))
 ///     .Build(trainX, trainY);
 ///
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 9 });
@@ -212,13 +208,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// var model = new GraphGenerationModel&lt;double&gt;();
     ///
     /// // Create model for molecular generation with custom settings
-    /// var model = new GraphGenerationModel&lt;double&gt;(
-    ///     inputFeatures: 9,        // Atom features
-    ///     hiddenDim: 32,           // Hidden layer size
-    ///     latentDim: 16,           // Latent space dimension
-    ///     numEncoderLayers: 2,     // 2 GNN encoder layers
-    ///     maxNodes: 50,            // Maximum 50 atoms per molecule
-    ///     klWeight: 0.5);          // KL divergence weight
+    /// var model = new GraphGenerationModel&lt;double&gt;(// Atom features     hiddenDim: 32, // Hidden layer size     latentDim: 16, // Latent space dimension     numEncoderLayers: 2, // 2 GNN encoder layers     maxNodes: 50, // Maximum 50 atoms per molecule     klWeight: 0.5, options: new GraphGenerationModelOptions { InputFeatures = 9 });          // KL divergence weight
     ///
     /// // Train on molecular graphs
     /// model.Train(molecules, adjacencyMatrices, epochs: 100);

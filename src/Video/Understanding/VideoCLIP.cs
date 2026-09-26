@@ -60,7 +60,7 @@ namespace AiDotNet.Video.Understanding;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 400);
-/// var model = new VideoCLIP&lt;double&gt;(architecture, numFrames: 32, embeddingDim: 512);
+/// var model = new VideoCLIP&lt;double&gt;(architecture, options: new VideoCLIPVideoOptions { NumFrames = 32, EmbeddingDim = 512 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

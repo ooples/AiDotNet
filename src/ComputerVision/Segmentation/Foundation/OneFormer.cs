@@ -53,10 +53,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new OneFormer&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new OneFormer&lt;double&gt;(architecture, options: new OneFormerOptions { NumClasses = 150 });
 ///
 /// // Or load a pre-trained ONNX model for text-prompted segmentation
-/// var onnxModel = new OneFormer&lt;double&gt;(architecture, "oneformer.onnx", numClasses: 150);
+/// var onnxModel = new OneFormer&lt;double&gt;(architecture, "oneformer.onnx", options: new OneFormerOptions { NumClasses = 150 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

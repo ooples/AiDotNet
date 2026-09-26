@@ -47,10 +47,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new MixedQueryTransformer&lt;double&gt;(architecture, numClasses: 133);
+/// var model = new MixedQueryTransformer&lt;double&gt;(architecture, options: new MixedQueryTransformerOptions { NumClasses = 133 });
 ///
 /// // Or load a pre-trained ONNX model for cross-dataset segmentation
-/// var onnxModel = new MixedQueryTransformer&lt;double&gt;(architecture, "querymeldnet.onnx", numClasses: 133);
+/// var onnxModel = new MixedQueryTransformer&lt;double&gt;(architecture, "querymeldnet.onnx", options: new MixedQueryTransformerOptions { NumClasses = 133 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

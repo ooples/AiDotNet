@@ -80,12 +80,7 @@ namespace AiDotNet.PointCloud.Models;
 /// <example>
 /// <code>
 /// // Create a DGCNN model for point cloud classification with dynamic edge convolution
-/// var dgcnn = new DGCNN&lt;float&gt;(
-///     numClasses: 40,
-///     knnK: 20,
-///     edgeConvChannels: new[] { 64, 64, 128, 256 },
-///     useDropout: true,
-///     dropoutRate: 0.5);
+/// var dgcnn = new DGCNN&lt;float&gt;(new DGCNNOptions { NumClasses = 40, EdgeConvChannels = new[] { 64, 64, 128, 256 }, KnnK = 20, UseDropout = true, DropoutRate = 0.5 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

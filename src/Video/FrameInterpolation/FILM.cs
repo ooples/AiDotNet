@@ -48,7 +48,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
-/// var model = new FILM&lt;double&gt;(architecture, numScales: 7, numFeatures: 64);
+/// var model = new FILM&lt;double&gt;(architecture, options: new FILMOptions { NumScales = 7, NumFeatures = 64 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

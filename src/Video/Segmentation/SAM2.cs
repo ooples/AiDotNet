@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Segmentation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
-/// var model = new SAM2&lt;double&gt;(architecture, modelSize: SAM2ModelSize.Large, memoryBankSize: 7);
+/// var model = new SAM2&lt;double&gt;(architecture, options: new SAM2Options { ModelSize = SAM2ModelSize.Large, MemoryBankSize = 7 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

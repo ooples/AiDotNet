@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Inpainting;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new E2FGVI&lt;double&gt;(architecture, numFeatures: 128);
+/// var model = new E2FGVI&lt;double&gt;(architecture, options: new E2FGVIOptions { NumFeatures = 128 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

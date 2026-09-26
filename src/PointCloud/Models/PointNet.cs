@@ -52,10 +52,7 @@ namespace AiDotNet.PointCloud.Models;
 /// <example>
 /// <code>
 /// // Create a PointNet model for 3D object classification with 40 classes
-/// var pointNet = new PointNet&lt;float&gt;(
-///     numClasses: 40,
-///     useInputTransform: true,
-///     useFeatureTransform: true);
+/// var pointNet = new PointNet&lt;float&gt;(new AiDotNet.Models.Options.PointNetOptions { NumClasses = 40, UseInputTransform = true, UseFeatureTransform = true });
 /// // Process a point cloud (1024 points, 3 coordinates each)
 /// var pointCloud = new Tensor&lt;float&gt;(new[] { 1, 1024, 3 });
 /// Vector&lt;float&gt; classProbabilities = pointNet.ClassifyPointCloud(pointCloud);
