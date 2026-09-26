@@ -124,7 +124,8 @@ public class StreamingStepTrainingTests : IDisposable
         int seed = 1234,
         ITrainingMonitor<float>? monitor = null,
         IStreamingDataLoader<float, Tensor<float>, Tensor<float>>? validation = null,
-        int validateEvery = 0)
+        int validateEvery = 0,
+        IDataTransformer<float, Tensor<float>, Tensor<float>>? featureTransform = null)
     {
         var optimizer = Optimizer(epochs: 100, scheduler);
         var model = Model(optimizer);
@@ -144,6 +145,7 @@ public class StreamingStepTrainingTests : IDisposable
             });
         if (checkpoints is not null) builder.ConfigureCheckpointManager(checkpoints);
         if (monitor is not null) builder.ConfigureTrainingMonitor(monitor);
+        if (featureTransform is not null) builder.ConfigurePreprocessing(featureTransform);
         await builder.BuildAsync();
         return (model, optimizer);
     }
@@ -180,6 +182,74 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.True(MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters()) < 1e-6,
             "resumed run diverged from the uninterrupted run");
         Assert.Equal(straight.Opt.GetCurrentLearningRate(), resumed.Opt.GetCurrentLearningRate(), 12);
+    }
+
+    /// <summary>
+    /// Subtracts the mean of whichever batch it was fitted on. Fitting on a different batch gives a different
+    /// shift, so a resumed run that fits its (fresh, unfitted) pipeline on another batch trains on differently
+    /// scaled data and diverges from the run it resumes.
+    /// </summary>
+    private sealed class FirstFitMeanShift : IDataTransformer<float, Tensor<float>, Tensor<float>>
+    {
+        private float _mean;
+
+        public bool IsFitted { get; private set; }
+        public bool SupportsInverseTransform => true;
+        public int[]? ColumnIndices => null;
+
+        public void Fit(Tensor<float> data)
+        {
+            double sum = 0;
+            for (int i = 0; i < data.Length; i++) sum += data[i];
+            _mean = (float)(sum / Math.Max(1, data.Length));
+            IsFitted = true;
+        }
+
+        public Tensor<float> Transform(Tensor<float> data) => Shift(data, -_mean);
+        public Tensor<float> FitTransform(Tensor<float> data) { Fit(data); return Transform(data); }
+        public Tensor<float> InverseTransform(Tensor<float> data) => Shift(data, _mean);
+        public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) => inputFeatureNames ?? [];
+
+        private static Tensor<float> Shift(Tensor<float> data, float by)
+        {
+            var result = new Tensor<float>(data.Shape.ToArray());
+            for (int i = 0; i < data.Length; i++) result[i] = data[i] + by;
+            return result;
+        }
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task StoppedAndResumedRun_WithFittedPreprocessing_MatchesUninterruptedRun()
+    {
+        await Task.Yield();
+        var init = InitialWeights();
+        WarmupStableDecayScheduler Wsd() => new(0.02, warmupSteps: 5, decayStartStep: 15, decaySteps: 10);
+        var straight = await Train(25, resume: false, Checkpoints("pp-straight", saveEvery: 1000), init, Wsd(),
+            featureTransform: new FirstFitMeanShift());
+
+        await Train(13, resume: true, Checkpoints("pp-resumed", saveEvery: 4), init, Wsd(),
+            featureTransform: new FirstFitMeanShift());
+        var scrambled = new Vector<float>(Enumerable.Repeat(0.123f, init.Length).ToArray());
+        var resumed = await Train(25, resume: true, Checkpoints("pp-resumed", saveEvery: 4), scrambled, Wsd(),
+            featureTransform: new FirstFitMeanShift());
+
+        Assert.True(MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters()) < 1e-6,
+            "a resumed run fitted its preprocessing on a different batch than the uninterrupted run");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task StreamingTrainingOptions_OnANonStreamingBuild_AreRefused()
+    {
+        await Task.Yield();
+        var optimizer = Optimizer(epochs: 1);
+        var x = new Tensor<float>(new[] { N, InDim });
+        var y = new Tensor<float>(new[] { N, 1 });
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(Model(optimizer))
+            .ConfigureOptimizer(optimizer)
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>> { Seed = 1 });
+
+        Assert.Throws<NotSupportedException>(() => builder.Build(x, y));
     }
 
     [Fact(Timeout = 120000)]
@@ -231,7 +301,12 @@ public class StreamingStepTrainingTests : IDisposable
         await Train(10, resume: false, null, InitialWeights(), monitor: monitor, validation: Loader(99), validateEvery: 4);
         var history = monitor.GetMetricHistory(monitor.SessionId, "validation_loss");
         // steps 4, 8, then the final evaluation at step 10
-        Assert.Equal(3, history.Count);
+        Assert.Equal(new[] { 4, 8, 10 }, history.Select(entry => entry.Step).ToArray());
+        foreach (var (step, value, _) in history)
+        {
+            Assert.False(float.IsNaN(value) || float.IsInfinity(value), $"validation loss at step {step} is not finite: {value}");
+            Assert.True(value >= 0f, $"validation loss at step {step} is negative: {value}");
+        }
     }
 
     [Fact(Timeout = 120000)]
